@@ -17,3 +17,4 @@ buildchk.err
 /base/ntos/ke/mp/x86
 /base/ntos/ke/mp/amd64
 /base/ntos/rtl/error.h
+/public/publish.log
