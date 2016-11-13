@@ -1,0 +1,6 @@
+DIRS= \
+    crts    \
+    hals    \
+    ntos
+
+OPTIONAL_DIRS=
