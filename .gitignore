@@ -18,3 +18,8 @@ buildchk.err
 /base/ntos/ke/mp/amd64
 /base/ntos/rtl/error.h
 /public/publish.log
+/ds/lsa/server/exe/lsapmsgs.h
+/ds/lsa/server/lsarpc_s.c
+/ds/lsa/uclient/lsarpc_c.c
+/ds/lsa/uclient/lsarpc_c.h
+/base/ntos/ex/dbg.log
