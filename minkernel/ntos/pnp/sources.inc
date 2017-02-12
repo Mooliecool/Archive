@@ -9,7 +9,7 @@ BUILD_PRODUCES=ntospnp$(NT_UP)
 
 GPSIZE=32
 
-INCLUDES=..;..\..\inc;..\..\ke
+INCLUDES=..;..\..\inc;..\..\ke;$(BASE_INC_PATH)
 
 C_DEFINES=$(C_DEFINES) -D_NTSYSTEM_
 

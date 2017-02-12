@@ -7,7 +7,7 @@ TARGETPATH=obj
 
 BUILD_PRODUCES=ntospo$(NT_UP)
 
-INCLUDES=..\..\inc
+INCLUDES=..\..\inc;$(BASE_INC_PATH)
 
 MSC_WARNING_LEVEL=/W4 /WX
 

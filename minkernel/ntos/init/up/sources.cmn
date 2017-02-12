@@ -33,7 +33,7 @@ BUILD_CONSUMES= ntoscache$(NT_UP) \
                 ntosse$(NT_UP) \
                 ntosvdm$(NT_UP)
 
-INCLUDES=..;..\..\inc;..\..\nls\$(O)
+INCLUDES=..;..\..\inc;..\..\nls\$(O);$(BASE_INC_PATH)
 
 !ifndef TARGET1
 TARGET1=up

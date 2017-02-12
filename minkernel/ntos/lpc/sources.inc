@@ -7,7 +7,7 @@ TARGETPATH=obj
 
 BUILD_PRODUCES=ntoslpc$(NT_UP)
 
-INCLUDES=..;..\..\inc
+INCLUDES=..;..\..\inc;$(BASE_INC_PATH)
 
 C_DEFINES=$(C_DEFINES) -D_NTSYSTEM_
 

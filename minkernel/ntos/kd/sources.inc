@@ -7,7 +7,7 @@ TARGETPATH=obj
 
 BUILD_PRODUCES=ntoskd$(NT_UP)
 
-INCLUDES=..;..\..\inc;..\..\ke;..\$(TARGET_DIRECTORY)
+INCLUDES=..;..\..\inc;..\..\ke;..\$(TARGET_DIRECTORY);$(BASE_INC_PATH)
 
 MSC_WARNING_LEVEL=/W4 /WX
 

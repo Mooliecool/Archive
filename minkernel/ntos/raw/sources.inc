@@ -7,7 +7,7 @@ TARGETPATH=obj
 
 BUILD_PRODUCES=ntosraw$(NT_UP)
 
-INCLUDES=..;..\..\inc
+INCLUDES=..;..\..\inc;$(BASE_INC_PATH)
 
 MIPS_OPTIONS=-nodwalign
 

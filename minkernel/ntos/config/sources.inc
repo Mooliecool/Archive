@@ -7,7 +7,7 @@ TARGETPATH=obj
 
 BUILD_PRODUCES=ntosconfig$(NT_UP)
 
-INCLUDES=..;..\..\inc
+INCLUDES=..;..\..\inc;$(BASE_INC_PATH)
 
 GPSIZE=32
 
