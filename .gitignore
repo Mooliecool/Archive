@@ -12,14 +12,14 @@ buildfre.err
 buildchk.err
 
 /build.dat
-/base/ntos/obj
-/base/ntos/mpobj
-/base/ntos/ke/mp/x86
-/base/ntos/ke/mp/amd64
-/base/ntos/rtl/error.h
+/minkernel/ntos/obj
+/minkernel/ntos/mpobj
+/minkernel/ntos/ke/mp/x86
+/minkernel/ntos/ke/mp/amd64
+/minkernel/ntos/rtl/error.h
 /public/publish.log
 /ds/lsa/server/exe/lsapmsgs.h
 /ds/lsa/server/lsarpc_s.c
 /ds/lsa/uclient/lsarpc_c.c
 /ds/lsa/uclient/lsarpc_c.h
-/base/ntos/ex/dbg.log
+/minkernel/ntos/ex/dbg.log
