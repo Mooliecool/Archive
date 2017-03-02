@@ -1,6 +1,7 @@
 DIRS= \
     crts    \
     hals    \
-    ntos
+    ntos    \
+    subsys
 
 OPTIONAL_DIRS=
