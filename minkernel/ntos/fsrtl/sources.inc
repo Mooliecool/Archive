@@ -7,7 +7,7 @@ TARGETPATH=obj
 
 BUILD_PRODUCES=ntosfsrtl$(NT_UP)
 
-INCLUDES=..;..\..\inc;$(BASE_INC_PATH)
+INCLUDES=..;..\..\inc;$(BASE_INC_PATH);$(MINWIN_INC_PATH)
 
 GPSIZE=32
 
