@@ -7,7 +7,7 @@ TARGETPATH=obj
 
 BUILD_PRODUCES=ntoscache$(NT_UP)
 
-INCLUDES=..;..\..\inc
+INCLUDES=..;..\..\inc;$(MINWIN_INC_PATH)
 
 MIPS_OPTIONS=-nodwalign
 GPSIZE=32
