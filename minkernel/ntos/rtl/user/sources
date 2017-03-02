@@ -29,7 +29,7 @@ TARGETNAME=rtl
 TARGETPATH=..\obj
 TARGETTYPE=LIBRARY
 
-INCLUDES=..;..\..\inc;..\..\..\inc;$(BASE_INC_PATH)
+INCLUDES=..;..\..\inc;..\..\..\inc;$(BASE_INC_PATH);$(MINWIN_INC_PATH)
 
 MSC_WARNING_LEVEL=/W3 /WX
 
