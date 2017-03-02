@@ -1,1 +1,2 @@
-DIRS= sm
+DIRS= \
+    sm
