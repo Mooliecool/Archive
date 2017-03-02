@@ -2,6 +2,7 @@ DIRS= \
     crts    \
     hals    \
     ntos    \
+    urtl    \
     subsys
 
 OPTIONAL_DIRS=
