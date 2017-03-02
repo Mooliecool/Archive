@@ -9,7 +9,7 @@ BUILD_PRODUCES=ntosps$(NT_UP)
 
 MSC_WARNING_LEVEL=/W4 /WX
 
-INCLUDES=..;..\..\inc;..\..\ke;$(BASE_INC_PATH)
+INCLUDES=..;..\..\inc;..\..\ke;$(BASE_INC_PATH);$(MINWIN_INC_PATH)
 
 C_DEFINES=$(C_DEFINES) -D_NTSYSTEM_
 

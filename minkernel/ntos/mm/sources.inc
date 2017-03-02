@@ -7,7 +7,7 @@ TARGETPATH=obj
 
 BUILD_PRODUCES=ntosmm$(NT_UP)
 
-INCLUDES=..;..\..\inc;..\..\ke;$(BASE_INC_PATH)
+INCLUDES=..;..\..\inc;..\..\ke;$(BASE_INC_PATH);$(MINWIN_INC_PATH)
 
 MIPS_OPTIONS=-nodwalign
 GPSIZE=32
