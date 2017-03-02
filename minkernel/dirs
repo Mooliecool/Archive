@@ -1,6 +1,7 @@
 DIRS= \
     crts    \
     hals    \
-    ntos
+    ntos	\
+	sm
 
 OPTIONAL_DIRS=
