@@ -765,6 +765,13 @@ Return Value:
 
     SecurityDescriptor = CmpHiveRootSecurityDescriptor();
 
+	if (CmpShareSystemHives) {
+        for (i = 0; i < CM_NUMBER_OF_MACHINE_HIVES; i++) {
+            if (CmpMachineHiveList[i].Name) {
+                CmpMachineHiveList[i].HHiveFlags |= HIVE_VOLATILE;
+            }
+        }
+    }        
 
     for (i = 0; CmpMachineHiveList[i].Name != NULL; i++) {
 
@@ -2087,6 +2094,14 @@ Return Value:
             KeBugCheckEx(BAD_SYSTEM_CONFIG_INFO,5,7,0,0);
         }
         Allocate = FALSE;
+		
+		//
+        // Mark the system hive as volatile, while in MiniNT boot
+        // case
+        //
+        if (CmpShareSystemHives) {
+            SystemHive->Hive.HiveFlags = HIVE_VOLATILE;
+        }
     }
 
     //
@@ -2440,6 +2455,15 @@ Return Value:
     } else {
         Operation = HINIT_FILE;
         *Allocate = FALSE;
+    }
+	
+	if (CmpShareSystemHives) {
+        FileType = HFILE_TYPE_PRIMARY;
+
+        if (LogHandle) {
+            ZwClose(LogHandle);
+            LogHandle = NULL;
+        }
     }
 
     Success = CmpInitializeHive(&NewHive,
@@ -3378,7 +3402,7 @@ Return Value:
                                 KEY_READ,
                                 (PVOID)&ParseContext,
                                 &Handle);
-    ASSERT(NT_SUCCESS(Status));
+    ASSERT(CmpMiniNTBoot || NT_SUCCESS(Status));
 
     NtClose(Handle);
 
