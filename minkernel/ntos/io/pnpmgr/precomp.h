@@ -13,17 +13,25 @@
 #include <zwapi.h>
 
 //
+// SDK Header Files
+//
+
+#include <ntiologc.h>
+
+//
 // CRT Header Files
 //
 #include <stdio.h>
 #include <string.h>
 
 //
-// Plug and Play Manager Internal Header File
+// Plug and Play Manager Internal Header Files
 //
 #include "pnpi.h"
+#include "pnpiop.h"
 
 //
 // I/O Private Header Files for Registry Helper Functions
 //
-//#include "..\io\iop.h"
+#include "..\iomgr\iomgr.h"
+

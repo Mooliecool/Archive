@@ -25,7 +25,7 @@ Revision History:
 --*/
 
 
-#include "..\pnp\pnpi.h"
+#include "pnpi.h"
 
 #if _PNP_POWER_
 
