@@ -168,7 +168,8 @@ ExpDeleteLockRoutine(
 
 #endif // i386
 
-
+BOOLEAN InitIsWinPEMode = FALSE;
+ULONG InitWinPEModeType = INIT_WINPEMODE_NONE;
 
 NLSTABLEINFO InitTableInfo;
 ULONG InitNlsTableSize;
@@ -924,6 +925,7 @@ Phase1Initialization(
     PMESSAGE_RESOURCE_ENTRY MessageEntry1;
 #endif
     PCHAR MPKernelString;
+    PCHAR Options;
 
     //
     //  Set handle for PAGELK section.
@@ -950,6 +952,29 @@ Phase1Initialization(
     if (HalInitSystem(InitializationPhase, LoaderBlock) == FALSE) {
         KeBugCheck(HAL1_INITIALIZATION_FAILED);
     }
+    
+    //
+    // Grab the loader block options.
+    //
+    
+    Options = LoaderBlock->LoadOptions ? _strupr(LoaderBlock->LoadOptions) : NULL;
+
+    //
+    // Are we booting into WinPE?
+    //
+    
+    if (Options) {
+        if (strstr(Options, "MININT") != NULL) {
+            InitIsWinPEMode = TRUE;
+
+            if (strstr(Options, "INRAM") != NULL) {
+                InitWinPEModeType |= INIT_WINPEMODE_INRAM;
+            } else {
+                InitWinPEModeType |= INIT_WINPEMODE_REGULAR;
+            }
+        }
+    }
+
 
 #ifdef _PNP_POWER_
     if (!PoInitSystem(0)) {
