@@ -26,6 +26,8 @@ Revision History:
 
 extern  BOOLEAN HvShutdownComplete;     // Set to true after shutdown
                                         // to disable any further I/O
+										
+extern HIVE_LIST_ENTRY CmpMachineHiveList[];
 
 #if DBG
 #define DumpDirtyVector(Hive)    \
@@ -690,6 +692,28 @@ Return Value:
     //
     if (Hive->DirtyCount == 0) {
         return TRUE;
+    }
+	
+	//
+    // Discard the write(s) to system hives if needed
+    //
+    if (CmpMiniNTBoot) {        
+        ULONG Index;
+        PCMHIVE CurrentHive = (PCMHIVE)Hive;
+        BOOLEAN SkipWrite = FALSE;
+        
+        for (Index = 0; Index < CM_NUMBER_OF_MACHINE_HIVES; Index++) {
+            if ((CmpMachineHiveList[Index].Name != NULL) &&
+                ((CmpMachineHiveList[Index].CmHive == CurrentHive))) {
+                SkipWrite = TRUE;                 
+
+                break;
+            }
+        }
+
+        if (SkipWrite) {
+            return TRUE;
+        }
     }
 
     HvpTruncateBins(Hive);

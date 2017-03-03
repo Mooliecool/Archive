@@ -326,6 +326,24 @@ Return Value:
 
     PAGED_CODE();
     CMLOG(CML_MAJOR, CMS_INIT) KdPrint(("CmInitSystem1\n"));
+	
+	//
+    // Set the mini NT flag if we are booting into Mini NT 
+    // environment
+    //
+    if (InitIsWinPEMode) {
+        CmpMiniNTBoot = InitIsWinPEMode;        
+
+        //
+        // On Remote boot client share the system hives
+        //
+        // NOTE : We can't assume exclusive access to WinPE
+        // remote boot clients. We don't flush anything to 
+        // system hives in WinPE. All the system hives are 
+        // loaded in memory in scratch mode
+        //
+        CmpShareSystemHives = TRUE;
+    }
 
     //
     // Initialize Names of all registry paths.

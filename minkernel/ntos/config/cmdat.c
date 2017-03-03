@@ -278,6 +278,19 @@ BOOLEAN CmFirstTime = TRUE;       // set to false to shut off NtInitializeRegist
 //
 BOOLEAN CmpWasSetupBoot;
 
+//
+// Indicates whether the hives need to be loaded in memory
+// and in scratch mode
+//
+BOOLEAN CmpMiniNTBoot = FALSE;
+
+//
+// Indicates whether the system hives need to be opened in a
+// shared mode. Generally needed if we are booting WinPE (MiniNT)
+// on network
+//
+BOOLEAN CmpShareSystemHives = FALSE;
+
 #ifdef ALLOC_DATA_PRAGMA
 #pragma  data_seg()
 #endif
