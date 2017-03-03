@@ -171,6 +171,14 @@ extern BOOLEAN SepDumpSD;
 
 extern  UNICODE_STRING  CmRegistrySystemCloneName;
 
+//
+// Determines whether the Current Control Set used during booting
+// is cloned in order to fully preserve it for being saved
+// as the LKG Control Set.
+//
+
+#define     CM_NUMBER_OF_MACHINE_HIVES  6
+
 #define NUMBER_TYPES (MaximumType + 1)
 
 #define CM_WRAP_LIMIT               0x7fffffff
@@ -1418,6 +1426,12 @@ CmpValidateHiveSecurityDescriptors(
         CmpUsedStorage += HvGetCellSize(Hive, p);   \
     }
 
+//
+// Mini NT boot indicator
+//
+extern BOOLEAN CmpMiniNTBoot;
+extern BOOLEAN CmpShareSystemHives;
+	
 //
 // cmboot - functions for determining driver load lists
 //
