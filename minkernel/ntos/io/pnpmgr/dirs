@@ -1,7 +1,6 @@
 !IF 0
 
-Copyright (c) 2015  Microsoft Corporation
-Copyright (c) 2015  OpenNT Project
+Copyright (c) 1989  Microsoft Corporation
 
 Module Name:
 
@@ -12,10 +11,12 @@ Abstract:
     This file specifies the subdirectories of the current directory that
     contain component makefiles.
 
+
 Author:
 
-    Stephanos Io (stephanos) 09-Jun-2015
+
+NOTE:   Commented description of this file is in \nt\bak\bin\dirs.tpl
 
 !ENDIF
 
-DIRS= iomgr pnpmgr
+DIRS=up{x86,amd64,mips} mp

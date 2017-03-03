@@ -12,7 +12,6 @@ DIRS= \
     mm      \
     nls     \
     ob      \
-    pnp     \
     po      \
     ps      \
     raw     \
