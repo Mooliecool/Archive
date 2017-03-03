@@ -168,8 +168,8 @@ ExpDeleteLockRoutine(
 
 #endif // i386
 
-BOOLEAN InitIsWinPEMode;
-ULONG InitWinPEModeType;
+BOOLEAN InitIsWinPEMode = FALSE;
+ULONG InitWinPEModeType = INIT_WINPEMODE_NONE;
 
 NLSTABLEINFO InitTableInfo;
 ULONG InitNlsTableSize;
