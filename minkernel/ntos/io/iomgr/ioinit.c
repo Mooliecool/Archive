@@ -3590,6 +3590,20 @@ Notes:
     //
 
     fileObject->DeviceObject->Flags |= DO_SYSTEM_BOOT_PARTITION;
+	
+	//
+    // Save away the characteristics of boot device object for later
+    // use in WinPE mode
+    //
+    if (InitIsWinPEMode) {
+        if (fileObject->DeviceObject->Characteristics & FILE_REMOVABLE_MEDIA) {
+            InitWinPEModeType |= INIT_WINPEMODE_REMOVABLE_MEDIA;
+        }
+
+        if (fileObject->DeviceObject->Characteristics & FILE_READ_ONLY_DEVICE) {
+            InitWinPEModeType |= INIT_WINPEMODE_READONLY_MEDIA;
+        }
+    }
 
     //
     // Finally, close the handle and dereference the file object.
