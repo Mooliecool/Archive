@@ -765,6 +765,10 @@ Return Value:
 
     SecurityDescriptor = CmpHiveRootSecurityDescriptor();
 
+    //
+    // HIVE_LIST_ENTRY does not have HHiveFlags currently
+    //
+#if 0
 	if (CmpShareSystemHives) {
         for (i = 0; i < CM_NUMBER_OF_MACHINE_HIVES; i++) {
             if (CmpMachineHiveList[i].Name) {
@@ -772,7 +776,8 @@ Return Value:
             }
         }
     }        
-
+#endif
+	
     for (i = 0; CmpMachineHiveList[i].Name != NULL; i++) {
 
         //
