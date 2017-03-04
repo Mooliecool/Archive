@@ -5,7 +5,6 @@
 admin           cd /d %NTROOT%\admin
 
 base            cd /d %NTROOT%\base
-ntos            cd /d %NTROOT%\base\ntos
 
 com             cd /d %NTROOT%\com
 
@@ -20,6 +19,12 @@ inetcore        cd /d %NTROOT%\inetcore
 inetsrv         cd /d %NTROOT%\inetsrv
 
 mergedcomp      cd /d %NTROOT%\mergedcomponents
+
+minkernel       cd /d %NTROOT%\minkernel
+crts            cd /d %NTROOT%\minkernel\crts
+hals            cd /d %NTROOT%\minkernel\hals
+ntos            cd /d %NTROOT%\minkernel\ntos
+subsys          cd /d %NTROOT%\minkernel\subsys
 
 multimedia      cd /d %NTROOT%\multimedia
 
