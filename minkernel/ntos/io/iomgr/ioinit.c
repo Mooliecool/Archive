@@ -102,11 +102,6 @@ IopCheckDependencies(
     IN HANDLE KeyHandle
     );
 
-VOID
-IopCreateArcNames(
-    IN PLOADER_PARAMETER_BLOCK LoaderBlock
-    );
-
 BOOLEAN
 IopCreateObjectTypes(
     VOID
@@ -135,19 +130,6 @@ IopInitializeAttributesAndCreateObject(
     );
 
 BOOLEAN
-IopInitializeBootDrivers(
-    IN PLOADER_PARAMETER_BLOCK LoaderBlock,
-    OUT PDRIVER_OBJECT *PreviousDriver
-    );
-
-BOOLEAN
-IopInitializeBuiltinDriver(
-    IN PUNICODE_STRING DriverName,
-    IN PUNICODE_STRING RegistryPath,
-    IN PDRIVER_INITIALIZE DriverInitializeRoutine
-    );
-
-BOOLEAN
 IopInitializeDumpDrivers(
     IN PLOADER_PARAMETER_BLOCK LoaderBlock
     );
@@ -159,20 +141,10 @@ IopInitializeSingleBootDriver(
     OUT PUNICODE_STRING DriverName           OPTIONAL
     );
 
-BOOLEAN
-IopInitializeSystemDrivers(
-    VOID
-    );
-
 PTREE_ENTRY
 IopLookupGroupName(
     IN PUNICODE_STRING GroupName,
     IN BOOLEAN Insert
-    );
-
-BOOLEAN
-IopMarkBootPartition(
-    IN PLOADER_PARAMETER_BLOCK LoaderBlock
     );
 
 BOOLEAN

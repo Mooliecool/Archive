@@ -411,10 +411,7 @@ extern KSPIN_LOCK IopCompletionLock;
 extern POBJECT_TYPE IoAdapterObjectType;
 extern POBJECT_TYPE IoCompletionObjectType;
 extern POBJECT_TYPE IoControllerObjectType;
-extern POBJECT_TYPE IoDeviceObjectType;
-extern POBJECT_TYPE IoDriverObjectType;
 extern POBJECT_TYPE IoDeviceHandlerObjectType;
-extern POBJECT_TYPE IoFileObjectType;
 extern ULONG        IoDeviceHandlerObjectSize;
 
 extern NPAGED_LOOKASIDE_LIST IopLargeIrpLookasideList;
@@ -668,12 +665,6 @@ IopFreeIrpAndMdls(
     );
 
 NTSTATUS
-IopGetDriverNameFromKeyNode(
-    IN HANDLE KeyHandle,
-    OUT PUNICODE_STRING DriverName
-    );
-
-NTSTATUS
 IopGetFileName(
     IN PFILE_OBJECT FileObject,
     IN ULONG Length,
@@ -684,19 +675,6 @@ IopGetFileName(
 BOOLEAN
 IopGetMountFlag(
     IN PDEVICE_OBJECT DeviceObject
-    );
-
-NTSTATUS
-IopGetRegistryKeyInformation(
-    IN HANDLE KeyHandle,
-    OUT PKEY_FULL_INFORMATION *Information
-    );
-
-NTSTATUS
-IopGetRegistryValue(
-    IN HANDLE KeyHandle,
-    IN PWSTR  ValueName,
-    OUT PKEY_VALUE_FULL_INFORMATION *Information
     );
 
 NTSTATUS
@@ -728,45 +706,6 @@ IopHardErrorThread(
     PVOID StartContext
     );
 
-//++
-//
-// VOID
-// IopInitializeIrp(
-//     IN OUT PIRP Irp,
-//     IN USHORT PacketSize,
-//     IN CCHAR StackSize
-//     )
-//
-// Routine Description:
-//
-//     Initializes an IRP.
-//
-// Arguments:
-//
-//     Irp - a pointer to the IRP to initialize.
-//
-//     PacketSize - length, in bytes, of the IRP.
-//
-//     StackSize - Number of stack locations in the IRP.
-//
-// Return Value:
-//
-//     None.
-//
-//--
-
-#define IopInitializeIrp( Irp, PacketSize, StackSize ) {          \
-    RtlZeroMemory( (Irp), (PacketSize) );                         \
-    (Irp)->Type = (CSHORT) IO_TYPE_IRP;                           \
-    (Irp)->Size = (USHORT) ((PacketSize));                        \
-    (Irp)->StackCount = (CCHAR) ((StackSize));                    \
-    (Irp)->CurrentLocation = (CCHAR) ((StackSize) + 1);           \
-    (Irp)->ApcEnvironment = KeGetCurrentApcEnvironment();         \
-    (Irp)->Tail.Overlay.CurrentStackLocation =                    \
-        ((PIO_STACK_LOCATION) ((UCHAR *) (Irp) +                  \
-            sizeof( IRP ) +                                       \
-            ( (StackSize) * sizeof( IO_STACK_LOCATION )))); }
-
 VOID
 IopInitializeResourceMap (
     PLOADER_PARAMETER_BLOCK LoaderBlock
@@ -777,17 +716,6 @@ IopInsertRemoveDevice(
     IN PDRIVER_OBJECT DriverObject,
     IN PDEVICE_OBJECT DeviceObject,
     IN BOOLEAN Insert
-    );
-
-NTSTATUS
-IopInvalidDeviceRequest(
-    IN PDEVICE_OBJECT DeviceObject,
-    IN PIRP Irp
-    );
-
-NTSTATUS
-IopLoadDriver(
-    IN HANDLE KeyHandle
     );
 
 VOID
@@ -884,35 +812,6 @@ IopQueryXxxInformation(
     OUT PULONG ReturnedLength,
     IN BOOLEAN FileInformation
     );
-
-//+
-// VOID
-// IopQueueThreadIrp(
-//     IN PIRP Irp
-//     )
-//
-// Routine Description:
-//
-//     This routine queues the specified I/O Request Packet (IRP) to the thread
-//     whose TCB address is stored in the packet.
-//
-// Arguments:
-//
-//     Irp - Supplies the IRP to be queued for the specified thread.
-//
-// Return Value:
-//
-//     None.
-//
-//-
-
-#define IopQueueThreadIrp( Irp ) {                      \
-    KIRQL irql;                                         \
-    KeRaiseIrql( APC_LEVEL, &irql );                    \
-    InsertHeadList( &Irp->Tail.Overlay.Thread->IrpList, \
-                    &Irp->ThreadListEntry );            \
-    KeLowerIrql( irql );                                \
-    }
 
 VOID
 IopQueueWorkRequest(

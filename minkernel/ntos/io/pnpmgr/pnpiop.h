@@ -326,9 +326,4 @@ IopQueryDeviceConfigurationVector(
     OUT PULONG ActualBufferSize
     );
 
-PDRIVER_OBJECT
-IopReferenceDriverObjectByName (
-    IN PUNICODE_STRING DriverName
-    );
-
 #endif
