@@ -1,16 +1,16 @@
 MAJORCOMP=ntos
-MINORCOMP=iomgr
+MINORCOMP=io
 
 TARGETNAME=iomgr
 TARGETTYPE=LIBRARY
 TARGETPATH=obj
 
+BUILD_PRODUCES=ntosiomgr$(NT_UP)
+
 INCLUDES=..;..\..;..\..\..\inc;;$(BASE_INC_PATH);$(MINWIN_INC_PATH)
 
 MIPS_OPTIONS=-nodwalign
 GPSIZE=32
-
-C_DEFINES=$(C_DEFINES) -D_NTSYSTEM_
 
 SOURCES=..\arcsec.c   \
         ..\complete.c \
@@ -42,7 +42,7 @@ NTTEST=
 OPTIONAL_NTTEST=tio
 
 PRECOMPILED_INCLUDE=..\iomgr.h
-PRECOMPILED_PCH=iop.pch
-PRECOMPILED_OBJ=iop.obj
+PRECOMPILED_PCH=iomgr.pch
+PRECOMPILED_OBJ=iomgr.obj
 
 SOURCES_USED=..\sources.inc
