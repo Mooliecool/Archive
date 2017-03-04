@@ -19,8 +19,8 @@ BUILD_CONSUMES= ntoscache$(NT_UP) \
                 ntosex$(NT_UP) \
                 ntosfsrtl$(NT_UP) \
                 ntosfstub$(NT_UP) \
-                ntosio$(NT_UP) \
-                ntospnp$(NT_UP) \
+                ntosiomgr$(NT_UP) \
+                ntospnpmgr$(NT_UP) \
                 ntoskd$(NT_UP) \
                 ntoske$(NT_UP) \
                 ntoslpc$(NT_UP) \
@@ -98,28 +98,28 @@ TARGETPATH2=$(TARGETPATH)
 !endif
 
 KERNEL_LIBS = \
-    $(PROJECT_ROOT)\ntos\cache\$(TARGET2)\$(O)\cache.lib  \
-    $(PROJECT_ROOT)\ntos\config\$(TARGET2)\$(O)\config.lib \
-    $(PROJECT_ROOT)\ntos\dbgk\$(TARGET2)\$(O)\dbgk.lib   \
-    $(PROJECT_ROOT)\ntos\ex\$(TARGET2)\$(O)\ex.lib     \
-    $(PROJECT_ROOT)\ntos\FsRtl\$(TARGET2)\$(O)\FsRtl.lib  \
-    $(PROJECT_ROOT)\ntos\FStub\$(TARGET2)\$(O)\FStub.lib  \
-    $(PROJECT_ROOT)\ntos\init\$(TARGET1)\$(O)\init.lib    \
-    $(PROJECT_ROOT)\ntos\io\iomgr\$(TARGET2)\$(O)\iomgr.lib     \
-    $(PROJECT_ROOT)\ntos\kd\$(TARGET1)\$(O)\kd.lib      \
-    $(PROJECT_ROOT)\ntos\ke\$(TARGET1)\$(O)\ke.lib      \
-    $(PROJECT_ROOT)\ntos\lpc\$(TARGET2)\$(O)\lpc.lib    \
-    $(PROJECT_ROOT)\ntos\mm\$(TARGET1)\$(O)\mm.lib      \
-    $(PROJECT_ROOT)\ntos\ob\$(TARGET2)\$(O)\ob.lib     \
-    $(PROJECT_ROOT)\ntos\io\pnpmgr\$(TARGET2)\$(O)\pnpmgr.lib     \
-    $(PROJECT_ROOT)\ntos\po\$(TARGET2)\$(O)\po.lib     \
-    $(PROJECT_ROOT)\ntos\ps\$(TARGET2)\$(O)\ps.lib     \
-    $(PROJECT_ROOT)\ntos\raw\$(TARGET2)\$(O)\raw.lib    \
-    $(PROJECT_ROOT)\ntos\rtl\$(TARGET2)\$(O)\ntosrtl.lib\
-    $(PROJECT_ROOT)\ntos\se\$(TARGET2)\$(O)\se.lib     \
-    $(PROJECT_ROOT)\ntos\vdm\$(TARGET2)\$(O)\vdm.lib    \
-    $(DS_LIB_PATH)\lsakrnlp.lib \
-    $(SDK_LIB_PATH)\libcntpr.lib \
+    $(PROJECT_ROOT)\ntos\cache\$(TARGET2)\$(O)\cache.lib            \
+    $(PROJECT_ROOT)\ntos\config\$(TARGET2)\$(O)\config.lib          \
+    $(PROJECT_ROOT)\ntos\dbgk\$(TARGET2)\$(O)\dbgk.lib              \
+    $(PROJECT_ROOT)\ntos\ex\$(TARGET2)\$(O)\ex.lib                  \
+    $(PROJECT_ROOT)\ntos\FsRtl\$(TARGET2)\$(O)\FsRtl.lib            \
+    $(PROJECT_ROOT)\ntos\FStub\$(TARGET2)\$(O)\FStub.lib            \
+    $(PROJECT_ROOT)\ntos\init\$(TARGET1)\$(O)\init.lib              \
+    $(PROJECT_ROOT)\ntos\io\iomgr\$(TARGET2)\$(O)\iomgr.lib         \
+    $(PROJECT_ROOT)\ntos\io\pnpmgr\$(TARGET2)\$(O)\pnpmgr.lib       \
+    $(PROJECT_ROOT)\ntos\kd\$(TARGET1)\$(O)\kd.lib                  \
+    $(PROJECT_ROOT)\ntos\ke\$(TARGET1)\$(O)\ke.lib                  \
+    $(PROJECT_ROOT)\ntos\lpc\$(TARGET2)\$(O)\lpc.lib                \
+    $(PROJECT_ROOT)\ntos\mm\$(TARGET1)\$(O)\mm.lib                  \
+    $(PROJECT_ROOT)\ntos\ob\$(TARGET2)\$(O)\ob.lib                  \
+    $(PROJECT_ROOT)\ntos\po\$(TARGET2)\$(O)\po.lib                  \
+    $(PROJECT_ROOT)\ntos\ps\$(TARGET2)\$(O)\ps.lib                  \
+    $(PROJECT_ROOT)\ntos\raw\$(TARGET2)\$(O)\raw.lib                \
+    $(PROJECT_ROOT)\ntos\rtl\$(TARGET2)\$(O)\ntosrtl.lib            \
+    $(PROJECT_ROOT)\ntos\se\$(TARGET2)\$(O)\se.lib                  \
+    $(PROJECT_ROOT)\ntos\vdm\$(TARGET2)\$(O)\vdm.lib                \
+    $(DS_LIB_PATH)\lsakrnlp.lib                                     \
+    $(SDK_LIB_PATH)\libcntpr.lib
 
 !if !$(FREEBUILD) && $(X86)
 KERNEL_ALIGNMENT=0x1000
