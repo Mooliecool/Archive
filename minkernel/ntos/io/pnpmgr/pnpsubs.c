@@ -25,7 +25,7 @@ Revision History:
 
 --*/
 
-#include "precomp.h"
+#include "pnpmgrp.h"
 
 //
 // Prototype of internal functions

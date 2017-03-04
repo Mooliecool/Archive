@@ -24,7 +24,7 @@ Revision History:
 
 --*/
 
-#include "precomp.h"
+#include "pnpmgrp.h"
 
 #ifdef ALLOC_DATA_PRAGMA
 #pragma data_seg("INIT")

@@ -1,17 +1,15 @@
 MAJORCOMP=ntos
-MINORCOMP=pnpmgr
+MINORCOMP=io
 
 TARGETNAME=pnpmgr
 TARGETTYPE=LIBRARY
 TARGETPATH=obj
 
-BUILD_PRODUCES=ntospnp$(NT_UP)
+BUILD_PRODUCES=ntospnpmgr$(NT_UP)
 
 GPSIZE=32
 
 INCLUDES=..;..\..;..\..\..\inc;..\..\..\ke;$(BASE_INC_PATH);$(MINWIN_INC_PATH)
-
-C_DEFINES=$(C_DEFINES) -D_NTSYSTEM_
 
 SOURCES=..\assign.c   \
         ..\busenum.c  \
@@ -27,11 +25,10 @@ SOURCES=..\assign.c   \
         ..\pnpsubs.c  \
         ..\report.c   \
 
-UMTYPE=nt
-UMTEST=
+NTTEST=
 
-PRECOMPILED_INCLUDE=..\precomp.h
-PRECOMPILED_PCH=precomp.pch
-PRECOMPILED_OBJ=precomp.obj
+PRECOMPILED_INCLUDE=..\pnpmgrp.h
+PRECOMPILED_PCH=pnpmgrp.pch
+PRECOMPILED_OBJ=pnpmgrp.obj
 
 SOURCES_USED=..\sources.inc

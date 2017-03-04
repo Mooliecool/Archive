@@ -24,7 +24,7 @@ Revision History:
 
 --*/
 
-#include "precomp.h"
+#include "pnpmgrp.h"
 
 extern WCHAR IopWstrRaw[];
 extern WCHAR IopWstrTranslated[];

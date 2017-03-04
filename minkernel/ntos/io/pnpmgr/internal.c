@@ -19,7 +19,7 @@ Revision History:
 
 --*/
 
-#include "precomp.h"
+#include "pnpmgrp.h"
 #pragma hdrstop
 
 //

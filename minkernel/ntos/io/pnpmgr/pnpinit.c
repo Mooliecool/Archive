@@ -29,7 +29,7 @@ Revision History:
 		
 --*/
 
-#include "precomp.h"
+#include "pnpmgrp.h"
 
 #if _PNP_POWER_
 

@@ -23,7 +23,7 @@ Revision History:
 
 --*/
 
-#include "precomp.h"
+#include "pnpmgrp.h"
 
 #define IDBG    DBG
 #define PAGED   1

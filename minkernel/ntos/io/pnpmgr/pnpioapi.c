@@ -23,7 +23,7 @@ Revision History:
 
 --*/
 
-#include "precomp.h"
+#include "pnpmgrp.h"
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text(PAGE, IoQueryDeviceEnumInfo)

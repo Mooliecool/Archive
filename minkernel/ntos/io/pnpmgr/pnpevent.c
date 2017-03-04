@@ -18,7 +18,7 @@ Revision History:
 
 --*/
 
-#include "precomp.h"
+#include "pnpmgrp.h"
 #pragma hdrstop
 
 #ifdef ALLOC_PRAGMA
