@@ -57,6 +57,7 @@ Revision History:
 #endif
 
 #include <rpcnsip.h>
+#include <basetsd.h>
 
 #ifdef __cplusplus
 extern "C" {
