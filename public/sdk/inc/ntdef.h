@@ -69,6 +69,8 @@ Revision History:
 #define CONST               const
 #endif
 
+#include <basetsd.h>
+
 // begin_winnt
 
 #if (defined(_M_MRX000) || defined(_M_IX86) || defined(_M_ALPHA) || defined(_M_PPC)) && !defined(MIDL_PASS)

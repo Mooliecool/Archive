@@ -37,6 +37,7 @@ extern "C" {
 #define UNALIGNED
 #endif
 
+#include <basetsd.h>
 
 #if (defined(_M_MRX000) || defined(_M_IX86) || defined(_M_ALPHA) || defined(_M_PPC)) && !defined(MIDL_PASS)
 #define DECLSPEC_IMPORT __declspec(dllimport)
