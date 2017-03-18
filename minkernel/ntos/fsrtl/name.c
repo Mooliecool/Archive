@@ -62,6 +62,13 @@ extern ULONG DaveDebug;
 #endif
 
 //
+//  Define a tag for general pool allocations from this module
+//
+
+#undef MODULE_POOL_TAG
+#define MODULE_POOL_TAG                  ('nrSF')
+
+//
 //  Local support routine prototypes
 //
 
@@ -846,9 +853,9 @@ Return Value:
 
                     ExpressionChars = Expression->Length / sizeof(WCHAR);
 
-                    AuxBuffer = FsRtlAllocatePool( PagedPool,
-                                                   (ExpressionChars+1) *
-                                                   sizeof(USHORT)*2*2 );
+                    AuxBuffer = FsRtlpAllocatePool( PagedPool,
+                                                    (ExpressionChars+1) *
+                                                    sizeof(USHORT)*2*2 );
 
                     RtlCopyMemory( AuxBuffer,
                                    CurrentMatches,
@@ -1068,3 +1075,4 @@ Return Value:
 
     return (BOOLEAN)(CurrentState == MaxState);
 }
+

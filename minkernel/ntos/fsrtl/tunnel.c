@@ -59,6 +59,10 @@ Revision History:
 
 #include "FsRtlP.h"
 
+#ifndef INLINE
+#define INLINE __inline
+#endif
+
 //
 //  Registry keys/values for controlling tunneling
 //
@@ -172,7 +176,7 @@ FsRtlPruneTunnelCache (
     IN OUT PLIST_ENTRY FreePoolList);
 
 #ifdef ALLOC_PRAGMA
-#pragma alloc_text(PAGE, FsRtlInitializeTunnel)
+#pragma alloc_text(PAGE, FsRtlInitializeTunnels)
 #pragma alloc_text(PAGE, FsRtlInitializeTunnelCache)
 #pragma alloc_text(PAGE, FsRtlAddToTunnelCache)
 #pragma alloc_text(PAGE, FsRtlFindInTunnelCache)
@@ -209,7 +213,8 @@ VOID DumpTunnel( TUNNEL *Tunnel );
 #endif
 
 
-__inline LONG
+INLINE
+LONG
 FsRtlCompareNodeAndKey (
     TUNNEL_NODE *Node,
     ULONGLONG DirectoryKey,
@@ -245,33 +250,8 @@ Return Value:
 }
 
 
-__inline VOID
-FsRtlQueryNormalizedSystemTime (
-    PLARGE_INTEGER PTime
-    )
-/*++
-
-Routine Description:
-
-    Query system time normalized to ~.5 sec boundaries. Time is kept in .1 msec quanta,
-    so masking off the low 22 bits (2^22 = 4,194,304) will yield normalized quantities.
-
-Arguments:
-
-    PTime     - pointer to a timestamp to write into   
-
-Return Value:
-
-    None
-
--*/
-{
-    KeQuerySystemTime(PTime);
-    PTime->LowPart &= ~0x3fffff;
-}
-
-
-__inline VOID
+INLINE
+VOID
 FsRtlFreeTunnelNode (
     PTUNNEL_NODE Node,
     PLIST_ENTRY FreePoolList OPTIONAL
@@ -312,7 +292,8 @@ Return Value:
 }
 
 
-__inline VOID
+INLINE
+VOID
 FsRtlEmptyFreePoolList (
     PLIST_ENTRY FreePoolList
     )
@@ -344,7 +325,8 @@ Return Value:
 }
 
 
-__inline VOID
+INLINE
+VOID
 FsRtlRemoveNodeFromTunnel (
     IN PTUNNEL Cache,
     IN PTUNNEL_NODE Node,
@@ -397,7 +379,7 @@ Return Value:
 
 
 VOID
-FsRtlInitializeTunnel (
+FsRtlInitializeTunnels (
     VOID
     )
 /*++
@@ -438,7 +420,6 @@ Return Value:
     //  Don't worry about failure in retrieving from the registry. We've gotten
     //  this far so fall back on defaults even if there was a problem with resources.
     //
-
 
     ValueName.Buffer = TUNNEL_SIZE_VALUE_NAME;
     ValueName.Length = sizeof(TUNNEL_SIZE_VALUE_NAME) - sizeof(WCHAR);
@@ -810,7 +791,7 @@ Return Value:
     //  Thread onto the timer list
     //
 
-    FsRtlQueryNormalizedSystemTime(&NewNode->CreateTime);
+    KeQuerySystemTime(&NewNode->CreateTime);
     InsertTailList(&Cache->TimerQueue, &NewNode->ListLinks);
 
     Cache->NumEntries++;
@@ -1324,6 +1305,7 @@ Return Value:
 {
     PTUNNEL_NODE Node;
     LARGE_INTEGER ExpireTime;
+    LARGE_INTEGER CurrentTime;
     BOOLEAN Splay = TRUE;
 
     PAGED_CODE();
@@ -1332,18 +1314,23 @@ Return Value:
     //  Calculate the age of the oldest entry we want to keep
     //
 
-    FsRtlQueryNormalizedSystemTime(&ExpireTime);
-    ExpireTime.QuadPart -= TunnelMaxAge;
+    KeQuerySystemTime(&CurrentTime);
+    ExpireTime.QuadPart = CurrentTime.QuadPart - TunnelMaxAge;
 
     //
-    //  Expire old entries off of the timer queue
+    //  Expire old entries off of the timer queue.  We have to check
+    //  for future time because the clock may jump as a result of
+    //  hard clock change.  If we did not do this, a rogue entry
+    //  with a future time could sit at the top of the queue and
+    //  prevent entries from going away.
     //
 
     while (!IsListEmpty(&Cache->TimerQueue)) {
 
         Node = CONTAINING_RECORD(Cache->TimerQueue.Flink, TUNNEL_NODE, ListLinks);
 
-        if (Node->CreateTime.QuadPart < ExpireTime.QuadPart) {
+        if (Node->CreateTime.QuadPart < ExpireTime.QuadPart ||
+            Node->CreateTime.QuadPart > CurrentTime.QuadPart) {
 
 #if defined(TUNNELTEST) || defined(KEYVIEW)
             DbgPrint("Expiring node %x (%ud%ud 1/10 msec too old)\n", Node, DblHex64(ExpireTime.QuadPart - Node->CreateTime.QuadPart));

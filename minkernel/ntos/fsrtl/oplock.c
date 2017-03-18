@@ -59,6 +59,7 @@ Revision History:
     FILE_WRITE_ATTRIBUTES           |   \
     FILE_READ_DATA                  |   \
     FILE_READ_EA                    |   \
+    FILE_EXECUTE                    |   \
     SYNCHRONIZE                     |   \
     READ_CONTROL                        \
 )
@@ -77,9 +78,8 @@ Revision History:
 #define BATCH_OPLOCK            (0x00000004)
 #define FILTER_OPLOCK           (0x00000008)
 #define LEVEL_II_OPLOCK         (0x00000010)
-#define UNINITIALIZE_OPLOCK     (0x00000020)
 
-#define OPLOCK_TYPE_MASK        (0x0000003f)
+#define OPLOCK_TYPE_MASK        (0x0000001f)
 
 #define EXCLUSIVE               (0x00000040)
 #define PENDING                 (0x00000080)
@@ -90,9 +90,8 @@ Revision History:
 #define BREAK_TO_NONE           (0x00000200)
 #define BREAK_TO_II_TO_NONE     (0x00000400)
 #define CLOSE_PENDING           (0x00000800)
-#define TIMER_STARTED           (0x00001000)
 
-#define OPLOCK_BREAK_MASK       (0x00001f00)
+#define OPLOCK_BREAK_MASK       (0x00000f00)
 
 //
 //  The oplock types consist of the appropriate flags.
@@ -120,11 +119,7 @@ Revision History:
 #define OpBatchClosePending     (BATCH_OPLOCK   | EXCLUSIVE | CLOSE_PENDING)
 #define OpFilterClosePending    (FILTER_OPLOCK  | EXCLUSIVE | CLOSE_PENDING)
 
-#define OpFilterTimerStarted    (FILTER_OPLOCK  | EXCLUSIVE | PENDING | TIMER_STARTED)
-
 #define OplockIIGranted         (LEVEL_II_OPLOCK)
-
-#define UninitializeOplock      (UNINITIALIZE_OPLOCK)
 
 //
 //  The oplock state is now just a ULONG.
@@ -180,18 +175,6 @@ typedef struct _NONOPAQUE_OPLOCK {
 
     PFAST_MUTEX FastMutex;
 
-    //
-    //  This is the timer package to process an OpFilter break.
-    //
-
-    struct _OPFILTER_TIMER *OpFilter;
-
-    //
-    //  Count of outstanding timers.
-    //
-
-    ULONG TimerCount;
-
 } NONOPAQUE_OPLOCK, *PNONOPAQUE_OPLOCK;
 
 //
@@ -245,17 +228,11 @@ typedef struct _WAITING_IRP {
 } WAITING_IRP, *PWAITING_IRP;
 
 //
-//  The following structure is used when timing out the OpFilter oplocks.
+//  Define a tag for general pool allocations from this module
 //
 
-typedef struct _OPFILTER_TIMER {
-
-    KDPC OpFilterDpc;
-    KTIMER OpFilterTimer;
-    WORK_QUEUE_ITEM OpFilterItem;
-    PNONOPAQUE_OPLOCK Oplock;
-
-} OPFILTER_TIMER, *POPFILTER_TIMER;
+#undef MODULE_POOL_TAG
+#define MODULE_POOL_TAG                  ('orSF')
 
 
 //
@@ -373,48 +350,19 @@ FsRtlRemoveAndCompleteWaitIrp (
     IN PWAITING_IRP WaitingIrp
     );
 
-BOOLEAN
-FsRtlCheckForMatchingFileObject (
-    IN PFILE_OBJECT FileObject,
-    IN PLIST_ENTRY Link,
-    IN PLIST_ENTRY EndOfList,
-    OUT PLIST_ENTRY *MatchingLink
-    );
-
 VOID
 FsRtlNotifyCompletion (
     IN PVOID Context,
     IN PIRP Irp
     );
 
-VOID
-FsRtlOplockDpc (
-    IN PKDPC Dpc,
-    IN PVOID Context,
-    IN PVOID SystemArgument1,
-    IN PVOID SystemArgument2
-    );
-
-VOID
-FsRtlOpFilterWorkerRoutine (
-    IN PVOID Context
-    );
-
-VOID
-FsRtlInitializeOpFilter (
-    IN PNONOPAQUE_OPLOCK Oplock
-    );
-
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text(PAGE, FsRtlAllocateOplock)
-#pragma alloc_text(PAGE, FsRtlCheckForMatchingFileObject)
 #pragma alloc_text(PAGE, FsRtlCompletionRoutinePriv)
 #pragma alloc_text(PAGE, FsRtlCurrentBatchOplock)
-#pragma alloc_text(PAGE, FsRtlInitializeOpFilter)
 #pragma alloc_text(PAGE, FsRtlInitializeOplock)
 #pragma alloc_text(PAGE, FsRtlNotifyCompletion)
 #pragma alloc_text(PAGE, FsRtlOpBatchBreakClosePending)
-#pragma alloc_text(PAGE, FsRtlOpFilterWorkerRoutine)
 #pragma alloc_text(PAGE, FsRtlOplockBreakNotify)
 #pragma alloc_text(PAGE, FsRtlOplockFsctrl)
 #pragma alloc_text(PAGE, FsRtlOplockIsFastIoPossible)
@@ -512,129 +460,116 @@ Return Value:
 
         ExAcquireFastMutexUnsafe( ThisOplock->FastMutex );
 
-        //
-        //  If there are still timers outstanding then leave this to be
-        //  done when the last timer times out.
-        //
+        try {
 
-        if (ThisOplock->TimerCount == 0) {
+            PIRP Irp;
 
-            try {
+            //
+            //  Release any waiting Irps held.
+            //
 
-                PIRP Irp;
+            while (!IsListEmpty( &ThisOplock->WaitingIrps )) {
 
-                //
-                //  Release any waiting Irps held.
-                //
+                PWAITING_IRP WaitingIrp;
+                PIRP ThisIrp;
 
-                while (!IsListEmpty( &ThisOplock->WaitingIrps )) {
+                WaitingIrp = CONTAINING_RECORD( ThisOplock->WaitingIrps.Flink,
+                                                WAITING_IRP,
+                                                Links );
 
-                    PWAITING_IRP WaitingIrp;
-                    PIRP ThisIrp;
+                RemoveHeadList( &ThisOplock->WaitingIrps );
 
-                    WaitingIrp = CONTAINING_RECORD( ThisOplock->WaitingIrps.Flink,
-                                                    WAITING_IRP,
-                                                    Links );
+                ThisIrp = WaitingIrp->Irp;
 
-                    RemoveHeadList( &ThisOplock->WaitingIrps );
+                IoAcquireCancelSpinLock( &ThisIrp->CancelIrql );
 
-                    ThisIrp = WaitingIrp->Irp;
+                IoSetCancelRoutine( ThisIrp, NULL );
+                IoReleaseCancelSpinLock( ThisIrp->CancelIrql );
 
-                    IoAcquireCancelSpinLock( &ThisIrp->CancelIrql );
-
-                    IoSetCancelRoutine( ThisIrp, NULL );
-                    IoReleaseCancelSpinLock( ThisIrp->CancelIrql );
-
-                    ThisIrp->IoStatus.Information = 0;
-
-                    //
-                    //  Call the completion routine in the Waiting Irp.
-                    //
-
-                    WaitingIrp->CompletionRoutine( WaitingIrp->Context,
-                                                   WaitingIrp->Irp );
-
-                    ExFreePool( WaitingIrp );
-                }
+                ThisIrp->IoStatus.Information = 0;
 
                 //
-                //  Release any oplock II irps held.
+                //  Call the completion routine in the Waiting Irp.
                 //
 
-                while (!IsListEmpty( &ThisOplock->IrpOplocksII )) {
+                WaitingIrp->CompletionRoutine( WaitingIrp->Context,
+                                               WaitingIrp->Irp );
 
-                    Irp = CONTAINING_RECORD( ThisOplock->IrpOplocksII.Flink,
-                                             IRP,
-                                             Tail.Overlay.ListEntry );
-
-                    RemoveHeadList( &ThisOplock->IrpOplocksII );
-
-                    IoAcquireCancelSpinLock( &Irp->CancelIrql );
-
-                    IoSetCancelRoutine( Irp, NULL );
-                    IoReleaseCancelSpinLock( Irp->CancelIrql );
-
-                    //
-                    //  Complete the oplock II Irp.
-                    //
-
-                    ObDereferenceObject( IoGetCurrentIrpStackLocation( Irp )->FileObject );
-
-                    Irp->IoStatus.Information = FILE_OPLOCK_BROKEN_TO_NONE;
-                    FsRtlCompleteRequest( Irp, STATUS_SUCCESS );
-                }
-
-                //
-                //  Release any exclusive oplock held.
-                //
-
-                if (ThisOplock->IrpExclusiveOplock != NULL) {
-
-                    Irp = ThisOplock->IrpExclusiveOplock;
-
-                    IoAcquireCancelSpinLock( &Irp->CancelIrql );
-
-                    IoSetCancelRoutine( Irp, NULL );
-                    IoReleaseCancelSpinLock( Irp->CancelIrql );
-
-                    Irp->IoStatus.Information = FILE_OPLOCK_BROKEN_TO_NONE;
-                    FsRtlCompleteRequest( Irp, STATUS_SUCCESS );
-
-                    ThisOplock->IrpExclusiveOplock = NULL;
-
-                    if (ThisOplock->FileObject != NULL) {
-
-                        ObDereferenceObject( ThisOplock->FileObject );
-                    }
-                }
-
-            } finally {
-
-                //
-                //  No matter how we complete the preceding statements we will
-                //  now release the waiting lock queue mutex
-                //
-
-                ExReleaseFastMutexUnsafe( ThisOplock->FastMutex );
+                ExFreePool( WaitingIrp );
             }
 
             //
-            //  Deallocate the mutex.
+            //  Release any oplock II irps held.
             //
 
-            ExFreePool( ThisOplock->FastMutex );
+            while (!IsListEmpty( &ThisOplock->IrpOplocksII )) {
+
+                Irp = CONTAINING_RECORD( ThisOplock->IrpOplocksII.Flink,
+                                         IRP,
+                                         Tail.Overlay.ListEntry );
+
+                RemoveHeadList( &ThisOplock->IrpOplocksII );
+
+                IoAcquireCancelSpinLock( &Irp->CancelIrql );
+
+                IoSetCancelRoutine( Irp, NULL );
+                IoReleaseCancelSpinLock( Irp->CancelIrql );
+
+                //
+                //  Complete the oplock II Irp.
+                //
+
+                ObDereferenceObject( IoGetCurrentIrpStackLocation( Irp )->FileObject );
+
+                Irp->IoStatus.Information = FILE_OPLOCK_BROKEN_TO_NONE;
+                FsRtlCompleteRequest( Irp, STATUS_SUCCESS );
+            }
 
             //
-            //  Deallocate the Oplock structure.
+            //  Release any exclusive oplock held.
             //
 
-            ExFreePool( ThisOplock );
+            if (ThisOplock->IrpExclusiveOplock != NULL) {
 
-        } else {
+                Irp = ThisOplock->IrpExclusiveOplock;
 
-            ThisOplock->OplockState = UninitializeOplock;
+                IoAcquireCancelSpinLock( &Irp->CancelIrql );
+
+                IoSetCancelRoutine( Irp, NULL );
+                IoReleaseCancelSpinLock( Irp->CancelIrql );
+
+                Irp->IoStatus.Information = FILE_OPLOCK_BROKEN_TO_NONE;
+                FsRtlCompleteRequest( Irp, STATUS_SUCCESS );
+
+                ThisOplock->IrpExclusiveOplock = NULL;
+
+                if (ThisOplock->FileObject != NULL) {
+
+                    ObDereferenceObject( ThisOplock->FileObject );
+                }
+            }
+
+        } finally {
+
+            //
+            //  No matter how we complete the preceding statements we will
+            //  now release the waiting lock queue mutex
+            //
+
             ExReleaseFastMutexUnsafe( ThisOplock->FastMutex );
         }
+
+        //
+        //  Deallocate the mutex.
+        //
+
+        ExFreePool( ThisOplock->FastMutex );
+
+        //
+        //  Deallocate the Oplock structure.
+        //
+
+        ExFreePool( ThisOplock );
     }
 
     DebugTrace( -1, Dbg, "FsRtlUninitializeOplock:  Exit\n", 0 );
@@ -777,12 +712,16 @@ Return Value:
             //  synchronously or the open count is not 1.  Otherwise the Io system
             //  will hold the return code until the Irp is completed.
             //
+            //  Also fail this if the flag is set which indicates that
+            //  the IO system should copy data back to a user's buffer.
+            //
             //  If cleanup has occurrred on this file, then we refuse
             //  the oplock request.
             //
 
             if ((OpenCount != 1) ||
                 IoIsOperationSynchronous( Irp ) ||
+                FlagOn( Irp->Flags, IRP_INPUT_OPERATION ) ||
                 FlagOn( IrpSp->FileObject->Flags, FO_CLEANUP_COMPLETE )) {
 
                 FsRtlCompleteRequest( Irp, STATUS_OPLOCK_NOT_GRANTED );
@@ -808,6 +747,9 @@ Return Value:
             //  If cleanup has occurrred on this file, then we refuse
             //  the oplock request.
             //
+            //  Also fail this if the flag is set which indicates that
+            //  the IO system should copy data back to a user's buffer.
+            //
             //  A non-zero open count in this case indicates that there are
             //  file locks on the file.  We will also fail the request in
             //  this case.
@@ -815,6 +757,7 @@ Return Value:
 
             if ((OpenCount != 0) ||
                 IoIsOperationSynchronous( Irp ) ||
+                FlagOn( Irp->Flags, IRP_INPUT_OPERATION ) ||
                 FlagOn( IrpSp->FileObject->Flags, FO_CLEANUP_COMPLETE )) {
 
                 FsRtlCompleteRequest( Irp, STATUS_OPLOCK_NOT_GRANTED );
@@ -1107,6 +1050,17 @@ Return Value:
 
                     break;
                 }
+
+            case IRP_MJ_FILE_SYSTEM_CONTROL :
+
+                //
+                //  We need to break to none if this is a zeroing operation.
+                //
+
+                if (IrpSp->Parameters.FileSystemControl.FsControlCode == FSCTL_SET_ZERO_DATA) {
+
+                    BreakToNone = TRUE;
+                }
             }
 
             if (BreakToII) {
@@ -1306,11 +1260,11 @@ Return Value:
         //  The structure is allocated out of non-paged pool.
         //
 
-        NewOplock = FsRtlAllocatePool( PagedPool, sizeof( NONOPAQUE_OPLOCK ));
+        NewOplock = FsRtlpAllocatePool( PagedPool, sizeof( NONOPAQUE_OPLOCK ));
 
         RtlZeroMemory( NewOplock, sizeof( NONOPAQUE_OPLOCK ));
 
-        NewOplock->FastMutex = FsRtlAllocatePool( NonPagedPool, sizeof( FAST_MUTEX ));
+        NewOplock->FastMutex = FsRtlpAllocatePool( NonPagedPool, sizeof( FAST_MUTEX ));
 
         ExInitializeFastMutex( NewOplock->FastMutex );
 
@@ -1446,7 +1400,6 @@ Return Value:
 
             ThisOplock->IrpExclusiveOplock = Irp;
             ThisOplock->FileObject = IrpSp->FileObject;
-            ThisOplock->OpFilter = NULL;
 
             ThisOplock->OplockState = OpFilterReqPending;
             Status = STATUS_SUCCESS;
@@ -1489,14 +1442,12 @@ Return Value:
             ThisOplock->IrpExclusiveOplock = Irp;
             ThisOplock->FileObject = IrpSp->FileObject;
             ThisOplock->OplockState = NextOplockState;
-            ThisOplock->OpFilter = NULL;
 
             IoMarkIrpPending( Irp );
 
             ObReferenceObject( IrpSp->FileObject );
 
-            Irp->IoStatus.Information = (ULONG) ThisOplock;
-
+            Irp->IoStatus.Information = (ULONG_PTR) ThisOplock;
 
             IoAcquireCancelSpinLock( &Irp->CancelIrql );
 
@@ -1660,7 +1611,7 @@ Return Value:
             InsertHeadList( &ThisOplock->IrpOplocksII,
                             &Irp->Tail.Overlay.ListEntry );
 
-            Irp->IoStatus.Information = (ULONG) ThisOplock;
+            Irp->IoStatus.Information = (ULONG_PTR) ThisOplock;
 
             ThisOplock->OplockState = OplockIIGranted;
 
@@ -1834,25 +1785,15 @@ Return Value:
         if (GrantLevelII &&
             FlagOn( Oplock->OplockState, BREAK_TO_II )) {
 
+            PFAST_MUTEX OplockFastMutex = Oplock->FastMutex;
+
             DebugTrace(0, Dbg, "OplockItoII\n", 0);
 
             //
-            //  If the acknowledgement is a synchronous request, we will
-            //  break the oplock to none since the Io system will not
-            //  allow this request to complete.
+            //  The acknowledgement should never be synchronous.
             //
 
-            if (IoIsOperationSynchronous( Irp )) {
-
-                DebugTrace(0,
-                           Dbg,
-                           "Synchronous acknowledgement, break to no oplock\n",
-                           0);
-
-                Status = STATUS_SUCCESS;
-                FsRtlCompleteRequest( Irp, Status );
-                Irp->IoStatus.Information = FILE_OPLOCK_BROKEN_TO_NONE;
-                Oplock->OplockState = NoOplocksHeld;
+            ASSERT( !IoIsOperationSynchronous( Irp ));
 
             //
             //  We need to add this Irp to the oplock II queue, change
@@ -1860,47 +1801,43 @@ Return Value:
             //  return value to STATUS_PENDING.
             //
 
+
+            IoMarkIrpPending( Irp );
+
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+
+            InsertHeadList( &Oplock->IrpOplocksII,
+                            &Irp->Tail.Overlay.ListEntry );
+
+            DereferenceFileObject = FALSE;
+
+            Oplock->OplockState = OplockIIGranted;
+
+            Irp->IoStatus.Information = (ULONG_PTR) Oplock;
+
+            IoAcquireCancelSpinLock( &Irp->CancelIrql );
+
+            //
+            //  Now if the irp is cancelled then we'll call the cancel
+            //  routine right now to do away with the irp, otherwise
+            //  we set the cancel routine
+            //
+
+            if (Irp->Cancel) {
+
+                AcquiredMutex = FALSE;
+
+                ExReleaseFastMutexUnsafe( OplockFastMutex );
+
+                FsRtlCancelOplockIIIrp( NULL, Irp );
+
             } else {
 
-                PFAST_MUTEX OplockFastMutex = Oplock->FastMutex;
-
-                IoMarkIrpPending( Irp );
-
-                Irp->IoStatus.Status = STATUS_SUCCESS;
-
-                InsertHeadList( &Oplock->IrpOplocksII,
-                                &Irp->Tail.Overlay.ListEntry );
-
-                DereferenceFileObject = FALSE;
-
-                Oplock->OplockState = OplockIIGranted;
-
-                Irp->IoStatus.Information = (ULONG) Oplock;
-
-                IoAcquireCancelSpinLock( &Irp->CancelIrql );
-
-                //
-                //  Now if the irp is cancelled then we'll call the cancel
-                //  routine right now to do away with the irp, otherwise
-                //  we set the cancel routine
-                //
-
-                if (Irp->Cancel) {
-
-                    AcquiredMutex = FALSE;
-
-                    ExReleaseFastMutexUnsafe( OplockFastMutex );
-
-                    FsRtlCancelOplockIIIrp( NULL, Irp );
-
-                } else {
-
-                    IoSetCancelRoutine( Irp, FsRtlCancelOplockIIIrp );
-                    IoReleaseCancelSpinLock( Irp->CancelIrql );
-                }
-
-                Status = STATUS_PENDING;
+                IoSetCancelRoutine( Irp, FsRtlCancelOplockIIIrp );
+                IoReleaseCancelSpinLock( Irp->CancelIrql );
             }
+
+            Status = STATUS_PENDING;
 
         //
         //  We will break to none since this is the expected case for these
@@ -2095,13 +2032,17 @@ Return Value:
                 //  Break all oplocks for an exclusive oplock.
                 //
 
-                if (FlagOn( Oplock->OplockState, LEVEL_I_OPLOCK )) {
+                if (FlagOn( Oplock->OplockState, LEVEL_I_OPLOCK | PENDING )) {
 
                     //
                     //  Clean up the oplock structure and complete all waiting Irps.
                     //
 
-                    ObDereferenceObject( Oplock->FileObject );
+                    if (FlagOn( Oplock->OplockState, LEVEL_I_OPLOCK )) {
+
+                        ObDereferenceObject( Oplock->FileObject );
+                    }
+
                     Oplock->OplockState = NoOplocksHeld;
                     Oplock->FileObject = NULL;
 
@@ -2204,7 +2145,7 @@ Return Value:
 {
     NTSTATUS Status;
 
-    BOOLEAN AcquiredMutex = FALSE;
+    BOOLEAN AcquiredMutex;
 
     PAGED_CODE();
 
@@ -2250,7 +2191,14 @@ Return Value:
                        0);
 
             FsRtlCompleteRequest( Irp, STATUS_SUCCESS );
+            try_return( Status = STATUS_SUCCESS );
 
+        } else if (FlagOn( Oplock->OplockState, PENDING )) {
+
+            Oplock->OplockState = NoOplocksHeld;
+            Oplock->FileObject = NULL;
+
+            FsRtlCompleteRequest( Irp, STATUS_SUCCESS );
             try_return( Status = STATUS_SUCCESS );
         }
 
@@ -2368,6 +2316,8 @@ Return Value:
         if (Oplock->OplockState == OplockIIGranted) {
 
             PLIST_ENTRY Link;
+            PIRP Irp;
+            PIO_STACK_LOCATION NextIrpSp;
 
             DebugTrace(0,
                        Dbg,
@@ -2378,28 +2328,27 @@ Return Value:
                  Link != &Oplock->IrpOplocksII;
                  Link = Link->Flink) {
 
-                PLIST_ENTRY NextLink;
+                Irp = CONTAINING_RECORD( Link, IRP, Tail.Overlay.ListEntry );
 
-                if (!FsRtlCheckForMatchingFileObject( IrpSp->FileObject,
-                                                      Link,
-                                                      &Oplock->IrpOplocksII,
-                                                      &NextLink )) {
+                NextIrpSp = IoGetCurrentIrpStackLocation( Irp );
 
-                    DebugTrace( 0, Dbg, "No matching Irp found\n", 0 );
-                    try_return( NOTHING );
+                //
+                //  If the file objects match, then emove the entry found and complete the Irp.
+                //
+
+                if (IrpSp->FileObject == NextIrpSp->FileObject) {
+
+                    //
+                    //  Back up to remember this link.
+                    //
+
+                    Link = Link->Blink;
+
+                    //
+                    //
+
+                    FsRtlRemoveAndCompleteIrp( Link->Flink );
                 }
-
-                //
-                //  Back up to remember this link.
-                //
-
-                Link = NextLink->Blink;
-
-                //
-                //  Remove the entry found and complete the Irp.
-                //
-
-                FsRtlRemoveAndCompleteIrp( NextLink );
             }
 
             //
@@ -2465,7 +2414,6 @@ Return Value:
 
             Oplock->FileObject = NULL;
             Oplock->OplockState = NoOplocksHeld;
-            Oplock->OpFilter = NULL;
 
             while (!IsListEmpty( &Oplock->WaitingIrps )) {
 
@@ -2553,7 +2501,7 @@ Return Value:
     KEVENT Event;
     NTSTATUS Status;
 
-    BOOLEAN AcquiredMutex = FALSE;
+    BOOLEAN AcquiredMutex;
 
     DebugTrace( +1, Dbg, "CheckOplockBreakToII:  Entered\n", 0 );
     DebugTrace(  0, Dbg, "Oplock    -> %08lx\n", Oplock );
@@ -2636,7 +2584,6 @@ Return Value:
 
                 ObDereferenceObject( Oplock->FileObject );
                 Oplock->FileObject = NULL;
-                Oplock->OpFilter = NULL;
 
                 //
                 //  Release any waiting irps.
@@ -2673,8 +2620,18 @@ Return Value:
                 Oplock->IrpExclusiveOplock->IoStatus.Information = CompletionStatus;
                 FsRtlCompleteRequest( Oplock->IrpExclusiveOplock, STATUS_SUCCESS );
                 Oplock->IrpExclusiveOplock = NULL;
-                Oplock->OpFilter = NULL;
             }
+
+        //
+        //  If there is a pending opfilter request then clear the request.
+        //
+
+        } else if (FlagOn( Oplock->OplockState, PENDING )) {
+
+            Oplock->OplockState = NoOplocksHeld;
+            Oplock->FileObject = NULL;
+
+            try_return( Status = STATUS_SUCCESS );
         }
 
         //
@@ -2684,15 +2641,6 @@ Return Value:
 
         if ((IrpSp->MajorFunction == IRP_MJ_CREATE) &&
             FlagOn( IrpSp->Parameters.Create.Options, FILE_COMPLETE_IF_OPLOCKED )) {
-
-            //
-            //  Start the oplock break if there is an OpFilter pending.
-            //
-
-            if (Oplock->OplockState == OpFilterReqPending) {
-
-                FsRtlInitializeOpFilter( Oplock );
-            }
 
             DebugTrace( 0, Dbg, "Don't block open\n", 0 );
 
@@ -2789,7 +2737,7 @@ Return Value:
     KEVENT Event;
     NTSTATUS Status;
 
-    BOOLEAN AcquiredMutex = FALSE;
+    BOOLEAN AcquiredMutex;
 
     DebugTrace( +1, Dbg, "CheckOplockBreakToNone:  Entered\n", 0 );
     DebugTrace(  0, Dbg, "Oplock    -> %08lx\n", Oplock );
@@ -2855,7 +2803,6 @@ Return Value:
 
                 ObDereferenceObject( Oplock->FileObject );
                 Oplock->FileObject = NULL;
-                Oplock->OpFilter = NULL;
 
                 //
                 //  Release any waiting irps.
@@ -2920,6 +2867,17 @@ Return Value:
 
             ClearFlag( Oplock->OplockState, BREAK_TO_II );
             SetFlag( Oplock->OplockState, BREAK_TO_II_TO_NONE );
+
+        //
+        //  If there is a pending opfilter request then clear that request.
+        //
+
+        } else if (FlagOn( Oplock->OplockState, PENDING )) {
+
+            Oplock->OplockState = NoOplocksHeld;
+            Oplock->FileObject = NULL;
+
+            try_return( Status = STATUS_SUCCESS );
         }
 
         //
@@ -2943,17 +2901,8 @@ Return Value:
         //  block, we will complete the operation now.
         //
 
-        if (IrpSp->MajorFunction == IRP_MJ_CREATE
-            && FlagOn( IrpSp->Parameters.Create.Options, FILE_COMPLETE_IF_OPLOCKED )) {
-
-            //
-            //  Start the timer if there is a pending filter oplock.
-            //
-
-            if (Oplock->OplockState == OpFilterReqPending) {
-
-                FsRtlInitializeOpFilter( Oplock );
-            }
+        if ((IrpSp->MajorFunction == IRP_MJ_CREATE) &&
+            FlagOn( IrpSp->Parameters.Create.Options, FILE_COMPLETE_IF_OPLOCKED )) {
 
             DebugTrace( 0, Dbg, "Don't block open\n", 0 );
 
@@ -3147,26 +3096,15 @@ Return Value:
         PFAST_MUTEX OplockFastMutex = Oplock->FastMutex;
 
         //
-        //  If the oplock state shows that we are waiting for
-        //  an oplock filter request then start a timer to
-        //  time out the request.
-        //
-
-        if (Oplock->OplockState == OpFilterReqPending) {
-
-            FsRtlInitializeOpFilter( Oplock );
-        }
-
-        //
         //  Allocate and initialize the Wait Irp structure.
         //
 
-        WaitingIrp = FsRtlAllocatePool( PagedPool, sizeof( WAITING_IRP ));
+        WaitingIrp = FsRtlpAllocatePool( PagedPool, sizeof( WAITING_IRP ));
 
         WaitingIrp->Irp = Irp;
 
         WaitingIrp->Context = Context;
-        WaitingIrp->Information = Irp->IoStatus.Information;
+        WaitingIrp->Information = (ULONG) Irp->IoStatus.Information;
 
         //
         //  Take appropriate action if depending on the value of the
@@ -3212,7 +3150,7 @@ Return Value:
         //
 
         IoAcquireCancelSpinLock( &Irp->CancelIrql );
-        Irp->IoStatus.Information = (ULONG) Oplock;
+        Irp->IoStatus.Information = (ULONG_PTR) Oplock;
 
         //
         //  If the Irp is cancelled then we'll call the cancel routine
@@ -3337,6 +3275,8 @@ Return Value:
     DebugTrace( -1, Dbg, "FsRtlCompletionRoutinePriv:  Exit\n", 0 );
 
     return;
+
+    UNREFERENCED_PARAMETER( Irp );
 }
 
 
@@ -3378,8 +3318,6 @@ Return Value:
 
     PLIST_ENTRY Links;
 
-    UNREFERENCED_PARAMETER( DeviceObject );
-
     DebugTrace( +1, Dbg, "FsRtlCancelWaitIrp:  Entered\n", 0 );
 
     Oplock = (PNONOPAQUE_OPLOCK) Irp->IoStatus.Information;
@@ -3393,7 +3331,7 @@ Return Value:
 
     //
     //  Iterate through all of the waiting locks looking for a canceled one
-    //  We do this under the protection of the waiting lock queue mutex
+    //  We do this under the protection of the oplock mutex.
     //
 
     ExAcquireFastMutex( Oplock->FastMutex );
@@ -3445,6 +3383,8 @@ Return Value:
     }
 
     return;
+
+    UNREFERENCED_PARAMETER( DeviceObject );
 }
 
 
@@ -3487,8 +3427,6 @@ Return Value:
 
     PLIST_ENTRY Links;
 
-    UNREFERENCED_PARAMETER( DeviceObject );
-
     DebugTrace( +1, Dbg, "FsRtlCancelOplockIIIrp:  Entered\n", 0 );
 
     Oplock = (PNONOPAQUE_OPLOCK) Irp->IoStatus.Information;
@@ -3504,7 +3442,7 @@ Return Value:
 
     //
     //  Iterate through all of the level II oplocks looking for a canceled one
-    //  We do this under the protection of the waiting lock queue mutex
+    //  We do this under the protection of the oplock mutex.
     //
 
     ExAcquireFastMutex( Oplock->FastMutex );
@@ -3551,8 +3489,7 @@ Return Value:
         //  no oplocks held.
         //
 
-        if (IsListEmpty( &Oplock->IrpOplocksII ) &&
-            LevelIIIrps) {
+        if (LevelIIIrps && IsListEmpty( &Oplock->IrpOplocksII )) {
 
             Oplock->OplockState = NoOplocksHeld;
         }
@@ -3569,6 +3506,8 @@ Return Value:
     }
 
     return;
+
+    UNREFERENCED_PARAMETER( DeviceObject );
 }
 
 
@@ -3605,8 +3544,6 @@ Return Value:
 {
     PNONOPAQUE_OPLOCK Oplock;
 
-    UNREFERENCED_PARAMETER( DeviceObject );
-
     DebugTrace( +1, Dbg, "FsRtlCancelExclusiveIrp:  Entered\n", 0 );
 
     Oplock = (PNONOPAQUE_OPLOCK) Irp->IoStatus.Information;
@@ -3631,8 +3568,8 @@ Return Value:
         //  we complete it.
         //
 
-        if (Oplock->IrpExclusiveOplock != NULL
-            && Oplock->IrpExclusiveOplock->Cancel) {
+        if ((Oplock->IrpExclusiveOplock != NULL) &&
+            (Oplock->IrpExclusiveOplock->Cancel)) {
 
             FsRtlCompleteRequest( Oplock->IrpExclusiveOplock, STATUS_CANCELLED );
             Oplock->IrpExclusiveOplock = NULL;
@@ -3640,7 +3577,6 @@ Return Value:
             ObDereferenceObject( Oplock->FileObject );
             Oplock->FileObject = NULL;
             Oplock->OplockState = NoOplocksHeld;
-            Oplock->OpFilter = NULL;
 
             //
             //  Complete the waiting Irps.
@@ -3674,6 +3610,8 @@ Return Value:
     }
 
     return;
+
+    UNREFERENCED_PARAMETER( DeviceObject );
 }
 
 
@@ -3756,100 +3694,6 @@ Return Value:
 //  Local support routine.
 //
 
-
-BOOLEAN
-FsRtlCheckForMatchingFileObject (
-    IN PFILE_OBJECT FileObject,
-    IN PLIST_ENTRY Link,
-    IN PLIST_ENTRY EndOfList,
-    OUT PLIST_ENTRY *MatchingLink
-    )
-
-/*++
-
-Routine Description:
-
-    This routine is called to walk through a linked list of Irp's, looking
-    for a file object to match the argument file object.
-
-Arguments:
-
-    FileObject - This is the file object to match.
-
-    Link - This is the starting point in the list to search from.
-
-    EndOfList - This link value signals the end of the list.
-
-    MatchingLink - Supplies the address to store the link containing
-                   the matching Irp.
-
-Return Value:
-
-    BOOLEAN - TRUE if a matching Irp is found, FALSE otherwise.
-
---*/
-
-{
-    BOOLEAN FoundLink;
-
-    PAGED_CODE();
-
-    DebugTrace( +1, Dbg, "FsRtlCheckForMatchingFileObject:  Entered\n", 0 );
-
-    //
-    //  Assume we won't find a match.
-    //
-
-    FoundLink = FALSE;
-
-    //
-    //  Continue looking as long as we haven't reached the end of the list.
-    //
-
-    while (Link != EndOfList) {
-
-        PIRP Irp;
-        PIO_STACK_LOCATION IrpSp;
-
-        //
-        //  Get the Irp and IrpSp for this link.
-        //
-
-        Irp = CONTAINING_RECORD( Link, IRP, Tail.Overlay.ListEntry );
-
-        IrpSp = IoGetCurrentIrpStackLocation( Irp );
-
-        //
-        //  If the file objects match, we remember this link and break out
-        //  of the loop.
-        //
-
-        if (FileObject == IrpSp->FileObject) {
-
-            DebugTrace( 0, Dbg, "Found a match\n", 0 );
-
-            *MatchingLink = Link;
-            FoundLink = TRUE;
-            break;
-        }
-
-        //
-        //  Otherwise we get the next link.
-        //
-
-        Link = Link->Flink;
-    }
-
-    DebugTrace( +1, Dbg, "FsRtlCheckForMatchingFileObject:  Exit -> %08x\n", FoundLink );
-
-    return FoundLink;
-}
-
-
-//
-//  Local support routine.
-//
-
 VOID
 FsRtlNotifyCompletion (
     IN PVOID Context,
@@ -3888,240 +3732,6 @@ Return Value:
     FsRtlCompleteRequest( Irp, Irp->IoStatus.Status );
 
     DebugTrace( -1, Dbg, "FsRtlNotifyCompletion:  Exit\n", 0 );
-
-    return;
-}
-
-
-//
-//  Local support routine.
-//
-
-VOID
-FsRtlOplockDpc (
-    IN PKDPC Dpc,
-    IN PVOID Context,
-    IN PVOID SystemArgument1,
-    IN PVOID SystemArgument2
-    )
-
-/*++
-
-Routine Description:
-
-    This routine is called when the timer in the oplock structure times
-    out while waiting for an filter oplock request.  This routine posts
-    a request to a worker queue to do the actual work.
-
-Arguments:
-
-    Context - This is the filter timer structure.
-
-Return Value:
-
-    None.
-
---*/
-
-{
-    POPFILTER_TIMER OpFilterTimer = (POPFILTER_TIMER) Context;
-
-    ExQueueWorkItem( &OpFilterTimer->OpFilterItem, CriticalWorkQueue );
-
-    return;
-}
-
-
-//
-//  Local support routine.
-//
-
-VOID
-FsRtlOpFilterWorkerRoutine (
-    IN PVOID Context
-    )
-
-/*++
-
-Routine Description:
-
-    This is the worker routine which process the OpFilter timer operations
-    on a time out.  It can either tear down the oplock structure, release
-    waiting irps or do nothing if the actual request for the oplock filter
-    has been processed.
-
-Arguments:
-
-    Context - This is the filter timer structure.
-
-Return Value:
-
-    None.
-
---*/
-
-{
-    POPFILTER_TIMER OpFilter = (POPFILTER_TIMER) Context;
-    PNONOPAQUE_OPLOCK Oplock = OpFilter->Oplock;
-    BOOLEAN AcquiredMutex;
-
-    PAGED_CODE();
-
-    //
-    //  Grap the synchronization object.
-    //
-
-    ExAcquireFastMutexUnsafe( Oplock->FastMutex );
-    AcquiredMutex = TRUE;
-
-    //
-    //  Decrement the timer count.
-    //
-
-    Oplock->TimerCount -= 1;
-
-    //
-    //  Use a try-finally to facilitate cleanup.
-    //
-
-    try {
-
-        //
-        //  Teardown the structure if we are to uninitialize it.
-        //
-
-        if (Oplock->OplockState == UninitializeOplock) {
-
-            if (Oplock->TimerCount == 0) {
-
-                Oplock->OplockState = NoOplocksHeld;
-
-                ExReleaseFastMutexUnsafe( Oplock->FastMutex );
-                AcquiredMutex = FALSE;
-
-                FsRtlUninitializeOplock( &Oplock );
-            }
-
-        //
-        //  If this is not the current timer then there is nothing to do.
-        //
-
-        } else {
-
-            if (Oplock->OpFilter == OpFilter) {
-
-                //
-                //  Check if the timer expired naturally.
-                //
-
-                if (Oplock->OplockState == OpFilterTimerStarted) {
-
-                    //
-                    //  Cleanup the oplock structure and complete all waiting Irps.
-                    //
-
-                    while (!IsListEmpty( &Oplock->WaitingIrps )) {
-
-                        PWAITING_IRP WaitingIrp;
-
-                        //
-                        //  Remove the entry found and complete the Irp.
-                        //
-
-                        WaitingIrp = CONTAINING_RECORD( Oplock->WaitingIrps.Flink,
-                                                        WAITING_IRP,
-                                                        Links );
-
-                        FsRtlRemoveAndCompleteWaitIrp( WaitingIrp );
-                    }
-
-                    Oplock->OplockState = NoOplocksHeld;
-                    Oplock->FileObject = NULL;
-                }
-
-                Oplock->OpFilter = NULL;
-            }
-        }
-
-        //
-        //  Always free the timer structure.
-        //
-
-        ExFreePool( OpFilter );
-
-    } finally {
-
-        //
-        //  Give up the synchronization event if we haven't done so.
-        //
-
-        if (AcquiredMutex) {
-
-            ExReleaseFastMutexUnsafe( Oplock->FastMutex );
-        }
-    }
-
-    return;
-}
-
-
-//
-//  Local support routine.
-//
-
-VOID
-FsRtlInitializeOpFilter (
-    IN PNONOPAQUE_OPLOCK Oplock
-    )
-
-/*++
-
-Routine Description:
-
-    This routine is called to allocate and initialize the oplock filter
-    structure.  This will also initialize and start the timer.
-
-Arguments:
-
-    Context - This is the filter timer structure.
-
-Return Value:
-
-    None.
-
---*/
-
-{
-    POPFILTER_TIMER OpFilter;
-    LONGLONG TwoSecondsFromNow;
-
-    PAGED_CODE();
-
-    OpFilter = FsRtlAllocatePool( NonPagedPool,
-                                  sizeof( OPFILTER_TIMER ));
-
-    KeInitializeDpc( &OpFilter->OpFilterDpc,
-                     FsRtlOplockDpc,
-                     OpFilter );
-
-    KeInitializeTimer( &OpFilter->OpFilterTimer );
-
-    ExInitializeWorkItem( &OpFilter->OpFilterItem,
-                          FsRtlOpFilterWorkerRoutine,
-                          OpFilter );
-
-    Oplock->TimerCount += 1;
-
-    Oplock->OpFilter = OpFilter;
-    Oplock->OplockState = OpFilterTimerStarted;
-
-    OpFilter->Oplock = Oplock;
-
-    TwoSecondsFromNow = -2 * 1000 * 1000 * 10;
-
-    KeSetTimer( &OpFilter->OpFilterTimer,
-                *(PLARGE_INTEGER) &TwoSecondsFromNow,
-                &OpFilter->OpFilterDpc );
 
     return;
 }

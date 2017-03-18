@@ -19,4 +19,4 @@ NOTE:   Commented description of this file is in \nt\bak\bin\dirs.tpl
 
 !ENDIF
 
-DIRS=up{x86,amd64,mips} mp
+DIRS=up mp

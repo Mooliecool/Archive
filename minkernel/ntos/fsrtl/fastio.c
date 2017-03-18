@@ -98,7 +98,7 @@ Return Value:
 {
     PFSRTL_COMMON_FCB_HEADER Header;
     BOOLEAN Status = TRUE;
-    ULONG PageCount = COMPUTE_PAGES_SPANNED(((PVOID)FileOffset->LowPart), Length);
+    ULONG PageCount = COMPUTE_PAGES_SPANNED( FileOffset->QuadPart, Length );
     LARGE_INTEGER BeyondLastByte;
     PDEVICE_OBJECT targetVdo;
 
@@ -111,9 +111,18 @@ Return Value:
     if (Length != 0) {
 
         //
-        //  Get a real pointer to the common fcb header
+        //  Check for overflow. Returning false here will re-route this request through the
+        //  IRP based path, but this isn't performance critical.
         //
 
+        if (MAXLONGLONG - FileOffset->QuadPart < (LONGLONG)Length) {
+
+            IoStatus->Status = STATUS_INVALID_PARAMETER;
+            IoStatus->Information = 0;
+            
+            return FALSE;
+        }
+        
         BeyondLastByte.QuadPart = FileOffset->QuadPart + (LONGLONG)Length;
         Header = (PFSRTL_COMMON_FCB_HEADER)FileObject->FsContext;
 
@@ -282,7 +291,7 @@ Return Value:
                 FileObject->Flags |= FO_FILE_FAST_IO_READ;
 
                 ASSERT( !Status || (IoStatus->Status == STATUS_END_OF_FILE) ||
-                        ((FileOffset->QuadPart + IoStatus->Information) <= Header->FileSize.QuadPart));
+                        ((LONGLONG)(FileOffset->QuadPart + IoStatus->Information) <= Header->FileSize.QuadPart));
             }
 
             if (Status) {
@@ -414,7 +423,7 @@ Return Value:
             //  is ok, then just return FALSE later if we were wrong.  This
             //  should virtually never happen.
             //
-            //  IMPORTANT NOTE: It is very important that any changes mad to
+            //  IMPORTANT NOTE: It is very important that any changes made to
             //                  this path also be applied to the 64-bit path
             //                  which is the else of this test!
             //
@@ -774,12 +783,14 @@ Return Value:
                 //  return.
                 //
                 //  Get out if we are about to zero too much as well, as commented above.
+                //  Likewise, for NewFileSizes that exceed MAXLONGLONG.
                 //
 
                 if ((FileObject->PrivateCacheMap == NULL) ||
                     (Header->IsFastIoPossible == FastIoIsNotPossible) ||
                       (Offset.QuadPart >= (Header->ValidDataLength.QuadPart + 0x2000)) ||
-                      ( NewFileSize.QuadPart > Header->AllocationSize.QuadPart ) ) {
+                      (MAXLONGLONG - Offset.QuadPart < (LONGLONG)Length) ||
+                      (NewFileSize.QuadPart > Header->AllocationSize.QuadPart) ) {
 
                     ExReleaseResource( Header->Resource );
                     FsRtlExitFileSystem();
@@ -1112,6 +1123,13 @@ Return Value:
         return TRUE;
     }
 
+    //
+    //  Overflows should've been handled by caller.
+    //
+
+    ASSERT(MAXLONGLONG - FileOffset->QuadPart >= (LONGLONG)Length);
+
+       
     //
     //  Get a real pointer to the common fcb header
     //
@@ -1600,6 +1618,7 @@ Return Value:
 
     if ((FileObject->PrivateCacheMap == NULL) ||
         (Header->IsFastIoPossible == FastIoIsNotPossible) ||
+        (MAXLONGLONG - Offset.QuadPart < (LONGLONG)Length) ||
         ( NewFileSize.QuadPart > Header->AllocationSize.QuadPart ) ) {
 
         ExReleaseResource( Header->Resource );
@@ -2027,6 +2046,14 @@ Return Value:
 
 
 {
+    //
+    //  Do not support WRITE_THROUGH in the fast path call.
+    //
+
+    if (FlagOn( FileObject->Flags, FO_WRITE_THROUGH )) {
+        return FALSE;
+    }
+
     CcMdlWriteComplete2( FileObject, FileOffset, MdlChain );
     return TRUE;
 }
@@ -2409,8 +2436,10 @@ Return Value:
 
     DeviceObject = IoGetBaseFileSystemDeviceObject( FileObject );
 
-    FastIoDispatch = DeviceObject->DriverObject->FastIoDispatch;
-    if ((FastIoDispatch->SizeOfFastIoDispatch >
+    FsRtlEnterFileSystem();
+
+    if ((FastIoDispatch = DeviceObject->DriverObject->FastIoDispatch) &&
+        (FastIoDispatch->SizeOfFastIoDispatch >
          FIELD_OFFSET( FAST_IO_DISPATCH, AcquireForCcFlush )) &&
         (FastIoDispatch->AcquireForCcFlush != NULL)) {
 
@@ -2489,8 +2518,8 @@ Return Value:
 
     DeviceObject = IoGetBaseFileSystemDeviceObject( FileObject );
 
-    FastIoDispatch = DeviceObject->DriverObject->FastIoDispatch;
-    if ((FastIoDispatch->SizeOfFastIoDispatch >
+    if ((FastIoDispatch = DeviceObject->DriverObject->FastIoDispatch) &&
+        (FastIoDispatch->SizeOfFastIoDispatch >
          FIELD_OFFSET( FAST_IO_DISPATCH, ReleaseForCcFlush )) &&
         (FastIoDispatch->ReleaseForCcFlush != NULL)) {
 
@@ -2516,6 +2545,8 @@ Return Value:
             ExReleaseResource( Header->Resource );
         }
     }
+
+    FsRtlExitFileSystem();
 }
 
 
@@ -2566,6 +2597,7 @@ Return Value:
          FIELD_OFFSET( FAST_IO_DISPATCH, AcquireFileForNtCreateSection )) &&
         (FastIoDispatch->AcquireFileForNtCreateSection != NULL)) {
 
+        FsRtlEnterFileSystem();
         FastIoDispatch->AcquireFileForNtCreateSection( FileObject );
 
         return;
@@ -2578,6 +2610,7 @@ Return Value:
     if ((Header = (PFSRTL_COMMON_FCB_HEADER)FileObject->FsContext) &&
         (Header->Resource != NULL)) {
 
+        FsRtlEnterFileSystem();
         ExAcquireResourceExclusive( Header->Resource, TRUE );
 
         return;
@@ -2631,6 +2664,7 @@ Return Value:
         (FastIoDispatch->ReleaseFileForNtCreateSection != NULL)) {
 
         FastIoDispatch->ReleaseFileForNtCreateSection( FileObject );
+        FsRtlExitFileSystem();
         return;
     }
 
@@ -2642,6 +2676,7 @@ Return Value:
         (Header->Resource != NULL)) {
 
         ExReleaseResource( Header->Resource );
+        FsRtlExitFileSystem();
         return;
     }
 

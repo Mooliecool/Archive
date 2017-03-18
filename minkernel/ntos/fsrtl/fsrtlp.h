@@ -26,6 +26,19 @@ Revision History:
 #include <NtDdFt.h>
 #include <zwapi.h>
 
+#define FsRtlAllocatePool(PoolType, NumberOfBytes )                \
+    ExAllocatePoolWithTag((POOL_TYPE)((PoolType) | POOL_RAISE_IF_ALLOCATION_FAILURE), \
+                          NumberOfBytes,                                      \
+                          'trSF')
+
+
+#define FsRtlAllocatePoolWithQuota(PoolType, NumberOfBytes )           \
+    ExAllocatePoolWithQuotaTag((POOL_TYPE)((PoolType) | POOL_RAISE_IF_ALLOCATION_FAILURE), \
+                               NumberOfBytes,                                 \
+                               'trSF')
+
+#define FsRtlpAllocatePool(a,b)  FsRtlAllocatePoolWithTag((a),(b),MODULE_POOL_TAG)
+
 //
 //  The global FsRtl debug level variable, its values are:
 //
@@ -122,31 +135,28 @@ extern LONG FsRtlDebugTraceIndent;
 
 #endif // FSRTLDBG
 
-//
-//  A spinlock used for cached structure allocation
-//
-
-extern KSPIN_LOCK FsRtlStrucSupSpinLock;
-
-extern NPAGED_LOOKASIDE_LIST FsRtlFastMutexLookasideList;
-
 
 //
 //  Miscellaneous support routines
 //
 
 VOID
-FsRtlInitProcessorLockQueue (
+FsRtlInitializeFileLocks (
+    VOID
+    );
+
+VOID
+FsRtlInitializeLargeMcbs (
+    VOID
+    );
+
+VOID
+FsRtlInitializeTunnels(
     VOID
     );
 
 NTSTATUS
 FsRtlInitializeWorkerThread (
-    VOID
-    );
-
-VOID
-FsRtlInitializeTunnel(
     VOID
     );
 
@@ -173,7 +183,7 @@ FsRtlInitializeTunnel(
 //
 
 #define WordAlign(Ptr) (                \
-    ((((ULONG)(Ptr)) + 1) & 0xfffffffe) \
+    ((((ULONG_PTR)(Ptr)) + 1) & -2) \
     )
 
 //
@@ -182,7 +192,7 @@ FsRtlInitializeTunnel(
 //
 
 #define LongAlign(Ptr) (                \
-    ((((ULONG)(Ptr)) + 3) & 0xfffffffc) \
+    ((((ULONG_PTR)(Ptr)) + 3) & -4) \
     )
 
 //
@@ -191,7 +201,7 @@ FsRtlInitializeTunnel(
 //
 
 #define QuadAlign(Ptr) (                \
-    ((((ULONG)(Ptr)) + 7) & 0xfffffff8) \
+    ((((ULONG_PTR)(Ptr)) + 7) & -8) \
     )
 
 //
@@ -200,7 +210,7 @@ FsRtlInitializeTunnel(
 //
 
 #define SectorAlign(Ptr) (                \
-    ((((ULONG)(Ptr)) + 511) & 0xfffffe00) \
+    ((((ULONG_PTR)(Ptr)) + 511) & -512) \
     )
 
 //

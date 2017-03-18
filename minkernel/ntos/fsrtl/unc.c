@@ -36,8 +36,16 @@ static WCHAR DevNull[] = L"\\Device\\Null";
 static WCHAR DevMup[] = DD_MUP_DEVICE_NAME;
 
 //
+//  Define a tag for general pool allocations from this module
+//
+
+#undef MODULE_POOL_TAG
+#define MODULE_POOL_TAG                  ('nuSF')
+
+//
 // Local prototypes
 //
+
 NTSTATUS
 FsRtlpRegisterProviderWithMUP
 (
@@ -129,7 +137,7 @@ Return Value:
     paramLength = sizeof( REDIRECTOR_REGISTRATION ) +
                       RedirDevName->Length;
 
-    params = ExAllocatePool( NonPagedPool, paramLength );
+    params = ExAllocatePoolWithTag( NonPagedPool, paramLength, MODULE_POOL_TAG );
     if( params == NULL )
         return STATUS_INSUFFICIENT_RESOURCES;
 
@@ -304,8 +312,9 @@ Return Value:
         // Save up enough state to allow us to call the MUP later with
         // this registration info if necessary.
         //
-        FsRtlpDRD.RedirDevName.Buffer =
-                ExAllocatePool( NonPagedPool, RedirDevName->MaximumLength );
+        FsRtlpDRD.RedirDevName.Buffer = ExAllocatePoolWithTag( NonPagedPool, 
+                                                               RedirDevName->MaximumLength, 
+                                                               MODULE_POOL_TAG );
 
         if( FsRtlpDRD.RedirDevName.Buffer == NULL ) {
             status =  STATUS_INSUFFICIENT_RESOURCES;
