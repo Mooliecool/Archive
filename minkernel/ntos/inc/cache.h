@@ -312,6 +312,12 @@ CcZeroData (
     IN PLARGE_INTEGER EndOffset,
     IN BOOLEAN Wait
     );
+    
+NTKERNELAPI
+PVOID
+CcRemapBcb (
+    IN PVOID Bcb
+    );
 
 NTKERNELAPI
 VOID

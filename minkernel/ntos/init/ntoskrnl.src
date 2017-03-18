@@ -27,6 +27,7 @@ EXPORTS
     CcPrepareMdlWrite
     CcPreparePinWrite
     CcPurgeCacheSection
+    CcRemapBcb
     CcRepinBcb
     CcScheduleReadAhead
     CcSetAdditionalCacheAttributes
