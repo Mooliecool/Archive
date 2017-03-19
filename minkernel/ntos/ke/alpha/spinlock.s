@@ -569,3 +569,41 @@
 #endif
 
         .end    KiTryToAcquireSpinLock
+
+//++
+//
+// BOOLEAN
+// KeTestSpinLock (
+//    IN PKSPIN_LOCK SpinLock
+//    )
+//
+// Routine Description:
+//
+//    This function tests a kernel spin lock.  If the spinlock is
+//    busy, FALSE is returned.  If not, TRUE is returned.  The spinlock
+//    is never acquired.  This is provided to allow code to spin at low
+//    IRQL, only raising the IRQL when there is a reasonable hope of
+//    acquiring the lock.
+//
+// Arguments:
+//
+//    SpinLock (a0) - Supplies a pointer to a kernel spin lock.
+//
+// Return Value:
+//
+//    TRUE  - Spinlock appears available
+//    FALSE - SpinLock is busy
+//--
+
+#if !defined(NT_UP)
+
+        LEAF_ENTRY(KeTestSpinLock)
+
+        LDP     t0, (a0)                // get current spinlock value
+        ldil    v0, 1                   // default TRUE
+        cmovne  t0, zero, v0            // if t0 != 0, return FALSE
+        ret     zero, (ra)              // return
+
+        .end    KeTestSpinLock
+
+#endif

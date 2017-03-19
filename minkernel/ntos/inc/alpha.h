@@ -1636,6 +1636,26 @@ KiReleaseSpinLock (
 // end_nthal
 
 //
+// KeTestSpinLock may be used to spin at low IRQL until the lock is
+// available.  The IRQL must then be raised and the lock acquired with
+// KeTryToAcquireSpinLock.  If that fails, lower the IRQL and start again.
+//
+
+#if defined(NT_UP)
+
+#define KeTestSpinLock(SpinLock) (TRUE)
+
+#else
+
+BOOLEAN
+KeTestSpinLock (
+    IN PKSPIN_LOCK SpinLock
+    );
+
+#endif
+
+
+//
 // Fill TB entry.
 //
 

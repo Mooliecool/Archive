@@ -459,6 +459,40 @@ atsl20:
 endif
 stdENDP _KiTryToAcquireSpinLock
 
+;++
+;
+;  BOOLEAN
+;  KeTestSpinLock (
+;     IN PKSPIN_LOCK SpinLock
+;     )
+;
+;  Routine Description:
+;
+;     This function tests a kernel spin lock.  If the spinlock is
+;     busy, FALSE is returned.  If not, TRUE is returned.  The spinlock
+;     is never acquired.  This is provided to allow code to spin at low
+;     IRQL, only raising the IRQL when there is a reasonable hope of
+;     acquiring the lock.
+;
+;  Arguments:
+;
+;     SpinLock (ecx) - Supplies a pointer to a kernel spin lock.
+;
+;  Return Value:
+;     TRUE  - Spinlock appears available
+;     FALSE - SpinLock is busy
+;
+;--
+
+cPublicFastCall KeTestSpinLock  ,1
+        TEST_SPINLOCK       ecx,<short tso10>
+        mov       eax, 1
+        fstRET    KeTestSpinLock
+        
+tso10:  xor       eax, eax
+        fstRET    KeTestSpinLock
+        
+fstENDP KeTestSpinLock
 
 _TEXT$00   ends
 
