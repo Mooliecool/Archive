@@ -1998,10 +1998,10 @@ NTKERNELAPI
 VOID
 KeBugCheckEx(
     IN ULONG BugCheckCode,
-    IN ULONG BugCheckParameter1,
-    IN ULONG BugCheckParameter2,
-    IN ULONG BugCheckParameter3,
-    IN ULONG BugCheckParameter4
+    IN ULONG_PTR BugCheckParameter1,
+    IN ULONG_PTR BugCheckParameter2,
+    IN ULONG_PTR BugCheckParameter3,
+    IN ULONG_PTR BugCheckParameter4
     );
 
 #define KeInitializeCallbackRecord(CallbackRecord) \

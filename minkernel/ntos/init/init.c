@@ -30,6 +30,8 @@ Revision History:
 #include "stdio.h"
 #include <string.h>
 
+#include <inbv.h>
+
 UNICODE_STRING NtSystemRoot;
 PVOID ExPageLockHandle;
 
@@ -72,6 +74,11 @@ ExBurnMemory(
     IN PLOADER_PARAMETER_BLOCK LoaderBlock
     );
 
+VOID
+DisplayFilter(
+    PUCHAR *String
+    );    
+    
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text(INIT,ExpInitializeExecutive)
 #pragma alloc_text(INIT,Phase1Initialization)
@@ -178,6 +185,119 @@ ULONG InitAnsiCodePageDataOffset;
 ULONG InitOemCodePageDataOffset;
 ULONG InitUnicodeCaseTableDataOffset;
 PVOID InitNlsSectionPointer;
+
+extern BOOLEAN InbvBootDriverInstalled;
+
+VOID
+DisplayBootBitmap (
+    IN BOOLEAN DisplayOnScreen
+    )
+
+/*++
+
+Routine Description:
+
+    Draws the gui boot screen.
+
+Arguments:
+
+    DisplayOnScreen - TRUE to dump text to the screen, FALSE otherwise.
+
+Return Value:
+
+    None.
+
+Environment:
+
+    This routine may be called more than once, and should not be marked INIT.
+
+--*/
+
+{   
+    if (DisplayOnScreen) {
+
+        PUCHAR BitmapTop;
+
+        InbvSetTextColor(14);
+        InbvSolidColorFill(0, 0,  639, 479, 0);
+        InbvSolidColorFill(0, 421,  639, 479, -1);
+
+        BitmapTop = InbvGetResourceAddress(2);
+
+        InbvSetScrollRegion(32, 80, 631, 400);
+
+        if (BitmapTop) {
+            InbvBitBlt(BitmapTop, 0, 0);
+        }  
+        
+        //
+        // Progress bar is shown in verbose mode, in this case
+        //
+    
+        InbvSetProgressBarCoordinates(239, 430);
+        
+    } else {
+        
+        PUCHAR BootBitmap;
+        
+        InbvInstallDisplayStringFilter(DisplayFilter);
+        
+        if (!InbvBootDriverInstalled) {
+            return;
+        }
+        
+        InbvSolidColorFill(0, 0, 639, 479, 0);
+        
+        BootBitmap = InbvGetResourceAddress(1);
+        
+        if (BootBitmap) {
+            InbvBitBlt(BootBitmap, 168, 138);
+        }
+            
+        InbvSetProgressBarCoordinates(283, 326);
+        
+    }
+}
+
+VOID
+DisplayFilter(
+    IN OUT PUCHAR *String
+    )
+
+/*++
+
+Routine Description:
+
+    This routine monitors InbvDisplayString output.  If it sees something
+    which needs to be displayed on the screen, it triggers the output screen.
+
+Arguments:
+
+    String - Pointer to a string pointer.
+
+Returns:
+
+    None.
+
+Notes:
+
+    This routine will be called anytime a string is displayed via the
+    Inbv routines.  It cannot be paged!
+
+--*/
+
+{
+    static const UCHAR EmptyString = 0;
+    static BOOLEAN NonDotHit = FALSE;
+
+    if ((NonDotHit == FALSE) && (strcmp(*String, ".") == 0)) {
+        *String = (PUCHAR)&EmptyString;
+    } else {
+        NonDotHit = TRUE;
+        InbvInstallDisplayStringFilter((INBV_DISPLAY_STRING_FILTER)NULL);
+        DisplayBootBitmap(TRUE);
+    }
+}
 
 VOID
 ExBurnMemory(
@@ -713,35 +833,6 @@ Return Value:
         NtMinorVersion = atoi( sMinor );
         *--sMinor = '.';
 
-        /*NtHeaders = RtlImageNtHeader( DataTableEntry->DllBase );
-        if (NtHeaders->OptionalHeader.MajorSubsystemVersion != NtMajorVersion ||
-            NtHeaders->OptionalHeader.MinorSubsystemVersion != NtMinorVersion)
-        {
-            NtMajorVersion = NtHeaders->OptionalHeader.MajorSubsystemVersion;
-            NtMinorVersion = NtHeaders->OptionalHeader.MinorSubsystemVersion;
-        }*/
-
-        sprintf( VersionBuffer, "%u.%u", NtMajorVersion, NtMinorVersion );
-        RtlCreateUnicodeStringFromAsciiz( &CmVersionString, VersionBuffer );
-        sprintf(s,
-                NT_SUCCESS(Status) ? MessageEntry->Text : "WINDOWS NT (TM)\n",
-                VersionBuffer,
-                NtBuildNumber & 0xFFFF,
-                Buffer);
-        HalDisplayString(s);
-        
-        //
-        // Print the ESUP version information message
-        //
-        sprintf(s,
-                "Legacy System Extended Support ESUP\n"
-                "%s, SVN r%u, %s, %s\n",
-                VER_PRODUCTESUPBLDTYPE_STR,
-                VER_PRODUCTBUILD_SVNREV,
-                VER_PRODUCTESUPBLDDATE_STR,
-                VER_PRODUCTESUPBUILDER_STR);
-        HalDisplayString(s);
-
 #if i386 && !FPO
         if (NtGlobalFlag & FLG_KERNEL_STACK_TRACE_DB) {
             PVOID StackTraceDataBase;
@@ -889,7 +980,7 @@ Phase1Initialization(
     )
 
 {
-
+    PCHAR s;
     PLOADER_PARAMETER_BLOCK LoaderBlock;
     PETHREAD Thread;
     PKPRCB Prcb;
@@ -909,6 +1000,7 @@ Phase1Initialization(
     ANSI_STRING AnsiDebugString;
     UNICODE_STRING EnvString, NullString, UnicodeSystemDriveString;
     CHAR DebugBuffer[256];
+    CHAR BootLogBuffer[256];
     PWSTR Src, Dst;
     BOOLEAN ResetActiveTimeBias;
     HANDLE NlsSection;
@@ -920,12 +1012,15 @@ Phase1Initialization(
     ULONG SavedViewSize;
     LONG BootTimeZoneBias;
     PLDR_DATA_TABLE_ENTRY DataTableEntry;
+    CHAR VersionBuffer[24];
     PMESSAGE_RESOURCE_ENTRY MessageEntry;
 #ifndef NT_UP
     PMESSAGE_RESOURCE_ENTRY MessageEntry1;
 #endif
     PCHAR MPKernelString;
     PCHAR Options;
+    BOOLEAN NOGUIBOOT;
+    BOOLEAN SOS;
 
     //
     //  Set handle for PAGELK section.
@@ -954,10 +1049,49 @@ Phase1Initialization(
     }
     
     //
-    // Grab the loader block options.
+    // Allow the boot video driver to behave differently based on the
+    // OsLoadOptions.
     //
-    
+
     Options = LoaderBlock->LoadOptions ? _strupr(LoaderBlock->LoadOptions) : NULL;
+
+    if (Options) {
+        NOGUIBOOT = (BOOLEAN)(strstr(Options, "NOGUIBOOT") != NULL);
+    } else {
+        NOGUIBOOT = FALSE;
+    }
+
+    InbvEnableBootDriver((BOOLEAN)!NOGUIBOOT);
+
+    //
+    // There is now enough functionality for the system Boot Video
+    // Driver to run.
+    //
+
+    InbvDriverInitialize(LoaderBlock, 18);
+
+    if (NOGUIBOOT) {
+
+        //
+        // If the user specified the noguiboot switch we don't want to
+        // use the bootvid driver, so release display ownership.
+        //
+
+        InbvNotifyDisplayOwnershipLost(NULL);
+    }
+
+    if (Options) {
+        SOS = (BOOLEAN)(strstr(Options, "SOS") != NULL);
+    } else {
+        SOS = FALSE;
+    }
+
+    if (NOGUIBOOT) {
+        InbvEnableDisplayString(FALSE);
+    } else {
+        InbvEnableDisplayString(SOS);
+        DisplayBootBitmap(SOS);
+    }
 
     //
     // Are we booting into WinPE?
@@ -975,7 +1109,55 @@ Phase1Initialization(
         }
     }
 
+    //
+    // We can safely display the version information now.
+    //
+    
+    Status = RtlFindMessage (DataTableEntry->DllBase,
+                             11,
+                             0,
+                             WINDOWS_NT_BANNER,
+                             &MessageEntry);
 
+    s = DebugBuffer;
+
+    if (CmCSDVersionString.Length != 0) {
+        s += sprintf( s, ": %wZ", &CmCSDVersionString );
+    }
+
+    *s++ = '\0';
+
+    sprintf( VersionBuffer, "%u.%u", NtMajorVersion, NtMinorVersion );
+
+    if (NT_SUCCESS(Status)) {
+        sprintf (s,
+             MessageEntry->Text,
+             VersionBuffer,
+             NtBuildNumber & 0xFFFF,
+             DebugBuffer);
+    } else {
+        //
+        // Could not find the WINDOWS_NT_BANNER message.
+        //
+        sprintf (s, "MICROSOFT (R) WINDOWS (TM)\n");
+    }
+
+    InbvDisplayString(s);
+    
+    //
+    // Print the ESUP version information message
+    //
+    sprintf(s,
+                "Legacy System Extended Support ESUP\n"
+                "%s, SVN r%u, %s, %s\n",
+                VER_PRODUCTESUPBLDTYPE_STR,
+                VER_PRODUCTBUILD_SVNREV,
+                VER_PRODUCTESUPBLDDATE_STR,
+                VER_PRODUCTESUPBUILDER_STR);
+        HalDisplayString(s);
+
+    RtlCopyMemory (BootLogBuffer, DebugBuffer, sizeof(DebugBuffer));
+ 
 #ifdef _PNP_POWER_
     if (!PoInitSystem(0)) {
         KeBugCheck(IO1_INITIALIZATION_FAILED);
@@ -1107,7 +1289,9 @@ Phase1Initialization(
              (Size + (1 << 20 - PAGE_SHIFT) - 1) >> (20 - PAGE_SHIFT),
              &AnsiDebugString
            );
-    HalDisplayString(DebugBuffer);
+    InbvDisplayString(DebugBuffer);
+    InbvUpdateProgressBar(5);
+
 
     //
     // Display the memory configuration of the host system.
@@ -1270,6 +1454,8 @@ Phase1Initialization(
 
     if (!SeInitSystem())
             KeBugCheck(SECURITY1_INITIALIZATION_FAILED);
+        
+    InbvUpdateProgressBar(10);
 
     //
     // Create the symbolic link to \SystemRoot.
@@ -1443,11 +1629,13 @@ Phase1Initialization(
 
     if (!CmInitSystem1(LoaderBlock))
       KeBugCheck(CONFIG_INITIALIZATION_FAILED);
-
+    
+    InbvUpdateProgressBar(15); 
+    
     //
     // Compute timezone bias and next cutover date
     //
-
+    
     BootTimeZoneBias = ExpLastTimeZoneBias;
 
     ExRefreshTimeZoneInformation(&CmosTime);
@@ -1482,6 +1670,8 @@ Phase1Initialization(
     if (!PpInitSystem()) {
         KeBugCheck(PP1_INITIALIZATION_FAILED);
     }
+    
+    InbvUpdateProgressBar(20);
 
 //#endif // _PNP_POWER_
 
@@ -1499,10 +1689,21 @@ Phase1Initialization(
     //
 
     ExInitSystemPhase2();
+    
+    InbvUpdateProgressBar(25);
 
+    InbvSetProgressBarSubset(25, 75);
+    
     if (!IoInitSystem(LoaderBlock))
         KeBugCheck(IO1_INITIALIZATION_FAILED);
+    
+    //
+    // Clear progress bar subset, goes back to absolute mode.
+    //
 
+    InbvSetProgressBarSubset(0, 100);
+
+    InbvUpdateProgressBar(80);
 #if i386
     //
     // Initialize Vdm specific stuff
@@ -1526,6 +1727,8 @@ Phase1Initialization(
 
     if (PsInitSystem(1, (PLOADER_PARAMETER_BLOCK)Context) == FALSE)
         KeBugCheck(PROCESS1_INITIALIZATION_FAILED);
+    
+    InbvUpdateProgressBar(85);
 
     //
     // Force KeBugCheck to look at PsLoadedModuleList now that it is
@@ -1555,6 +1758,8 @@ Phase1Initialization(
     if (!SeRmInitPhase1()) {
         KeBugCheck(REFMON_INITIALIZATION_FAILED);
     }
+    
+    InbvUpdateProgressBar(90);
 
     //
     // Set up process parameters for the Session Manager Subsystem
@@ -1740,6 +1945,14 @@ Phase1Initialization(
         KeBugCheckEx(SESSION4_INITIALIZATION_FAILED,Status,0,0,0);
     }
 
+    InbvUpdateProgressBar(100);
+
+    //
+    // Turn on debug output so that we can see chkdsk run.
+    //
+
+    InbvEnableDisplayString(TRUE);
+    
     //
     // Wait five seconds for the session manager to get started or
     // terminate. If the wait times out, then the session manager

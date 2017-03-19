@@ -24,6 +24,7 @@ Revision History:
 --*/
 
 #include "iomgr.h"
+#include <inbv.h>
 
 //
 // Define the default number of I/O stack locations a large IRP should
@@ -2364,6 +2365,13 @@ Return Value:
     if (!NT_SUCCESS( status )) {
         return FALSE;
     }
+    
+    //
+    // The boot process takes a while loading drivers.   Indicate that
+    // progress is being made.
+    //
+
+    InbvIndicateProgress();
 
     //
     // Save the name of the driver so that it can be easily located by functions
@@ -3365,6 +3373,14 @@ Return Value:
                 }
             }
         }
+        
+        //
+        // The boot process takes a while loading drivers.   Indicate that
+        // progress is being made.
+        //
+
+        InbvIndicateProgress();
+        
     }
 
     //
