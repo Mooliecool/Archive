@@ -46,7 +46,9 @@ HAL_PRIVATE_DISPATCH HalPrivateDispatchTable = {
     xHalRegisterBusHandler,
     NULL,                               // HalHibernateProcessor
     xHalSuspendHibernateSystem,
-    NULL                                // HalpSuspendHibernateSystem;
+    NULL,                               // HalpSuspendHibernateSystem;
+    NULL,                               // HalResetDisplay
+    NULL                                // HalFindBusAddressTranslation
     };
 
 #ifdef ALLOC_PRAGMA

@@ -408,6 +408,12 @@ extern ULONG HalpUseDbgPrint;
         HalEnableSystemInterrupt(APIC_CLOCK_VECTOR, CLOCK2_LEVEL, HalpClockMode);
 
         HalpInitializeClock();
+        
+        //
+        // Set the private dispatch routine for HalFindBusAddressTranslation.
+        //
+        
+        HALPDISPATCH->HalFindBusAddressTranslation = HalpFindBusAddressTranslation;
 
         HalpRegisterVector (
             DeviceUsage,

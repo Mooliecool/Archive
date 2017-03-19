@@ -256,6 +256,12 @@ Return Value:
         //
 
         HalpInitializeClock();
+        
+        //
+        // Set the private dispatch routine for HalFindBusAddressTranslation.
+        //
+        
+        HALPDISPATCH->HalFindBusAddressTranslation = HalpFindBusAddressTranslation;
 
         //
         // Make sure profile is disabled
