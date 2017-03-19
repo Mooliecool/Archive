@@ -31,6 +31,7 @@ Revision History:
 #include <string.h>
 
 #include <inbv.h>
+#include <bootvid.h>
 
 UNICODE_STRING NtSystemRoot;
 PVOID ExPageLockHandle;
@@ -187,6 +188,16 @@ ULONG InitUnicodeCaseTableDataOffset;
 PVOID InitNlsSectionPointer;
 
 extern BOOLEAN InbvBootDriverInstalled;
+
+// NOTE: On NT 5.1, this is declared under anim.c
+VOID
+FinalizeBootLogo(VOID)
+{
+    InbvAcquireLock();
+	if (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
+		VidSolidColorFill(0,0,639,479,0);
+    InbvReleaseLock();
+}
 
 VOID
 DisplayBootBitmap (
@@ -1860,6 +1871,12 @@ Phase1Initialization(
                 NULL,
                 &ProcessInformation
                 );
+
+    if (InbvBootDriverInstalled)
+    {
+        FinalizeBootLogo();
+    }                
+                
     if ( !NT_SUCCESS(Status) ) {
 #if DBG
         sprintf(DebugBuffer,
