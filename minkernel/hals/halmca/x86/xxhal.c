@@ -268,8 +268,6 @@ Return Value:
 
         HalStopProfileInterrupt(0);
 
-        HalpInitializeDisplay();
-
         //
         // Initialize spinlock used by HalGetBusData hardware access routines
         //

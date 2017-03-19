@@ -30,7 +30,6 @@ Revision History:
 #define RESET       0xfe
 #define KEYBPORT    (PUCHAR )0x64
 
-VOID  HalpVideoReboot(VOID);
 VOID  HalpReboot(VOID);
 
 
@@ -63,7 +62,7 @@ Return Value:
         case HalRestartRoutine:
         case HalRebootRoutine:
 
-            HalpVideoReboot();
+            InbvAcquireDisplayOwnership();
 
             //
             // Never returns

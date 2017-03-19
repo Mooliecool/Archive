@@ -468,8 +468,6 @@ extern ULONG HalpUseDbgPrint;
         HalpSetInternalVector(APC_VECTOR, HalpApcInterrupt);
         HalpSetInternalVector(APIC_IPI_VECTOR, HalpIpiHandler);
 
-        HalpInitializeDisplay();
-
         //
         // Initialize spinlock used by HalGetBusData hardware access routines
         //

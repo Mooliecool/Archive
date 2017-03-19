@@ -81,6 +81,16 @@ Return Value:
     ULONG   port, i;
     ULONG   EBI2NMISource;
     PUCHAR  p;
+    
+	if (InbvIsBootDriverInstalled()) {
+        InbvAcquireDisplayOwnership();
+        InbvResetDisplay();
+        InbvSolidColorFill(0, 0, 639, 479, 4);
+        InbvSetTextColor(15);
+        InbvInstallDisplayStringFilter(0);
+        InbvEnableDisplayString(1);
+        InbvSetScrollRegion(0, 0, 639, 479);
+    }
 
     HalDisplayString (MSG_HARDWARE_ERROR1);
     HalDisplayString (MSG_HARDWARE_ERROR2);
