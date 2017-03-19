@@ -1108,55 +1108,6 @@ Phase1Initialization(
             }
         }
     }
-
-    //
-    // We can safely display the version information now.
-    //
-    
-    Status = RtlFindMessage (DataTableEntry->DllBase,
-                             11,
-                             0,
-                             WINDOWS_NT_BANNER,
-                             &MessageEntry);
-
-    s = DebugBuffer;
-
-    if (CmCSDVersionString.Length != 0) {
-        s += sprintf( s, ": %wZ", &CmCSDVersionString );
-    }
-
-    *s++ = '\0';
-
-    sprintf( VersionBuffer, "%u.%u", NtMajorVersion, NtMinorVersion );
-
-    if (NT_SUCCESS(Status)) {
-        sprintf (s,
-             MessageEntry->Text,
-             VersionBuffer,
-             NtBuildNumber & 0xFFFF,
-             DebugBuffer);
-    } else {
-        //
-        // Could not find the WINDOWS_NT_BANNER message.
-        //
-        sprintf (s, "MICROSOFT (R) WINDOWS (TM)\n");
-    }
-
-    InbvDisplayString(s);
-    
-    //
-    // Print the ESUP version information message
-    //
-    sprintf(s,
-                "Legacy System Extended Support ESUP\n"
-                "%s, SVN r%u, %s, %s\n",
-                VER_PRODUCTESUPBLDTYPE_STR,
-                VER_PRODUCTBUILD_SVNREV,
-                VER_PRODUCTESUPBLDDATE_STR,
-                VER_PRODUCTESUPBUILDER_STR);
-        HalDisplayString(s);
-
-    RtlCopyMemory (BootLogBuffer, DebugBuffer, sizeof(DebugBuffer));
  
 #ifdef _PNP_POWER_
     if (!PoInitSystem(0)) {
@@ -1310,7 +1261,7 @@ Phase1Initialization(
         // Output display headings and enumerate memory types.
         //
 
-        HalDisplayString("\nStart  End  Page  Type Of Memory\n Pfn   Pfn  Count\n\n");
+        InbvDisplayString("\nStart  End  Page  Type Of Memory\n Pfn   Pfn  Count\n\n");
         ListHead = &LoaderBlock->MemoryDescriptorListHead;
         NextEntry = ListHead->Flink;
         do {
@@ -1430,11 +1381,11 @@ Phase1Initialization(
                     MemoryDescriptor->PageCount,
                     TypeOfMemory);
 
-            HalDisplayString(&DisplayBuffer[0]);
+            InbvDisplayString(&DisplayBuffer[0]);
             NextEntry = NextEntry->Flink;
         } while (NextEntry != ListHead);
 
-        HalDisplayString("\n");
+        InbvDisplayString("\n");
     }
 #endif
 
