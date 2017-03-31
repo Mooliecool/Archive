@@ -107,6 +107,22 @@ ULONG NtBuildNumber = VER_PRODUCTBUILD | 0xC0000000;
 ULONG NtBuildNumber = VER_PRODUCTBUILD | 0xF0000000;
 #endif
 
+#if defined(__BUILDMACHINE__)
+#if defined(__BUILDDATE__)
+#define B2(w,x,y) "" #w "." #x "." #y
+#define B1(w,x,y) B2(w, x, y)
+#define BUILD_MACHINE_TAG B1(VER_PRODUCTBUILD, __BUILDMACHINE__, __BUILDDATE__)
+#else
+#define B2(w,x) "" #w "." #x
+#define B1(w,x) B2(w,x)
+#define BUILD_MACHINE_TAG B1(VER_PRODUCTBUILD, __BUILDMACHINE__)
+#endif
+#else
+#define BUILD_MACHINE_TAG ""
+#endif
+
+const CHAR NtBuildLab[] = BUILD_MACHINE_TAG;
+
 ULONG InitializationPhase;  // bss 0
 
 extern LIST_ENTRY PsLoadedModuleList;

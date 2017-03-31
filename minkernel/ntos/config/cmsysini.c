@@ -1653,6 +1653,28 @@ Return Value:
         ValueString.Buffer,
         ValueString.Length + sizeof( UNICODE_NULL )
         );
+        
+    RtlInitUnicodeString(
+        &NameString,
+        L"BuildLab"
+        );
+
+    RtlInitAnsiString( &AnsiString, NtBuildLab );
+
+    ValueString.Buffer = ValueBuffer;
+    ValueString.Length = 0;
+    ValueString.MaximumLength = sizeof( ValueBuffer );
+
+    RtlAnsiStringToUnicodeString( &ValueString, &AnsiString, FALSE );
+
+    status = NtSetValueKey(
+        key1,
+        &NameString,
+        0,              // TitleIndex
+        REG_SZ,
+        ValueString.Buffer,
+        ValueString.Length + sizeof( UNICODE_NULL )
+        );
 #if DBG
     if (!NT_SUCCESS(status)) {
         DbgPrint("CMINIT: SetValueKey of %wZ failed - Status == %lx\n",

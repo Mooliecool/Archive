@@ -39,6 +39,8 @@ extern ULONG CmNtCSDVersion;
 extern UNICODE_STRING CmVersionString;
 extern UNICODE_STRING CmCSDVersionString;
 
+extern const CHAR NtBuildLab[];
+
 extern NLSTABLEINFO InitTableInfo;
 extern ULONG InitNlsTableSize;
 extern PVOID InitNlsTableBase;
