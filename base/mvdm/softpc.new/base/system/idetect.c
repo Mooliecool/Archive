@@ -212,7 +212,7 @@ static int minFailedPolls = 10;
 
 
 #else
-#include "..\..\..\..\inc\vdm.h"
+#include <vdm.h>
   
 /*  NTVDM
  *  Some of our static global variables are located in 16 bit memory area
