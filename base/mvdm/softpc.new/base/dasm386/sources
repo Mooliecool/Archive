@@ -27,21 +27,18 @@ MAJORCOMP=spcbase
 MINORCOMP=dasm386
 
 TARGETNAME=dasm386
-
 TARGETPATH=obj
-
+TARGETTYPE=LIBRARY
+TARGETLIBS=
 
 NTPROFILEINPUT=yes
 
-# Pick one of the following and delete the others
-TARGETTYPE=LIBRARY
+SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
 
-
-TARGETLIBS=
-
-SOFTPC_TREE=$(BASEDIR)\private\mvdm\softpc.new
-
-INCLUDES=$(SOFTPC_TREE)\host\inc;$(SOFTPC_TREE)\base\inc;$(BASEDIR)\private\inc
+INCLUDES=                       \
+    $(BASE_INC_PATH);           \
+    $(SOFTPC_TREE)\host\inc;    \
+    $(SOFTPC_TREE)\base\inc
 
 !IF $(ALPHA)
 GPSIZE=0
@@ -49,19 +46,18 @@ GPSIZE=0
 GPSIZE=0
 !ENDIF
 
-
-PPC_SOURCES=		dasm386.c    \
-			build.c	     \
-			decode.c
+PPC_SOURCES=    \
+    dasm386.c   \
+	build.c	    \
+	decode.c
 
 ALPHA_SOURCES=$(PPC_SOURCES)
 
 MIPS_SOURCES=$(PPC_SOURCES)
 
-i386_SOURCES=
+X86_SOURCES=
 
 SOURCES=
-
 
 !INCLUDE $(SOFTPC_TREE)\obj.vdm\CDEFINE.INC
 
