@@ -91,6 +91,16 @@
 #pragma warning(disable:4715) // not all control paths return a value
 #endif
 
+#if 1 // For SoftPC (aaaaaaaaarrrrrrrrrghhhhhh)
+#pragma warning(disable:4005)
+#pragma warning(disable:4018)
+#pragma warning(disable:4013)
+#pragma warning(disable:4102)
+#pragma warning(disable:4028)
+#pragma warning(disable:4142)
+#pragma warning(disable:4002)
+#endif
+
 #if 1 // For MinNT repository, MIPS build
 #pragma warning(disable:4022) // pointer mismatch for actual parameter *
 #pragma warning(disable:4047) // '*' differs in levels of indirection from '*'
