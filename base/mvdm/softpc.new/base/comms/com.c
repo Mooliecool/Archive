@@ -3157,7 +3157,7 @@ FILE *fd;
 	fprintf(fd, "\nAll bytes dumped.\n");
 }
 
-com_save_rxbytes IFN2(int, n, CHAR *, buf)
+void com_save_rxbytes IFN2(int, n, CHAR *, buf)
 {
 	int tc, bs;
 
@@ -3173,7 +3173,7 @@ com_save_rxbytes IFN2(int, n, CHAR *, buf)
 	}
 }
 
-com_save_txbyte IFN1(CHAR, value)
+void com_save_txbyte IFN1(CHAR, value)
 {
 	if (com_save_tx)
 	{

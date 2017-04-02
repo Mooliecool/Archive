@@ -391,8 +391,8 @@ extern void com_outb IPT2(io_addr, port, half_word, value);
 extern void com_recv_char IPT1(int, adapter);
 extern void recv_char IPT1(long, adapter);
 extern void com_modem_change IPT1(int, adapter);
-extern int com_save_rxbytes IPT2(int,n, CHAR *,buf);
-extern int com_save_txbyte IPT1(CHAR,value);
+extern void com_save_rxbytes IPT2(int,n, CHAR *,buf);
+extern void com_save_txbyte IPT1(CHAR,value);
 
 #ifdef PS_FLUSHING
 extern void com_psflush_change IPT2(IU8,hostID, IBOOL,apply);
