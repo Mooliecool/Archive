@@ -27,18 +27,24 @@ MAJORCOMP=mvdm
 MINORCOMP=dem
 
 TARGETNAME=dem
-TARGETPATH=\nt\public\sdk\lib
+TARGETPATH=obj
 TARGETTYPE=LIBRARY
 TARGETLIBS=
 
-
 NTPROFILEINPUT=YES
 
-SOFTPC_TREE=$(BASEDIR)\private\mvdm\softpc.new
+SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
 
-INCLUDES=..\..\inc;..\..\..\windows\inc;..\..\..\inc;$(SOFTPC_TREE)\base\inc;$(SOFTPC_TREE)\host\inc;..\..\vdd\h
+INCLUDES=                       \
+    ..\..\inc;                  \
+    ..\..\..\inc;               \
+    $(BASE_INC_PATH);           \
+    $(SOFTPC_TREE)\base\inc;    \
+    $(SOFTPC_TREE)\host\inc;    \
+    ..\..\vdd\h
 
-SOURCES=dem.c       \
+SOURCES=        \
+    dem.c       \
     demfcb.c    \
     demdata.c   \
     demdir.c    \
