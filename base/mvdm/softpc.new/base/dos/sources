@@ -27,29 +27,24 @@ MAJORCOMP=spcbase
 MINORCOMP=dos
 
 TARGETNAME=dos
-
 TARGETPATH=obj
-
-
-NTPROFILEINPUT=yes
-
-# Pick one of the following and delete the others
 TARGETTYPE=LIBRARY
-
 
 TARGETLIBS=
 
-SOFTPC_TREE=$(BASEDIR)\private\mvdm\softpc.new
+NTPROFILEINPUT=yes
 
-INCLUDES=$(SOFTPC_TREE)\host\inc;$(SOFTPC_TREE)\base\inc
+SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
+
+INCLUDES=                       \
+    $(SOFTPC_TREE)\host\inc;    \
+    $(SOFTPC_TREE)\base\inc
 
 !IF $(ALPHA)
 GPSIZE=0
 !ELSE
 GPSIZE=0
 !ENDIF
-
-
 
 SOURCES=emm_mngr.c
 
