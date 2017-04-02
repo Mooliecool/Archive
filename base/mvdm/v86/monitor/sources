@@ -26,19 +26,18 @@ NOTE:   Commented description of this file is in \nt\bak\bin\sources.tpl
 
 MAJORCOMP=v86
 MINORCOMP=monitor
+
 TARGETNAME=monitor
-
-
-TARGETPATH=\nt\public\sdk\lib
-
+TARGETPATH=obj
 TARGETTYPE=LIBRARY
-
 
 TARGETLIBS=
 
-
-INCLUDES=..\..\inc;..\..\softpc.new\base\inc;..\..\softpc.new\host\inc;..\..\..\inc
-
+INCLUDES=                       \
+    ..\..\inc;                  \
+    ..\..\softpc.new\base\inc;  \
+    ..\..\softpc.new\host\inc;  \
+    ..\..\..\inc
 
 NTPROFILEINPUT=YES
 
