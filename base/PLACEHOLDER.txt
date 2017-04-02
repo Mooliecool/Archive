@@ -1,1 +1,0 @@
-All components in this directory have been relocated to minkernel project for now.
