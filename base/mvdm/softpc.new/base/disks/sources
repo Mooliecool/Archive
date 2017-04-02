@@ -27,21 +27,19 @@ MAJORCOMP=spcbase
 MINORCOMP=disks
 
 TARGETNAME=disks
-
 TARGETPATH=obj
-
-
-NTPROFILEINPUT=yes
-
-# Pick one of the following and delete the others
 TARGETTYPE=LIBRARY
-
 
 TARGETLIBS=
 
-SOFTPC_TREE=$(BASEDIR)\private\mvdm\softpc.new
+NTPROFILEINPUT=yes
 
-INCLUDES=$(SOFTPC_TREE)\host\inc;$(SOFTPC_TREE)\base\inc;$(BASEDIR)\private\inc
+SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
+
+INCLUDES=                       \
+    $(BASE_INC_PATH);           \
+    $(SOFTPC_TREE)\host\inc;    \
+    $(SOFTPC_TREE)\base\inc
 
 !IF $(ALPHA)
 GPSIZE=0
@@ -49,18 +47,17 @@ GPSIZE=0
 GPSIZE=0
 !ENDIF
 
-
-
-SOURCES=floppy.c      \
-                        floppy_i.c    \
-                        diskbios.c    \
-                        fdisk.c       \
-                        fla.c \
-                        gfi.c \
-                        gfi_ibm.c     \
-                        gfi_mpty.c    \
-                        gfi_sflp.c    \
-                        gfi_test.c
+SOURCES=        \
+    floppy.c    \
+    floppy_i.c  \
+    diskbios.c  \
+    fdisk.c     \
+    fla.c       \
+    gfi.c       \
+    gfi_ibm.c   \
+    gfi_mpty.c  \
+    gfi_sflp.c  \
+    gfi_test.c
 
 !INCLUDE $(SOFTPC_TREE)\obj.vdm\CDEFINE.INC
 
