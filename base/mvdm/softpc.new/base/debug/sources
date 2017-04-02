@@ -27,21 +27,19 @@ MAJORCOMP=spcbase
 MINORCOMP=debug
 
 TARGETNAME=debug
-
 TARGETPATH=obj
-
-
-NTPROFILEINPUT=yes
-
-# Pick one of the following and delete the others
 TARGETTYPE=LIBRARY
-
 
 TARGETLIBS=
 
-SOFTPC_TREE=$(BASEDIR)\private\mvdm\softpc.new
+NTPROFILEINPUT=yes
 
-INCLUDES=$(SOFTPC_TREE)\host\inc;$(SOFTPC_TREE)\base\inc;$(BASEDIR)\private\inc
+SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
+
+INCLUDES=                       \
+    $(BASE_INC_PATH);           \
+    $(SOFTPC_TREE)\host\inc;    \
+    $(SOFTPC_TREE)\base\inc
 
 !IF $(ALPHA)
 GPSIZE=0
@@ -49,19 +47,17 @@ GPSIZE=0
 GPSIZE=0
 !ENDIF
 
+SOURCES=        \
+    debuggng.c  \
+    ega_dump.c  \
+    btrace.c    \
+    trace.c     \
+    profile.c   \
+    pigyoda.c   \
+    yoda.c
+#   dasm.c      \
 
-
-
-SOURCES=                debuggng.c    \
-                        ega_dump.c    \
-                        btrace.c      \
-                        trace.c       \
-                        profile.c     \
-                        pigyoda.c     \
-                        yoda.c
-#			dasm.c        \
-
-i386_SOURCES=		dasm.c
+X86_SOURCES=dasm.c
 
 !INCLUDE $(SOFTPC_TREE)\obj.vdm\CDEFINE.INC
 
