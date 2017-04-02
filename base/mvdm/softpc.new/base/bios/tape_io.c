@@ -11,6 +11,12 @@
  *
  */
 
+// BUGBUG: stephanos 04/02/2017
+//  These warnings were deliberately disabled to allow compilation.
+// ==
+#pragma warning(disable:4018)
+// ==
+
 /*
  * static char SccsID[]="@(#)tape_io.c	1.26 06/28/95 Copyright Insignia Solutions Ltd.";
  */

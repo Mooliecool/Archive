@@ -26,44 +26,42 @@ NOTE:   Commented description of this file is in \nt\bak\bin\sources.tpl
 MAJORCOMP=spcbase
 MINORCOMP=bios
 
-
 TARGETNAME=bios
-
 TARGETPATH=obj
-
-
-NTPROFILEINPUT=yes
-
-# Pick one of the following and delete the others
 TARGETTYPE=LIBRARY
-
 
 TARGETLIBS=
 
-SOFTPC_TREE=$(BASEDIR)\private\mvdm\softpc.new
+SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
 
-INCLUDES=$(SOFTPC_TREE)\host\inc;$(SOFTPC_TREE)\base\inc;$(BASEDIR)\private\inc
+INCLUDES=                       \
+    $(BASE_INC_PATH);           \
+    $(SOFTPC_TREE)\host\inc;    \
+    $(SOFTPC_TREE)\base\inc
+
+NTPROFILEINPUT=yes
+
 !IF $(ALPHA)
 GPSIZE=0
 !ELSE
 GPSIZE=0
 !ENDIF
 
-
-SOURCES=bios.c        \
-        cmos_bis.c    \
-        cntlbop.c     \
-        emm_fncs.c    \
-        reset.c       \
-        rom_basc.c    \
-        rtc_bios.c    \
-        slave_bs.c    \
-        tape_io.c     \
-        equipmnt.c    \
-        ill_bop.c     \
-        build_id.c    \
-        virtual.c     \
-        mem_size.c
+SOURCES=        \
+    bios.c      \
+    cmos_bis.c  \
+    cntlbop.c   \
+    emm_fncs.c  \
+    reset.c     \
+    rom_basc.c  \
+    rtc_bios.c  \
+    slave_bs.c  \
+    tape_io.c   \
+    equipmnt.c  \
+    ill_bop.c   \
+    build_id.c  \
+    virtual.c   \
+    mem_size.c
 
 !INCLUDE $(SOFTPC_TREE)\obj.vdm\CDEFINE.INC
 

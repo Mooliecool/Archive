@@ -8,6 +8,13 @@
 #include	<ctype.h>
 #endif
 
+// BUGBUG: stephanos 04/02/2017
+//  These warnings were deliberately disabled to allow compilation.
+// ==
+#pragma warning(disable:4013)
+#pragma warning(disable:4018)
+// ==
+
 /*			INSIGNIA MODULE SPECIFICATION
 			-----------------------------
 

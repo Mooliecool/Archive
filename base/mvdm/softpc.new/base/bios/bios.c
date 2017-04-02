@@ -16,6 +16,13 @@
  *
  */
 
+// BUGBUG: stephanos 04/02/2017
+//  These warnings were deliberately disabled to allow compilation.
+// ==
+#pragma warning(disable:4113)
+#pragma warning(disable:4276)
+// ==
+
 #ifdef SCCSID
 static char SccsID[]="@(#)bios.c	1.64 06/28/95 Copyright Insignia Solutions Ltd.";
 #endif

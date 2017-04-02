@@ -18,6 +18,13 @@
 
 ]*/
 
+// BUGBUG: stephanos 04/02/2017
+//  These warnings were deliberately disabled to allow compilation.
+// ==
+#pragma warning(disable:4005)
+#pragma warning(disable:4013)
+// ==
+
 #ifdef SEGMENTATION
 /*
  * The following #include specifies the code segment into which this
