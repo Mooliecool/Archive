@@ -27,11 +27,11 @@ SPC_VAR=-DPIG
 !ENDIF
 
 
-SOFTPC_TREE=$(BASEDIR)\private\mvdm\softpc.new
+SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
 
 # Set machine specific variables. Differences are for X86 vs. RISC
 
-!IF $(386)
+!IF $(X86)
 
 SPC_MC_DEF=   -DMONITOR \
               -DC_VID   \
