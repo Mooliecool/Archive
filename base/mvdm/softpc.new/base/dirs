@@ -33,6 +33,3 @@ DIRS=   bios \
         support \
         system \
         video \
-
-
-

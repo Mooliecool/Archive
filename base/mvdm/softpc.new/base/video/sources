@@ -27,21 +27,19 @@ MAJORCOMP=spcbase
 MINORCOMP=video
 
 TARGETNAME=video
-
 TARGETPATH=obj
-
-
-NTPROFILEINPUT=yes
-
-# Pick one of the following and delete the others
 TARGETTYPE=LIBRARY
-
 
 TARGETLIBS=
 
-SOFTPC_TREE=$(BASEDIR)\private\mvdm\softpc.new
+NTPROFILEINPUT=yes
 
-INCLUDES=$(SOFTPC_TREE)\host\inc;$(SOFTPC_TREE)\base\inc;$(BASEDIR)\private\inc
+SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
+
+INCLUDES=                       \
+    $(BASE_INC_PATH);           \
+    $(SOFTPC_TREE)\host\inc;    \
+    $(SOFTPC_TREE)\base\inc
 
 !IF $(ALPHA)
 GPSIZE=0
@@ -49,28 +47,27 @@ GPSIZE=0
 GPSIZE=0
 !ENDIF
 
-
-
-SOURCES=                ega_mode.c      \
-                        ega_prts.c      \
-                        ega_vide.c      \
-                        gfx_updt.c      \
-                        video.c         \
-                        gvi.c           \
-                        video_io.c      \
-                        v7_ports.c      \
-                        v7_video.c      \
-                        vga_mode.c      \
-                        vga_prts.c      \
-                        vga_vide.c      \
-                        ega_read.c      \
-                        ega_writ.c      \
-                        ega_dmmy.c      \
-                        ega_trcr.c      \
-                        egawrtm0.c      \
-                        egwrtm12.c      \
-                        cga.c
-#                        ga_glue.c       \
+SOURCES=        \
+    ega_mode.c  \
+    ega_prts.c  \
+    ega_vide.c  \
+    gfx_updt.c  \
+    video.c     \
+    gvi.c       \
+    video_io.c  \
+    v7_ports.c  \
+    v7_video.c  \
+    vga_mode.c  \
+    vga_prts.c  \
+    vga_vide.c  \
+    ega_read.c  \
+    ega_writ.c  \
+    ega_dmmy.c  \
+    ega_trcr.c  \
+    egawrtm0.c  \
+    egwrtm12.c  \
+    cga.c
+#   ga_glue.c   \
 
 !INCLUDE $(SOFTPC_TREE)\obj.vdm\CDEFINE.INC
 
