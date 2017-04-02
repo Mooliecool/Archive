@@ -1,0 +1,34 @@
+!IF 0
+
+Copyright (c) 1989  Microsoft Corporation
+Copyright (c) 2017  OpenNT Project
+
+Module Name:
+
+    dirs.
+
+Abstract:
+
+    This file specifies the subdirectories of the current directory that
+    contain component makefiles.
+
+!ENDIF
+
+
+DIRS=dos    \
+#    xms.486 \
+#    dbg    \
+#    v86    \
+#    dpmi32 \
+#    inc    \
+#    suballoc \
+#    oemuni \
+#    softpc.new \
+#    wow32  \
+#    vdmexts \
+#    vdmdbg \
+#    vdmutils \
+#    vdd \
+#    fax
+
+OPTIONAL_DIRS=vdmredir
