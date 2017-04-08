@@ -81,6 +81,7 @@
 #pragma warning(disable:4296) // expression is always true
 #pragma warning(disable:4305) // 'type cast' : truncation from '*' to '*'
 #pragma warning(disable:4306) // 'type cast' : conversion from '* to '*' of greater size
+#pragma warning(disable:4550) // expression evaluates to a function which is missing an argument list
 #pragma warning(disable:4532) // 'return' : jump out of __finally block has undefined behavior during termination handling
 #pragma warning(disable:4552) // operator has no effect; expected operator with side-effect
 #pragma warning(disable:4554) // check operator precedence for possible error; use parentheses to clarify precedence
