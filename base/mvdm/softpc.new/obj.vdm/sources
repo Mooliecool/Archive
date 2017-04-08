@@ -30,6 +30,8 @@ TARGETNAME=ntvdm
 TARGETPATH=obj
 TARGETTYPE=PROGLIB
 
+PASS1_PUBLISH={$(O)\ntvdm.lib=$(SDK_LIB_PATH)\ntvdm.lib}
+
 EXEPROFILEINPUT=yes
 
 MVDM_TREE=$(PROJECT_ROOT)\mvdm
@@ -153,6 +155,7 @@ UMTYPE=console
 # in allocated Virtual Memory (bottom up) is within
 # near jump range to ntvdm's code.
 #
+
 UMBASE=0x0f000000
 
 DLLDEF=$(O)\ntvdm.def
