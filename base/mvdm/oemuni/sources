@@ -27,14 +27,14 @@ MAJORCOMP=mvdm
 MINORCOMP=oemuni
 
 TARGETNAME=oemuni
-TARGETPATH=\nt\public\sdk\lib
+TARGETPATH=obj
 TARGETTYPE=LIBRARY
-TARGETLIBS=
 
+TARGETLIBS=
 
 NTPROFILEINPUT=YES
 
-INCLUDES=.;..\inc;..\..\windows\inc
+INCLUDES=.;..\inc
 
 SOURCES=file.c \
         process.c
@@ -42,4 +42,4 @@ SOURCES=file.c \
 UMTYPE=console
 UMTEST=toemuni
 UMAPPL=
-UMLIBS=$(_NTDRIVE)\nt\public\sdk\lib\*\oemuni.lib
+UMLIBS=$(ALT_PROJECT)\$(O)\oemuni.lib
