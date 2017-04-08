@@ -61,8 +61,8 @@ TARGETTYPE=DYNLINK
 # where the machine specific subdirectory name should go.
 #
 
-TARGETLIBS=$(BASEDIR)\public\sdk\lib\*\kernel32.lib \
-           $(BASEDIR)\public\sdk\lib\*\user32.lib
+TARGETLIBS=$(SDK_LIB_PATH)\kernel32.lib \
+           $(SDK_LIB_PATH)\user32.lib
 
 #
 # The INCLUDES variable specifies any include paths that are specific to
@@ -70,7 +70,7 @@ TARGETLIBS=$(BASEDIR)\public\sdk\lib\*\kernel32.lib \
 # semicolons.  Relative path specifications are okay.
 #
 
-INCLUDES=..\inc;..\..\inc;..\..\windows\inc
+INCLUDES=..\inc;$(SDK_INC_PATH);$(WINDOWS_INC_PATH)
 
 
 #
@@ -87,7 +87,7 @@ SOURCES=bdecmds.c \
         bdesym.c \
         bdeutil.c \
         data.c \
-	disasm.c
+        disasm.c
 
 
 #
@@ -109,8 +109,8 @@ NTTEST=
 # programs that always get built when the directory is built.
 #
 
-#
-
 PRECOMPILED_INCLUDE=precomp.h
 PRECOMPILED_PCH=precomp.pch
 PRECOMPILED_OBJ=precomp.obj
+
+NO_SAFESEH=1

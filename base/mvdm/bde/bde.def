@@ -1,6 +1,6 @@
 NAME BDE
 
-DESCRIPTION 'Bob's Debugger Extensions'
+;DESCRIPTION 'Bob's Debugger Extensions'
 
 EXPORTS
     k
