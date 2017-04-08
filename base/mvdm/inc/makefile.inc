@@ -29,7 +29,7 @@ INC_FILES = mvdm.inc softpc.inc bop.inc vint.inc \
      wowwsock.inc wowth.inc vrdefld.inc wowcmdlg.inc wowcmpat.inc  \
      doswow.inc curdir.inc vdmtib.inc
 
-all: $(INC_FILES)
+buildall: $(INC_FILES)
 
 clean: cleanup all
 
@@ -105,5 +105,5 @@ doswow.inc: doswow.h
 wownt32.inc: $(SDK_INC_PATH)\wownt32.h
     h2inc -t -s mvdm.h -s wow.h $(SDK_INC_PATH)\wownt32.h -o wownt32.inc
 
-vdmtib.inc: ..\..\inc\vdm.h
-    h2inc -t -s mvdm.h -s wow.h ..\..\inc\vdm.h -o vdmtib.inc
+#vdmtib.inc: ..\..\inc\vdm.h
+#    h2inc -t -s mvdm.h -s wow.h ..\..\inc\vdm.h -o vdmtib.inc
