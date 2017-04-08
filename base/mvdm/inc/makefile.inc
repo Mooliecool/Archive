@@ -10,24 +10,8 @@
 #   12-FEB-92 mattfe added tdb16.h
 #   14-April-92 ChandanC added WOWSHELL.H
 #   12-May-1992 MikeTri added MultiMedia header
+#   08-Apr-2017 Stephanos Ported to NTOSBE build process
 #
-
-!IFDEF USEBUILD
-
-# If using BUILD.EXE, edit .\sources. if you want to add a new source
-# file to this component.  This file merely indirects to the real make file
-# that is shared by all the components of NT OS/2.
-
-!INCLUDE $(NTMAKEENV)\makefile.def
-
-!ELSE
-
-########## Path definition so we find 16 bit tools ##########
-# Also works around stupid bug in RC 3.1 that doesn't allow rcpp.err to be
-# in a directory that is greater than 128 chars down the path, even if
-# rc 3.1 is running as an OS/2 app.
-
-PATH    = $(_NTBINDIR)\private\mvdm\tools16;$(PATH)
 
 .SUFFIXES:
 .SUFFIXES: .c   .asm .h   .inc .obj .lst .sys .exe .com .map .sym .def .lib
@@ -118,9 +102,8 @@ vrdefld.inc: vrdefld.h
 
 doswow.inc: doswow.h
 
-wownt32.inc: \nt\public\sdk\inc\wownt32.h
-    h2inc -t -s mvdm.h -s wow.h \nt\public\sdk\inc\wownt32.h -o wownt32.inc
+wownt32.inc: $(SDK_INC_PATH)\wownt32.h
+    h2inc -t -s mvdm.h -s wow.h $(SDK_INC_PATH)\wownt32.h -o wownt32.inc
 
 vdmtib.inc: ..\..\inc\vdm.h
     h2inc -t -s mvdm.h -s wow.h ..\..\inc\vdm.h -o vdmtib.inc
-!ENDIF
