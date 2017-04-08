@@ -32,7 +32,7 @@ TARGETTYPE=LIBRARY
 
 TARGETLIBS=
 
-SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
+SOFTPC_TREE=$(PROJECT_ROOT)\mvdm\softpc.new
 
 INCLUDES=                       \
     $(BASE_INC_PATH);           \

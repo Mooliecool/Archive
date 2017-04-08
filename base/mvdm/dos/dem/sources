@@ -33,7 +33,7 @@ TARGETLIBS=
 
 NTPROFILEINPUT=YES
 
-SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
+SOFTPC_TREE=$(PROJECT_ROOT)\mvdm\softpc.new
 
 INCLUDES=                       \
     ..\..\inc;                  \

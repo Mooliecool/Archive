@@ -34,7 +34,7 @@ TARGETLIBS=
 
 NTPROFILEINPUT=yes
 
-SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
+SOFTPC_TREE=$(PROJECT_ROOT)\mvdm\softpc.new
 
 INCLUDES=                       \
     $(SOFTPC_TREE)\host\inc;    \
