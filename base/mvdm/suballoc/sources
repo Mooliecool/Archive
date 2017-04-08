@@ -27,12 +27,8 @@ MAJORCOMP=mvdm
 MINORCOMP=suballoc
 
 TARGETNAME=suballoc
-
-TARGETPATH=\nt\public\sdk\lib
-
+TARGETPATH=obj
 TARGETTYPE=LIBRARY
-
-
 
 INCLUDES=..\inc
 
@@ -42,4 +38,4 @@ C_DEFINES=-DDEV_DBG
 
 UMTYPE=console
 UMTEST=tsa
-UMLIBS=\nt\public\sdk\lib\*\suballoc.lib
+UMLIBS=$(ALT_PROJECT)\$(O)\suballoc.lib
