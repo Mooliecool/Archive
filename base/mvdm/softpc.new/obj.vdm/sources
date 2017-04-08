@@ -32,8 +32,8 @@ TARGETTYPE=PROGLIB
 
 EXEPROFILEINPUT=yes
 
-MVDM_TREE=$(NTROOT)\base\mvdm
-SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
+MVDM_TREE=$(PROJECT_ROOT)\mvdm
+SOFTPC_TREE=$(MVDM_TREE)\softpc.new
 
 INCLUDES=                       \
     $(SOFTPC_TREE)\host\inc;    \
@@ -45,16 +45,16 @@ GPSIZE=0
 
 !if $(X86)
 TARGETLIBS=\
-        $(SDK_LIB_PATH)\gdi32.lib     \
-        $(WINDOWS_LIB_PATH)\user32p.lib   \
-        $(SDK_LIB_PATH)\ntdll.lib   \
+        $(SDK_LIB_PATH)\gdi32.lib       \
+        $(WINDOWS_LIB_PATH)\user32p.lib \
+        $(SDK_LIB_PATH)\ntdll.lib       \
         $(SDK_LIB_PATH)\advapi32.lib
 !else
 TARGETLIBS=\
-        $(SDK_LIB_PATH)\binmode.obj  \
-        $(SDK_LIB_PATH)\gdi32.lib     \
-        $(WINDOWS_LIB_PATH)\user32p.lib   \
-        $(SDK_LIB_PATH)\ntdll.lib   \
+        $(SDK_LIB_PATH)\binmode.obj     \
+        $(SDK_LIB_PATH)\gdi32.lib       \
+        $(WINDOWS_LIB_PATH)\user32p.lib \
+        $(SDK_LIB_PATH)\ntdll.lib       \
         $(SDK_LIB_PATH)\advapi32.lib
 !endif
 
@@ -70,27 +70,27 @@ SYNCHRONIZE_BLOCK=1
 #
 
 !if $(X86)
-LINKLIBS =                                                                  \
-     $(SOFTPC_TREE)\base\support$(ALT_PROJECT_OBJS)\$(O)\MAIN.obj          \
-     $(SOFTPC_TREE)\host\src$(ALT_PROJECT_OBJS)\$(O)\FPRT.OBJ              \
-     $(SOFTPC_TREE)\base\system$(ALT_PROJECT_OBJS)\$(O)\SYSTEM.LIB         \
-     $(SOFTPC_TREE)\base\bios$(ALT_PROJECT_OBJS)\$(O)\BIOS.LIB             \
-     $(SOFTPC_TREE)\base\video$(ALT_PROJECT_OBJS)\$(O)\VIDEO.LIB           \
-     $(SOFTPC_TREE)\base\dos$(ALT_PROJECT_OBJS)\$(O)\DOS.LIB               \
-     $(SOFTPC_TREE)\base\comms$(ALT_PROJECT_OBJS)\$(O)\COMMS.LIB           \
-     $(SOFTPC_TREE)\base\debug$(ALT_PROJECT_OBJS)\$(O)\DEBUG.LIB           \
-     $(SOFTPC_TREE)\base\support$(ALT_PROJECT_OBJS)\$(O)\SUPPORT.LIB       \
-     $(SOFTPC_TREE)\base\disks$(ALT_PROJECT_OBJS)\$(O)\DISKS.LIB           \
-     $(SOFTPC_TREE)\base\keymouse$(ALT_PROJECT_OBJS)\$(O)\KEYMOUSE.LIB     \
-     $(SOFTPC_TREE)\host\src$(ALT_PROJECT_OBJS)\$(O)\SRC.LIB               \
-     $(MVDM_TREE)\v86\monitor$(ALT_PROJECT_OBJS)\$(O)\monitor.lib          \
-     $(SDK_LIB_PATH)\dem.lib                                                \
-     $(SDK_LIB_PATH)\dbg.lib                                                \
-     $(SDK_LIB_PATH)\command.lib                                            \
-     $(SDK_LIB_PATH)\dpmi32.lib                                             \
-     $(SDK_LIB_PATH)\xms486.lib                                             \
-     $(SDK_LIB_PATH)\suballoc.lib                                           \
-     $(SDK_LIB_PATH)\oemuni.lib
+LINKLIBS =                                                              \
+     $(SOFTPC_TREE)\base\support$(ALT_PROJECT)\$(O)\MAIN.obj            \
+     $(SOFTPC_TREE)\host\src$(ALT_PROJECT)\$(O)\FPRT.OBJ                \
+     $(SOFTPC_TREE)\base\system$(ALT_PROJECT)\$(O)\SYSTEM.LIB           \
+     $(SOFTPC_TREE)\base\bios$(ALT_PROJECT)\$(O)\BIOS.LIB               \
+     $(SOFTPC_TREE)\base\video$(ALT_PROJECT)\$(O)\VIDEO.LIB             \
+     $(SOFTPC_TREE)\base\dos$(ALT_PROJECT)\$(O)\DOS.LIB                 \
+     $(SOFTPC_TREE)\base\comms$(ALT_PROJECT)\$(O)\COMMS.LIB             \
+     $(SOFTPC_TREE)\base\debug$(ALT_PROJECT)\$(O)\DEBUG.LIB             \
+     $(SOFTPC_TREE)\base\support$(ALT_PROJECT)\$(O)\SUPPORT.LIB         \
+     $(SOFTPC_TREE)\base\disks$(ALT_PROJECT)\$(O)\DISKS.LIB             \
+     $(SOFTPC_TREE)\base\keymouse$(ALT_PROJECT)\$(O)\KEYMOUSE.LIB       \
+     $(SOFTPC_TREE)\host\src$(ALT_PROJECT)\$(O)\SRC.LIB                 \
+     $(MVDM_TREE)\v86\monitor$(ALT_PROJECT)\$(O)\monitor.lib            \
+     $(MVDM_TREE)\dos\dem$(ALT_PROJECT)\$(O)\dem.lib                    \
+     $(MVDM_TREE)\dbg$(ALT_PROJECT_OBJS)\$(O)\dbg.lib                   \
+     $(MVDM_TREE)\dos\command$(ALT_PROJECT)\$(O)\command.lib            \
+     $(MVDM_TREE)\dpmi32$(ALT_PROJECT)\$(O)\dpmi32.lib                  \
+     $(MVDM_TREE)\xms.486$(ALT_PROJECT)\$(O)\xms486.lib                 \
+     $(MVDM_TREE)\suballoc\$(O)\suballoc.lib                            \
+     $(MVDM_TREE)\oemuni\$(ALT_PROJECT)\$(O)\oemuni.lib
 !else
 
 #
@@ -100,27 +100,27 @@ LINKLIBS =                                                                  \
 LINKER_FLAGS=$(LINKER_FLAGS) -INCLUDE:__mb_cur_max -INCLUDE:_pctype
 
 LINKLIBS = \
-        $(SOFTPC_TREE)\base\support$(ALT_PROJECT_OBJS)\$(O)\MAIN.obj  \
-        $(SOFTPC_TREE)\host\src$(ALT_PROJECT_OBJS)\$(O)\FPRT.OBJ      \
-        $(SOFTPC_TREE)\host\src$(ALT_PROJECT_OBJS)\$(O)\SRC.LIB          \
-        $(SOFTPC_TREE)\base\system$(ALT_PROJECT_OBJS)\$(O)\SYSTEM.LIB \
-        $(SOFTPC_TREE)\base\bios$(ALT_PROJECT_OBJS)\$(O)\BIOS.LIB       \
-        $(SOFTPC_TREE)\base\video$(ALT_PROJECT_OBJS)\$(O)\VIDEO.LIB     \
-        $(SOFTPC_TREE)\base\dos$(ALT_PROJECT_OBJS)\$(O)\DOS.LIB          \
-        $(SOFTPC_TREE)\base\comms$(ALT_PROJECT_OBJS)\$(O)\COMMS.LIB     \
-        $(SOFTPC_TREE)\base\debug$(ALT_PROJECT_OBJS)\$(O)\DEBUG.LIB     \
-        $(SOFTPC_TREE)\base\dasm386$(ALT_PROJECT_OBJS)\$(O)\DASM386.LIB   \
-        $(SOFTPC_TREE)\base\support$(ALT_PROJECT_OBJS)\$(O)\SUPPORT.LIB   \
-        $(SOFTPC_TREE)\base\disks$(ALT_PROJECT_OBJS)\$(O)\DISKS.LIB     \
-        $(SOFTPC_TREE)\base\keymouse$(ALT_PROJECT_OBJS)\$(O)\KEYMOUSE.LIB \
-        $(CPULIBS) \
-        $(SDK_LIB_PATH)\dbg.lib         \
-        $(SDK_LIB_PATH)\dem.lib         \
-        $(SDK_LIB_PATH)\suballoc.lib    \
-        $(SDK_LIB_PATH)\command.lib  \
-        $(SDK_LIB_PATH)\dpmi32.lib   \
-        $(SDK_LIB_PATH)\xms486.lib       \
-        $(SDK_LIB_PATH)\oemuni.lib
+        $(SOFTPC_TREE)\base\support$(ALT_PROJECT)\$(O)\MAIN.obj         \
+        $(SOFTPC_TREE)\host\src$(ALT_PROJECT)\$(O)\FPRT.OBJ             \
+        $(SOFTPC_TREE)\host\src$(ALT_PROJECT)\$(O)\SRC.LIB              \
+        $(SOFTPC_TREE)\base\system$(ALT_PROJECT)\$(O)\SYSTEM.LIB        \
+        $(SOFTPC_TREE)\base\bios$(ALT_PROJECT)\$(O)\BIOS.LIB            \
+        $(SOFTPC_TREE)\base\video$(ALT_PROJECT)\$(O)\VIDEO.LIB          \
+        $(SOFTPC_TREE)\base\dos$(ALT_PROJECT)\$(O)\DOS.LIB              \
+        $(SOFTPC_TREE)\base\comms$(ALT_PROJECT)\$(O)\COMMS.LIB          \
+        $(SOFTPC_TREE)\base\debug$(ALT_PROJECT)\$(O)\DEBUG.LIB          \
+        $(SOFTPC_TREE)\base\dasm386$(ALT_PROJECT)\$(O)\DASM386.LIB      \
+        $(SOFTPC_TREE)\base\support$(ALT_PROJECT)\$(O)\SUPPORT.LIB      \
+        $(SOFTPC_TREE)\base\disks$(ALT_PROJECT)\$(O)\DISKS.LIB          \
+        $(SOFTPC_TREE)\base\keymouse$(ALT_PROJECT)\$(O)\KEYMOUSE.LIB    \
+        $(CPULIBS)                                                      \
+        $(MVDM_TREE)\dbg$(ALT_PROJECT)\$(O)\dbg.lib                     \
+        $(MVDM_TREE)\dos\dem$(ALT_PROJECT)\$(O)\dem.lib                 \
+        $(MVDM_TREE)\suballoc\$(O)\suballoc.lib                         \
+        $(MVDM_TREE)\dos\command$(ALT_PROJECT)\$(O)\command.lib         \
+        $(MVDM_TREE)\dpmi32$(ALT_PROJECT)\$(O)\dpmi32.lib               \
+        $(MVDM_TREE)\xms.486$(ALT_PROJECT)\$(O)\xms486.lib              \
+        $(MVDM_TREE)\oemuni\$(ALT_PROJECT)\$(O)\oemuni.lib
 !endif
 
 !if "$(NTDEBUG)" == ""
@@ -156,3 +156,5 @@ UMTYPE=console
 UMBASE=0x0f000000
 
 DLLDEF=$(O)\ntvdm.def
+
+NO_SAFESEH=1

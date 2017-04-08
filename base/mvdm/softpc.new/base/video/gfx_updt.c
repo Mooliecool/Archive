@@ -4634,6 +4634,9 @@ void init_text_rect()
 
 /* Add coordinates to rectangle */
 
+// HACKHACK: For some reason, compiler assumes that abs is stdcall. We force it cdecl.
+int     __cdecl abs(int);
+
 void add_to_rect(int screen_start, register int x, register int y, int len)
 {
     int endx = x + len - 1;
