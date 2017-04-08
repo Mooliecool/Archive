@@ -92,7 +92,7 @@
 #include "wmsgsbm.h"
 #include "wumsg.h"
 #include "wuman.h"
-#include "..\..\inc\vdm.h"
+#include "vdm.h"
 #include "wucaret.h"
 #include "wucursor.h"
 #include "wuhook.h"
