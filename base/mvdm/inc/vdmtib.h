@@ -28,7 +28,7 @@ Revision History:
 //
 // Definition of the VdmTib
 //
-#include "\nt\private\inc\vdm.h"
+//#include "\nt\private\inc\vdm.h"
 
 
 extern VDM_TIB VdmTib;

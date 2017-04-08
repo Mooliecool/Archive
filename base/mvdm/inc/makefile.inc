@@ -105,5 +105,5 @@ doswow.inc: doswow.h
 wownt32.inc: $(SDK_INC_PATH)\wownt32.h
     h2inc -t -s mvdm.h -s wow.h $(SDK_INC_PATH)\wownt32.h -o wownt32.inc
 
-#vdmtib.inc: ..\..\inc\vdm.h
-#    h2inc -t -s mvdm.h -s wow.h ..\..\inc\vdm.h -o vdmtib.inc
+vdmtib.inc: $(BASE_INC_PATH)\vdm.h
+    h2inc -t -s mvdm.h -s wow.h $(BASE_INC_PATH)\vdm.h -o vdmtib.inc
