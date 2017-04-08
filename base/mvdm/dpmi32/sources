@@ -27,33 +27,33 @@ MAJORCOMP=mvdm
 MINORCOMP=dpmi32
 
 TARGETNAME=dpmi32
-
-TARGETPATH=$(BASEDIR)\public\sdk\lib
-
+TARGETPATH=obj
 TARGETTYPE=LIBRARY
 
 TARGETLIBS=
 
-INCLUDES=..\inc;..\..\inc
+INCLUDES=..\inc
 
 
 NTPROFILEINPUT=YES
 
 SOURCES=debug.c     \
-        dpmi32.c \
-        dpmiint.c \
-        dpmiselr.c \
+        dpmi32.c    \
+        dpmiint.c   \
+        dpmiselr.c  \
         buffer.c    \
-        data.c         \
+        data.c      \
         int21map.c  \
         modesw.c    \
-        register.c     \
-        savestat.c     \
+        register.c  \
+        savestat.c  \
         stack.c     \
         vxd.c       \
         xmem.c
 
-i386_SOURCES=i386\dpmi386.c i386\dpmimem.c i386\dpmimisc.c
+X86_SOURCES=x86\dpmi386.c   \
+            x86\dpmimem.c   \
+            x86\dpmimisc.c
 
 MIPS_SOURCES=dpmimemr.c dpmimscr.c
 PPC_SOURCES=dpmimemr.c dpmimscr.c
