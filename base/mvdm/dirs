@@ -15,16 +15,17 @@ Abstract:
 !ENDIF
 
 
-DIRS=dos    \
-#    xms.486 \
-#    dbg    \
-#    v86    \
-#    dpmi32 \
-#    inc    \
-#    suballoc \
-#    oemuni \
-#    softpc.new \
-#    wow32  \
+DIRS=           \
+    inc         \
+    dos         \
+    xms.486     \
+    dbg         \
+    v86         \
+    dpmi32      \
+    suballoc    \
+    oemuni      \
+    softpc.new  \
+    wow32  \
 #    vdmexts \
 #    vdmdbg \
 #    vdmutils \
