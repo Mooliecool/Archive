@@ -92,3 +92,5 @@ endm
 #define SVC_NETBIOSCHECK        0x31    // VrCheckPmNetbiosAnr
 
 #define MAX_REDIR_SVC           SVC_NETBIOSCHECK
+
+#define NETWORK_VECTOR          0x73

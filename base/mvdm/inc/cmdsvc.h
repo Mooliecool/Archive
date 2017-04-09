@@ -30,8 +30,9 @@ CMDSVC	macro	func
 #define SVC_GETKBDLAYOUT        14
 #define SVC_GETINITENVIRONMENT  15
 #define SVC_GETSTARTINFO        16
-
-#define SVC_CMDLASTSVC          17
+#define SVC_SETWINTITLE         17
+#define SVC_GETCURSORPOS        30
+#define SVC_CMDLASTSVC          31
 
 #define ALL_HANDLES	7
 #define HANDLE_STDIN	0

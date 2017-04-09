@@ -45,10 +45,26 @@ typedef struct CURDIR_LIST {
 
 typedef CDS UNALIGNED *PCDS;
 
-#define curdirLen   sizeof(CURDIR_LIST)     // Needed for screwed up
+#define curdirLen   sizeof(CURDIR_LIST)     // Needed for
                                             // ASM87 which doesn't allow
                                             // Size directive as a macro
                                             // argument
+
+typedef struct CURDIR_LIST_JPN {
+    CHAR    CurDirJPN_Text[DIRSTRLEN];      // text of assignment and curdir
+    USHORT  CurDirJPN_Flags;                // various flags
+    USHORT  CurDirJPN_End;                  // index to ".." backup limit -
+    CHAR    CurDirJPN_Reserve[17];          // Reserved for application compatibility.
+                                            // Ichitaro ver5 checks drive type by this structure size.
+} CDS_JPN;                                  // see above
+
+typedef CDS_JPN UNALIGNED *PCDS_JPN;
+
+#define curdirLen_Jpn   sizeof(CURDIR_LIST_JPN)     // Needed for
+                                                    // ASM87 which doesn't allow
+                                                    // Size directive as a macro
+                                                    // argument
+
 // Flag values for CURDIR_FLAGS
 
 #define CURDIR_ISNET    0x8000
@@ -56,6 +72,7 @@ typedef CDS UNALIGNED *PCDS;
 #define CURDIR_INUSE    0x4000
 #define CURDIR_SPLICE   0x2000
 #define CURDIR_LOCAL    0x1000
+
 #define CURDIR_TOSYNC   0x0800              // Directory path to be sync added
 #define CURDIR_NT_FIX   0x0400              // fixed disk (includes NETWORK
                                             // drives. Used in $Current_dir perf
@@ -64,7 +81,8 @@ typedef CDS UNALIGNED *PCDS;
 
 
 /* XLATOFF */
-typedef CDS UNALIGNED *PCDS;
+typedef CDS     UNALIGNED *PCDS;
+typedef CDS_JPN UNALIGNED *PCDS_JPN;
 /* XLATON */
 
 /* XLATOFF */

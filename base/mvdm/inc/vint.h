@@ -35,6 +35,7 @@ EXEC_BIT_MASK         - tells if DOS is in int21/exec operation.
 */
 
 #define  INTERRUPT_PENDING_BIT      0x0003
+#define  VDM_INTS_HOOKED_IN_PM      0x0004
 #define  VIRTUAL_INTERRUPT_BIT      0x0200
 
 #define  MIPS_BIT_MASK              0x400
@@ -48,7 +49,7 @@ EXEC_BIT_MASK         - tells if DOS is in int21/exec operation.
 #define  FIXED_NTVDMSTATE_REL40     0x314
 
 #define  FIXED_NTVDMSTATE_SIZE	    4
-#define  NTIO_LOAD_SEGMENT	    0x70
+#define  NTIO_LOAD_SEGMENT	        0x70
 #define  NTIO_LOAD_OFFSET           0
 #define  pNtVDMState                ((PULONG)FIXED_NTVDMSTATE_LINEAR)
 

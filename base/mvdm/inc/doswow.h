@@ -29,9 +29,11 @@ typedef struct _DOSWOWDATA {           /* DWD */
     DWORD lpCurDrv;
     DWORD lpCurPDB;
     DWORD lpDrvErr;
-    DWORD lpExterrLocus;
+    DWORD lpExterrLocus; // byte
     DWORD lpSCS_ToSync;
     DWORD lpSftAddr;
+    DWORD lpExterr;  // word
+    DWORD lpExterrActionClass; // 2 bytes -- action and class
 } DOSWOWDATA;
 typedef DOSWOWDATA UNALIGNED *PDOSWOWDATA;
 
@@ -40,8 +42,10 @@ typedef DOSWOWDATA UNALIGNED *PDOSWOWDATA;
 
 #pragma pack(1)
 
-typedef struct _DOSPDB {			// DOS Process Data Block
-    CHAR   PDB_Not_Interested[50];	// Fields we are not interested in
+typedef struct _DOSPDB {                        // DOS Process Data Block
+    CHAR   PDB_Not_Interested[44];      // Fields we are not interested in
+    USHORT PDB_environ;             // segment of environment
+    DWORD  PDB_User_stack;
     USHORT PDB_JFN_Length;          // JFT length
     ULONG  PDB_JFN_Pointer;         // JFT pointer
 } DOSPDB, *PDOSPDB;
@@ -74,8 +78,38 @@ typedef struct _DOSSFT {            // DOS SFT
 } DOSSFT;
 typedef DOSSFT UNALIGNED *PDOSSFT;
 
+// execblock
+typedef struct _DOSEXECBLOCK {
+   USHORT envseg;   // env segment
+   ULONG  lpcmdline; // command line tail
+   ULONG  lpfcb1;    // fcb1
+   ULONG  lpfcb2;    // fcb2
+}  DOSEXECBLOCK, UNALIGNED *PDOSEXECBLOCK;
+
+#define NE_FLAGS_OFFSET 0xc
+#define NEPROT 0x8   // runs in prot mode only
+
+
 #define SF_NT_SEEK 0x0200
 
 #pragma pack()
+
+// these are demLFN structures that work with wow and dem
+
+typedef VOID (*PDOSWOWUPDATETDBDIR)(UCHAR, LPSTR);
+typedef BOOL (*PDOSWOWGETTDBDIR)(UCHAR Drive, LPSTR pCurrentDirectory);
+typedef BOOL (*PDOSWOWDODIRECTHDPOPUP)(VOID);
+typedef BOOL (*PDOSWOWGETCOMPATFLAGS)(LPDWORD lpdwCF, LPDWORD lpdwCFEx);
+
+
+typedef struct tagWOWLFNInit {
+   PDOSWOWUPDATETDBDIR pDosWowUpdateTDBDir;
+   PDOSWOWGETTDBDIR pDosWowGetTDBDir;
+   PDOSWOWDODIRECTHDPOPUP pDosWowDoDirectHDPopup;
+#if 0
+   PDOSWOWGETCOMPATFLAGS pDosWowGetCompatFlags;
+#endif
+}  WOWLFNINIT, *PWOWLFNINIT;
+
 
 /* XLATON */
