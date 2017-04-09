@@ -132,6 +132,8 @@ typedef struct _VdmVirtualIca{
 //
 #define VDM_INT_HARDWARE        0x00000001
 #define VDM_INT_TIMER           0x00000002
+// defined as VDM_INTS_HOOKED_IN_PM in mvdm\inc\vint.h
+#define VDM_INT_HOOK_IN_PM      0x00000004
 
    // A bitMask which includes all interrupts
 #define VDM_INTERRUPT_PENDING   (VDM_INT_HARDWARE | VDM_INT_TIMER)
