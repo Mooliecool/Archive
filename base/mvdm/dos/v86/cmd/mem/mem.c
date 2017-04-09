@@ -56,7 +56,7 @@
 |                                                                       |
 +----------------------------------------------------------------------*/
 
-/*ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ*/
+/*---------------------------------------------------------------------*/
 
 #include "ctype.h"
 #include "conio.h"			/* need for kbhit prototype */
@@ -69,7 +69,7 @@
 #include "version.h"			/* MSKK02 07/18/89 */
 #include "mem.h"
 
-/*ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ*/
+/*---------------------------------------------------------------------*/
 
 /* All global declarations go here */
 
@@ -107,7 +107,7 @@ struct p_result_blk  p_result4;
 struct p_value_blk p_noval;
 
 
-/*ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ*/
+/*---------------------------------------------------------------------*/
 
 	struct sublistx sublist[5];
 
@@ -139,7 +139,7 @@ struct p_value_blk p_noval;
 	struct mem_classif mem_table[100];	/* M003 */
 	int	noof_progs = 0;		/* no of entries in mem_table above */
 
-/*ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ*/
+/*---------------------------------------------------------------------*/
 
 void interrupt cdecl far MemCtrlc (unsigned es, unsigned ds,
 			unsigned di, unsigned si, unsigned bp, unsigned sp,
@@ -286,7 +286,7 @@ int	 main()
 
 	}
 
-/*ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ*/
+/*---------------------------------------------------------------------*/
 
 unsigned long AddressOf(Pointer)
 char far *Pointer;
