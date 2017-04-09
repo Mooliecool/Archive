@@ -22,6 +22,9 @@ buildmsg: $(ALT_PROJECT)\buildmsg.exe
 $(ALT_PROJECT)\buildmsg.exe: buildmsg.c $(ALT_PROJECT)\bldmsg.h
         cl16 /Zl /Gs -c -I$(ALT_PROJECT) -I..\..\h -Fo$(DEST)\buildmsg.obj buildmsg.c
         $(LINK) /stack:4096/onerror:noexe $(DEST)\buildmsg.obj,$(ALT_PROJECT)\buildmsg.exe,,..\..\lib\slibce.lib;
+        msdos32 -c$(ALT_PROJECT)\buildmsg32.exe $(ALT_PROJECT)\buildmsg.exe
+        -del $(ALT_PROJECT)\buildmsg.exe
+        -move $(ALT_PROJECT)\buildmsg32.exe $(ALT_PROJECT)\buildmsg.exe
 
 $(DEST)\command.ctl:    $(ALT_PROJECT)\command.skl      \
         $(msg)\$(ALT_PROJECT).msg    \
