@@ -14,9 +14,9 @@ ALT_PROJECT_TARGET=.
 msg = ..\..\messages\$(ALT_PROJECT)
 
 !if "$(PROCESSOR_ARCHITECTURE)" == "x86"
-DEST=$(ALT_PROJECT)\obj\x86
+DEST=$(ALT_PROJECT)\obj$(BUILD_ALT_DIR)\x86
 !elseif "$(PROCESSOR_ARCHITECTURE)" == "ALPHA"
-DEST=$(ALT_PROJECT)\obj\alpha
+DEST=$(ALT_PROJECT)\obj$(BUILD_ALT_DIR)\alpha
 !endif
 
 inc	=..\..\inc

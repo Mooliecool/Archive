@@ -990,8 +990,8 @@ DosWowDataStart     Label word
                     OFFSET DOSDATA:NetCDS,                              \
                     OFFSET DOSDATA:CURDRV,OFFSET DOSDATA:CurrentPDB,    \
                     OFFSET DOSDATA:DrvErr,OFFSET DOSDATA:EXTERR_LOCUS,  \
-                    OFFSET DOSDATA:SCS_ToSync, OFFSET DOSDATA:sfTabl,   \
-                    OFFSET DOSDATA:EXTERR, OFFSET DOSDATA:EXTERR_ACTION>
+                    OFFSET DOSDATA:SCS_ToSync, OFFSET DOSDATA:sfTabl>
+;                   OFFSET DOSDATA:EXTERR, OFFSET DOSDATA:EXTERR_ACTION>
 
 DOCLI:
     FCLI
