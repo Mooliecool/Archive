@@ -23,3 +23,11 @@ buildchk.err
 /ds/lsa/uclient/lsarpc_c.c
 /ds/lsa/uclient/lsarpc_c.h
 /minkernel/ntos/ex/dbg.log
+
+/base/mvdm/dos/v86/cmd/fastopen/fastopen.map
+/base/mvdm/dos/v86/cmd/graphics/graphics.map
+/base/mvdm/dos/v86/cmd/keyb/kb16.map
+/base/mvdm/dos/v86/cmd/loadfix/loadfix.map
+/base/mvdm/dos/v86/cmd/share/share.map
+/base/mvdm/dos/v86/dev/himem/himem.map
+/base/mvdm/dos/v86/lib/xmm.lib
