@@ -75,8 +75,18 @@ DW   0460H                           ;; maximum size of Common Xlat Sect (650)
 DW   01F0H                           ;; max size of Specific Xlat Sect (350)
 DW   0280H                           ;; max size of State Logic (400)
 DW   0                               ;;AC000;reserved
-DW   18	+ 12			     ;;AC000 number of IDs
-DW   19	+ 11			     ;;AC000 number of languages
+IFDEF	PRC
+DW   18	+ 12 + 1		     ;;AC000 number of IDs, KCHANG added Estonian
+DW   19	+ 11 + 1		     ;;AC000 number of languages
+ELSE
+IFDEF	TAIWAN
+DW   18	+ 12 + 1		     ;;AC000 number of IDs, KCHANG added Estonian
+DW   19	+ 11 + 1		     ;;AC000 number of languages
+ELSE
+DW   18	+ 12 + 1		     ;;AC000 number of IDs, KCHANG added Estonian
+DW   19	+ 11 + 1 + 1		     ;;AC000 number of languages, added Japanese
+ENDIF
+ENDIF
 DB   'GR'                            ;; LANGUAGE CODE TABLE
 DW   OFFSET GE_LANG_ENT,0            ;;
 DB   'SP'                            ;;
@@ -139,9 +149,22 @@ DB   'YU'
 DW   OFFSET YU_LANG_ENT, 0
 DB   'TR'
 DW   OFFSET TR2_LANG_ENT, 0
+DB   'ET'
+DW   OFFSET ET_LANG_ENT, 0
 ;
 ; daytona end
 ;
+DB   'JP'                            ;;M000                            ;JP9002
+DW   OFFSET JP_LANG_ENT, 0           ;;M000                            ;JP9002
+IFDEF	PRC
+DB   'CH'
+DW   OFFSET DUMMY_ENT,0              ;;
+ENDIF
+IFDEF	TAIWAN
+DB   'CH'
+DW   OFFSET DUMMY_ENT,0              ;;
+ENDIF
+
 DB   'US'			     ;;
 DW   OFFSET DUMMY_ENT,0              ;;
 DW    172                            ;;AN000;ID CODE TABLE ***************************
@@ -211,6 +234,8 @@ DW    179
 DW   OFFSET TR1_LANG_ENT, 0
 DW    440
 DW   OFFSET TR2_LANG_ENT, 0
+DW    425
+DW   OFFSET ET_LANG_ENT, 0	    ;;KCHANG added Estonian
 ;
 ; daytona end
 ;
@@ -751,6 +776,42 @@ TR2_LANG_ENT:				;;AC000; language entry for ITALY
 ; daytona end
 ;
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        EXTRN   JP_LOGIC:NEAR            ;;                             ;JP9002
+        EXTRN   JP_932_XLAT:NEAR         ;;                             ;JP9002
+        EXTRN   JP_437_XLAT:NEAR         ;;                             ;JP9002
+JP_LANG_ENT:                             ;;                             ;JP9002
+    DB   'JP'                            ;;                             ;JP9002
+    DW   194                             ;; keyboard ID for Japan       ;JP9009
+    DW   OFFSET JP_LOGIC, 0              ;; pointer to LANG kb table    ;JP9002
+    DB   1                               ;; number of ids               ;JP9002
+    DB   2                               ;; number of code pages        ;JP9002
+    DW   437                             ;; code page                   ;JP9002
+    DW   OFFSET JP_437_XLAT, 0           ;; table pointer               ;JP9002
+    DW   932                             ;; code page                   ;JP9002
+    DW   OFFSET JP_932_XLAT, 0           ;; table pointer               ;JP9002
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;*****************************************************************************
+     EXTRN ET_LOGIC:NEAR		  ;;
+     EXTRN ET_775_XLAT:NEAR		  ;;
+     EXTRN ET_850_XLAT:NEAR		  ;;
+					 ;;
+ET_LANG_ENT:				;;AC000; language entry for ITALY
+    DB	 'ET'				  ;;AC000;  PRIMARY KEYBOARD ID VALUE
+    DW	 425				  ;;AN000; ID entry
+    DW	 OFFSET ET_LOGIC,0		  ;;AN000; pointer to LANG kb table
+    DB	 1				  ;;AC000; number of ids
+    DB	 2				 ;;AC000; number of code pages
+    DW	 775				  ;;AC000; code page
+    DW	 OFFSET ET_775_XLAT,0		  ;;AC000; table pointer
+    DW	 850				  ;;AC000; code page
+    DW	 OFFSET ET_850_XLAT,0		  ;;AC000; table pointer
+;
+; daytona end
+;
+
+
 ;*****************************************************************************
 
 DUMMY_ENT:                             ;; language entry
@@ -758,7 +819,21 @@ DUMMY_ENT:                             ;; language entry
   DW   103                             ;;AC000; ID entry
   DW   OFFSET DUMMY_LOGIC,0            ;; pointer to LANG kb table
   DB   1                               ;;AC000; number of ids
+
+IFDEF PRC
+  DB   9
+  DW   936                             ;; code page
+  DW   OFFSET DUMMY_XLAT_936,0         ;; table pointer
+ELSE
+IFDEF TAIWAN
+  DB   9
+  DW   950                             ;; code page
+  DW   OFFSET DUMMY_XLAT_950,0         ;; table pointer
+ELSE
   DB   8                               ;;AC000; number of code pages
+ENDIF
+ENDIF
+
   DW   437                             ;; code page
   DW   OFFSET DUMMY_XLAT_437,0         ;; table pointer
   DW   850                             ;; code page
@@ -821,11 +896,24 @@ DUMMY_XLAT_855:                        ;;   (YST 3/19/91)
    DW     6                            ;; length of section
    DW     855                          ;; code page
    DW     0                            ;; LAST STATE
+IFDEF PRC
+DUMMY_XLAT_936:                        ;;   (YST 3/19/91)
+   DW     6                            ;; length of section
+   DW     936                          ;; code page
+   DW     0                            ;; LAST STATE
+ENDIF
+IFDEF TAIWAN
+DUMMY_XLAT_950:                        ;;   (YST 3/19/91)
+   DW     6                            ;; length of section
+   DW     950                          ;; code page
+   DW     0                            ;; LAST STATE
+ENDIF
+
                                        ;;
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;*****************************************************************************
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
                                        ;;
 CODE     ENDS                          ;;
          END                           ;;
-

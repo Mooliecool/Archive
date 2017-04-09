@@ -1,4 +1,4 @@
-;	SCCSID = @(#)ibmtable.asm	1.1 85/04/10
+;       SCCSID = @(#)ibmtable.asm       1.1 85/04/10
 ;
 ; Table Segment for DOS
 ;
@@ -10,37 +10,37 @@ include mssw.asm
 .cref
 .list
 
-TITLE	IBMTABLE - Table segment for DOS
-NAME	IBMTABLE
+TITLE   IBMTABLE - Table segment for DOS
+NAME    IBMTABLE
 
 ;
-;	Microsoft Confidential
-;	Copyright (C) Microsoft Corporation 1991
-;	All Rights Reserved.
+;       Microsoft Confidential
+;       Copyright (C) Microsoft Corporation 1991
+;       All Rights Reserved.
 ;
 
 ; ==========================================================================
 
 
 
-;**	MS_TABLE.ASM
+;**     MS_TABLE.ASM
 ;
 ;       Revision history:
 ;         A000   version 4.0  Jan. 1988
 ;         A001   DCR 486 - Share installation for >32mb drives
 ;         A006   DCR 503 - fake version for IBMCACHE
 ;         A008   PTM 4070 - fake version for MS WINDOWS
-;	  M006   Fake Version call no longer supported. 8/6/90
+;         M006   Fake Version call no longer supported. 8/6/90
 
-	.xlist
-	.xcref
-	include version.inc
-	include dosseg.inc
-	include fastopen.inc
-	include dossym.inc
-	include syscall.inc
-	.cref
-	.list
+        .xlist
+        .xcref
+        include version.inc
+        include dosseg.inc
+        include fastopen.inc
+        include dossym.inc
+        include syscall.inc
+        .cref
+        .list
 
         AsmVars <Debug, Redirector, ShareF>
 
@@ -134,8 +134,8 @@ I21_MAP_E_TAB   LABEL   BYTE
     DB          error_too_many_open_files,error_access_denied
     DB  CreateNewFile,5,error_file_exists,error_path_not_found
     DB          error_file_not_found,error_too_many_open_files,error_access_denied
-;   DB	LockOper,4,error_invalid_handle,error_invalid_function
-;   DB	 error_sharing_buffer_exceeded,error_lock_violation
+;   DB  LockOper,4,error_invalid_handle,error_invalid_function
+;   DB   error_sharing_buffer_exceeded,error_lock_violation
     DB  GetExtCntry,2,error_invalid_function,error_file_not_found       ;DOS 3.3
     DB  GetSetCdPg,2,error_invalid_function,error_file_not_found        ;DOS 3.3
     DB  Commit,1,error_invalid_handle                                   ;DOS 3.3
@@ -153,8 +153,8 @@ I21_MAP_E_TAB   LABEL   BYTE
 
         PUBLIC  DISPATCH
 
-;MAXCALL 	EQU      VAL1
-;MAXCOM  	EQU	 VAL2
+;MAXCALL        EQU      VAL1
+;MAXCOM         EQU      VAL2
 
 ; Standard Functions
 DISPATCH    LABEL WORD
@@ -182,7 +182,7 @@ DISPATCH    LABEL WORD
         short_addr  $FCB_SEQ_WRITE                  ; 21     15
         short_addr  $FCB_CREATE                     ; 22     16
         short_addr  $FCB_RENAME                     ; 23     17
-	short_addr  NO_OP			    ; 24     18
+        short_addr  NO_OP                           ; 24     18
         short_addr  $GET_DEFAULT_DRIVE              ; 25     19
         short_addr  $SET_DMA                        ; 26     1A
 
@@ -195,8 +195,8 @@ DISPATCH    LABEL WORD
 ;            C  A  V  E  A  T     P  R  O  G  R  A  M  M  E  R             ;
 ;----+----+----+----+----+----+----+----+----+----+----+----+----+----+----;
 
-	short_addr  NO_OP			    ; 29     1D
-	short_addr  NO_OP			    ; 30     1E
+        short_addr  NO_OP                           ; 29     1D
+        short_addr  NO_OP                           ; 30     1E
 ;----+----+----+----+----+----+----+----+----+----+----+----+----+----+----;
 ;            C  A  V  E  A  T     P  R  O  G  R  A  M  M  E  R             ;
 ;                                                                          ;
@@ -204,7 +204,7 @@ DISPATCH    LABEL WORD
 ;                                                                          ;
 ;            C  A  V  E  A  T     P  R  O  G  R  A  M  M  E  R             ;
 ;----+----+----+----+----+----+----+----+----+----+----+----+----+----+----;
-	short_addr  NO_OP			    ; 32     20
+        short_addr  NO_OP                           ; 32     20
         short_addr  $FCB_RANDOM_READ                ; 33     21
         short_addr  $FCB_RANDOM_WRITE               ; 34     22
         short_addr  $GET_FCB_FILE_LENGTH            ; 35     23
@@ -213,7 +213,7 @@ DISPATCH    LABEL WORD
 
 VAL1    =       ($-DISPATCH)/2 - 1
 
-	PUBLIC	MAXCALL
+        PUBLIC  MAXCALL
 MaxCall = VAL1
 
 ; Extended Functions
@@ -306,12 +306,12 @@ MaxCall = VAL1
         short_addr  $GetExtendedError               ; 89     59
         short_addr  $CreateTempFile                 ; 90     5A
         short_addr  $CreateNewFile                  ; 91     5B
-	short_addr  $LockOper			    ; 92     5C
-	short_addr  $ServerCall			    ; 93     5D
+        short_addr  $LockOper                       ; 92     5C
+        short_addr  $ServerCall                     ; 93     5D
         short_addr  $UserOper                       ; 94     5E
         short_addr  $AssignOper                     ; 95     5F
         short_addr  $NameTrans                      ; 96     60
-	short_addr  NO_OP			    ; 97     61
+        short_addr  NO_OP                           ; 97     61
         short_addr  $Get_Current_PDB                ; 98     62
 ; the next call is reserved for hangool sys call
         short_addr  $ECS_Call                       ; 99     63
@@ -328,29 +328,35 @@ MaxCall = VAL1
         short_addr  $Commit                         ; 104    68
         short_addr  $GSetMediaID                    ; 105    69   ;AN000;
         short_addr  $Commit                         ; 106    6A   ;AN000;
-        short_addr  NO_OP                           ; 107    6B   
-						    ; IFS_IOCTL no longer 
-						    ; supported
+        short_addr  NO_OP                           ; 107    6B
+                                                    ; IFS_IOCTL no longer
+                                                    ; supported
         short_addr  $Extended_Open                  ; 108    6C   ;AN000;
 
 ;----+----+----+----+----+----+----+----+----+----+----+----+----+----+----;
 ;            C  A  V  E  A  T     P  R  O  G  R  A  M  M  E  R             ;
 ;                                                                          ;
 ifdef ROMEXEC
-        short_addr  $ROM_FIND_FIRST	   	    ; 109    6D
-        short_addr  $ROM_FIND_NEXT	   	    ; 110    6E
+        short_addr  $ROM_FIND_FIRST                 ; 109    6D
+        short_addr  $ROM_FIND_NEXT                  ; 110    6E
+else
+        short_addr  NO_OP                           ; 109    6d
+        short_addr  NO_OP                           ; 110    6e
+
 endif
 ;                                                                          ;
 ;            C  A  V  E  A  T     P  R  O  G  R  A  M  M  E  R             ;
 ;----+----+----+----+----+----+----+----+----+----+----+----+----+----+----;
 
-
+        short_addr  NO_OP                           ; 111    6f
+        short_addr  NO_OP                           ; 112    70
+        short_addr  $LongFileNameAPI                ; 113    71
 
 
 VAL2    =       ($-DISPATCH)/2 - 1
 
-	PUBLIC	MAXCOM
-MaxCom 	= 	VAL2
+        PUBLIC  MAXCOM
+MaxCom  =       VAL2
 
         If      Installed
 
@@ -365,35 +371,35 @@ DTab    DW  OFFSET  DOSCODE:DOSTable
 DOSTable    LABEL   WORD
         DB      (DOSTableEnd-DOSTable-1)/2
         Short_addr  DOSInstall          ;   0 install check
-	Short_addr  NO_OP		;   1	DOS_CLOSE
+        Short_addr  NO_OP               ;   1   DOS_CLOSE
         Short_addr  RECSET              ;   2   RECSET
         Short_addr  DOSGetGroup         ;   3   Get DOSGROUP
         Short_addr  PATHCHRCMP          ;   4   PATHCHRCMP
         Short_addr  OUTT                ;   5   OUT
         Short_addr  NET_I24_ENTRY       ;   6   NET_I24_ENTRY
-	Short_addr  NO_OP		;   7	PLACEBUF
+        Short_addr  NO_OP               ;   7   PLACEBUF
         Short_addr  FREE_SFT            ;   8   FREE_SFT
-	Short_addr  NO_OP		;   9	BUFWRITE
-	Short_addr  NO_OP		;	 10  SHARE_VIOLATION
+        Short_addr  NO_OP               ;   9   BUFWRITE
+        Short_addr  NO_OP               ;        10  SHARE_VIOLATION
         Short_addr  SHARE_ERROR         ;   11  SHARE_ERROR
         Short_addr  SET_SFT_MODE        ;   12  SET_SFT_MODE
-	Short_addr  NO_OP		;   13	DATE16
+        Short_addr  NO_OP               ;   13  DATE16
         Short_addr  idle                ;   14      empty slot
-	Short_addr  NO_OP		;   15	SCANPLACE
+        Short_addr  NO_OP               ;   15  SCANPLACE
         Short_addr  idle                ;   16      empty slot
         Short_addr  StrCpy              ;   17  StrCpy
         Short_addr  StrLen              ;   18  StrLen
         Short_addr  Ucase               ;   19  Ucase
-	Short_addr  NO_OP		;   20	POINTCOMP
-	Short_addr  NO_OP		;   21	CHECKFLUSH
+        Short_addr  NO_OP               ;   20  POINTCOMP
+        Short_addr  NO_OP               ;   21  CHECKFLUSH
         Short_addr  SFFromSFN           ;   22  SFFromSFN
         Short_addr  GetCDSFromDrv       ;   23  GetCDSFromDrv
         Short_addr  Get_User_Stack      ;   24  Get_User_Stack
         Short_addr  GetThisDrv          ;   25  GetThisDrv
         Short_addr  DriveFromText       ;   26  DriveFromText
-	Short_addr  NO_OP		;   27	SETYEAR
-	Short_addr  NO_OP		;   28	DSUM
-	Short_addr  NO_OP		;   29	DSLIDE
+        Short_addr  NO_OP               ;   27  SETYEAR
+        Short_addr  NO_OP               ;   28  DSUM
+        Short_addr  NO_OP               ;   29  DSLIDE
         Short_addr  StrCmp              ;   30  StrCmp
         Short_addr  InitCDS             ;   31  initcds
         Short_addr  pJFNFromHandle      ;   32  pJfnFromHandle
@@ -412,7 +418,7 @@ DOSTable    LABEL   WORD
         Short_addr  NLS_GETEXT          ;   45  NLS_GETEXT    DOS 3.3
         Short_addr  MSG_RETRIEVAL       ;   46  MSG_RETRIEVAL DOS 4.0  ;AN000;
 
-	Short_addr  NO_OP		;   M006: 47  no longer supported
+        Short_addr  NO_OP               ;   M006: 47  no longer supported
 ;***       Short_addr  Fake_Version     ;   47  Fake_Version  DOS 4.0  ;AN006;
 
 DOSTableEnd LABEL   BYTE
@@ -435,7 +441,11 @@ Header  LABEL   BYTE
         ENDIF
 
         IF      NOT IBM
+ifndef NEC_98
         DB      13,10,"MS-DOS version "
+else    ;NEC_98
+        DB      "$",10,"MS-DOS version "
+endif   ;NEC_98
         DB      MAJOR_VERSION + "0"
         DB      "."
         DB      (MINOR_VERSION / 10) + "0"
@@ -445,8 +455,8 @@ Header  LABEL   BYTE
         DB      "H"
         ENDIF
 
-	DB	13,10, "Copyright 1981,82,83,84,88 Microsoft Corp.",13,10,"$"
-	ENDIF
+        DB      13,10, "Copyright 1981,82,83,84,88 Microsoft Corp.",13,10,"$"
+        ENDIF
 
 IF DEBUG
         DB      13,10,"$"
@@ -461,6 +471,5 @@ DOSCODE   ENDS
 
 ; ==========================================================================
 
-	END
-
+        END
 

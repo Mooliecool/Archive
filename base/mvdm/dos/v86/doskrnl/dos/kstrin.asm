@@ -222,7 +222,11 @@ CONTIN1:				;AN000;; 2/13/KK
 GETCH0: 				;AN000;; 2/17/KK
 	JMP	GETCH			;AN000;; 2/17/KK
 
+IFDEF	JAPAN
+BACKSPJ: JMP	BACKSP
+ELSE
 BACKSPJ: JMP	SHORT BACKSP
+ENDIF
 
 BUFFUL:
 	popf				;AN000;; 2/17/KK
@@ -754,5 +758,4 @@ sj2:					;AN000;
 	ret				;AN000;
 bufoutx endp				;AN000;
 ;-------------- End of DBCS 2/17/KK
-
 

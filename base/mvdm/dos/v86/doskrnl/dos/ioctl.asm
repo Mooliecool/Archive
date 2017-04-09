@@ -40,6 +40,10 @@
 	include dosseg.inc
 	INCLUDE DOSSYM.INC
 	INCLUDE DEVSYM.INC
+ifdef NEC_98
+	include bpb.inc
+	include dpb.inc
+endif   ;NEC_98
 	include mult.inc
 	include sf.inc
 	include vector.inc
@@ -61,6 +65,9 @@
 	I_need	DrvErr,BYTE
 	I_need	USER_IN_AX,WORD 		;AN000;
 	I_need	Temp_Var2,WORD			;AN000;
+ifdef NEC_98
+	i_need	IOMED,BYTE
+endif   ;NEC_98
 
 	EXTRN	CURDRV:BYTE
 	extrn	GetThisDrv:near
@@ -369,9 +376,13 @@ ioctl_read:
 	MOV	[EXTERR_LOCUS],errLOC_SerDev
 	LES	DI,ES:[DI.sf_devptr]	; Get device pointer
         MOV     AH,BYTE PTR ES:[DI.SDEVATT+1]   ; Get high byte
+ifndef NEC_98
         jmp     short dev_cont
 ioctl_no_high:
 dev_cont:
+else    ;NEC_98
+ioctl_no_high:
+endif   ;NEC_98
 	MOV	DX,AX
 	invoke	get_user_stack
 	MOV	[SI.user_DX],DX
@@ -571,9 +582,11 @@ ioctl_set_DX:
 	MOV	[SI.user_DX],DX
 	transfer    SYS_RET_OK
 
+ifndef NEC_98
 ioctl_drv_err:
 
 	error	error_invalid_drive
+endif   ;NEC_98
 
 query_device_support:
 GENERICIOCTL:
@@ -665,7 +678,9 @@ ioctl_setup_pkt:
 	MOV	WORD PTR [IOCALL.REQLEN],AX
 	XOR	AX,AX
 	MOV	[IOCALL.REQSTAT],AX
-;	MOV	[IOMED],AL
+ifdef NEC_98
+	MOV	[IOMED],AL
+endif   ;NEC_98
 	MOV	[IOSCNT],CX
 	MOV	WORD PTR [IOXAD],DX
 	MOV	WORD PTR [IOXAD+2],SI
@@ -782,5 +797,4 @@ EndProc $IOCTL
 
 DOSCODE ENDS
 	END
-
 

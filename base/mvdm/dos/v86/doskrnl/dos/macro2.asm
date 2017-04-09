@@ -143,7 +143,7 @@ FCBScan:LODSB				; get a byte
 	call	TestKanj		;
 	jz	notkanj2		;
 	DEC	CX			;
-	JCXZ	VolidChck		; Kanji half char screw up
+	JCXZ	VolidChck		; Kanji half char mess up
 	LODSB				; second kanji byte
 	jmp	short Nextch
 VolidChck:
@@ -619,6 +619,16 @@ CanonLoop:
 ;BUGBUG DBCS???
 	CMP	BYTE PTR ES:[DI-1],'\'
 	JNZ	DoTerminate
+ IFDEF	DBCS
+	; ntraid:mskkbug#3300,3302: Cannot CreateDir/BrowseDir
+	; Check that really '\' character for DBCS
+	; 10/30/93 yasuho
+	push	ax
+	mov	al, es:[di-2]
+	call	TestKanj		; Really '\' ?
+	pop	ax
+	jnz	DoTerminate		; No. this is DBCS character
+ ENDIF
 	jmp	short CanonBad
 
 Do_Colon:
@@ -711,7 +721,13 @@ CanonPath:
 ;
 	LODSB				; get the char
 	call	PathChrCmp		; is it path char?
+ifdef	DBCS
+	JZ	Not_CanonDec
+	JMP	CanonDec		; no, go test for nul
+Not_CanonDec:
+else
 	JNZ	CanonDec		; no, go test for nul
+endif
 	CMP	DI,BP			; beyond buffer end?
 	JAE	CanonBad		; yep, error.
 	STOSB				; copy the one byte

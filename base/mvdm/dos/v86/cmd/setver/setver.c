@@ -108,10 +108,30 @@ int main( int argc, char *argv[] )
 	if ( iFunc != S_OK )
 	{
 		iFunc = -(iFunc);
+#ifdef BILINGUAL
+		if (IsDBCSCodePage())
+		{
+			strcpy( szError, ErrorMsg[ 0 ] );
+			strcat( szError, ErrorMsg[ iFunc ] );
+		}
+		else
+		{
+			strcpy( szError, ErrorMsg2[ 0 ] );
+			strcat( szError, ErrorMsg2[ iFunc ] );
+		}
+#else
 		strcpy( szError, ErrorMsg[ 0 ] );
 		strcat( szError, ErrorMsg[ iFunc ] );
+#endif
 		PutStr( szError );
+#ifdef BILINGUAL
+		if (IsDBCSCodePage())
+			PutStr( szMiniHelp );
+		else
+			PutStr( szMiniHelp2 );
+#else
 		PutStr( szMiniHelp );
+#endif
 	}
 	return( iFunc	);
 }
@@ -136,12 +156,26 @@ int DoFunction( int iFunc )
 
 	if ( iFunc == DO_HELP )
 	{
+#ifdef BILINGUAL
+		if (IsDBCSCodePage())
+			DisplayMsg( Help );
+		else
+			DisplayMsg( Help2 );
+#else
 		DisplayMsg( Help );
+#endif
 		return( S_OK );
 	}
 
 	if ( iFunc == DO_ADD_FILE )
+#ifdef BILINGUAL
+		if (IsDBCSCodePage())
+			DisplayMsg( Warn );
+		else
+			DisplayMsg( Warn2 );
+#else
 		DisplayMsg( Warn );							/* Read in the lie table and	*/
+#endif
 															/* then decide what to do		*/
 	if ( (iStatus = ReadVersionTable()) == S_OK )
 	{
@@ -161,15 +195,38 @@ int DoFunction( int iFunc )
 				  (iStatus = WriteVersionTable()) == S_OK &&
 				   !(iFunc == DO_QUIET) )
 			{
+#ifdef BILINGUAL
+				if (IsDBCSCodePage())
+					PutStr( SuccessMsg );
+				else
+					PutStr( SuccessMsg_2 );
+				if ( SetVerCheck() == TRUE )		/* M001 */
+				{
+					if (IsDBCSCodePage())
+						PutStr( SuccessMsg2 );
+					else
+						PutStr( SuccessMsg2_2 );
+				}
+#else
 				PutStr( SuccessMsg );
 				if ( SetVerCheck() == TRUE )		/* M001 */
 					PutStr( SuccessMsg2 );
+#endif
 			}
 		}
 	}
 					/* M001 Install check to see if currently in device chain */
 	if ( iStatus == S_OK && iFunc != DO_QUIET && SetVerCheck() == FALSE )
+#ifdef BILINGUAL
+	{
+		if (IsDBCSCodePage())
+			DisplayMsg( szNoLoadMsg );
+		else
+			DisplayMsg( szNoLoadMsg2 );
+	}
+#else
 		DisplayMsg( szNoLoadMsg );
+#endif
 
 	return( iStatus );
 }
@@ -241,7 +298,16 @@ int DisplayTable( void )
 		PutStr( szEntry );
 	}
 	if ( BufPtr == LieBuffer )
+#ifdef BILINGUAL
+	{
+		if (IsDBCSCodePage())
+			PutStr( szTableEmpty );
+		else
+			PutStr( szTableEmpty2 );
+	}
+#else
 		PutStr( szTableEmpty );
+#endif
 
 	return( S_OK );
 }
@@ -528,3 +594,32 @@ int SeekRead( int iFile, void *Buf, long lOffset, unsigned uBytes )
 	else
 		return( S_FILE_READ_ERROR );
 }
+
+
+#ifdef BILINGUAL
+int	IsDBCSCodePage()
+{
+	union REGS inregs,outregs;
+
+	inregs.x.ax = 0x4f01;
+	int86(0x2f,&inregs,&outregs);
+
+#ifdef JAPAN
+	if (outregs.x.bx == 932)
+#endif
+#ifdef KOREA
+	if (outregs.x.bx == 949)
+#endif
+#ifdef PRC
+	if (outregs.x.bx == 936)
+#endif
+#ifdef TAIWAN
+	if (outregs.x.bx == 950)
+#endif
+		return(1);
+	else
+		return(0);
+}
+#endif
+
+

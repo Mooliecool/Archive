@@ -24,6 +24,9 @@ default_filenum = 8
 	endm
 
 	include sysvar.inc
+ifdef NEC_98
+	include dpb.inc
+endif   ;NEC_98
 	include	pdb.inc			; M020
 	include syscall.inc
 	include doscntry.inc
@@ -36,7 +39,11 @@ default_filenum = 8
         include cmdsvc.inc
         include softpc.inc
 
+ifndef NEC_98
 stacksw equ	true		;include switchable hardware stacks
+else    ;NEC_98
+stacksw equ	false		;include switchable hardware stacks
+endif   ;NEC_98
 
 	if	ibmjapver
 noexec	equ	true
@@ -105,7 +112,12 @@ assume	cs:sysinitseg,ds:nothing,es:nothing,ss:nothing
 	extrn	setdevmark:near
 
 	extrn	print:near,organize:near,newline:near
+ifndef NEC_98
 	extrn	parseline:near
+else    ;NEC_98
+	extrn	deviceparameters:byte
+	extrn	diddleback:near,parseline:near,setparms:near
+endif   ;NEC_98
 	extrn	badload:near,calldev:near,prnerr:near
 
 	extrn	runhigh:byte
@@ -115,6 +127,12 @@ assume	cs:sysinitseg,ds:nothing,es:nothing,ss:nothing
 
 ifdef DBCS
 	extrn	testkanj:near
+endif
+
+ifdef	JAPAN
+extrn	badblock2:byte,badsiz_pre2:byte,badcountry2:byte,insufmemory2:byte
+extrn	badcountry2:byte,badcountrycom2:byte,badstack2:byte,badopm2:byte
+extrn	badparm2:byte,badorder2:byte,errorcmd2:byte
 endif
 
         extrn   bEchoConfig:byte  ; NTVDM flag off\on echo of cfg processing
@@ -141,6 +159,9 @@ DOS_FLAG_OFFSET	equ	86h
 
 	endif
 
+ifdef NEC_98
+DOS_FLAG_OFFSET equ	86h
+endif   ;NEC_98
 	public doconf
 	public getchr
 	public multi_pass
@@ -273,7 +294,12 @@ buf_parmsx dw	201h,buf_pos1,buf_pos2	; min 1, max 2 positionals
 	   db	0			; no keywords
 
 buf_pos1    p_pos   <8000h,0,result_val,buf_range_1> ; numeric
+ifndef NEC_98
 buf_range_1 p_range <,,,1,99>			     ; M050
+else    ;NEC_98
+;<patch BIOS50-P18>
+buf_range_1 p_range <,,,1,62>                        ; M050
+endif   ;NEC_98
 buf_pos2    p_pos   <8001h,0,result_val,buf_range_2> ; optional num.
 buf_range_2 p_range <,,,0,8>
 
@@ -513,7 +539,11 @@ ThreeComName	db	'PROTMAN$'	; 3Com Device name
 FirstUMBLinked	db	0
 DevDOSData	dw	?	; segment of DOS Data
 DevCmdLine	dd	?	; Current Command line
+ifndef NEC_98
 DevSavedDelim	db	?	; The delimiter which was replaced with null
+else    ;NEC_98
+DevSavedDelim	db	00h	; The delimiter which was replaced with null
+endif   ;NEC_98
 				; to use the file name in the command line
 ;
 ;----------------------------------------------------------------------------
@@ -1062,8 +1092,12 @@ tryu:
 	inc	si
 	jmp	@b
 @@:
+ifndef NEC_98
 	mov	DevSavedDelim, al	; Save the delimiter before replacing
 					;  it with null
+else    ;NEC_98
+	db	4 dup (90h)		; 4 bytes of NOPs
+endif   ;NEC_98
 	mov	byte ptr es:[si], 0
 	pop	es
 	pop	si
@@ -1086,8 +1120,12 @@ tryd:
 gotd:
 	mov	DeviceHi, 0		; not to be loaded in UMB ;M007
 	mov	DevSizeOption, 0
+ifndef NEC_98
 	mov	DevSavedDelim, ' '	; In case of DEVICE= the null has to
 					;  be replaced with a ' '
+else    ;NEC_98
+	mov	DevSavedDelim, 00h
+endif   ;NEC_98
 
 LoadDevice:
 	mov	bx,cs			;device= or devicehigh= command.
@@ -1173,9 +1211,11 @@ goodld:
         pop     si                              ;clear the stack
         pop     es
 
+ifndef NEC_98
         mov     ax, NOSUPPORT_DRIVER
         BOP     BOP_NOSUPPORT
         jmp     short erase_dev_do
+endif   ;NEC_98
 
 got_device_com_cont:
 
@@ -1316,6 +1356,12 @@ bad_bpb_size_sector:
 	pop	si
 	pop	es
 	mov	dx,offset badsiz_pre
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badsiz_pre2
+@@:
+endif
 	mov	bx,offset crlfm
 	call	prnerr
 
@@ -1401,6 +1447,23 @@ sr52:
 tryqbad:				;"invalid country code or code page"
        stc
        mov     dx,offset badcountry
+ifndef NEC_98
+ifdef	JAPAN
+	pushf
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badcountry2
+@@:
+	popf
+endif
+else    ;NEC_98
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badsiz_pre2
+@@:
+endif
+endif   ;NEC_98
        jmp     tryqchkerr
 
 tryq_open:
@@ -1469,6 +1532,14 @@ tryqbadload:
 
 tryqmemory:
 	mov	dx,offset insufmemory
+ifdef	JAPAN
+	pushf
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset insufmemory2
+@@:
+	popf
+endif
 tryqchkerr:
 	mov	cx,cs:[confbot]
 	mov	es,cx			;restore es -> confbot seg
@@ -1498,10 +1569,22 @@ cntry_error	proc	near
 	cmp	ax,$p_out_of_range
 	jnz	if64
 	mov	dx,offset badcountry	;"invalid country code or code page"
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badcountry2
+@@:
+endif
 	jmp	short en64
 
 if64:
 	mov	dx,offset badcountrycom ;"error in contry command"
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badcountrycom2
+@@:
+endif
 en64:
 	call	print
 	call	error_line
@@ -1545,9 +1628,16 @@ tryf:
 
 do67:
 	call	sysinit_parse
-	jnc	if67			; parse error
-	call	badparm_p		;   and show messages and end the search loop.
-	jmp	short sr67
+        jnc     if67                    ; parse error
+
+; sudeepb - 27-Feb-1997
+; if a bad value is found, set it to DOS default i.e. 20. If its WOW VDM
+; the BOP will return the right value.
+        mov     p_files,20
+
+
+;       call    badparm_p              ;   and show messages and end the search loop.
+        jmp     short en67
 
 if67:
 	cmp	ax,$p_rc_eol		; end of line?
@@ -1694,6 +1784,7 @@ tryp:
 ;****************************************************************************
 
 tryk:
+ifndef NEC_98
 	cmp	ah,'K'
 	je	do_tryk
 	jmp	trys
@@ -1710,6 +1801,12 @@ do79:
 	jnc	if79			; parse error
 
 	mov	dx,offset badstack	; "invalid stack parameter"
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badstack2
+@@:
+endif
 	call	print			;  and show messages and end the search loop.
 	call	error_line
 	jmp	sr79
@@ -1757,6 +1854,12 @@ en87:
 	mov	word ptr stack_addr,0
 
 	mov	dx,offset badstack
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badstack2
+@@:
+endif
 	call	print
 	call	error_line
 	jmp	short sr79
@@ -1771,6 +1874,97 @@ sr79:
 	jmp	coff
 
 	endif
+else    ;NEC_98
+	if	stacksw
+
+	cmp	ah,'K'
+	je	do_tryk
+	jmp	trys
+
+do_tryk:
+	mov	di,offset stks_parms
+	xor	cx,cx
+	mov	dx,cx
+
+do79:
+	call	sysinit_parse
+	jnc	if79			; parse error
+
+	mov	dx,offset badstack	; "invalid stack parameter"
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badstack2
+@@:
+endif
+	call	print			;  and show messages and end the search loop.
+	call	error_line
+	jmp	sr79
+
+if79:
+	cmp	ax,$p_rc_eol		; end of line?
+	jz	en79			; then end the $endloop
+
+	mov	ax,word ptr result_val.$p_picked_val
+	cmp	cx,1
+	jnz	if83
+
+	mov	p_stack_count,ax
+	jmp	short en83
+
+if83:
+	mov	p_stack_size,ax
+en83:
+	jmp	do79
+
+en79:
+	cmp	p_stack_count,0
+	jz	if87
+
+	cmp	p_stack_count,mincount
+	jb	ll88
+	cmp	p_stack_size,minsize
+	jnb	if88
+
+ll88:
+	mov	p_stack_count,-1	; invalid
+if88:
+	jmp	short en87
+
+if87:
+	cmp	p_stack_size,0
+	jz	en87
+	mov	p_stack_count,-1	; invalid
+en87:
+	cmp	p_stack_count,-1	; invalid?
+	jnz	if94
+
+	mov	stack_count,defaultcount ;reset to default value.
+	mov	stack_size,defaultsize
+	mov	word ptr stack_addr,0
+
+	mov	dx,offset badstack
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badstack2
+@@:
+endif
+	call	print
+	call	error_line
+	jmp	short sr79
+
+if94:
+	mov	ax,p_stack_count
+	mov	stack_count,ax
+	mov	ax,p_stack_size
+	mov	stack_size,ax
+	mov	word ptr stack_addr,-1	; stacks= been accepted.
+sr79:
+	jmp	coff
+
+	endif
+endif   ;NEC_98
 
 ;------------------------------------------------------------------------
 ; shell command
@@ -1987,7 +2181,11 @@ en110:
 	mov	keyrd_func,0	;use the conventional keyboard functions
 	mov	keysts_func,1
 if117:
+ifndef NEC_98
 ;	mov	al, p_swit_t					;M059
+else    ;NEC_98
+	mov	al, p_swit_t					;M059
+endif   ;NEC_98
 ;	mov	t_switch, al					;M059
 
 	cmp	p_swit_w, 0					;M063
@@ -2144,6 +2342,12 @@ badop_p proc	near
 	push	cs
 	pop	ds			;set ds to configsys seg.
 	mov	dx,offset badopm
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badopm2
+@@:
+endif
 	call	print
 	call	error_line
 	ret
@@ -2157,6 +2361,12 @@ badop_p endp
 ;----------------------------------------------------------------------------
 ;
 badop:	mov	dx,offset badopm	;want to print command error "unrecognized command..."
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badopm2
+@@:
+endif
 	call	print
 	call	error_line		;show "error in config.sys ..." .
 	jmp	coff
@@ -2183,6 +2393,12 @@ badparm_p	proc	near
 	pop	ds
 
 	mov	dx,offset badparm
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badparm2
+@@:
+endif
 	call	print			;"bad command or parameters - "
 	lds	si,badparm_ptr
 
@@ -2250,6 +2466,12 @@ getchr	endp
 incorrect_order proc	near
 
 	mov	dx,offset badorder
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badorder2
+@@:
+endif
 	call	print
 	call	showlinenum
 	ret
@@ -2272,6 +2494,12 @@ error_line	proc	near
 	push	cs
 	pop	ds
 	mov	dx,offset errorcmd
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset errorcmd2
+@@:
+endif
 	call	print
 	call	showlinenum
 	ret
@@ -3824,12 +4052,35 @@ get_next	endp
 LinkFirstUMB	proc	near
 
 		call	umb_allocate
+ifndef NEC_98
 		jc	lfu_err
+else    ;NEC_98
+		jnc	lfu_next
+		jmp	lfu_err
+lfu_next:
+endif   ;NEC_98
 
 ; bx = segment of allocated UMB
 ; dx = size of UMB
 
+ifndef NEC_98
 		int	12h			; ax = size of memory
+else    ;NEC_98
+		xor	cx,cx
+		mov	es,cx
+		mov	al,byte ptr es:[501h]	; BIOS_FLG
+		and	ax,07h			; main memory size
+		inc	ax
+		mov	cl,7
+		shl	ax,cl			; ax= size of memory
+
+		test	byte ptr es:[501h],08h	; hireso?
+		jz	got_mm			;   no
+		cmp	ax,768
+		jb	got_mm
+		sub	ax,64
+got_mm:
+endif   ;NEC_98
 		mov	cl, 6
 		shl	ax, cl			; ax = size in paragraphs
 
@@ -3888,6 +4139,9 @@ got_last:
 ;; The following instruction was commentted out for this reason.
 ;;		sub	es:[arena_size], 1
 ;;
+ifdef NEC_98
+		sub	es:[arena_size], 1
+endif   ;NEC_98
 		mov	es:[arena_signature], arena_signature_normal
 		clc
 		ret
@@ -3968,5 +4222,22 @@ UnlinkUMB	endp
 
 ; =========================================================================
 ;
+
+ifdef	JAPAN
+	public	IsDBCSCodePage
+IsDBCSCodePage	proc	near
+	push	ax
+	push	bx
+	mov	ax,4f01h		; get code page
+	xor	bx,bx
+	int	2fh
+	cmp	bx,932
+	pop	bx
+	pop	ax
+	ret
+IsDBCSCodePage	endp
+endif
+
 sysinitseg	ends
 		end
+

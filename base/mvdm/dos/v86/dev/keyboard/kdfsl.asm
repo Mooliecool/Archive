@@ -7,7 +7,7 @@
 ;;
 ;;
 ;; This file contains the keyboard tables for:
-;; Czechoslovakia (Slovak)
+;; Slovakia (Slovak) 
 ;; Alterations created by Gyorgy Balint on behalf of IBM ROECE
 ;; 22.10.87 Basingstoke
 ;;

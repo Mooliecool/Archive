@@ -50,8 +50,10 @@ funky	ends
 	extrn	fCanChangeA20:byte
 	extrn	fHMAMayExist:byte
 
+ifndef NEC_98
 	extrn	fVDISK:byte
 	extrn	IsVDISKIn:near
+endif   ;NEC_98
 
 	extrn	A20Handler:near
 	extrn	EnableCount:word
@@ -84,8 +86,10 @@ funky	ends
 	extrn	NoHMAMsg:byte
 	extrn	A20OnMsg:byte
 	extrn	HMAOKMsg:byte
+ifndef NEC_98
 	extrn	VDISKInMsg:byte
 	extrn	BadArgMsg:byte
+endif   ;NEC_98
 
 	extrn	DevAttr:word
 	extrn	Int15MemSize:word
@@ -95,6 +99,13 @@ funky	ends
 
         extrn   DOSTI:near
         extrn   DOCLI:near
+ifdef NEC_98
+	extrn	fAltA20Routine:byte
+	extrn	LocalDisableA20:near
+	extrn	LocalEnableA20:near
+	extrn	cant_ena20_msg:byte
+	extrn	cant_dia20_msg:byte
+endif   ;NEC_98
 
 ;************************************************************************
 ;*									*
@@ -117,10 +128,12 @@ f1stWasWarning	db	0	; NZ if 1st attempt to diddle A20 generated
 fA20Control	db	0ffh	; NZ if himem should take control of A20, even
 				;   it was already on when himem loaded.
 
+ifndef NEC_98
 	public	fCPUClock
 
 fCPUClock	db	0	; NZ if himem should try to preserve CPU clock
 				;   speed when gating A20
+endif   ;NEC_98
 
 	public	StringParm, MachineNum, MachineName
 
@@ -139,6 +152,7 @@ MachineName	label	byte
 	db	'acer1100',0		; Acer 1100
 	db	'toshiba',0		; Toshiba 1600 & 1200XE
 	db	'wyse',0		; Wyse 12.5 MHz 286 machine
+ifndef NEC_98
 	db	'tulip',0		; Tulip machines
 	db	'zenith',0		; Zenith ZBIOS
 	db	'at1',0 		; IBM AT/delay 0
@@ -149,16 +163,22 @@ MachineName	label	byte
 	db	'fasthp',0		; Single byte method for HP Vectras
 	db	'ibm7552',0		; IBM 7552 Industrial Computer
 	db	'bullmicral',0		; Bull Micral 60 M004
+endif   ;NEC_98
 	db	'at',0			; IBM AT
 	db	0FFh			; end of table
 
 ;NOTE: there is code in GetParms which depends on AltNameTbl coming
 ;      after MachineName table.
 
+ifndef NEC_98
 	public	AltName1, AltName2, AltName3, AltName4, AltName5
 	public	AltName6, AltName7, AltName8, AltName9, AltName10
 	public	AltName11, AltName12, AltName13, AltName14, AltName15
 	public	AltName16                                    ;M004
+else    ;NEC_98
+	public	AltName1, AltName2, AltName3, AltName4, AltName5
+	public	AltName6, AltName7, AltName8
+endif   ;NEC_98
 
 AltNameTbl	label	byte
 AltName3    db	'3',0			; Phoenix Cascade BIOS
@@ -168,6 +188,7 @@ AltName4    db	'4',0			; HP 'Classic' Vectra (A & A+)
 AltName6    db	'6',0			; Acer 1100
 AltName7    db	'7',0			; Toshiba 1600 & 1200XE
 AltName8    db	'8',0			; Wyse 12.5 Mhz 286 machine
+ifndef NEC_98
 AltName9    db	'9',0			; Tulip machine
 AltName10   db	'10',0			; Zenith ZBIOS
 AltName11   db	'11',0			; IBM AT/delay 0
@@ -178,6 +199,7 @@ AltName13   db	'13',0			; IBM AT/delay 2
 AltName14   db	'14',0			; Single byte HP Vectra m/cs
 AltName15   db	'15',0			; IBM 7552 Industrial Computer
 AltName16   db	'16',0			; Bull Micral 60          M004
+endif   ;NEC_98
 AltName1    db	'1',0			; IBM AT
 	    db	0FFh			; end of table
 
@@ -307,7 +329,9 @@ InitInterrupt   endp
 ;*									*
 ;*----------------------------------------------------------------------*
 
+ifndef NEC_98
 	public	InitDriver
+endif   ;NEC_98
 
 InitDriver  proc    near
 
@@ -341,14 +365,49 @@ InitDriver  proc    near
 	jmp	IDFlushMe
 
 IDCheckXMS:
+ifndef NEC_98
 	mov	ax,(INT2F_ID SHL 8) OR INT2F_INS_CHK
 	int	2Fh		; make sure there's no other XMS installed
+else    ;NEC_98
+	mov     ax,4300h	; make sure there's no other XMS installed
+	int	2Fh
+endif   ;NEC_98
 	cmp	al,80h		; Is INT 2F hooked?
 	jne     IDNotInYet
 	mov	dx,offset NowInMsg
 	jmp	IDFlushMe
 
 IDNotInYet:
+ifdef NEC_98
+	xor	ax,ax
+	mov	es,ax
+	test	byte ptr es:[501h],40h	; we're on an V30/V50
+	jz	@f
+	jmp	IDFlushMe		; so give out
+@@:
+	call	GetInt15Memory		; If Int 15h/88h reports < 384k of
+	mov	dx,offset NoExtMemMsg
+	or	ax,ax			; we have extend memory ?
+	jnz	@f
+	jmp	IDFlushMe		; so give out
+@@:
+	test	byte ptr es:[0501h],08h	; Q : HIRES CRT ?
+	jz	@f			;  N : continue
+	mov	ah,byte ptr es:[501h]	; BIOS_FLG
+	mov	al,ah			;  save
+	and	ah,07h			; get main memory size
+	cmp	ah,4			; main memory > 512 ?
+	jb	@f			; no. don't need to init RAMWindow
+	test	byte ptr es:[458h],80h	; NPC ?
+	jnz	not_XA			; yes
+	test	al,30h			; system type = 0 ?
+	jnz	not_XA			; no. other than XA
+	call	Init_RamWindow_XA
+	jmp	short @f
+not_XA:
+	call	Init_RamWindow
+@@:
+endif   ;NEC_98
 	call	GetParms		; process command line parameters
 ;; don't call IsA20On at this moment because we haven't init it yet
 	mov	ax, 2
@@ -377,7 +436,14 @@ IDAfterA20:
 
 	call    GetInt15Memory	; how much extended memory is installed?
 	cmp     ax,64		; Is there >= 64K of extended?
+ifndef NEC_98
 	jae	IDHMAOK
+else    ;NEC_98
+	jb	@f
+	cmp	Int15MemSize, 0	; has the hma been allocated to INT 15 ?
+	jz	IDHMAOK		; no, HMA is available
+@@:
+endif   ;NEC_98
 
 	push	es
 	mov	es,hiseg
@@ -549,6 +615,7 @@ HookInt2F   endp
 
 GetInt15Memory proc near
 
+ifndef NEC_98
 IFDEF WHEN_INT15_DONE
 	mov	ah,88h			; snag the int 15h memory
 	clc
@@ -569,6 +636,16 @@ ELSE
 ENDIF
 
 	ret
+else    ;NEC_98
+	push	es
+	mov	ax,40h
+	mov	es,ax
+	mov	al,byte ptr es:[01h]	; get extend memory size
+	pop	es
+	sub	ah,ah
+	shl	ax,7
+	ret
+endif   ;NEC_98
 
 GetInt15Memory endp
 
@@ -586,7 +663,9 @@ GetInt15Memory endp
 ;*									*
 ;*----------------------------------------------------------------------*
 
+ifndef NEC_98
 GPArgPtr	dd	?
+endif   ;NEC_98
 GPRegSave	dw	?
 
 	public	GetParms
@@ -603,18 +682,21 @@ else					;-------------------------------
 	les	di,[pReqHdr]		; Running as a device driver
 	lds	si,es:[di].pCmdLine	; DS:SI points to first char
 					;   after "DEVICE="
+ifndef NEC_98
 @@:	call	GPGetChar		; Skip over driver name, up to
 	jc	GPDatsAll		;   first blank or / or eol
 	jz	GPNextArg
 	cmp	al,'/'
 	jnz	@b
 	dec	si			; Backup to get / again
+endif   ;NEC_98
 endif					;-------------------------------
 
 	assume	ds:nothing,es:nothing
 
 ;	Scan until we see a non-blank or the end of line.
 
+ifndef NEC_98
 GPNextArg:
 	call	GPGetChar
 	jc	GPDatsAll		; eol
@@ -658,6 +740,15 @@ GPBadDisp:
 
 ;	Finished, we're outta here...
 
+else    ;NEC_98
+GPBadParm:
+GPNextChar:
+	call	GPGetChar
+	jc	GPDatsAll
+	cmp	al,'/'
+	je	GPGotOne
+	jmp	short GPNextChar
+endif   ;NEC_98
 GPDatsAll:
 	pop	ds
 	ret
@@ -672,8 +763,14 @@ GPGotOne:
 
 GPNeedParm:
 	call	GPGetChar
+ifndef NEC_98
 	jc	GPBadParm
 	jz	GPBadParm	; blank
+else    ;NEC_98
+	jc	GPDatsAll
+	cmp	al,' '
+	je	GPBadParm
+endif   ;NEC_98
 	cmp	al,':'		; start of string arg
 	je	GPString
 	cmp	al,'='
@@ -696,12 +793,17 @@ GPNumLoop:
 	add	dx,ax
 	call	GPGetChar
 	jc	GPNumDone
+ifndef NEC_98
 	jz	GPNumDone
+else    ;NEC_98
+	cmp	al,' '
+	je	GPNumDone
+endif   ;NEC_98
 	cmp	al,'0'
 	jb	GPBadParm
 	cmp	al,'9'
 	ja	GPBadParm
-	shl	dx,1		; Stupid multiply DX by 10
+	shl	dx,1		; multiply DX by 10
 	mov	bx,dx
 	shl	dx,1
 	shl	dx,1
@@ -719,15 +821,22 @@ GPString:
 GPStrLoop:
 	call	GPGetChar
 	jc	GPStrDone
+ifndef NEC_98
 	jz	GPStrDone
+else    ;NEC_98
+	cmp	al,' '
+	je	GPStrDone
+endif   ;NEC_98
 	stosb
 	loop	GPStrLoop
 
 GPStrDone:
 
 	mov	byte ptr es:[di],0	; Null terminate the string
+ifndef NEC_98
 	mov	dx,-1			; In case parm expects a num, give'm
 					;   a likely invalid one
+endif   ;NEC_98
 
 ;	Which parameter are we dealing with here?
 
@@ -750,9 +859,11 @@ GPNumDone:
 @@:	cmp	al, 'I' 	; INT15=
 	jne	@f
 	jmp	GPGotInt15
+ifndef NEC_98
 @@:	cmp	al, 'C' 	; CPUCLOCK:
 	jne	@f
 	jmp	GPGotCPUClock
+endif   ;NEC_98
 @@:	jmp	GPBadParm
 
 
@@ -767,7 +878,11 @@ GPGotA20Control:
 	inc	bl
 	cmp	ax,'fo' 		; OFF ? - means we leave alone if on
 	jz	GPSetA20
+ifndef NEC_98
 	jmp	GPBadParm
+else    ;NEC_98
+	jmp	GPNextParm
+endif   ;NEC_98
 
 GPSetA20:
 	mov	fA20Control,bl		; Z if A20 should be left alone if
@@ -792,7 +907,11 @@ GPNextName:
 
 GPChkNext:
 	cmp	byte ptr es:[di],0FFh		; end of name table?
+ifndef NEC_98
 	jz	GPNoName
+else    ;NEC_98
+	jz	GPBadName
+endif   ;NEC_98
 
 	lodsb				; char from StringParm
 	cmp	al,'A'			; force to lower case for match
@@ -815,7 +934,11 @@ GPFlushName:
 GPFN2:
 	inc	di
 	cmp	byte ptr es:[di],0FFh
+ifndef NEC_98
 	jz	GPNoName
+else    ;NEC_98
+	jz	GPBadName
+endif   ;NEC_98
 
 	cmp	byte ptr es:[di],0
 	jnz	GPFN2
@@ -826,6 +949,7 @@ GPFoundName:
 	mov	cs:[MachineNum],bx	; found a match, remember which entry
 	jmp	short GPNameDone	;   it is for later
 
+ifndef NEC_98
 GPNoName:
 
 	cmp	di,offset _text:AltNameTbl
@@ -842,6 +966,21 @@ GPBadName:
 	pop	ds			; clear stack and error out...
 	pop	si
 	jmp	GPBadParm
+else    ;NEC_98
+GPBadName:
+
+	cmp	di,offset _text:AltNameTbl
+	ja	GPNameDone
+	mov	di,offset _text:AltNameTbl
+	jmp	short GPNextTbl
+
+GPNameDone:
+	pop	ds			; recover parm line pointer
+	pop	si
+
+	jmp	GPNextParm
+
+endif   ;NEC_98
 
 ;	Process /NUMHANDLES= parameter.
 
@@ -875,7 +1014,11 @@ GPGotHands:
 	call    GPPrintAX
 	mov	dx,offset HandlesMsg
 	call    GPPrintIt
+ifndef NEC_98
 	jmp	GPNextParm
+else    ;NEC_98
+	jmp	short GPNextParm
+endif   ;NEC_98
 
 GPGotMin:
 	cmp	dx,64		; process /hmamin= parameter
@@ -910,12 +1053,17 @@ GPGotShadow:
 	inc	bl
 	cmp	ax,'fo' 		; OFF ? - means we turn it off
 	jz	GPSetShadow
+ifndef NEC_98
 	jmp	GPBadParm
+else    ;NEC_98
+	jmp	short GPNextParm
+endif   ;NEC_98
 
 GPSetShadow:
 	mov	fShadowOff,bl		; NZ if Shadow RAM should be turned off
 	jmp	short GPNextParm
 
+ifndef NEC_98
 
 ;	Process /CPUCLOCK: parameter
 
@@ -934,6 +1082,7 @@ GPGotCPUClock:
 GPSetClock:
 	mov	fCPUClock,bl		; NZ if clock rate preserved
 	jmp	short GPNextParm
+endif   ;NEC_98
 
 
 ;	Process /INT15= parameter
@@ -942,12 +1091,20 @@ GPGotInt15:
 	cmp	dx, 64			; atleast 64K
 	jae	@f
 	jmp	GPBadParm
+ifndef NEC_98
 @@:	call	GetInt15Memory
 	cmp	ax, dx			; enuf Ext Mem ?
+else    ;NEC_98
+	call	GetInt15Memory
+@@:	cmp	ax, dx			; enuf Ext Mem ?
+endif   ;NEC_98
 	jae	@f
 	jmp	GPBadParm
 @@:	mov	[Int15MemSize], dx
 	; Fall through to GetNextParm
+ifdef NEC_98
+	jmp	short GPNextParm
+endif   ;NEC_98
 
 GPNextParm:
 	mov	ax,cs:[GPRegSave]	; are we at the end of the line?
@@ -955,7 +1112,11 @@ GPNextParm:
 	je	GPExit
 	cmp	al,10
 	je	GPExit
+ifndef NEC_98
 	jmp	GPNextArg
+else    ;NEC_98
+	jmp     GPNextChar
+endif   ;NEC_98
 
 GPExit:
 	pop	ds
@@ -966,11 +1127,14 @@ GetParms    endp
 ; Get the next character from DS:SI, set CY if it's an EOL (CR, LF), set
 ; Z if it's a space
 
+ifndef NEC_98
 GPOffEOL	dw	-1
+endif   ;NEC_98
 
 	public	GPGetChar
 
 GPGetChar	proc	near
+ifndef NEC_98
 
 	cmp	si,cs:[GPOffEOL]	; are we already at EOL?
 	jnb	GPAtEOL
@@ -989,6 +1153,17 @@ GPGetChar	proc	near
 GPHitEOL:
 	mov	cs:[GPOffEOL],si	; save EOL offset once
 GPAtEOL:
+else    ;NEC_98
+	lodsb
+	cmp	al,10
+	je	@f
+	cmp	al,13
+	je	@f
+
+	clc
+	ret
+@@:
+endif   ;NEC_98
 	stc
 	ret
 
@@ -1074,6 +1249,309 @@ IHTabLoop:
 
 InitHandles endp
 
+ifdef NEC_98
+;******************************************************************************
+;   Init_Ram_Window - Initialize Ram Window Memory
+;
+;	MS-DOS
+;	Ram Window	Memory			Ram Windows	Memory
+;	 80		100			80		80
+;	 90		110			90		90
+;	 BO		120			B0		B0
+;	 A0		130			A0		A0
+;
+;
+;
+;   Author:   (sbp)
+;
+;   ENTRY:  REAL MODE on 386 processor (CPU ID already performed)
+;   EXIT:
+;
+;   USED:   flags
+;   STACK:
+;------------------------------------------------------------------------------
+
+Init_RamWindow	proc	near
+
+	push	ax
+	push	bx
+	push	dx
+	push	ds
+
+	cli
+	mov	cs:[save_ss],ss
+	mov	cs:[save_sp],sp
+	push	cs
+	pop	ss
+	mov	sp,offset EISA_stack
+
+	mov	al, 8
+	out	37h, al
+
+	mov	ax, 8000h		; ì]ëóå≥±ƒﬁ⁄Ω
+	mov	bx, 4000h		; ì]ëóêÊ±ƒﬁ⁄Ω
+	mov	cx, 4			; ì]ëóÉoÉìÉNêî
+	call	movebank
+
+	mov	al,08h			; 80 BANK memory
+	mov	dx,91h			; 80 BANK ram windows		"
+	out	dx,al			; set RAM WINDOW
+
+	mov	al,0ah			; A0 BANK memory
+	mov	dx,93h			; A0 BANK ram window		"
+	out	dx,al			; set RAM WINDOW
+
+	xor	ax, ax
+	mov	ds, ax
+	test	byte ptr ds:[481h], 04h	; Q : can use shadow ram ?
+	jnz	@f
+	call	initshadowram
+@@:
+	mov	ax, 4000h
+	mov	bx, 8000h
+	mov	cx, 4
+	call	movebank
+
+	mov	ss, cs:[save_ss]
+	mov	sp, cs:[save_sp]
+
+	mov	al, 09h
+	out	37h, al
+	sti
+
+	pop	ds
+	pop	dx
+	pop	bx
+	pop	ax
+	ret
+	
+Init_RamWindow	endp
+
+;******************************************************************************
+;   Init_Ram_Window_XA - Initialize Ram Window Memory
+;
+;	MS-DOS					Himem
+;	Ram Window	Memory			Ram Windows	Memory
+;	 80		100			80		TOM-40  or  TOM-20
+;	 90		110			90		TOM-30  or  TOM-10
+;	 BO		120			B0		TOM-20  or  120
+;	 A0		130			A0		TOM-10  or  130
+;
+;   Author:   (sbp)
+;
+;   ENTRY:  REAL MODE on 286
+;	    AH = main memory size in blocks of 128k
+;   EXIT:
+;
+;   USED:   flags
+;   STACK:
+;------------------------------------------------------------------------------
+
+Init_RamWindow_XA	proc	near
+
+	sub	ah,3
+	cmp	byte ptr es:[401h],ah
+	ja	IRX_Start
+	mov	byte ptr es:[401h],0
+	ret
+
+IRX_Start:
+	push	ax
+	push	bx
+	push	dx
+	push	ds
+
+	cli
+	mov	cs:[save_ss],ss
+	mov	cs:[save_sp],sp
+	push	cs
+	pop	ss
+	mov	sp,offset EISA_stack
+
+	mov	al, 8
+	out	37h, al
+
+	cmp	ah,1			; main memory = 640k ?
+	je	IRX_640
+
+	mov	ax, 0a000h		; ì]ëóå≥±ƒﬁ⁄Ω
+	mov	bx, 4000h		; ì]ëóêÊ±ƒﬁ⁄Ω
+	mov	cx, 2			; ì]ëóÉoÉìÉNêî
+	call	movebank
+
+	mov	al,byte ptr es:[401h]
+	dec	al
+	shl	al,1
+	add	al,10h			; al = BANK #
+	mov	dx,93h			; A0 BANK ram window		"
+	out	dx,al			; set RAM WINDOW
+
+	mov	ax, 4000h
+	mov	bx, 0a000h
+	mov	cx, 2
+	call	movebank
+
+	dec	byte ptr es:[401h]
+
+IRX_640:
+	mov	ax, 8000h		; ì]ëóå≥±ƒﬁ⁄Ω
+	mov	bx, 4000h		; ì]ëóêÊ±ƒﬁ⁄Ω
+	mov	cx, 2			; ì]ëóÉoÉìÉNêî
+	call	movebank
+
+	mov	al,byte ptr es:[401h]
+	dec	al
+	shl	al,1
+	add	al,10h			; al = BANK #
+	mov	dx,91h			; 80 BANK ram windows		"
+	out	dx,al			; set RAM WINDOW
+
+	mov	ax, 4000h
+	mov	bx, 8000h
+	mov	cx, 2
+	call	movebank
+
+	dec	byte ptr es:[401h]
+
+	mov	ss, cs:[save_ss]
+	mov	sp, cs:[save_sp]
+
+	mov	al, 09h
+	out	37h, al
+	sti
+
+	pop	ds
+	pop	dx
+	pop	bx
+	pop	ax
+	ret
+
+Init_RamWindow_XA	endp
+
+;-------------------------------------------------------------------
+;   movebank	move bank datat
+;	entry	ax : source seg. address
+;		bx : dest. seg. address
+;		cx : bank count
+;
+;----------------------------------------------------------------
+
+movebank proc	near
+	push	es
+	push	ds
+	push	si
+	push	di
+@@:
+	mov	ds, ax
+	mov	es, bx
+	push	cx
+	mov	cx, 8000h
+	cld
+	xor	si, si
+	xor	di, di
+	rep	movsw
+	pop	cx
+	add	ax, 1000h		; get next bank address
+	add	bx, 1000h		; get next bank address
+	loop	@b
+	pop	di
+	pop	si
+	pop	ds
+	pop	es
+	ret
+movebank endp
+
+;*-----------------------------------------------------------
+;*  initshadowram
+;*
+;*
+;*----------------------------------------------------------
+initshadowram proc	near
+	push	es
+	push	di
+	push	cx
+	cld
+	mov	ax, 8000h
+	mov	es, ax
+	mov	cx, 0004h
+	mov	ax,8000h
+	mov	es,ax
+	mov	cx,0004h
+l3:
+	xor	di, di
+	push	cx
+	mov	cx, 3333h
+l1:
+	mov	ax, 0ff01h
+	stosw
+	mov	ax, 55aah
+	stosw
+	mov	al, 00
+	stosb
+	loop	l1
+	stosb
+
+	xor	di, di
+	mov	cx, 3333h
+l2:
+	mov	ax,0ff01h
+	scasw
+	jnz	isr_exit
+	mov	ax,55aah
+	scasw
+	jnz	isr_exit
+	mov	al,00h
+	scasb	 
+	jnz	isr_exit
+	loop	l2 
+	mov	ax, es
+	add	ax, 1000h
+	mov	es, ax
+	pop	cx
+	loop	l3
+
+;	clean up memory
+
+	mov	cx, 0004h
+l4:
+	push	cx
+	mov	ax, es
+	sub	ax, 1000h
+	mov	es, ax
+	xor	ax, ax
+	mov	di, ax
+	mov	cx, 8000h
+	rep	stosw
+	pop	cx
+	loop	l4
+	xor	ax,ax
+	jmp	short isr_done
+isr_exit:
+	mov	ax,0001 
+isr_done:
+	pop	cx 
+	pop	di 
+	pop	es 
+	ret
+
+initshadowram endp
+;*----------------------------------------------------------------------*
+;*									*
+;*  ScanEISA - poll any EISA devices through the BIOS's Int15(0d8h)	*
+;*     and add any memory we find out about to our free memory table.	*
+;*     Note:  this code (including a big buffer) gets thrown out after	*
+;*     completion of the initialization sequence.			*
+;*									*
+;*	Note:  The COMPAQ BIOS uses up 1.5K of stack during int15(d80x) *
+;*		so we'll set up a separate stack while we're here	*
+;*									*
+;*----------------------------------------------------------------------*
+
+save_ss	dw	0
+save_sp	dw	0
+EISA_Stack:
+
+endif   ;NEC_98
 _text	ends
 
 ifdef	debug_tsr
@@ -1091,3 +1569,4 @@ EndStmt equ	<end>
 endif
 
 	EndStmt
+

@@ -3275,7 +3275,11 @@ SetupParamError	endp
 UseLine	proc
 
 	dec	LeftOnPage
+ifndef NEC_98
 	cmp	LeftOnPage,2
+else    ;NEC_98
+	cmp	LeftOnPage,1            ;NEC04 Canged Page Line (23 to 24)
+endif   ;NEC_98
 	ja	ulRet
 	call	EndPage
 ulRet:	ret

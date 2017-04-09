@@ -21,6 +21,7 @@
 
 extern char LinkedIn;
 extern void (interrupt far *OldCtrlc)();
+#pragma warning(4:4762)
 
 void interrupt cdecl far MemCtrlc (unsigned es, unsigned ds,
 			unsigned di, unsigned si, unsigned bp, unsigned sp,

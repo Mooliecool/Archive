@@ -51,6 +51,9 @@
 	include bugtyp.inc
 	include dossvc.inc
         include vint.inc
+ifdef NEC_98
+	include dpb.inc
+endif   ;NEC_98
 	.cref
 	.list
 
@@ -100,8 +103,9 @@
 	I_need	vheDev,BYTE
 	I_need	TEMPSEG, WORD
 	I_need	DosHasHMA,byte			; M021
-
-
+ifdef JAPAN
+	i_need	DIVMES2,BYTE
+endif
 
 
 DOSDATA	SEGMENT
@@ -116,6 +120,9 @@ DOSCODE SEGMENT
 	ASSUME	SS:DOSDATA,CS:DOSCODE
 
 	extrn	DivMesLen:WORD
+ifdef JAPAN
+	extrn	DivMesLen2:WORD
+endif
 
 	allow_getdseg
 
@@ -539,6 +546,21 @@ procedure   DIVOV,NEAR
 	MOV	BX,DivMesLen
 
 					; Point SS to dosdata 
+ifdef JAPAN
+	push	ax
+	push	bx
+	mov	ax,4f01h		; get code page
+	xor	bx,bx
+	int	2fh
+	cmp	bx,932
+	pop	bx
+	pop	ax
+	jz	@f			; if DBCS code page
+	mov	si,offset DOSCODE:DIVMES2
+	mov	bx,DivMesLen2
+@@:
+endif
+
 	getdseg	<ss>			; we are in an ISR flag is CLI
 
 					; AUXSTACK is in DOSDATA
@@ -783,6 +805,20 @@ NoFree:
 	INC	BYTE PTR ErrorMode	; Flag INT 24 in progress
 	DEC	BYTE PTR InDos		; INT 24 handler might not return
 
+ifdef NEC_98
+	;; Extended Open hooks
+
+					; AN000;IFS.I24 error disabled	      ;AN000;
+	TESTB	EXTOPEN_ON,EXT_OPEN_I24_OFF 
+	JZ	i24yes			; AN000;IFS.no			      ;AN000;
+faili24:				; AN000;
+	MOV	AL,3			; AN000;IFS.fake fail		      ;AN000;
+	JMP	short passi24 		; AN000;IFS.exit			      ;AN000;
+i24yes: 				; AN000;
+
+	;; Extended Open hooks
+
+endif   ;NEC_98
 	MOV	SS,User_SS
 ASSUME	SS:NOTHING
 	MOV	SP,ES:User_SP		; User stack pointer restored
@@ -1041,7 +1077,7 @@ reset_return:				; come here for normal return
 					; set up ds to DOSDATA
 	MOV	User_SP,AX
 
-	POP	AX			; suck off CS:IP of interrupt...
+	POP	AX			; take off CS:IP of interrupt...
 	POP	AX
 	POP	AX
 

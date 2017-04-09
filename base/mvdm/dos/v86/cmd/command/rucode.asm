@@ -115,6 +115,9 @@ CODERES segment public byte
 	public	MsgInt2fHandler
 	public	MsgRetriever
 	public	RPrint
+ifdef BILINGUAL
+	public	RPrint@
+endif
 
 	ifdef	DBCS
 	public	ITestKanj
@@ -661,6 +664,34 @@ RPrint	proc
 					; DS:SI = ptr to message text
 	xor	cx,cx
 	mov	cl,al			; CX = message length
+
+ifdef BILINGUAL
+	call	IsDBCSCodePage
+	jnz	rp_us			; if not DBCS code page
+	push	ax
+	push	si
+	xor	cx,cx
+@@:
+	lodsb
+	inc	cx
+	or	al,al
+	jnz	@b
+	dec	cx
+	pop	si
+	pop	ax
+	jmp	short rp_next
+rp_us:
+	push	ax
+@@:
+	lodsb
+	dec	cx
+	or	al,al
+	jnz	@b
+	pop	ax
+rp_next:
+
+endif
+
 	jcxz	rpRet
 
 	call	RDispMsg
@@ -673,6 +704,31 @@ rpRet:	pop	dx
 	ret
 
 RPrint	endp
+
+ifdef BILINGUAL
+RPrint@	proc
+	push	ax
+	push	bx
+	push	cx
+	push	si
+	mov	bx,si			; DS:BX = ptr to subst block
+	mov	si,dx			; DS:SI = ptr to count byte
+	lodsb				; AL = message length
+					; DS:SI = ptr to message text
+	xor	cx,cx
+	mov	cl,al			; CX = message length
+	jcxz	@f
+
+	call	RDispMsg
+
+@@:
+	pop	si
+	pop	cx
+	pop	bx
+	pop	ax
+	ret
+RPrint@	endp
+endif
 
 
 
@@ -696,11 +752,30 @@ RPrintCrit	proc
 	xchg	bx,dx			; BX = extended error #
 					; DX = saved BX
 	sub	bx,19			; BX = critical error index, from 0
+
+ifdef BILINGUAL
+	call	IsDBCSCodePage
+	jz	rpc_next		; if Kanji mode
+	add	bx,21
+	push	ax
+@@:
+	lodsb
+	or	al,al
+	jnz	@b
+	pop	ax
+	dec	si
+rpc_next:
+endif
+
 	shl	bx,1			; BX = offset in word table
 	mov	bx,CritMsgPtrs[bx]	; BX = ptr to error msg
 	xchg	bx,dx			; DX = ptr to error msg
 					; BX = restored
+ifdef BILINGUAL
+	call	RPrint@			; print the message
+else
 	call	RPrint			; print the message
+endif
 	pop	dx			; restore DX
 	ret
 
@@ -1222,9 +1297,33 @@ Lh_OffUnlink	endp
 ; M003; End of changes for UMB support
 ;
 
+ifdef BILINGUAL
+IsDBCSCodePage	proc	near
+	push	ax
+	push	bx
+	mov	ax,4f01h		; get code page
+	xor	bx,bx
+	int	2fh
+ifdef JAPAN
+	cmp	bx,932
+endif
+ifdef KOREA
+	cmp	bx,949
+endif
+ifdef TAIWAN
+	cmp	bx,950
+endif
+ifdef PRC
+	cmp	bx,936
+endif
+	pop	bx
+	pop	ax
+	ret
+IsDBCSCodePage	endp
+endif
+
 public	EndCode
 EndCode	label	byte
 
 CODERES ends
 	end
-

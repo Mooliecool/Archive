@@ -681,7 +681,11 @@ Chk_DBCS	PROC								;AN000;
 	PUSH	BX								;AN000;
 
 ;hkn; SS is DOSDATA
+IFDEF	JAPAN
+	getdseg <ds>
+ELSE
 	Context DS  
+ENDIF
      
 ;hkn; COUNTRY_CDPG is in DOSDATA
 	MOV	BX,offset DOSDATA:COUNTRY_CDPG.ccSetDBCS			;AN000;

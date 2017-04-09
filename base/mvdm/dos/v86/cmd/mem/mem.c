@@ -109,7 +109,7 @@ struct p_value_blk p_noval;
 
 /*컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴�*/
 
-	struct sublistx sublist[4];
+	struct sublistx sublist[5];
 
 	unsigned far	     *ArenaHeadPtr;
 	struct	 SYSIVAR far *SysVarsPtr;
@@ -465,3 +465,4 @@ void CSwitch_init()
 
 /* M003 END */
 	
+

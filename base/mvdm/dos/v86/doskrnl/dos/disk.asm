@@ -517,7 +517,7 @@ procedure   DOS_WRITE,NEAR
 
 	LES	DI,ThisSFT
 	Assert	ISSFT,<ES,DI>,"DosWrite"
-; BUGBUG sudeepb 12-Mar-1991 Take care of this RO Bullshit of FCBS in
+; BUGBUG sudeepb 12-Mar-1991 Take care of this RO stuff of FCBS in
 ; appropriate FCB routines.
 ;
 ; NOTE: The following check for writting to a Read Only File is performed

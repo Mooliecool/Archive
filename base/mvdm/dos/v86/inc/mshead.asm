@@ -51,7 +51,11 @@ $STARTCODE	LABEL WORD
 
 ; Segment address of BIOS data segment in RAM
 	PUBLIC	BioDataSeg
+ifndef NEC_98
 BioDataSeg	dw	70h		;Bios data segment fixed at 70h
+else    ;NEC_98
+BioDataSeg	dw	60h		;Bios data segment fixed at 60h
+endif   ;NEC_98
 
 
 ;

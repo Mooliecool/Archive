@@ -26,6 +26,9 @@ TITLE   Part1 COMMAND Transient Routines
         include comequ.asm
         include cmdsvc.inc
         include mult.inc
+ifdef NEC_98
+        include pdb.inc
+endif   ;NEC_98
         include vint.inc
 .list
 .cref
@@ -59,9 +62,10 @@ DATARES         SEGMENT PUBLIC BYTE     ;AC000;
         EXTRN   RE_OUTSTR:BYTE
         EXTRN   RESTDIR:BYTE
         EXTRN   SINGLECOM:WORD
+        EXTRN   KSWITCHFLAG:BYTE
         EXTRN   VERVAL:WORD
-	EXTRN	SCS_Is_First:BYTE
-	EXTRN	SCS_PAUSE:BYTE
+    EXTRN   SCS_Is_First:BYTE
+    EXTRN   SCS_PAUSE:BYTE
         EXTRN   SCS_REENTERED:BYTE
         EXTRN   SCS_FIRSTCOM:BYTE
         EXTRN   SCS_CMDPROMPT:BYTE
@@ -78,7 +82,7 @@ DATARES         SEGMENT PUBLIC BYTE     ;AC000;
         extrn   Io_Save:word
         extrn   Io_Stderr:byte
         extrn   RES_TPA:WORD            ; YST
-	extrn	LTPA:WORD		; YST
+    extrn   LTPA:WORD       ; YST
 DATARES ENDS
 
 TRANDATA        SEGMENT PUBLIC BYTE     ;AC000;
@@ -409,6 +413,11 @@ ISNOBAT:
         CMP     [SINGLECOM],0
         JZ      REGCOM
         MOV     SI,-1
+        CMP     KSWITCHFLAG,0
+        JE      NO_K_SWITCH
+        INC     SI
+        MOV     KSWITCHFLAG,0
+NO_K_SWITCH:
         XCHG    SI,[SINGLECOM]
         MOV     DI,OFFSET TRANGROUP:COMBUF + 2
         XOR     CX,CX
@@ -453,10 +462,10 @@ DRE_RET:
         MOV     DS,cs:[RESSEG]
         ASSUME  DS:RESGROUP
         xor     ax,ax
-	jmp	short do_again
+    jmp short do_again
 
 first_inst:
-	mov	[SCS_PAUSE],0			; yst 4-5-93
+    mov [SCS_PAUSE],0           ; yst 4-5-93
         cmp     [SCS_Is_First],1
         jne     cont_scs
         mov     [SCS_Is_First],0
@@ -496,34 +505,51 @@ cont_scs1:
 
         MOV     DS,cs:[RESSEG]
         ASSUME  DS:RESGROUP
-	mov	ax,[retcode]
+    mov ax,[retcode]
 
 do_again:
+ifdef NEC_98
+        jmp     ClrFky
+FKY_OFF DB      1Bh,'[>1h$'                     ;ESC sequence of FKY off
+Clrfky: push    ds
+        push    cs
+        pop     ds
+        push    cx
+        push    ax
+        push    dx
+        mov     cl,10H
+        mov     ah,01H
+        mov     dx,offset FKY_OFF
+        int     0DCH                            ;FKY off
+        pop     dx
+        pop     ax
+        pop     cx
+        pop     ds
+endif   ;NEC_98
         MOV     DS,cs:[RESSEG]
-	ASSUME	DS:RESGROUP
-	push	es
-	mov	es,[envirseg]
-	mov	[ENV_PTR_SEG],es
-	call	GETENVSIZ
-	pop	es
-	push	cs
-	pop	ds
-	ASSUME	DS:TRANGROUP
-	mov	[ENV_SIZE],cx
+    ASSUME  DS:RESGROUP
+    push    es
+    mov es,[envirseg]
+    mov [ENV_PTR_SEG],es
+    call    GETENVSIZ
+    pop es
+    push    cs
+    pop ds
+    ASSUME  DS:TRANGROUP
+    mov [ENV_SIZE],cx
 
 ;; williamh - Jan 11 1993
 ;; nt expects 16bits exit code while DOS has only 8 bits
 ;; clear the high byte so that things won't go wrong
-	xor	ah, ah
-
+    xor ah, ah
 
         MOV     [SCS_EXIT_CODE],ax
         mov     ah,19h
         int     21h
         xor     ah,ah
         mov     [SCS_CUR_DRIVE], ax     ; a= 0 , b = 1 etc
-	mov	[CMD_SIZE],COMBUFLEN
-	MOV	DX,OFFSET TRANGROUP:UCOMBUF
+    mov [CMD_SIZE],COMBUFLEN
+    MOV DX,OFFSET TRANGROUP:UCOMBUF
 
 if 0
 ;       Try to read interactive command line via DOSKey.
@@ -660,6 +686,37 @@ scs_std_err:
         jc      rdr_err
 
 no_rdr:
+ifdef NEC_98
+        push    ds
+        push    cx
+        push    ax
+        push    dx
+
+        CMDSVC  SVC_GETCURSORPOS                ;gets bios cursor position
+                                                ;now dx=offset on TEXT VRAM
+        mov     ax,dx
+        mov     cl,160
+        div     cl
+        mov     dh,al
+        xor     dl,dl
+        mov     cl,10h
+        mov     ah,03h
+        int     0DCH                            ;set cursor position for DOS
+
+        jmp     DspFky
+FKY_ON  DB      1Bh,'[>1l$'                     ;ESC sequence of FKY on
+Dspfky: push    cs
+        pop     ds
+        mov     cl,10H
+        mov     ah,01H
+        mov     dx,offset FKY_ON
+        int     0DCH                            ;FKY on
+
+        pop     dx
+        pop     ax
+        pop     cx
+        pop     ds
+endif   ;NEC_98
         mov     ah,GetSetCdPg
         mov     al,1
         int     21h
@@ -689,17 +746,17 @@ no_nlsf_msg:
 cdpg_done:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;							      ;;
+;;                                ;;
 ;; (YST) 08-Jan-1993 Checking and installing  16-bit KEYB.COM ;;
-;;							      ;;
+;;                                ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
        jmp     YST_beg
 
 ;; Data for KB16
 
-KEY_LINE db	128 dup (0)	   ; "d:\nt\system32\kb16.com", 0
-YST_ARG  db	128 dup (0)	   ; 32, " XX,,d:\nt\system32\keyboard.sys", 0DH
+KEY_LINE db 128 dup (0)    ; "d:\nt\system32\kb16.com", 0
+YST_ARG  db 128 dup (0)    ; 32, " XX,,d:\nt\system32\keyboard.sys", 0DH
 
 
 YPAR     dw     0
@@ -712,14 +769,14 @@ KEEP_SP  dw     0
 
 YST_beg:
 
-      SAVE <BX, ES, DS>			       ; save all regs for INT 2FH
+      SAVE <BX, ES, DS>                ; save all regs for INT 2FH
 
-      mov     ax, CHECK_KEYB16		       ; see if KEYB16 installed
+      mov     ax, CHECK_KEYB16             ; see if KEYB16 installed
       int     2fh
       xor     dx,dx
       cmp     al, KEYB16_installed
-      jne     keyb_cont			       ; KEYB16 not installed, DX == 0
-      inc     dx			       ; installed DX == 1
+      jne     keyb_cont                ; KEYB16 not installed, DX == 0
+      inc     dx                   ; installed DX == 1
 
 keyb_cont:
       RESTORE <DS, ES, BX>
@@ -728,16 +785,16 @@ keyb_cont:
       push    cs
       pop     ds
 
-      mov     si, offset KEY_LINE	       ; name of KB16.COM
-      mov     cx, offset YST_ARG	       ; command line
+      mov     si, offset KEY_LINE          ; name of KB16.COM
+      mov     cx, offset YST_ARG           ; command line
 
-      CMDSVC	SVC_GETKBDLAYOUT	; Call 32-bit API for checking
-					; and installing correct layout
-      or      dx,dx			; if DX != 0 after BOP then we need
-      pop     ds			; to install 16-bit KEYB.COM
+      CMDSVC    SVC_GETKBDLAYOUT    ; Call 32-bit API for checking
+                    ; and installing correct layout
+      or      dx,dx         ; if DX != 0 after BOP then we need
+      pop     ds            ; to install 16-bit KEYB.COM
       jnz     run_keyb
 
-      jmp     End_keyb			; No installation of KB16.COM
+      jmp     End_keyb          ; No installation of KB16.COM
 
 run_keyb:
 
@@ -745,42 +802,42 @@ run_keyb:
 
       SAVE    <DS, BX>
 
-      PUSH    ES			; free TPA for running KB16
+      PUSH    ES            ; free TPA for running KB16
       MOV     ES,[TRAN_TPA]
       MOV     AH,DEALLOC
-      INT     21h			; Now running in "free" space
+      INT     21h           ; Now running in "free" space
 
       push    cs
       pop     ds
       push    cs
       pop     es
 
-      mov     dx, offset KEY_LINE	; file name
-      mov     YPAR+0, 0000H		; keep current enviroment
-      mov     YPAR+2, offset YST_ARG	; arguments (options) for KB16.COM
+      mov     dx, offset KEY_LINE   ; file name
+      mov     YPAR+0, 0000H     ; keep current enviroment
+      mov     YPAR+2, offset YST_ARG    ; arguments (options) for KB16.COM
       mov     YPAR+4, ds
       mov     bx, offset YPAR
 
-      mov     KEEP_SS, ss		; Peter Norton suggests to keep
-      mov     KEEP_SP, sp		; SS and SP
+      mov     KEEP_SS, ss       ; Peter Norton suggests to keep
+      mov     KEEP_SP, sp       ; SS and SP
 
       mov     ah, 4bh
       xor     al, al
 
-      int     21h			; RUN!
+      int     21h           ; RUN!
 
-      mov     ss, cs:KEEP_SS		; Restore SS and SP
+      mov     ss, cs:KEEP_SS        ; Restore SS and SP
       mov     sp, cs:KEEP_SP
 
       POP     ES
 
-      SAVE	<BP>			; We need to restore TSR bit
-      xor	si,si			; for running next app.
-      xor	bp,bp			; use "undocumented" call.
-      mov	al,2
-      mov	ah,setdpb
-      int	21h			; resets the TSR bit
-      RESTORE	<BP>
+      SAVE  <BP>            ; We need to restore TSR bit
+      xor   si,si           ; for running next app.
+      xor   bp,bp           ; use "undocumented" call.
+      mov   al,2
+      mov   ah,setdpb
+      int   21h         ; resets the TSR bit
+      RESTORE   <BP>
 
 
 ; Allocate transient again after runnig KB16.
@@ -880,9 +937,9 @@ GotSize1:
 
 End_keyb:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;								    ;;
+;;                                  ;;
 ;; End of (YST) 08-Jan-1993 Checking and installing 16-bit KEYB.COM ;;
-;;								    ;;
+;;                                  ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
@@ -954,7 +1011,7 @@ OkParse:
         jne     short drvgd                     ; no, use default of zero...
 
         mov     DL, BYTE PTR [BX]               ; pick-up drive letter
-        and     DL, NOT 20H                     ; uppercase the sucker
+        and     DL, NOT 20H                     ; uppercase it
         sub     DL, capital_A                   ; convert it to a drive number, A=0
 
         CMP     AL,-1                           ; See what PARSE said about our drive letter.
@@ -1007,6 +1064,10 @@ do_skipcom:
 
 do_skipped:
         dec     SI
+; jarbats 11-20-2000
+; failing to decrease SI results in missing leading space for command tail
+; which upsets many old dos apps which assume there is a space at the beginning and start at the second char
+;do_skipped1:
         XOR     CX,CX
 
 COMTAIL:
@@ -1280,19 +1341,51 @@ Do16BitPrompt:
         push    ax
         mov     es,cs:[RESSEG]                  ; es is resident group
         ASSUME  ES:resgroup
-	PUSH	CS
+    PUSH    CS
         POP     DS                              ; Need local segment to point to buffer
         assume  ds:trangroup
         cmp     al,Start16
+ifdef DBCS
+        je      @F
+        jmp     d16_ret
+@@:
+else ; !DBCS
         jne     d16_ret
+endif ; !DBCS
 
 d16_loop:
+ifdef DBCS
+;;; williamh  Sept 24 1993, removed it. Not necessary to show two line feed
+;;; for every command.
+;;; yasuho 12/9/93  It is necessary. for example, if previous command
+;;; didn't follow CR+LF before terminate, prompt will show on the strange
+;;; position.
+endif ; DBCS
         INVOKE  CRLF2
         INVOKE  PRINT_PROMPT                    ; put the prompt
-	MOV	DX,OFFSET TRANGROUP:UCOMBUF
+ifdef DBCS  ;; this should go to US build also
+;; reset the title
+    xor al, al
+    CMDSVC  SVC_SETWINTITLE
+endif ; DBCS
+    MOV DX,OFFSET TRANGROUP:UCOMBUF
 
         mov     ah,STD_CON_STRING_INPUT         ; AH = Buffered Keyboard Input
         int     21h                             ; call DOS
+ifdef DBCS_NT31J
+;; special case for CR was added the original source.
+;; this code doesn't need. 04/07/94 (hiroh)
+    ;; #3920: CR+LFs are needed when using 32bit command
+    ;; 12/9/93 yasuho
+    ;; not necessary CR+LF if nothing to do
+    push    bx
+    mov bx, dx
+    cmp byte ptr [bx + 1], 0        ; only CR ?
+    pop bx
+    je  @F              ; yes. no neccessary CRLF
+        INVOKE  CRLF2
+@@:
+endif ; DBCS_NT31J
 
         push    si
         mov     si,dx
@@ -1306,13 +1399,24 @@ d16_loop:
         jmp     d16_loop
 
 d16_gotcom:
+ifdef DBCS  ;; this should go to US build also
+;; update the new command to the title
+    mov al, 1
+    CMDSVC  SVC_SETWINTITLE
+endif ; DBCS
         INVOKE  CRLF2
         call    check_command                   ; check for exit and cd
         pop     si
         jnc     d16_run
 
         or      al,al
+ifdef DBCS
+        jnz @F
+    jmp d16_exit
+@@:
+else ; !DBCS
         jz      d16_exit
+endif ; !DBCS
 
 d16_dosonly:
         mov     byte ptr es:[scs_prompt16],0
@@ -1341,8 +1445,59 @@ d16_run:
         add     si,2            ; first two bytes are the count, after that real command
         mov     ah,19h
         int     21h             ; al = cur drive
+ifdef NEC_98
+        jmp     Clrfky2
+FKY_OFF2        DB      1Bh,'[>1h$'             ;ESC sequence of FKY off
+Clrfky2:        push    ds
+        push    cs
+        pop     ds
+        push    cx
+        push    ax
+        push    dx
+        mov     cl,10H
+        mov     ah,01H
+        mov     dx,offset FKY_OFF2
+        int     0DCH                            ;FKY off
+        pop     dx
+        pop     ax
+        pop     cx
+        pop     ds
+endif   ;NEC_98
         mov     ah,1            ; do cmd /c
         CMDSVC  SVC_CMDEXEC     ; Exec through cmd
+ifdef NEC_98
+        pushf
+        push    ds
+        push    cx
+        push    ax
+        push    dx
+
+        CMDSVC  SVC_GETCURSORPOS                ;gets bios cursor position
+                                                ;now dx=offset on TEXT VRAM
+        mov     ax,dx
+        mov     cl,160
+        div     cl
+        mov     dh,al
+        xor     dl,dl
+        mov     cl,10h
+        mov     ah,03h
+        int     0DCH                            ;set cursor position for DOS
+
+        jmp     Dspfky2
+FKY_ON2 DB      1Bh,'[>1l$'                     ;ESC sequence of FKY on
+Dspfky2:        push    cs
+        pop     ds
+        mov     cl,10H
+        mov     ah,01H
+        mov     dx,offset FKY_ON2
+        int     0DCH                            ;FKY on
+
+        pop     dx
+        pop     ax
+        pop     cx
+        pop     ds
+        popf
+endif   ;NEC_98
         lahf
         add     sp,12           ; recover std handle space
         pop     si
@@ -1350,7 +1505,13 @@ d16_run:
         pop     es
         sahf
 
+ifndef NEC_98
         jnc    d16_loop         ; command completed, go put the prompt
+else    ;NEC_98
+        jc      @F
+        jmp     d16_loop
+@@:
+endif   ;NEC_98
 
         ; carry set means re-entered
 d16_retback:
@@ -1364,7 +1525,13 @@ d16_retback:
 d16_ret:
         cmp     byte ptr es:[scs_prompt16],0   ; mark 0 to mean to come back
                                             ; and put prompt fro next command
+ifdef DBCS
+        jne @F
+        jmp     d16_loop
+@@:
+else ; !DBCS
         je      d16_loop
+endif ; !DBCS
 
 
 d16_return32:
@@ -1485,7 +1652,7 @@ cc_found:
 ;
 ; Input:    AL is character to classify
 ; Output:   Z set if delimiter
-;	    NZ set otherwise
+;       NZ set otherwise
 ; Registers modified: none
 ;
 
@@ -1552,7 +1719,7 @@ chk_x:
         ret
 
 alloc_con:
-	SAVE	<DX,SI,BP,BX,DS>
+    SAVE    <DX,SI,BP,BX,DS>
         MOV     DS,cs:[RESSEG]
         ASSUME  DS:RESGROUP
         push    cx
@@ -1571,25 +1738,25 @@ alloc_con:
         jc      alloc_err
 ;; bx:cx  = nt file handle
 ;; dx:ax = file size
-	push	di
-	mov	di, ax
+    push    di
+    mov di, ax
         xor     si,si
         xor     bp,bp
         mov     al,0                            ; free original console
         mov     ah,setdpb
         int     21h
-	pop	di
+    pop di
         jc      alloc_err
         pop     bx
         pop     ax
-	RESTORE 	<DS,BX,BP,SI,DX>
+    RESTORE     <DS,BX,BP,SI,DX>
         ret
 
 alloc_err:
         pop     bx
         pop     ax
         mov     byte ptr ds:[bx],al
-	RESTORE 	<DS,BX,BP,SI,DX>
+    RESTORE     <DS,BX,BP,SI,DX>
         ret
 
 
@@ -1655,3 +1822,4 @@ tsr_ret:
 
 TRANCODE        ENDS
         END
+

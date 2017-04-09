@@ -510,6 +510,7 @@ ASSUME	DS:TRANGROUP
 
 assume	ds:trangroup,es:trangroup
 
+ifndef NEC_98
 ANSI_installed		equ    0ffh
 
 CLS:
@@ -686,6 +687,22 @@ clrloop:
 	return
 
 ansi_cls	endp				;AC000;
+else    ;NEC_98
+
+CLS:
+
+        mov     si,offset trangroup:clsstring
+        lodsb
+        mov     cl,al
+        xor     ch,ch
+        mov     ah,Raw_CON_IO
+clrloop:
+        lodsb
+        mov     DL,al
+        int     21h
+        loop    clrloop
+        return
+endif   ;NEC_98
 
 trancode    ends
 	    end

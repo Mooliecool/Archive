@@ -56,6 +56,9 @@
     i_need  COUNTRY_CDPG,byte		;AN000; 	2/12/KK
     i_need  TEMP_VAR,WORD		;AN000; 	2/12/KK
     i_need  DOS34_FLAG,WORD             ;AN000;         2/12/KK
+ifdef DBCS
+    i_need  LOOKSIZ,BYTE
+endif
 
 NT_WAIT_BOP	equ	5Ah
 
@@ -300,7 +303,7 @@ entry	GETCH
         invoke  $STD_CON_INPUT_NO_ECHO
 GOTCH:
 ;
-; Brain-damaged Tim Patterson ignored ^F in case his BIOS did not flush the
+; Tim Patterson ignored ^F in case his BIOS did not flush the
 ; input queue.
 ;
         CMP     AL,"F"-"@"
@@ -834,8 +837,19 @@ sj0:					;AN000; 		2/11/KK
 	LDS	BX,[SI.sf_devptr]		; output to special?
 	TEST	BYTE PTR [BX+SDEVATT],ISSPEC
 	POP	DS
+ifndef NEC_98
 	JZ	RAWNORM 			; if not, do normally
 	INT	int_fastcon			; quickly output the char
+else    ;NEC_98
+;93/03/25 MVDM DOS5.0A---------------------------- NEC 93/01/07 ---------------
+;<patch>
+	extrn	patch_fastcon:near
+	public	RAWRET,RAWNORM
+
+	jmp	patch_fastcon
+	db	90h
+;------------------------------------------------------------------------------
+endif   ;NEC_98
 RAWRET:
 	CLC
 RAWRET1:
@@ -927,5 +941,4 @@ EndProc Save_Restore_Packet
 
 DOSCODE	ENDS
 	END
-
 

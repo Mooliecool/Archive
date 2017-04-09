@@ -193,6 +193,42 @@ ifdef	DBCS
 		db	248,249,250,251,252,253,254,255
 
   endif
+  ifdef	  PRC		 ; Added for PRC, 95/07/26
+		dw	256
+		db	0,1,2,3,4,5,6,7
+		db	8,9,10,11,12,13,14,15
+		db	16,17,18,19,20,21,22,23
+		db	24,25,26,27,28,29,30,31
+		db	" ","!",'"',"#","$","%","&","'"
+		db	"(",")","*","+",",","-",".","/"
+		db	"0","1","2","3","4","5","6","7"
+		db	"8","9",":",";","<","=",">","?"
+		db	"@","A","B","C","D","E","F","G"
+		db	"H","I","J","K","L","M","N","O"
+		db	"P","Q","R","S","T","U","V","W"
+		db	"X","Y","Z","[","\","]","^","_"
+		db	"`","A","B","C","D","E","F","G"
+		db	"H","I","J","K","L","M","N","O"
+		db	"P","Q","R","S","T","U","V","W"
+		db	"X","Y","Z","{","|","}","~",127
+		db	128,129,130,131,132,133,134,135
+		db	136,137,138,139,140,141,142,143
+		db	144,145,146,147,148,149,150,151
+		db	152,153,154,155,156,157,158,159
+		db	160,161,162,163,164,165,166,167
+		db	168,169,170,171,172,173,174,175
+		db	176,177,178,179,180,181,182,183
+		db	184,185,186,187,188,189,190,191
+		db	192,193,194,195,196,197,198,199
+		db	200,201,202,203,204,205,206,207
+		db	208,209,210,211,212,213,214,215
+		db	216,217,218,219,220,221,222,223
+		db	224,225,226,227,228,229,230,231
+		db	232,233,234,235,236,237,238,239
+		db	240,241,242,243,244,245,246,247
+		db	248,249,250,251,252,253,254,255
+
+  endif
   ifdef   KOREA							;Keyl/MSCH
                 dw      256
                 db      0,1,2,3,4,5,6,7
@@ -296,6 +332,13 @@ ifdef	DBCS
                 dw      4               ; <KOREA>
                 db      0A1h,0FEh       ; <KOREA>
                 db      0,0             ; <KOREA>
+
+		db	0,0,0,0,0,0,0,0,0,0,0,0
+  endif
+  ifdef	  PRC				; Added for PRC, 95/07/26
+  		dw	4      			; <PRC>
+		db  081h, 0FEh 	        ; <PRC>
+		db  0,0                 ; <PRC>
 
 		db	0,0,0,0,0,0,0,0,0,0,0,0
   endif
@@ -427,7 +470,17 @@ ENDIF
 ;
 ;##########################################################################
 
+ifndef NEC_98
+ifndef JAPAN
+; WARNING! WARNING!
+; MSVERSION's offset is not kept due to DummyCDS size's increment
+; redir.exe does not use these DOS-Data area
+; CURRENTLY MARK1 = 0D1FH
 	ORG	0d12h
+endif ; !JAPAN
+else    ;NEC_98
+	ORG	0d12h
+endif   ;NEC_98
 
 PUBLIC	MSVERSION
 MSVERSION	LABEL BYTE	
@@ -620,7 +673,17 @@ ENDIF
 
 
 
+ifndef NEC_98
+ifndef JAPAN
+; WARNING! WARNING!
+; MSVERSION's offset is not kept due to DummyCDS size's increment
+; redir.exe does not use these DOS-Data area
+; CURRENTLY MARK2 = 0DE8H
 	ORG	0ddbh
+endif ; !JAPAN
+else    ;NEC_98
+	ORG	0ddch			;NEC NT PROT
+endif   ;NEC_98
 ;**
 ;
 ; The following table defines CLASS ACTION and LOCUS info for the INT 21H
@@ -755,6 +818,7 @@ Win386_Info	db	3, 0
 
 
 public	Instance_Table
+ifndef NEC_98
 Instance_Table	dw	offset dosdata:contpos, 0, 2
 		dw	offset dosdata:bcon, 0, 4
 		dw	offset dosdata:carpos, 0, 106h
@@ -763,6 +827,20 @@ Instance_Table	dw	offset dosdata:contpos, 0, 2
 		dw	offset dosdata:umbflag,0,1		; M019
 		dw	offset dosdata:umb_head,0,2		; M019
 		dw	0, 0
+else    ;NEC_98
+Instance_Table	dw	offset dosdata:contpos, 0, 2
+		dw	offset dosdata:bcon, 0, 4
+		dw	offset dosdata:carpos, 0, 106h
+		dw	offset dosdata:charco, 0, 1
+		dw	offset dosdata:exec_init_sp, 0, 34      ; M074
+		dw	offset dosdata:umbflag,0,1		; M019
+		dw	offset dosdata:umb_head,0,2		; M019
+;93/03/25 MVDM DOS5.0A---------------------------------------------------------
+;;;		dw	offset dosdata:sftabl+4,0,127h		; NEC
+		dw	offset dosdata:sftabl+6,0,0b1h		; NEC 92/05/15
+;------------------------------------------------------------------------------
+		dw	0, 0
+endif   ;NEC_98
 
 ; M001; SR;
 ; M001; On DOSMGR call ( cx == 0 ), we need to return a table of offsets of 
@@ -848,6 +926,4 @@ public	LocalSFT
 LocalSFT		dd	0	;0 to indicate invalid pointer
 
 DOSDATA	ENDS
-
-
 

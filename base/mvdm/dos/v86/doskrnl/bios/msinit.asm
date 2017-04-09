@@ -205,20 +205,27 @@ next_int:
 	mov	word ptr device_list+2,cs
 
 
-	mov	current_dos_location,dos_load_seg ; will load MSDOS here
+        mov     current_dos_location,dos_load_seg ; will load MSDOS here
 
 
-ifdef	EXTENDEDKEY
+
+        push    cs
+        pop     ds
+        assume  ds:datagrp
+
+	push	cs
+	pop	es
+        assume  es:datagrp
+
+
+ifdef   EXTENDEDKEY
 
 ; we will check if the system has ibm extended keyboard by
 ; looking at a byte at 40:96.  if bit 4 is set, then extended key board
 ; is installed, and we are going to set keyrd_func to 10h, keysts_func to 11h
 ; for the extended keyboard function. use cx as the temporary register.
 
-	xor	cx,cx
-	mov	ds,cx
-	assume	ds:nothing
-	mov	cl,ds:0496h			; get keyboard flag
+        mov     cl, ss:[0496h]                  ; get keyboard flag
 	test	cl,00010000b
 	jz	org_key				; orginal keyboard
 	mov	byte ptr keyrd_func,10h		; extended keyboard
@@ -227,14 +234,8 @@ org_key:
 
 endif
 
-	push	cs
-	pop	ds
-	push	cs
-	pop	es
 
-	assume	ds:datagrp, es:datagrp
-
-	mov	di, offset endBIOSData	; BIOS data segment end address
+        mov     di, offset endBIOSData  ; BIOS data segment end address
 	shr	di,1
 	shr	di,1
 	shr	di,1

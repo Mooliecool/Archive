@@ -47,6 +47,9 @@ DOSDATA    SEGMENT WORD PUBLIC 'DATA'
 	public	lint2f
 	public	lcall_entry
 	public	lirett
+ifdef NEC_98
+	PUBLIC	lirett2
+endif   ;NEC_98
 
 
 	public	i0patch
@@ -289,6 +292,9 @@ callentry_cont:
 ;--------------------------------------------------------------------------
 
 lirett: jmp  DOIRET
+ifdef NEC_98
+lirett2:	iret
+endif   ;NEC_98
 
 ;---------------------------------------------------------------------------
 ;
@@ -588,6 +594,7 @@ EA20_OFF:
 WEnsureA20ON    endp
 
 
+ifndef NEC_98
 XMMerror:				; M006 - Start
 
 	mov	ah, 0fh			; get video mode
@@ -619,6 +626,33 @@ XMMprnt:
 XMMStall:
         call    DOSTI                   ; allow the user to warm boot
 	jmp	XMMStall		; M006 - End
+else    ;NEC_98
+	extrn	XMMerr:near
+
+XMMerror:
+	jmp	XMMerr			;  can't locate this code in this source
+					;   or code will be corrupted by ORG!!!
+endif   ;NEC_98
+
+
+
+ifdef NEC_98
+;
+;This has been put in for WIN386 2.XX support. The format of the instance
+;table was different for this. Segments will be patched in at init time.
+;
+public  OldInstanceJunk
+OldInstanceJunk	dw	70h	;segment of BIOS
+		dw	0	;indicate stacks in SYSINIT area
+		dw	6	;5 instance items
+
+		dw	0,offset dosdata:contpos, 2
+		dw	0,offset dosdata:bcon, 4
+		dw	0,offset dosdata:carpos,106h
+		dw	0,offset dosdata:charco, 1
+		dw	0,offset dosdata:exec_init_sp, 34               ;M032
+		dw	070h,offset BData:altah, 1	 ; altah byte in bios
+endif   ;NEC_98
 
 
 
@@ -708,11 +742,14 @@ ifdef	DBCS
   ifdef	  JAPAN
 	 dw   932		      ; system code page id (JAPAN)
   endif
-  ifdef	  TAIWAN
-	 dw   938		      ; system code page id (TAIWAN)
+  ifdef KOREA
+	 dw   949
   endif
-  ifdef   KOREA
-         dw   934                     ; system code page id (KOREA IBM)
+  ifdef TAIWAN
+	 dw   950
+  endif
+  ifdef PRC
+	 dw   936
   endif
 else
 	 dw   437		      ; system code page id
@@ -748,8 +785,25 @@ ifdef	DBCS
 	 db   '-',0                   ; date separator
 	 db   ':',0                   ; time separator
 	 db   0 		      ; currency format flag
-	 db   0 		      ; <MSKK01> # of disgit in currency
+	 db   0 		      ; <MSKK01> # of digit in currency
 	 db   1 		      ; <MSKK01> time format (HR24)
+	 dw   OFFSET DOSDATA:MAP_CASE	;mono case routine entry point
+	 dw   0 			; segment of entry point
+	 db   ',',0                    ; data list separator
+	 dw   0,0,0,0,0 	       ; reserved
+  endif
+  ifdef	  PRC
+	 dw   86		      ; PRC country id
+	 dw   936		      ; PRC system code page id
+	 dw   0 		      ; date format (MDY)
+	 db   '\',0,0,0,0	      ; currency symbol
+	 db   ',',0                   ; thousand separator
+	 db   '.',0                   ; decimal separator
+	 db   '-',0                   ; date separator
+	 db   ':',0                   ; time separator
+	 db   0 		      ; currency format flag
+	 db   2 		      ; # of digit in currency
+	 db   1 		      ; time format (HR24)
 	 dw   OFFSET DOSDATA:MAP_CASE	;mono case routine entry point
 	 dw   0 			; segment of entry point
 	 db   ',',0                    ; data list separator
@@ -757,7 +811,7 @@ ifdef	DBCS
   endif
   ifdef	  TAIWAN
 	 dw   88		      ; TAIWAN country id
-	 dw   938		      ; TAIWAN system code page id
+	 dw   950		      ; TAIWAN system code page id
 	 dw   0 		      ; date format (MDY)
 	 db   'N','T','$',0,0	      ; currency symbol
 	 db   ',',0                   ; thousand separator
@@ -765,7 +819,7 @@ ifdef	DBCS
 	 db   '-',0                   ; date separator
 	 db   ':',0                   ; time separator
 	 db   0 		      ; currency format flag
-	 db   2 		      ; # of disgit in currency
+	 db   2 		      ; # of digit in currency
 	 db   1 		      ; time format (HR24)
 	 dw   OFFSET DOSDATA:MAP_CASE	;mono case routine entry point
 	 dw   0 			; segment of entry point
@@ -774,7 +828,7 @@ ifdef	DBCS
   endif
   ifdef   KOREA
          dw   82                      ; <MSCH> KOREA country id
-         dw   934                     ; <MSCH> KOREA system code page id
+         dw   949                     ; <MSCH> KOREA system code page id
          dw   2                       ; <MSCH> date format (YMD)
          db   '\',0,0,0,0             ; <MSCH> currency symbol (WON)
 	 db   ',',0                   ; thousand separator
@@ -782,7 +836,7 @@ ifdef	DBCS
 	 db   '-',0                   ; date separator
 	 db   ':',0                   ; time separator
 	 db   0 		      ; currency format flag
-         db   0                       ; <MSCH> # of disgit in currency
+         db   0                       ; <MSCH> # of digit in currency
          db   1                       ; <MSCH> time format (HR24)
 	 dw   OFFSET DOSDATA:MAP_CASE	;mono case routine entry point
 	 dw   0 			; segment of entry point
@@ -799,7 +853,7 @@ else
 	 db   '-',0		      ; date separator
 	 db   ':',0                   ; time separator
 	 db   0 		      ; currency format flag
-	 db   2 		      ; # of disgit in currency
+	 db   2 		      ; # of digit in currency
 	 db   0 		      ; time format
 	 dw   OFFSET DOSDATA:MAP_CASE	;mono case routine entry point
 	 dw   0 			; segment of entry point
@@ -808,6 +862,7 @@ else
 endif
 ; ------------------------------------------------<MSKK01>----------------------
 
+ifndef NEC_98
 ;
 ;This has been put in for WIN386 2.XX support. The format of the instance
 ;table was different for this. Segments will be patched in at init time.
@@ -823,6 +878,7 @@ OldInstanceJunk	dw	70h	;segment of BIOS
 		dw	0,offset dosdata:charco, 1
 		dw	0,offset dosdata:exec_init_sp, 24
 		dw	070h,offset BData:altah, 1	 ; altah byte in bios
+endif   ;NEC_98
 
 
 
@@ -876,7 +932,11 @@ include dpb.inc
 FAKE_NTDPB db (size DPB) dup (0)
 
 ; This and NetCDS data structures are used by NT DOSEm for redirected drives.
+ifdef	  JAPAN
+	I_am	NetCDS,curdirLen_JPN	; CDS for redirected drives
+else
 	I_am	NetCDS,curdirLen	; CDS for redirected drives
+endif
 
 
 
@@ -930,7 +990,8 @@ DosWowDataStart     Label word
                     OFFSET DOSDATA:NetCDS,                              \
                     OFFSET DOSDATA:CURDRV,OFFSET DOSDATA:CurrentPDB,    \
                     OFFSET DOSDATA:DrvErr,OFFSET DOSDATA:EXTERR_LOCUS,  \
-                    OFFSET DOSDATA:SCS_ToSync, OFFSET DOSDATA:sfTabl>
+                    OFFSET DOSDATA:SCS_ToSync, OFFSET DOSDATA:sfTabl,   \
+                    OFFSET DOSDATA:EXTERR, OFFSET DOSDATA:EXTERR_ACTION>
 
 DOCLI:
     FCLI

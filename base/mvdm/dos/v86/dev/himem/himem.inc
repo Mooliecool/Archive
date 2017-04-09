@@ -37,7 +37,11 @@ ifndef DBCS
 HISEG_ORG		equ	0A000h		; ORG for the seg to be moved
 						;  into HMA
 else
+ifndef NEC_98
 HISEG_ORG		equ	0A000h+01000h	; adjust for DBCS System
+else
+HISEG_ORG		equ	0A000h+02000h	; adjust for NEC_98 System
+endif
 endif
 
 multMULT		equ	4ah

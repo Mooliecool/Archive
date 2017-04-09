@@ -40,3 +40,4 @@ struct	XMM_Move {
 };
 
 #define	XMSERROR(x)	(char)((x)>>24)
+

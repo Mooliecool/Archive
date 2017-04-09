@@ -187,6 +187,7 @@ fndcom: 					; search the internal command table
 						;  to be external.
 ; barryf code starts here
 
+ifndef NEC_98
 	IF	IBM
 	call	test_append			; see if APPEND installed
 	je	contcom 			; not loaded
@@ -211,6 +212,30 @@ append_internal:
 
 contcom:					; continue with internal scan
 	ENDIF
+else    ;NEC_98
+	call	test_append			; see if APPEND installed
+	je	contcom 			; not loaded
+
+append_internal:
+	mov	cl,TRANGROUP:IDLEN
+	mov	ch,0
+	mov	pathpos,cx
+	inc	append_exec			;AN041; set APPEND to ON
+
+	invoke	ioset				; re-direct the o'l io
+
+	mov	SI, offset TRANGROUP:IDLEN	; address command name, DS already set
+	mov	DX,-1				; set invoke function
+	mov	di,offset TRANGROUP:APPEND_PARSE;AN010; Get the entry point for PARSE for APPEND
+	mov	AX,0AE01H
+	int	2FH				; execute command
+	cmp	TRANGROUP:IDLEN,0		; execute requested
+;;	je	Cmd_done
+	jne	contcom
+	jmp	Cmd_done
+
+contcom:					; continue with internal scan
+endif   ;NEC_98
 
 ; barryf code ends here
 
@@ -308,7 +333,7 @@ drive_check:
 ;
 ; The user may have omitted the space between the command and its arguments.
 ; We need to copy the remainder of the user's command line into the buffer.
-; Note that thisdoes not screw up the arg structure; it points into COMBUF not
+; Note that thisdoes not mess up the arg structure; it points into COMBUF not
 ; into the command line at 80.
 ;
 nocheck:
@@ -359,6 +384,7 @@ noswit:
 
 EXTERNAL:
 
+ifndef NEC_98
 IF IBM
 	call	test_append			; check to see if append installed
 	je	not_barryf			; no - truly external command
@@ -367,6 +393,14 @@ IF IBM
 not_barryf:
 
 ENDIF
+else    ;NEC_98
+	call	test_append			; check to see if append installed
+	je	not_barryf			; no - truly external command
+	jmp	append_internal 		; yes - go to Barryf code
+
+not_barryf:
+
+endif   ;NEC_98
 
 	MOV	[FILTYP],0
 	MOV	DL,[SPECDRV]
@@ -588,6 +622,12 @@ KanjiScan:
 	LODSB					; get a byte
 	INVOKE	TestKanj			; is it a leadin byte
 	JZ	KanjiQuote			; no, check for quotes
+ifdef NEC_98
+if BUGFIX
+        cmp     byte ptr [si],' '
+        jb      kanjiQuote
+endif
+endif   ;NEC_98
 	MOV	AH,AL				; save leadin
 	LODSB					; get trailing byte
 	CMP	AX,DB_SPACE			; is it Kanji space
@@ -622,6 +662,12 @@ PRESCANLP:
 ;;;;	IFDEF	DBCS		3/3/KK
 	INVOKE	TESTKANJ
 	JZ	NOTKANJ6
+ifdef NEC_98
+if BUGFIX
+        cmp     byte ptr [si],' '
+        jb      NOTKANJ6
+endif
+endif   ;NEC_98
 	MOV	[DI],AL
 	INC	DI				; fake STOSB into DS
 	LODSB					; grab second byte

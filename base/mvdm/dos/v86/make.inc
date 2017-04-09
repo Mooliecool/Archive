@@ -1,20 +1,26 @@
+!include $(NTMAKEENV)\makefile.plt
+
 # Common makefile defines for DOSKRNL (NTIO.SYS and NTDOS.SYS) and utilities
 #
 # Created Sudeepb 20-Mar-1991
 
-
-
 MAKE	=nmake
-!IFNDEF COUNTRY
-COUNTRY =usa-ms
-msg     =..\..\messages
-!ELSE
-msg = ..\..\messages\$(COUNTRY)
+
+!IFNDEF ALT_PROJECT
+ALT_PROJECT=usa
+ALT_PROJECT_TARGET=.
 !ENDIF
+
+msg = ..\..\messages\$(ALT_PROJECT)
+
+!if "$(PROCESSOR_ARCHITECTURE)" == "x86"
+DEST=$(ALT_PROJECT)\obj\x86
+!elseif "$(PROCESSOR_ARCHITECTURE)" == "ALPHA"
+DEST=$(ALT_PROJECT)\obj\alpha
+!endif
+
 inc	=..\..\inc
 cinc	=..\..\..\..\inc
-
-
 
 #############################################################################
 #                                                                           #
@@ -41,10 +47,14 @@ cinc	=..\..\..\..\inc
 ##########    the new warning level in extasw #####
 ##########    in the makefile                 #####
 
-asm     =masm
+asm     =masm386
 awarn	=-W1
-aflags  =-Mx -t $(awarn) $(extasw)
-ainc	=-I. -I..\..\inc -I..\..\..\..\inc -I$(msg)
+!if "$(ALT_PROJECT)" == "JPN" || "$(ALT_PROJECT)" == "KOR"
+aflags  =-Mx -t $(awarn) $(extasw) $(DBCS_FLAGS) -DBILINGUAL
+!else
+aflags  =-Mx -t $(awarn) $(extasw) $(DBCS_FLAGS)
+!endif
+ainc    =-I. -I..\..\inc -I..\..\..\..\inc -I$(msg) -I$(DEST)
 
 ########## Definitions for C compiler         #####
 ########## cwarn can be overridden by placing #####
@@ -53,13 +63,14 @@ ainc	=-I. -I..\..\inc -I..\..\..\..\inc -I$(msg)
 
 cc      =cl16
 cwarn   =-W3
-cflags  =-Os -Zp $(cwarn) $(extcsw)
+cflags  =-Os -Zp $(cwarn) $(extcsw) $(DBCS_FLAGS) /Zl
+
 incc	=-I. -I..\..\h
 
 ########## Definitions for linker ##########
 
 link_opts = /MAP
-LINK    =link
+LINK    =link16
 exelink =/E
 
 ########## Definitions for compress ##########
@@ -67,11 +78,12 @@ exelink =/E
 compress =compress
 
 ########## Path definition so we find 16 bit tools ##########
-# Also works around stupid bug in RC 3.1 that doesn't allow rcpp.err to be
+# Also works around bug in RC 3.1 that doesn't allow rcpp.err to be
 # in a directory that is greater than 128 chars down the path, even if
 # rc 3.1 is running as an OS/2 app.
 
-PATH    = $(_NTBINDIR)\private\mvdm\tools16;$(PATH)
+#PATH    = $(BASEDIR)\tools\tools16;$(PATH)
+# NOTE: Disabled as of 2017-04-09 by stephanos for NTOSBE compatibility.
 
 ########## Built-in rules ##########
 
@@ -81,17 +93,51 @@ PATH    = $(_NTBINDIR)\private\mvdm\tools16;$(PATH)
 .sal.asm:
         salut $*.sal,nul,$*.asm
 
+.asm{$(DEST)}.obj:
+        $(asm) $(ainc) $(aflags) $(<F),$*.obj;
+
+.asm{$(DEST)}.lst:
+        $(asm) -l $(ainc) $(aflags) $(<F),$*.obj;
+
+.asm{$(DEST)}.obj:
+        $(asm) $(ainc) $(aflags) $<,$*.obj;
+
+.asm{$(DEST)}.lst:
+        $(asm) -l $(ainc) $(aflags) $<,$*.obj;
+
 .asm.obj:
         $(asm) $(ainc) $(aflags) $*.asm;
 
 .asm.lst:
         $(asm) -l $(ainc) $(aflags) $*.asm;
 
+.c{$(DEST)}.obj:
+        $(cc) -c $(incc) $(cflags) -Fo$*.obj $<
+
+.c{$(DEST)}.lst:
+        $(cc) -c $(incc) $(cflags) -Fc$*.cod -Fo$*.obj $<
+
+.c{$(DEST)}.obj:
+        $(cc) -c $(incc) $(cflags) -Fo$*.obj $<
+
+.c{$(DEST)}.lst:
+        $(cc) -c $(incc) $(cflags) -Fc$*.cod -Fo$*.obj $<
+
 .c.obj:
 	$(cc) -c $(incc) $(cflags) $*.c
 
 .c.lst:
 	$(cc) -c $(incc) $(cflags) -fc$*.cod -fo$*.obj $*.c
+
+{$(DEST)}.exs{$(DEST)}.sys:
+        copy $*.exs $*.exe
+        reloc $* $*.sys
+        del $*.exe
+
+{$(DEST)}.exc{$(DEST)}.com:
+        copy $*.exc $*.exe
+        reloc $* $*.com
+        del $*.exe
 
 .exs.sys:
         copy $*.exs $*.exe
@@ -106,14 +152,24 @@ PATH    = $(_NTBINDIR)\private\mvdm\tools16;$(PATH)
 .exe.com:
         convert $*.exe
 
-.skl.cl1:
-        nosrvbld $*.skl $(msg)\$(COUNTRY).msg
+{$(ALT_PROJECT)}.skl{$(DEST)}.cl1:
+        cd $(DEST)
+        copy ..\..\$(<F)
+        -nosrvbld $(<F) ..\..\..\$(msg)\$(ALT_PROJECT).msg
+        -nosrvbld $(<F) ..\..\..\$(msg)\$(ALT_PROJECT).msg
+        erase $(<F)
+        cd ..\..\..
 
-.skl.ctl:
-        buildmsg $(msg)\$(COUNTRY) $*.skl
+{$(ALT_PROJECT)}.skl{$(DEST)}.ctl:
+        cd $(DEST)
+        buildmsg ..\..\..\$(msg)\$(ALT_PROJECT) ..\..\$(<F)
+        cd ..\..\..
 
-.skl.cla:
-        buildmsg $(msg)\$(COUNTRY) $*.skl
+
+{$(ALT_PROJECT)}.skl{$(DEST)}.cla:
+        cd $(DEST)
+        buildmsg ..\..\..\$(msg)\$(ALT_PROJECT) ..\..\$(<F)
+        cd ..\..\..
 
 .sil.inc:
 	salut $*.sil,nul,$*.inc

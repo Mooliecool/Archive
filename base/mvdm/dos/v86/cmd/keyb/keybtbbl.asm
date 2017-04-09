@@ -210,7 +210,7 @@ TB_CHECK_CONTINUE1:
 
 TB_START:				; Else
 	xor	di,di			; Set number
-	LEA	cx,[di].KH_MAX_LOGIC_SZ+2 ;	bytes to read header
+	lea	cx,[di].KH_NUM_ID+2	; M006 -- read a few extra entries
 	mov	dx,OFFSET FILE_BUFFER	; Move contents into file buffer
 	mov	ah,3FH			;  READ
 	push	cs
@@ -222,10 +222,19 @@ TB_START:				; Else
 TB_CONTINUE1:
 	cmp	cx,ax
 	je	TB_ERROR_CHECK1
+ifndef JAPAN
 	mov	cx,4
 	jmp	TB_CPN_INVALID
+else ; JAPAN
+tb_err4_j:				; M006
+	jmp	TB_ERROR4		; M002
+endif ; JAPAN
 
 TB_ERROR_CHECK1:
+ifdef JAPAN
+	cmp	FB.KH_NUM_ID,0		; M006 -- is it an old KEYBOARD.SYS?
+	jz	tb_err4_j		; M006 --  bomb out if so
+endif ; JAPAN
 	mov	cx,FB.KH_MAX_COM_SZ	; Save values for RESIDENT_END
 	mov	MAX_COM_SIZE,cx		;  calculation
 	mov	cx,FB.KH_MAX_SPEC_SZ
@@ -235,6 +244,50 @@ TB_ERROR_CHECK1:
 
 	LEA	di,[bp].TABLE_AREA	; Point at beginning of table area
 					;		di ---> TABLE_AREA
+ifdef JAPAN
+;	M002 -- begin added section
+;
+;	Before we go ANY further, let's see if we actually have room
+;	   for our worst case memory allocation needs.  Notice that
+;	   we're actually trusting the MAX fields from the KEYBOARD
+;	   definition file.  If it lies to us and has fields bigger
+;	   than these MAX values, we may crash over memory we don't
+;	   own during initialization.
+
+	mov	ax,NUM_DESIG_CP
+	mul	MAX_SPEC_SIZE
+	or	dx,dx			; error if overflowed 16 bits
+	jnz	mem_alloc_err
+
+	add	ax,SA_HEADER_SIZE
+	jc	mem_alloc_err
+	add	ax,MAX_LOGIC_SIZE
+	jc	mem_alloc_err
+	add	ax,MAX_COM_SIZE
+	jc	mem_alloc_err
+
+;	Note that ax could be used for the RESIDENT_END_ACC value,
+;	  but since this check is being added late in the testing
+;	  cycle, we'll leave that calculation alone.
+
+	add	ax,di			; get the ending offset of temp buffer
+	jc	mem_alloc_err
+
+	add	ax,15
+	jc	mem_alloc_err
+	mov	cl,4			; convert to paragraph
+	shr	ax,cl
+	mov	cx,ax
+	mov	ax,cs			; get our code segment
+	add	ax,cx			; this is our ending segment
+	cmp	ax,cs:[2]		; compare against psp:2
+	jb	mem_alloc_ok
+mem_alloc_err:
+	jmp	TB_ERROR5
+mem_alloc_ok:
+
+;	M002 -- end added section
+endif ; JAPAN
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;	** FOR STATE LOGIC SECTION FOR LANG **
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -274,8 +327,12 @@ TB_STATE_CONTINUE2:
 TB_STATE_CONTINUE3:
 	cmp	cx,ax
 	je	TB_ERROR_CHECK2
+ifndef JAPAN
 	mov	cx,4
 	jmp	TB_CPN_INVALID
+else ; JAPAN
+	jmp	TB_ERROR4
+endif ; JAPAN
 
 TB_ERROR_CHECK2:
 	mov	ax,FB.KT_SPECIAL_FEATURES	; Save the special features in the
@@ -315,8 +372,12 @@ TB_STATE_CONTINUE4:
 TB_STATE_CONTINUE5:
 	cmp	cx,ax
 	je	TB_ERROR_CHECK3
+ifndef JAPAN
 	mov	cx,4
 	jmp	TB_CPN_INVALID
+else ; JAPAN
+	jmp	TB_ERROR4
+endif ; JAPAN
 
 TB_ERROR_CHECK3:
 	add	di,cx			; Set di at new beginning of area
@@ -484,6 +545,11 @@ CONTINUE_2_END:
 	mov	TB_RETURN_CODE,cx
 	ret
 
+ifndef JAPAN
+;	M002 -- dead code deleted.  The following label was only
+;		branched to with cx==4.  Those calls were all
+;		replaced with direct JMPs to TB_ERROR4, which was
+;		assumed to set cx=4 in other places anyway.
 TB_CPN_INVALID:
 	cmp	cx,1			;  Set error 1 return code
 	jnz	TB_ERROR2
@@ -501,10 +567,15 @@ TB_ERROR3:
 	jnz	TB_ERROR4
 	mov	TB_RETURN_CODE,cx
 	ret
+endif ; !JAPAN
 
 TB_ERROR4:
+ifndef JAPAN
 	cmp	cx,4			;  Set error 4 return code
 	jnz	TB_ERROR5
+else ; JAPAN
+	mov	cx,4		; M002	; set error 4 return code
+endif ; JAPAN
 	mov	TB_RETURN_CODE,cx
 	ret
 
@@ -835,4 +906,3 @@ FIND_CP_TABLE	 ENDP
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 CODE	ENDS
 	END	TABLE_BUILD
-

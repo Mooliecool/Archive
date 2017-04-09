@@ -27,6 +27,9 @@
 	include mult.inc
 	include sf.inc
 	include dossvc.inc
+ifdef NEC_98
+	include dpb.inc
+endif   ;NEC_98
 	.cref
 	.list
 
@@ -120,8 +123,7 @@ Lock_OK:
 
 EndProc $LockOper
 
-if 0
-
+ifdef NEC_98
 ; Inputs:
 ;	Outputs of SETUP
 ;	[USER_ID] Set
@@ -210,9 +212,7 @@ EndProc CheckShare
 
 ENDIF
 
-endif
+endif   ;NEC_98
 
 DOSCODE	ENDS
 	END
-
-

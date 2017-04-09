@@ -534,7 +534,7 @@ GETENV1:
 
 GETENV15:
 	CMP	AL,'%'                          ; terminating %?
-	JNZ	GETENV1 			; no, go suck out more characters
+	JNZ	GETENV1 			; no, go take out more characters
 
 ; M017 - following DEC is wrong, because we replace the % with a = here.
 ; This was the source of bug #1.

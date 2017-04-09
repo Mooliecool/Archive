@@ -11,9 +11,13 @@
 ;                      Using original macro on X86 is pretty costly
 ;                      because of trapping instructions.
 
+ifndef NEC_98
 include vint.inc
+else    ;NEC_98
+endif   ;NEC_98
 
 Get_CPU_Type    macro
+ifndef NEC_98
         local nonx86,getout
         push    ds
         mov     ax,40h
@@ -26,6 +30,8 @@ Get_CPU_Type    macro
         mov     ax,2
         jmp     short getout
 nonx86:
+else    ;NEC_98
+endif   ;NEC_98
 	pushf
 	push	bx			; preserve bx
 	xor	bx, bx			; init bx to zero
@@ -57,3 +63,4 @@ cpu_8086:				; don't inc at all if 086
         popf
 getout:
 	endm
+

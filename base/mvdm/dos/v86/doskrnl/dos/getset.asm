@@ -776,7 +776,34 @@ procedure   $SET_DEFAULT_DRIVE,NEAR
         mov     al, dl
         inc     al                      ; A=1, b=2...
 	invoke	GetVisDrv		; see if visible drive
+ifdef	JAPAN
+	; ntraid:mskkbug#3001,3102: Cannot install HANAKO2.0/ICHITARO4.3
+	; 10/27/93 yasuho
+	;
+	; HACK HACK HACK !!!. This code need for MS-DOS5/V compatibility.
+	; Basically, error occured SetDefaultDrive(DriveB) if you don't
+	; have floppy drive B:. But, MS-DOS5/V was successfully that
+	; function call.
+	; I know this is fake code, but we need this code for Japanese
+	; major DOS application of ICHITARO4.3 and HANAKO2.0
+	;
+	jnc	sdd_success
+	cmp	dl, 1			; Drive B?
+	jne	sdd_error		; No. error
+	mov	al, dl			; Set current drive (fake!!)
+	jmp	sdd_success
+sdd_error:
+	stc
+	jmp	nsetret
+sdd_success:
+else	;JAPAN
         jc      nsetret                 ; errors do not set
+endif	;JAPAN
+        ; set the win32 process current drive and directory.
+        lds     SI,ThisCDS              ; get current director string
+        SVC     SVC_DEMSETDEFAULTDRIVE
+        jc      nsetret
+
         mov     [curdrv],al
 
 nsetret:
@@ -1098,7 +1125,3 @@ $ECS_call endp
 
 DOSCODE	ENDS
 	END
-
-
-
-

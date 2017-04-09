@@ -46,10 +46,10 @@ unsigned int	DisplayBaseDetail()
 	FP_SEG(SysVarsPtr) = FP_SEG(UMB_Head_ptr) = SegRegs.es;
 	FP_OFF(SysVarsPtr) = OutRegs.x.bx;
 
-	FP_OFF(UMB_Head_ptr) = 0x8c; /* ptr to UMB_HEAD in DOS Data */ 
+	FP_OFF(UMB_Head_ptr) = 0x8c; /* ptr to UMB_HEAD in DOS Data */
 	UMB_Head = *UMB_Head_ptr;
 
-	if (!Classify) 
+	if (!Classify)
 	    Sub0_Message(NewLineMsg,STDOUT,Utility_Msg_Class);
 	if (DataLevel > 0)
 	{
@@ -244,127 +244,11 @@ unsigned int	DisplayBaseDetail()
 	while (ThisArenaPtr -> Signature != (char) 'Z')
 	      {
 																 /* MSKK02  */
-#ifdef		JAPAN					/* MSKK02 07/18/89 */							 /* MSKK02  */
-/* MSKK02 BEGIN */
+#ifdef JAPAN
 		if (ThisArenaPtr -> Owner == 8 || ThisArenaPtr -> Owner == 9 )
-		      {
-			FP_SEG(NextArenaPtr) = FP_SEG(ThisArenaPtr) + ThisArenaPtr -> Paragraphs + 1;
-			FP_OFF(NextArenaPtr) = 0;
-
-			Out_Var1 = AddressOf((char far *)ThisArenaPtr);
-			Out_Var2 = (long) (ThisArenaPtr -> Paragraphs) * 16l;
-			if (ThisArenaPtr->OwnerName[0] == 'S' &&
-			    ThisArenaPtr->OwnerName[1] == 'C')
-			{      /* display message for BIOS and DOS code */
-			   if (Classify)
-		 	        /* classify this memory also as part of DOS */
-				{ if (AddMem_to_PSP(8,Out_Var1,Out_Var2)) return(1); }
-			   else {
-				msgno = (FP_SEG(ThisArenaPtr) < UMB_Head) ? IbmdosMsg:SystemMsg;
-				Sub4_Message(MainLineMsg,
-					     STDOUT,
-					     Utility_Msg_Class,
-					     &Out_Var1,
-					     msgno,
-					     &Out_Var2,
-					     SystemProgramMsg);
-				Sub0_Message(NewLineMsg,STDOUT,Utility_Msg_Class);
-			   }
-			}
-			else /* display message for data */
-			{
-
-			if (!Classify)
-			    Sub4_Message(MainLineMsg,
-				     STDOUT,	
-				     Utility_Msg_Class,
-				     &Out_Var1, 
-				     (ThisArenaPtr -> Owner == 8) ? IbmbioMsg : AdddrvMsg,
-				     &Out_Var2,
-				     (ThisArenaPtr -> Owner == 8) ? SystemDataMsg : ProgramMsg );
-
-			FP_SEG(ThisConfigArenaPtr) = FP_SEG(ThisArenaPtr) + 1;
-			FP_OFF(ThisConfigArenaPtr) = 0; 
-						
-					
-			while ( (FP_SEG(ThisConfigArenaPtr) > FP_SEG(ThisArenaPtr)) &&
-				(FP_SEG(ThisConfigArenaPtr) < FP_SEG(NextArenaPtr))    )		
-			      { 
-				strcpy(SystemDataOwner," ");
-				switch(ThisConfigArenaPtr -> Signature)
-				      { 			
-					case 'B':	
-						SystemDataType = ConfigBuffersMsg;
-						if (AddMem_to_PSP(8,((long)ThisConfigArenaPtr) <<4,((long)ThisConfigArenaPtr->Paragraphs <<4) +1)) return(1);
-						break;
-					case 'D':
-						SystemDataType =ConfigDeviceMsg;
-						strcpy(SystemDataOwner,OwnerOf(ThisConfigArenaPtr));
-						break;
-					case 'F':
-						SystemDataType = ConfigFilesMsg;
-						if (AddMem_to_PSP(8,((long)ThisConfigArenaPtr) <<4,((long)ThisConfigArenaPtr->Paragraphs <<4) +1)) return(1);
-						break;
-					case 'I':
-						SystemDataType = ConfigIFSMsg;
-						strcpy(SystemDataOwner,OwnerOf(ThisConfigArenaPtr));
-						break;
-					case 'L':
-						SystemDataType = ConfigLastDriveMsg;
-						if (AddMem_to_PSP(8,((long)ThisConfigArenaPtr) <<4,((long)ThisConfigArenaPtr->Paragraphs <<4) +1)) return(1);
-						break;
-					case 'S':
-						SystemDataType = ConfigStacksMsg;
-						if (AddMem_to_PSP(8,((long)ThisConfigArenaPtr) <<4,((long)ThisConfigArenaPtr->Paragraphs <<4) +1)) return(1);
-						break;
-					case 'T':
-						SystemDataType = ConfigInstallMsg;
-						if (AddMem_to_PSP(8,((long)ThisConfigArenaPtr) <<4,((long)ThisConfigArenaPtr->Paragraphs <<4) +1)) return(1);
-						break;
-					case 'X':
-						SystemDataType = ConfigFcbsMsg;
-						if (AddMem_to_PSP(8,((long)ThisConfigArenaPtr) <<4,((long)ThisConfigArenaPtr->Paragraphs <<4) +1)) return(1);
-						break;
-					case '?':
-						SystemDataType = DataMsg;
-						break;
-					default:
-						SystemDataType = BlankMsg;
-						if (AddMem_to_PSP(8,((long)ThisConfigArenaPtr) <<4,((long)ThisConfigArenaPtr->Paragraphs <<4) +1)) return(1);
-						break;
-					}	
-				Out_Var1 = ((long) ThisConfigArenaPtr -> Paragraphs) * 16l;
-				if (!Classify)
-				    Sub3_Message(DriverLineMsg,
-					     STDOUT,	
-					     Utility_Msg_Class,
-					     SystemDataOwner,
-					     &Out_Var1, 
-					     SystemDataType );
-							
-				NextConfigArenaPtr = ThisConfigArenaPtr;
-				FP_SEG(NextConfigArenaPtr) += NextConfigArenaPtr -> Paragraphs + 1;	
-				if (ThisConfigArenaPtr -> Signature == (char) 'D')
-				      {
-				
-					FP_SEG(ThisDeviceDriver) = FP_SEG(ThisConfigArenaPtr) + 1;
-					FP_OFF(ThisDeviceDriver) = 0;
-					while ( (FP_SEG(ThisDeviceDriver) > FP_SEG(ThisConfigArenaPtr)) &&
-						(FP_SEG(ThisDeviceDriver) < FP_SEG(NextConfigArenaPtr))    ) {
-						DisplayDeviceDriver(ThisDeviceDriver,InstalledDeviceDriverMsg); 
-						ThisDeviceDriver = ThisDeviceDriver -> NextDeviceHeader;
-					     }							
-					}						
-										
-				FP_SEG(ThisConfigArenaPtr) += ThisConfigArenaPtr -> Paragraphs + 1;
-				}
-			    }	
-			}
-			
-		
-/* MSKK02 END */
-#else	
+#else
 		if (ThisArenaPtr -> Owner == 8)
+#endif
 		      {
 			FP_SEG(NextArenaPtr) = FP_SEG(ThisArenaPtr) + ThisArenaPtr -> Paragraphs + 1;
 			FP_OFF(NextArenaPtr) = 0;
@@ -396,9 +280,15 @@ unsigned int	DisplayBaseDetail()
 				     STDOUT,
 				     Utility_Msg_Class,
 				     &Out_Var1,
+#ifdef JAPAN
+				     (ThisArenaPtr -> Owner == 8) ? IbmbioMsg : AdddrvMsg,
+				     &Out_Var2,
+				     (ThisArenaPtr -> Owner == 8) ? SystemDataMsg : ProgramMsg );
+#else
 				     IbmbioMsg,
 				     &Out_Var2,
 				     SystemDataMsg);
+#endif
 
 			FP_SEG(ThisConfigArenaPtr) = FP_SEG(ThisArenaPtr) + 1;
 			FP_OFF(ThisConfigArenaPtr) = 0;
@@ -451,6 +341,11 @@ unsigned int	DisplayBaseDetail()
                                                 strcpy(SystemDataOwner,OwnerOf(ThisConfigArenaPtr));
                                                 if (AddMem_to_PSP(ThisConfigArenaPtr->Owner,((long)FP_SEG(ThisConfigArenaPtr)*16l) ,((long)ThisConfigArenaPtr->Paragraphs <<4) +1)) return(1);
                                                 break;
+#ifdef JAPAN
+					case '?':
+						SystemDataType = DataMsg;
+						break;
+#endif
                                         default:
 						SystemDataType = BlankMsg;
 						if (AddMem_to_PSP(8,((long)ThisConfigArenaPtr) <<4,((long)ThisConfigArenaPtr->Paragraphs <<4) +1)) return(1);
@@ -491,7 +386,6 @@ unsigned int	DisplayBaseDetail()
 				}
 			   }
 			}
-#endif
 		 else {
 
 /*******************************************************************************/
@@ -634,7 +528,7 @@ void DisplayBaseSummary()
 	int86x(0x15, &InRegs, &OutRegs, &SegRegs);
 	if (OutRegs.x.cflag == 0)
 	{
-		if (total_mem == ((long)SegRegs.es) * 16l) {
+		if (total_mem == ((unsigned long)SegRegs.es) * 16ul) {
 			FP_SEG(CarvedPtr) = SegRegs.es;
 			FP_OFF(CarvedPtr) = 0;
 			total_mem = total_mem + ( (unsigned long int) (*CarvedPtr) * 1024l) ;   /* ;an002; dms;adjust total for */
@@ -707,19 +601,21 @@ struct ARENA far *ArenaPtr;
  * such names.  - Nagara 11/20/90
  */
 
-#ifndef DBCS
 		for (i = 0; i < 8;i++,StringPtr++) {
-			if ( (*StringPtr < 0x20) | (*StringPtr == 0x7f) ) {  
+#ifdef DBCS
+			if ( ((unsigned char)*StringPtr < 0x20) | ((unsigned char)*StringPtr == 0x7f) ) {
+#else
+			if ( (*StringPtr < 0x20) | (*StringPtr == 0x7f) ) {
+#endif
 					/* unprintable char ? */	
 			   if (*StringPtr) fPrintable = FALSE;	
 			   break;
 			}
 		    }
-#endif
 
 		if (fPrintable) {	/*  the name is printable */
 			StringPtr = (char far *) &(ArenaPtr -> OwnerName[0]);
-			for (i = 0; i < 8;i++) 
+			for (i = 0; i < 8;i++)
 				*o++ = *StringPtr++;
 			*o = (char) '\0';
 		    }
@@ -906,7 +802,7 @@ unsigned long start_addr,length;
 	   }
 	   else i = noof_progs; /* new entry for FREE mem */
 	}
-	else  
+	else
 	    for (i = 0;i < noof_progs;i++)
 		if (mem_table[i].psp_add == psp) break;
 
@@ -945,7 +841,7 @@ unsigned long start_addr,length;
 /*									*/
 /*	find out if UMB is available by going through mem_table entries */
 /*	(also find out MEM's size from these entries)			*/
-/*	display memory break up for conventional memory			*/ 
+/*	display memory break up for conventional memory			*/
 /*	if (UMB in system) display memmory break up for UMB memory	*/
 /*	display the total free size (= total free in conv.+total_free   */
 /*		in UMB + MEM's size )					*/
@@ -1057,7 +953,7 @@ int memtype;
 		memsize = ((long) cur_memsize) *16l;
 		sprintf(ShDSizeName," (%5.1fK)",((float)memsize)/1024l );
 		SubC4_Message(MainLineMsg,STDOUT,nameptr,msgtype,&memsize, ShDSizeName);
-		     
+		
 	}
 	for (i=0; i <noof_progs; i++) {
 
@@ -1069,7 +965,7 @@ int memtype;
 		memsize = ((long) cur_memsize) *16l;
 		sprintf(ShDSizeName," (%5.1fK)",((float)memsize)/1024l );
 		SubC4_Message(MainLineMsg,STDOUT,NULL,CFreeMsg,&memsize, ShDSizeName);
-		     
+		
 	}
 
 	tot_free *= 16l;
@@ -1118,11 +1014,11 @@ unsigned int cur_psp;
 
 	fMEMHigh = (char)((cur_psp > UMB_Head) ? 1:0);
 
-	BigFree = DOS_TopOfMemory  - cur_psp; 
+	BigFree = DOS_TopOfMemory  - cur_psp;
 
 	if (fMEMHigh ) 	/* mem was loaded higher */
 		UMBBigFree = BigFree;
-	else    
+	else
 		ConvBigFree = BigFree;
 
 	for (i =0; i<noof_progs;i++) {
@@ -1157,4 +1053,4 @@ unsigned int cur_psp;
 
 }
 /* M003 END */
-
+

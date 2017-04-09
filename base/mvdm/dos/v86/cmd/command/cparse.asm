@@ -204,6 +204,13 @@ anum_char:
 ;;;;	IFDEF	DBCS		3/3/KK
 	invoke	TESTKANJ
 	jz	NOTKANJ 			;AC048;
+ifdef NEC_98 
+if BUGFIX
+
+	cmp	byte ptr [si],' '
+	jb	NOTKANJ
+endif
+endif   ;NEC_98
 	call	move_char
 	lodsb
 	jmp	short notspecial
@@ -359,6 +366,12 @@ a_switch:
 	INC	SI
 	invoke	testkanj			;AN057; See if DBCS lead byte
 	jz	a_switch_notkanj		;AN057; no - continue processing
+ifdef NEC_98
+if BUGFIX
+	cmp	byte ptr [si],' '
+	jb	a_switch_notkanj		;AN057; no - continue processing
+endif
+endif   ;NEC_98
 	call	move_char			;AN057; DBCS - store first byte
 	lodsb					;AN057; get second byte
 	call	move_char			;AN057; store second byte

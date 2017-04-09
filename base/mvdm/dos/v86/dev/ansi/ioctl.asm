@@ -366,6 +366,9 @@ SET_IOCTL	PROC	NEAR
 
 	or	In_Generic_IOCTL_Flag, I_AM_IN_NOW	; Signal GENERIC_IOCTL request being processed
 	push	REQ_TXT_LENGTH			; save old value in case of error
+ifdef JAPAN
+	push	word ptr row_adj
+endif
 
 	cmp	es:[di].INFO_LEVEL,0		; check for valid info level
 	jnz	si_invalid
@@ -399,6 +402,16 @@ si_mode_valid:
 
 si_do_text_mode:
 	mov	ax,es:[di].RP_ROWS		; save new requested value.
+
+ifdef JAPAN
+	mov	row_adj,0
+	cmp	ax,DEFAULT_LENGTH-1
+	jnz	@f
+	mov	row_adj,1
+	inc	ax
+@@:
+endif
+
 	mov	REQ_TXT_LENGTH,ax
 
 	cmp	ax,DEFAULT_LENGTH		; is it just 25 lines needed?
@@ -528,6 +541,9 @@ si_intensity_ok:
 
 si_end_ok:
 	and	In_Generic_IOCTL_Flag, NOT I_AM_IN_NOW	; Turn the flag off
+ifdef JAPAN
+	pop	ax				; throw old row_adj
+endif
 	pop	ax				; forget old REQ_TXT_LENGTH
 	xor	ax,ax				; clear error register
 	clc					; clear error flag
@@ -538,6 +554,9 @@ si_not_supported:
 
 si_failed:
 	and	In_Generic_IOCTL_Flag, NOT I_AM_IN_NOW	; Turn the flag off
+ifdef JAPAN
+	pop	word ptr row_adj
+endif
 	pop	REQ_TXT_LENGTH			; error...so restore old value.
 	stc					; set error flag
 	ret
@@ -1020,6 +1039,9 @@ ih_valid:
 
 ih_use_rtl:
 	mov	bx,REQ_TXT_LENGTH		; then use REQ_TXT_LENGTH instead..
+ifdef JAPAN
+	sub	bl,row_adj
+endif
 	mov	es:[di].RP_ROWS,bx
 
 ih_get_ok:
@@ -1201,3 +1223,4 @@ SET_VIDEO_MODE	ENDP
 
 CODE		ENDS
 		END
+

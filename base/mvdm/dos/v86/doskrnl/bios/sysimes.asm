@@ -19,8 +19,16 @@ sysinitseg segment
 	public	badparm
         public  toomanydrivesmsg			;M029
 
+ifdef	JAPAN
+	public	badopm2,badsiz_pre2,badld_pre2,badcom2,badcountry2
+	public	badmem2,badblock2,badstack2
+	public	insufmemory2,badcountrycom2
+	public	badorder2,errorcmd2
+	public	badparm2
+        public  toomanydrivesmsg2
+endif
+
 	include msbio.cl3
 
 sysinitseg	ends
 	end
-

@@ -144,7 +144,7 @@ Procedure   Search,NEAR
 	cmp	BYTE PTR [DI+1],':'             ; is there a drive spec?
 	jne	search_dir_check
 	mov	DL, [DI]			; get the drive byte
-	and	DL, NOT 20H			; uppercase the sucker
+	and	DL, NOT 20H			; uppercase it
 	sub	DL, '@'                         ; and convert to drive number
 
 search_dir_check:
@@ -417,7 +417,7 @@ assume	ES:nothing
 	mov	CX, SIZE arg_unit		; get back structure size
 	xor	DI, DI				; destination is new memory area
 	mov	SI, OFFSET TRANGROUP:arg	; source is arg structure
-	rep	movsb				; move that sucker!
+	rep	movsb				; move it
 	mov	CX, arg.argvcnt 		; adjust argv pointers
 	xor	AX, AX				; base address for argv_calc
 ;	Bugbug:	What did they mean by this?

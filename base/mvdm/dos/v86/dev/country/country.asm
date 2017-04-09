@@ -2,7 +2,7 @@
 ;       create country.sys file
 ;
 ;
-	include mkcntry.inc
+        include mkcntry.inc
 ;
 ; -----------------------------------------------------------
 ;
@@ -11,15 +11,15 @@
 ; -----------------------------------------------------------
 dseg    segment para
 cdinfo  label   word
-	db      0ffh,'COUNTRY'          ; signature
-	db      8 dup (0)               ; reserved
-	dw      PTRCNT                  ; number of pointers in header
-	db      CIPTYPE                 ; type = country info pointer
-	dd      offset cntryinfo        ; pointer to country information
+        db      0ffh,'COUNTRY'          ; signature
+        db      8 dup (0)               ; reserved
+        dw      PTRCNT                  ; number of pointers in header
+        db      CIPTYPE                 ; type = country info pointer
+        dd      offset cntryinfo        ; pointer to country information
 ;
 cntryinfo label word
 cntrycnt=0
-	dw      finalCNT                ; number of countries
+        dw      finalCNT                ; number of countries
 
  ctryent <CENTRYSIZE,CID_AL,852,,,al852_data>   ; Albania
  ctryent <CENTRYSIZE,CID_AL,850,,,al850_data>   ;
@@ -85,7 +85,7 @@ cntrycnt=0
  ctryent <CENTRYSIZE,CID_GK,737,,,gk737_data>   ; 
  ctryent <CENTRYSIZE,CID_GK,850,,,gk850_data>   ;
 
- ctryent <CENTRYSIZE,CID_HK,437,,,hk437_data>   ; Hong Kong
+ ctryent <CENTRYSIZE,CID_HK,437,,,hk437_data>   ; Hong Kong SAR
 
  ctryent <CENTRYSIZE,CID_HU,852,,,hu852_data>   ; Hungary
  ctryent <CENTRYSIZE,CID_HU,850,,,hu850_data>   ;
@@ -107,7 +107,7 @@ cntrycnt=0
  ctryent <CENTRYSIZE,CID_LA,850,,,la850_data>   ; Latin America
  ctryent <CENTRYSIZE,CID_LA,437,,,la437_data>   ;
 
- ctryent <CENTRYSIZE,CID_MAC,855,,,mac855_data> ; FYR Macedonia
+ ctryent <CENTRYSIZE,CID_MAC,855,,,mac855_data> ; FYRO former yugoslav republic of Macedonio
  ctryent <CENTRYSIZE,CID_MAC,850,,,mac850_data> ;
 
  ctryent <CENTRYSIZE,CID_MY,437,,,my437_data>   ; Malaysia
@@ -211,8 +211,8 @@ cntrycnt=0
 
 dummy   macro   p
 finalCNT        equ     p
-	endm
-	dummy   %cntrycnt
+        endm
+        dummy   %cntrycnt
 
 
 al852_data label   word
@@ -1612,7 +1612,7 @@ gk850_info   label   word   ;CP850 Greece
 
 ;================================================
 
-hk437_info   label   word   ;CP437 Hong Kong
+hk437_info   label   word   ;CP437 Hong Kong SAR
    ctable  <>
    cinfo   <CID_HK,437,DMY,'H','K','$',000,0,',',0,'.',0,'/',0,':',0,CurrAmount,2,HR24,0,','>  
 
@@ -1718,11 +1718,11 @@ la437_info   label   word   ;CP437 Latin America
 
 ;================================================
 
-mac855_info  label   word   ;CP855 FYR Macedonia
+mac855_info  label   word   ;CP855 FYRO Former Yugoslav Republic of Macedonia
    ctable  <>
    cinfo  <CID_MAC,855,YMD,'§','¨','Ô',000,0,'.',0,',',0,'-',0,':',0,Cur_Amount,2,HR24,0,','>
 
-mac850_info  label   word   ;CP850 FYR Macedonia
+mac850_info  label   word   ;CP850 FYRO Former Yugoslav Republic of Macedonia
    ctable  <>
    cinfo  <CID_MAC,850,YMD,'D','i','n',000,0,'.',0,',',0,'-',0,':',0,Cur_Amount,2,HR24,0,','>
 
@@ -1920,11 +1920,11 @@ ta437_info   label   word   ;CP437 Taiwan
    ctable  <>
    cinfo  <CID_TA,437,YMD,'$',000,000,000,0,',',0,'.',0,'/',0,':',0,CurrAmount,2,HR12,0,','>    
 
-tai938_info  label   word   ;CP938 Taiwan with Real Country Code
+tai938_info  label   word   ;CP938 Taiwan with Real Country/Region Code
    ctable  <>
    cinfo   <CID_TAI,938,YMD,'N','T','$',000,0,',',0,'.',0,'/',0,':',0,CurrAmount,2,HR12,0,','>
 
-tai437_info  label   word   ;CP437 Taiwan with Real Country Code
+tai437_info  label   word   ;CP437 Taiwan with Country/Region Code
    ctable  <>
    cinfo   <CID_TAI,437,YMD,'$',000,000,000,0,',',0,'.',0,'/',0,':',0,CurrAmount,2,HR12,0,','>    
 
@@ -1996,7 +1996,7 @@ iso850_info  label   word   ;CP850 Work around an NLSFUNC.EXE Bug Entry
 
 ;================================================
 
-	page
+        page
 
 include nls437.inc
 include nls737.inc
@@ -2024,11 +2024,11 @@ include nls93x.inc
 ;
 ; ----------------------------------------------------------------------------
 Valid_flist label word
-		ctable  <,'FCHAR  ',fclend-fclbegin>
+                ctable  <,'FCHAR  ',fclend-fclbegin>
 fclbegin        label   word
-		db      1,0,255                         ; include all
-		db      0,0,20h                         ; exclude 0 - 20h
-		db      2,14,'."/\[]:|<>+=;,'           ; exclude 14 special chars
+                db      1,0,255                         ; include all
+                db      0,0,20h                         ; exclude 0 - 20h
+                db      2,14,'."/\[]:|<>+=;,'           ; exclude 14 special chars
 fclend          label   word
 
 
@@ -2043,7 +2043,7 @@ fclend          label   word
 ; ----------------------------------------------------------------------------
 ;                                  
 Not_dbcs label word
-		ctable  <,'DBCS   ',dbcsterm-dbcsbegin>         ;AN000;
+                ctable  <,'DBCS   ',dbcsterm-dbcsbegin>         ;AN000;
 dbcsbegin       label   word                                    ;AN000;
 dbcsterm        db      0,0                                     ;AN000;
 dbcsend         label   word                                    ;AN000;
@@ -2064,6 +2064,5 @@ include copyrigh.inc
 
 
 dseg    ends
-	end
+        end
 
-

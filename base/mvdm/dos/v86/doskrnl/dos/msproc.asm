@@ -259,7 +259,11 @@ ENDPROC $Wait
 	EXTRN	Exec_Header_Len_NE:ABS
 
 Exec_Internal_Buffer		EQU	OpenBuf
+ifdef JAPAN
+Exec_Internal_Buffer_Size	EQU	(128+128+53+curdirLEN_Jpn)
+else
 Exec_Internal_Buffer_Size	EQU	(128+128+53+curdirLEN)
+endif
 
 ; =========================================================================
 
@@ -275,6 +279,9 @@ Exec_Internal_Buffer_Size	EQU	(128+128+53+curdirLEN)
 
 ; =========================================================================
 
+ifdef NEC_98
+        EXTRN   EMS_MNT         :NEAR
+endif   ;NEC_98
 
 ; =========================================================================
 ;
@@ -808,7 +815,11 @@ Exec_Read_OK:
 
 	sub	CX,AX
 	cmp	CX,512
+ifdef DBCS
+	ja	Exec_Bad_FileJ
+else ; !DBCS
 	jae	Exec_Bad_FileJ
+endif ; !DBCS
 
 		; We've read in CX bytes... bump DTA location
 
@@ -816,7 +827,7 @@ ExecCheckEnd:
 	add	Exec_DMA,BX		; Bump dma address
 	test	Exec_Res_Len_Para,-1
 	jnz	Exec_Big_Read
-
+	
 	; The image has now been read in. We must perform relocation
 	; to the current location.
 
@@ -1110,7 +1121,13 @@ Exec_Set_PDB:
 	; BX	 - Start Address or relocation factor
 	; DX:AX  - Size of exe resident image
 	; ES:DI  - Name of exe image
+        cmp     ExecFlag, 0
+        je      Exec_sym_exe_file
+        mov     bx, WORD PTR Exec_Load_Block
+        jmp     Exec_sym
+Exec_sym_exe_file:
 	mov	bx, WORD PTR Exec_Rel_Fac
+Exec_sym:
 	mov	dx, Exec_Res_LenH
 	mov	ax, Exec_Res_LenL
 	les	di, ExecName
@@ -1295,9 +1312,9 @@ Exec_BL:
 
 Exec_Set_Return:
 	invoke	get_user_stack		; get his return address
-	push	[SI.user_CS]		; suck out the CS and IP
+	push	[SI.user_CS]		; take out the CS and IP
 	push	[SI.user_IP]
-	push	[SI.user_CS]		; suck out the CS and IP
+	push	[SI.user_CS]		; take out the CS and IP
 	push	[SI.user_IP]
 	pop	WORD PTR ES:[PDB_Exit]
 	pop	WORD PTR ES:[PDB_Exit+2]
@@ -1330,6 +1347,9 @@ Exec_Set_Return:
 	transfer Sys_Ret_OK
 
 exec_go:
+ifdef NEC_98
+        call    EMS_MNT                 ; restore page frame status
+endif   ;NEC_98
 	lds	SI,DWORD PTR Exec_Init_IP   ; get entry point SS Override
 	les	DI,DWORD PTR Exec_Init_SP   ; new stack SS Override
 	mov	AX,ES
@@ -1548,7 +1568,21 @@ GetEntries:
 	push	ax			; save len
 sse_next_char:
 	lodsb
+IFDEF	DBCS                ; MSKK01 09/29/93
+        invoke   TESTKANJ       ; Is Character lead byte of DBCS?
+        jz ucase_it             ; jump if not
+        scasb                   ; put into user's buffer
+        lodsb                   ; skip over DBCS character
+        jne     Not_Matched
+        dec     cx
+
+        jmp short skip_ucase    ; skip upcase
+ucase_it:
+ENDIF
 	call	UCase
+IFDEF   DBCS
+skip_ucase:
+ENDIF
 	scasb
 	jne	Not_Matched
 	loop	sse_next_char
@@ -1738,7 +1772,10 @@ Abort_Inner:
 	; go to end of env (double NULL)
 	; get address of exe image name
 	mov	es, CurrentPDB
-	mov	es, es:PDB_environ
+        mov     ax, es:PDB_environ
+        or      ax, ax
+        jz      Abt_EndBopFree          ; krnl386 sets PDB_environ to NULL
+        mov     es, ax                  ; for WOW tasks, it's already notified debugger
 	xor	di, di
 	xor	al, al
 	mov	cx, 8000h		; at most 32k of environment
@@ -1752,7 +1789,11 @@ Abt_SearchName:
 	scasb				; is there another nul byte?
 	jnz	Abt_SearchName		; no, scan some more
 
-	; adv di past next word
+        mov     ax, word ptr es:[di]    ; word after double-null must be 0x1
+        dec     ax                      ; s/b zero now
+        jnz     Abt_EndBopFree
+
+        ; adv di past 0x1
 	dec	cx
 	jcxz	Abt_EndBopFree
 	inc	di

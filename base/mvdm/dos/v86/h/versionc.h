@@ -22,3 +22,4 @@
 
 #define DOSHMA			    0x10	/* DOS running in HMA */
 #define DOSROM			    0x08	/* DOS running in ROM */
+

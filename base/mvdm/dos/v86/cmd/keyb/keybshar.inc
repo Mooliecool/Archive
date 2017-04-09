@@ -77,6 +77,9 @@ PS_8042         EQU     0010H           ;; 8042 is a Patriot/Sebring type array;
 SECURITY_ACTIVE         EQU     0008h   ; M030  ;; Server password mode is active
 ;                               ; M030  ;;  This bit becomes off from on when
 ;                               ; M030  ;;  correct password is entered JP9010
+ifdef JAPAN
+DBCS_OK 	EQU	0002h		;; DBCS scan codes are OK allowed
+endif ; JAPAN
                                         ;;
                                         ;; HOT_KEY_FLAG EQUATES:
 US_MODE     EQU   0                     ;;  hot key is active => US

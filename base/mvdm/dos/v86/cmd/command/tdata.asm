@@ -388,7 +388,11 @@ COMTAB	DB	3,"DIR",fSwitchAllowed+fCheckDrive
 	DB	4,"CALL",fSwitchAllowed
 	DW	OFFSET TRANGROUP:$CALL		; In TBATCH2.ASM
 	DW	TRANGROUP:CallHelpMsgs
+ifndef NEC_98
 	DB	4,"CHCP",fSwitchAllowed
+else    ;NEC_98
+        DB      4,"    ",fSwitchAllowed         ; NEC01 91/07/29 CHCP Command DEL
+endif   ;NEC_98
 	DW	OFFSET TRANGROUP:CHCP		; In TCMD2B.ASM
 	DW	TRANGROUP:ChcpHelpMsgs
 	DB	6,"RENAME",fSwitchAllowed+fCheckDrive  ;AC018; P3903

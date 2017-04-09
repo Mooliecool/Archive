@@ -1576,7 +1576,7 @@ Break	<SFTFromFCB - take a FCB and obtain a SFT from it>
 
 ;----------------------------------------------------------------------------
 ;
-;   SFTFromFCB - the workhorse of this compatability crap.  Check to see if
+;   SFTFromFCB - the workhorse of this compatability stuff.  Check to see if
 ;	the SFT for the FCB is Good.  If so, make ThisSFT point to it.	If not
 ;	good, get one from the cache and regenerate it.  Overlay the LRU field
 ;	with PID

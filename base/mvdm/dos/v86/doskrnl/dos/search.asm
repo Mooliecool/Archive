@@ -263,7 +263,7 @@ Find_it:
 	JNC	FindSet 		; no error, transfer info
 	transfer Sys_Ret_Err
 FindSet:
-; BUGBUG Sudeepb 15-sept-91 This xor ax,ax is done for stupid PageMaker 4.0
+; BUGBUG Sudeepb 15-sept-91 This xor ax,ax is done for the PageMaker 4.0
 ; which trusts ax value more than carry even for success cases.
 	xor	ax,ax
 	transfer    Sys_Ret_OK		; bye with no errors
@@ -291,7 +291,7 @@ procedure $FIND_NEXT,NEAR
 	jnc	fnok
 	transfer Sys_Ret_Err
 fnok:
-; BUGBUG 13-Jun-1992 Jonle  This xor ax,ax is done for stupid list.com,
+; BUGBUG 13-Jun-1992 Jonle  This xor ax,ax is done for list.com,
 ; sidekick which trusts ax value more than carry even for success cases.
 	xor	ax,ax
         transfer    Sys_Ret_OK          ; bye with no errors

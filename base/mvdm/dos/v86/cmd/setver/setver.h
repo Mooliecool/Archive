@@ -13,6 +13,7 @@
 /*	johnhe	05-01-90                                                   		*/
 /***************************************************************************/
 
+
 #pragma pack(1)
 
 /***************************************************************************/
@@ -103,7 +104,11 @@ typedef  double         DOUBLE;
 struct TableEntry
 {
 	char		Drive;
+#ifdef JAPAN
+	char		Path[ MAX_PATH_LEN+10 ];
+#else
 	char		Path[ MAX_PATH_LEN ];
+#endif
 	char		szFileName[ MAX_NAME_LEN + 1 ];
 	UCHAR		MajorVer;
 	UCHAR		MinorVer;
@@ -162,6 +167,10 @@ static  int   WriteVersionTable( void );
 
 static  int   SeekRead( int iFile, void *Buf, long lOffset, unsigned uBytes );
 
+#ifdef BILINGUAL
+static	int	IsDBCSCodePage(void);
+#endif
+
 /***************************************************************************/
 /* Function prototypes for PARSE.C                                         */
 /***************************************************************************/
@@ -192,4 +201,4 @@ extern  int   IsValidDrive( unsigned DrvLetter );
 extern  void  PutStr( char *String );
 extern  long  _dos_seek( int Handle, long lOffset, int Mode );
 extern  int	  SetVerCheck ( void );					/* M001 */
-
+

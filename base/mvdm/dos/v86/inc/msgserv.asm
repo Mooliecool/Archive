@@ -106,7 +106,11 @@ $M_CLASS_ID STRUC					     ;;AN000;;
 							     ;;
     $M_CLS_ID	     DB        -1			     ;;AN000;; Class identifer
     $M_COMMAND_VER   DW        EXPECTED_VERSION 	     ;;AN003;; COMMAND.COM version check
+ifdef BILINGUAL
+    $M_NUM_CLS_MSG   DW        0			     ;;AN000;; Total number of message in class
+else
     $M_NUM_CLS_MSG   DB        0			     ;;AN000;; Total number of message in class
+endif
 							     ;;
 $M_CLASS_ID ENDS					     ;;
 							     ;;AN000;;
@@ -303,8 +307,12 @@ $MDO3:
 ;	      $IF     NZ				     ;;AN003;;
 	      JZ $MIF4
 		XOR	CX,CX				     ;;AN003;;	   Set flag to second pass
+ifdef BILINGUAL
+		MOV	AX,DS:[DI].$M_NUM_CLS_MSG	     ;;AN003;;
+else
 		XOR	AH,AH				     ;;AN003;;	   Get number of messages in class
 		MOV	AL,DS:[DI].$M_NUM_CLS_MSG	     ;;AN003;;
+endif
 		MOV	SI,$M_CLASS_ID_SZ		     ;;AN003;;	   Initialize index
 		CMP	DS:[DI].$M_COMMAND_VER,EXPECTED_VERSION ;;AN003;;  Is this the right version of COMMAND.COM?
 ;	      $ENDIF					     ;;AN003;;
@@ -1082,6 +1090,44 @@ $M_SET_LEN_IN_CX ENDP					     ;;
 							     ;;
 $M_FIND_SPECIFIED_MSG PROC NEAR 			     ;;AN000;;
 							     ;;
+ifdef BILINGUAL
+	push	ax			; save ax
+	push	ax
+	push	bx
+	mov	ax,4f01h		; get code page
+	xor	bx,bx
+	int	2fh
+ifdef JAPAN
+	cmp	bx,932
+endif
+ifdef KOREA
+	cmp	bx,949
+endif
+ifdef TAIWAN
+	cmp	bx,950
+endif
+ifdef PRC
+	cmp	bx,936
+endif
+	pop	bx
+	pop	ax
+	jz	MFSM_03			; if DBCS code page
+	cmp	ax,$M_SPECIAL_MSG_NUM
+	jz	MFSM_03
+	cmp	dh,EXT_ERR_CLASS
+	jz	MFSM_01
+	cmp	dh,PARSE_ERR_CLASS
+	jz	MFSM_02
+	add	ax,UTILITY_MSG_ADJ
+	jmp	short MFSM_03
+MFSM_01:
+	add	ax,EXT_MSG_ADJ
+	jmp	short MFSM_03
+MFSM_02:
+	add	ax,PARSE_MSG_ADJ
+MFSM_03:
+endif
+
 	  CMP	  BX,1					     ;;AN004;;	Do we have an address to CALL?
 ;	  $IF	  E,AND 				     ;;AN004;;	Yes,
 	  JNE $MIF64
@@ -1108,7 +1154,11 @@ $MIF64:
 	    CMP     DH,UTILITY_MSG_CLASS		     ;;AN001;;
 ;	    $IF     NE					     ;;AN001;;
 	    JE $MIF69
+ifdef BILINGUAL
+	      MOV     CX,WORD PTR ES:[DI].$M_NUM_CLS_MSG     ;;AN001;;	 Get number of messages in class
+else
 	      MOV     CL,BYTE PTR ES:[DI].$M_NUM_CLS_MSG     ;;AN001;;	 Get number of messages in class
+endif
 ;	    $ELSE					     ;;AN001;;
 	    JMP SHORT $MEN69
 $MIF69:
@@ -1120,9 +1170,17 @@ ENDIF
 ;	      $IF     E 				     ;;AN002;;	pointer (hopefully)
 	      JNE $MIF71
 IF		FARmsg					     ;;AN001;;
+ifdef BILINGUAL
+		MOV	CX,WORD PTR ES:[DI].$M_NUM_CLS_MSG   ;;AN000;;	   Get number of messages in class
+else
 		MOV	CL,BYTE PTR ES:[DI].$M_NUM_CLS_MSG   ;;AN000;;	   Get number of messages in class
+endif
 ELSE
+ifdef BILINGUAL
+		MOV	CX,WORD PTR CS:[DI].$M_NUM_CLS_MSG   ;;AN000;;	   Get number of messages in class
+else
 		MOV	CL,BYTE PTR CS:[DI].$M_NUM_CLS_MSG   ;;AN000;;	   Get number of messages in class
+endif
 ENDIF
 ;	      $ENDIF					     ;;AN002;;	  go on to the next class
 $MIF71:
@@ -1199,6 +1257,9 @@ $MIF75:
 $MIF91:
 
 	  MOV	  $M_RT.$M_SIZE,$M_NULL 		     ;;AN004;; Reset variable
+ifdef BILINGUAL
+	pop	ax
+endif
 	  RET						     ;;AN000;; Return
 							     ;;
 $M_FIND_SPECIFIED_MSG ENDP				     ;;AN000;;
@@ -2379,6 +2440,44 @@ $M_SET_LEN_IN_CX ENDP					     ;;
 							     ;;
 $M_FIND_SPECIFIED_MSG PROC NEAR 			     ;;AN000;;
 							     ;;
+ifdef BILINGUAL
+	push	ax			; save ax
+	push	ax
+	push	bx
+	mov	ax,4f01h		; get code page
+	xor	bx,bx
+	int	2fh
+ifdef JAPAN
+	cmp	bx,932
+endif
+ifdef KOREA
+	cmp	bx,949
+endif
+ifdef TAIWAN
+	cmp	bx,950
+endif
+ifdef PRC
+	cmp	bx,936
+endif
+	pop	bx
+	pop	ax
+	jz	MFSM_13			; if DBCS code page
+	cmp	ax,$M_SPECIAL_MSG_NUM
+	jz	MFSM_13
+	cmp	dh,EXT_ERR_CLASS
+	jz	MFSM_11
+	cmp	dh,PARSE_ERR_CLASS
+	jz	MFSM_12
+	add	ax,UTILITY_MSG_ADJ
+	jmp	short MFSM_13
+MFSM_11:
+	add	ax,EXT_MSG_ADJ
+	jmp	short MFSM_13
+MFSM_12:
+	add	ax,PARSE_MSG_ADJ
+MFSM_13:
+endif
+
 	  CMP	  BX,1					     ;;AN004;;	Do we have an address to CALL?
 ;	  $IF	  E,AND 				     ;;AN004;;	Yes,
 	  JNE $MIF247
@@ -2405,7 +2504,11 @@ $MIF247:
 	    CMP     DH,UTILITY_MSG_CLASS		     ;;AN001;;
 ;	    $IF     NE					     ;;AN001;;
 	    JE $MIF252
+ifdef BILINGUAL
+	      MOV     CX,WORD PTR ES:[DI].$M_NUM_CLS_MSG     ;;AN001;;	 Get number of messages in class
+else
 	      MOV     CL,BYTE PTR ES:[DI].$M_NUM_CLS_MSG     ;;AN001;;	 Get number of messages in class
+endif
 ;	    $ELSE					     ;;AN001;;
 	    JMP SHORT $MEN252
 $MIF252:
@@ -2417,9 +2520,17 @@ ENDIF
 ;	      $IF     E 				     ;;AN002;;	pointer (hopefully)
 	      JNE $MIF254
 IF		FARmsg					     ;;AN001;;
+ifdef BILINGUAL
+		MOV	CX,WORD PTR ES:[DI].$M_NUM_CLS_MSG   ;;AN000;;	   Get number of messages in class
+else
 		MOV	CL,BYTE PTR ES:[DI].$M_NUM_CLS_MSG   ;;AN000;;	   Get number of messages in class
+endif
 ELSE
+ifdef BILINGUAL
+		MOV	CX,WORD PTR CS:[DI].$M_NUM_CLS_MSG   ;;AN000;;	   Get number of messages in class
+else
 		MOV	CL,BYTE PTR CS:[DI].$M_NUM_CLS_MSG   ;;AN000;;	   Get number of messages in class
+endif
 ENDIF
 ;	      $ENDIF					     ;;AN002;;	  go on to the next class
 $MIF254:
@@ -2496,6 +2607,9 @@ $MIF258:
 $MIF274:
 
 	  MOV	  $M_RT.$M_SIZE,$M_NULL 		     ;;AN004;; Reset variable
+ifdef BILINGUAL
+	pop	ax
+endif
 	  RET						     ;;AN000;; Return
 							     ;;
 $M_FIND_SPECIFIED_MSG ENDP				     ;;AN000;;
@@ -3255,4 +3369,3 @@ $M_WAIT_FOR_INPUT ENDP					     ;;AN000;;
       ENDIF						     ;;AN000;; END of include of SYSDISPMSG
     ENDIF						     ;;AN000;; END of include of MSG_DATA_ONLY
 ENDIF							     ;;AN000;; END of include of Structure only
-

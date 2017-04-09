@@ -631,7 +631,7 @@ COM_NA_UP_1_END:		        ;;
 ;; CODE PAGE: Common
 ;; STATE: Non-alpha Upper Case              SECONDARY KEYBOARD MODE
 ;; KEYBOARD: all
-;; TABLE TYPE: Translate                       Greek Mode
+;; TABLE TYPE: Translate                       Greek Mode, merge changes from winse  
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 				       ;;
    DW	 COM_NA_UP_2_END-$	       ;; Length of state section
@@ -642,17 +642,17 @@ COM_NA_UP_1_END:		        ;;
    DW	 GK_005301-$		       ;; Size of xlat table
    DB	 STANDARD_TABLE 	       ;; xlat options:
    DB	    11             	        ;; number of scans
-   DB	    03,22h                      ;; "
-   DB       08,2fh                      ;; /
-   DB       09,28h                      ;; (
-   DB       0Ah,29h                     ;; )
-   DB       0Bh,3dh                     ;; =
-   DB	    0ch,0f8h			 ;; ú
-   DB	    0Dh,2ah			 ;; *
-   DB	    29h,0f1h			 ;; +-
-   DB       33h,3bh                     ;; ;
-   DB       34h,3ah                     ;; :
-   DB       35h,5fh                     ;; _
+   DB	    03,40h                      ;; @
+   DB       08,26h                      ;; &
+   DB       09,2ah                      ;; *
+   DB       0Ah,28h                     ;; (
+   DB       0Bh,29h                     ;; )
+   DB	    0ch,5fh			 ;; _
+   DB	    0Dh,2bh			 ;; +
+   DB	    29h,7eh			 ;; ~
+   DB       33h,3ch                     ;; <
+   DB       34h,3eh                     ;; >
+   DB       35h,3fh                     ;; ?
 
 GK_005301:			       ;;
 				       ;;
@@ -701,10 +701,10 @@ COM_NA_LC_1_END:		       ;;
    DW	 GK_00530-$		       ;; Size of xlat table
    DB	 STANDARD_TABLE 	       ;; xlat options:
    DB	  5              	       ;; number of scans
-   DB	 29h,0abh			;; 1/2
-   DB    0ch,27h                       ;; '
-   DB    0dh,2bh                       ;; +
-   DB    35h,2dh                       ;;
+   DB	 29h,60h			;; 1/2
+   DB    0ch,2dh                       ;; '
+   DB    0dh,3dh                       ;; +
+   DB    35h,2fh                       ;;
    DB    56h,15h                       ;; character 15h
                                        ;;
 GK_00530:			       ;;
@@ -1496,15 +1496,40 @@ GK_737_XLAT:                           ;;
                                        ;;
    DW    CP737_NA_LO_T1_END-$          ;; Size of xlat table
    DB    STANDARD_TABLE                ;; xlat options:
-   DB     2                            ;; number of entries
-   DB	  10h,0f9h		       ;; Middle dot
-   DB	  2bh,0fdh			;; subscript 2
+   DB     3                            ;; number of entries
+   DB	  10h,3bh		       ;; Middle dot
+   DB     11h,0aah                      ;;
+   DB	  2bh,5ch			;; subscript 2
 
 CP737_NA_LO_T1_END:                    ;;
                                        ;;
    DW    0                             ;; Size of xlat table - null table
                                        ;;
 CP737_NA_LO_END:                       ;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;        *******
+;; CODE PAGE: 737                                 GREEK
+;; STATE: Non Alpha Upper    SECONDARY KEYBOARD
+;; KEYBOARD TYPES: All
+;; TABLE TYPE: Translate
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                                       ;;
+   DW    CP737_NA_UP_END-$             ;; length of state section
+   DB	 NON_ALPHA_UPPER_SEC           ;; State ID
+   DW    ANY_KB                        ;; Keyboard Type
+   DB    -1,-1                         ;; Buffer entry for error character
+                                       ;;
+   DW    CP737_NA_UP_T1_END-$          ;; Size of xlat table
+   DB    STANDARD_TABLE                ;; xlat options:
+   DB     2                            ;; number of entries
+   DB	  10h,3ah		       ;; Middle dot
+   DB	  11h,91h			;; subscript 2
+
+CP737_NA_UP_T1_END:                    ;;
+                                       ;;
+   DW    0                             ;; Size of xlat table - null table
+                                       ;;
+CP737_NA_UP_END:                       ;;
                                        ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;	 Last state for 737		;;
 ;; CODE PAGE: 737
@@ -1520,12 +1545,11 @@ CP737_NA_LO_END:                       ;;
 				       ;;
    DW	 CP737_AL_LW_T1_END-$	       ;; Size of xlat table
    DB	 STANDARD_TABLE+ZERO_SCAN      ;; xlat options:
-   DB	 25			       ;; number of scans
-   DB    11h,0aah                      ;;
+   DB	 24			       ;; number of scans
    DB    12h,09ch                      ;;  Greek alpha characters
    DB    13h,0a8h                      ;;
    DB    14h,0abh                      ;;
-   DB    15h,0a4h                      ;;
+   DB    15h,0ach                      ;;
    DB    16h,09fh                      ;;
    DB    17h,0a0h                      ;;
    DB    18h,0a6h                      ;;
@@ -1567,7 +1591,7 @@ CP737_AL_LW_END:		       ;; length of state section
 				       ;;
    DW	 CP737_AL_UP_T1_END-$	       ;; Size of xlat table
    DB	 STANDARD_TABLE+ZERO_SCAN      ;; xlat options:
-   DB	 25			       ;; number of scans
+   DB	 24			       ;; number of scans
    DB    12h,084h                      ;;  Greek alpha characters
    DB    13h,090h                      ;;
    DB    14h,092h                      ;;
@@ -1598,7 +1622,212 @@ CP737_AL_UP_T1_END:		       ;;
    DW    0			       ;; Size of xlat table - null table
    				       ;;
 CP737_AL_UP_END:		       ;; length of state section
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CODE PAGE: 737		 LATIN
+;; STATE: Diaresis Lower Case Sec
+;; KEYBOARD: All
+;; TABLE TYPE: Translate
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+				       ;;
+				       ;;
+   DW	 CP737_D2_UP_END-$	       ;; length of state section
+   DB	 DIARESIS_UPPER_SEC 	       ;; State ID
+   DW	 ANY_KB 		       ;; Keyboard Type
+   DB	 -1, -1			       ;; error character = standalone accent
+				       ;;
+   DW	 CP737_D2_UP_T1_END-$	       ;; Size of xlat table
+   DB	 STANDARD_TABLE+ZERO_SCAN      ;; xlat options:
+   DB	 2			       ;; number of scans
+   DB	 17h,0f4h		       ;;    I diaeresis
+   DB	 15h,0f5h			;;    U diaeresis
                                        ;;
+CP737_D2_UP_T1_END:		       ;;
+				       ;;
+   DW	 0			       ;; Size of xlat table - null table
+				       ;;
+CP737_D2_UP_END:		       ;; length of state section
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;				       ;;
+;; CODE PAGE: 737		LATIN
+;; STATE: Diaresis Lower Case Sec
+;; KEYBOARD: All
+;; TABLE TYPE: Translate
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+				       ;;
+   DW	 C737_D2_LO_END-$	       ;; Length of state section
+   DB	 DIARESIS_LOWER_SEC 	       ;;
+   DW	 ANY_KB 		       ;;
+   DB	 -1, -1			       ;; Buffer entry for error character
+				       ;; Set Flag Table
+   DW	 GK2_737-$		       ;; Size of xlat table
+   DB	 STANDARD_TABLE+ZERO_SCAN      ;; xlat options:
+   DB	 2			       ;; number of scans
+   DB	 17h,0e4h			;; I diaresis  GREEK char
+   DB	 15h,0e8h			;; Y diaresis  GREEK char
+GK2_737:			       ;;
+				       ;;
+   DW	 0			       ;; Size of xlat table - null table
+				       ;;
+C737_D2_LO_END:			       ;;
+				       ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CODE PAGE: 737
+;; STATE: Diaresis Upper
+;; KEYBOARD TYPES: All
+;; TABLE TYPE: Translate
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+				       ;;
+   DW	 CP737_DI_UP_END-$	       ;; length of state section
+   DB	 DIARESIS_UPPER 	       ;; State ID
+   DW	 ANY_KB 		       ;; Keyboard Type
+   DB	 -1, -1			       ;; error character = standalone accent
+				       ;;
+   DW	 CP737_DI_UP_T1_END-$	       ;; Size of xlat table
+   DB	 STANDARD_TABLE+ZERO_SCAN      ;; xlat options:
+   DB	 2			       ;; number of scans
+   DB	 17h,0f4h		       ;;    I diaeresis
+   DB	 15h,0f5h			;;    U diaeresis
+                                       ;;
+CP737_DI_UP_T1_END:		       ;;
+				       ;;
+   DW	 0			       ;; Size of xlat table - null table
+				       ;;
+CP737_DI_UP_END:		       ;; length of state section
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;				       ;;
+;; CODE PAGE: 737		LATIN
+;; STATE: Diaresis Lower Case
+;; KEYBOARD: All
+;; TABLE TYPE: Translate
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+				       ;;
+   DW	 C737_DI_LO_END-$	       ;; Length of state section
+   DB	 DIARESIS_LOWER 	       ;;
+   DW	 ANY_KB 		       ;;
+   DB	 -1, -1			       ;; Buffer entry for error character
+				       ;; Set Flag Table
+   DW	 GK_737-$		       ;; Size of xlat table
+   DB	 STANDARD_TABLE+ZERO_SCAN      ;; xlat options:
+   DB	 0			       ;; number of scans
+                                       ;;
+GK_737:				       ;; No Characters for this in Either codepage
+				       ;;
+   DW	 0			       ;; Size of xlat table - null table
+				       ;;
+C737_DI_LO_END:			       ;;
+				       ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CODE PAGE: 737
+;; STATE: ACUTE Upper Sec
+;; KEYBOARD TYPES: All
+;; TABLE TYPE: Translate
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+				       ;;
+   DW	 CP737_A_UP_END-$	       ;; length of state section
+   DB	 ACUTE_UPPER_SEC               ;; State ID
+   DW	 ANY_KB 		       ;; Keyboard Type
+   DB	 -1, -1			       ;; error character = standalone accent
+				       ;;
+   DW	 CP737_A_UP_T1_END-$	       ;; Size of xlat table
+   DB	 STANDARD_TABLE+ZERO_SCAN      ;; xlat options:
+   DB	 7			       ;; number of scans
+   DB	 12h,0ebh		       ;; acute E
+   DB	 15h,0efh		       ;; acute Y
+   DB	 18h,0eeh		       ;; acute O
+   DB	 1eh,0eah		       ;; acute A
+   DB	 23h,0ech		       ;; acute H
+   DB	 2fh,0f0h		       ;; acute OMEGA
+   DB	 17h,0edh		       ;; acute IOTA
+                                       ;;
+CP737_A_UP_T1_END:		       ;;
+				       ;;
+   DW	 0			       ;; Size of xlat table - null table
+				       ;;
+CP737_A_UP_END:			       ;; length of state section
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;				       ;;
+;; CODE PAGE: 737		LATIN
+;; STATE: ACUTE Lower Case
+;; KEYBOARD: All
+;; TABLE TYPE: Translate
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+				       ;;
+   DW	 C737_A_LO_END-$	       ;; Length of state section
+   DB	 ACUTE_LOWER_SEC               ;;
+   DW	 ANY_KB 		       ;;
+   DB	 -1, -1			       ;; Buffer entry for error character
+				       ;; Set Flag Table
+   DW	 GK_A_737-$		       ;; Size of xlat table
+   DB	 STANDARD_TABLE+ZERO_SCAN      ;; xlat options:
+   DB	 7			       ;; number of scans
+   DB	 12h,0e2h		       ;; acute e
+   DB	 15h,0e7h		       ;; acute y
+   DB	 18h,0e6h		       ;; acute o
+   DB	 1eh,0e1h		       ;; acute a
+   DB	 23h,0e3h		       ;; acute h
+   DB	 2fh,0e9h		       ;; acute omega
+   DB	 17h,0e5h		       ;; acute iota
+                                       ;;
+GK_A_737:			       ;;
+				       ;;
+   DW	 0			       ;; Size of xlat table - null table
+				       ;;
+C737_A_LO_END:			       ;;
+				       ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CODE PAGE: 737
+;; STATE: ACUTE Upper
+;; KEYBOARD TYPES: All
+;; TABLE TYPE: Translate
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+				       ;;
+   DW	 CP737_AC_UP_END-$	       ;; length of state section
+   DB	 ACUTE_UPPER 	               ;; State ID
+   DW	 ANY_KB 		       ;; Keyboard Type
+   DB	 -1, -1			       ;; error character = standalone accent
+				       ;;
+   DW	 CP737_AC_UP_T1_END-$	       ;; Size of xlat table
+   DB	 STANDARD_TABLE+ZERO_SCAN      ;; xlat options:
+   DB	 7			       ;; number of scans
+   DB	 12h,0ebh		       ;; acute E
+   DB	 15h,0efh		       ;; acute Y
+   DB	 18h,0eeh		       ;; acute O
+   DB	 1eh,0eah		       ;; acute A
+   DB	 23h,0ech		       ;; acute H
+   DB	 2fh,0f0h		       ;; acute OMEGA
+   DB	 17h,0edh		       ;; acute IOTA
+                                       ;;
+CP737_AC_UP_T1_END:		       ;;
+				       ;;
+   DW	 0			       ;; Size of xlat table - null table
+				       ;;
+CP737_AC_UP_END:		       ;; length of state section
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;				       ;;
+;; CODE PAGE: 737		LATIN
+;; STATE: ACUTE Lower Case
+;; KEYBOARD: All
+;; TABLE TYPE: Translate
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+				       ;;
+   DW	 C737_AC_LO_END-$	       ;; Length of state section
+   DB	 ACUTE_LOWER   	               ;;
+   DW	 ANY_KB 		       ;;
+   DB	 -1, -1			       ;; Buffer entry for error character
+				       ;; Set Flag Table
+   DW	 GK_AC_737-$		       ;; Size of xlat table
+   DB	 STANDARD_TABLE+ZERO_SCAN      ;; xlat options:
+   DB	 7			       ;; number of scans
+   DB	 12h,0e2h		       ;; acute e
+   DB	 15h,0e7h		       ;; acute y
+   DB	 18h,0e6h		       ;; acute o
+   DB	 1eh,0e1h		       ;; acute a
+   DB	 23h,0e3h		       ;; acute h
+   DB	 2fh,0e9h		       ;; acute omega
+   DB	 17h,0e5h		       ;; acute iota
+                                       ;;
+GK_AC_737:			       ;;
+				       ;;
+   DW	 0			       ;; Size of xlat table - null table
+				       ;;
+C737_AC_LO_END:			       ;;
+				       ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;	 Last state for 737		;;
                                        ;;
                                        ;;

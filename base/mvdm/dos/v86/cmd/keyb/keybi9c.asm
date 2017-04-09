@@ -82,7 +82,7 @@ PAGE    ,132
 ;                       overlays memory before NLS processing of scan code.
 ;                       Remove AN006 "Wild Mouse" reset code, field tests done.
 ;  ; -  PTM ????        Fix read ID logic to recognize 122 keyboards and set the
-;            ;jwg 8/90  KBX flag on any enhansed keyboard.
+;	     ;jwg 8/90	KBX flag on any enhansed keyboard.
 ;  ; -  PTM ????        Add 122 Keyboard key support tables.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -111,6 +111,12 @@ include vint.inc
         PUBLIC  BEEP_PENDING
         PUBLIC  ERROR_BEEP
         PUBLIC  CHK_IBF
+ifdef JAPAN
+	PUBLIC	S_122_MARKER		; 122 KEYBOARD F8/00 marker
+	PUBLIC	BEEP_DELAY		; Error beep delay, default=19
+	PUBLIC	SCAN_CODE_SET		; Keyboard Scan Code Set in use
+	PUBLIC	READ_ID2		; Second byte read on last READ ID
+endif ; JAPAN
 
 
 
@@ -126,6 +132,10 @@ ID_2JG          EQU     090H            ; JPN G-LAYOUT
 ID_2JP          EQU     091H            ; JPN P-LAYOUT
 ID_2JA          EQU     092H            ; JPN A-LAYOUT
 
+ifdef JAPAN
+S_XKBD_SCAN	EQU	0A6h		; Highest Character Code For Enhanced
+S_122_MARK	EQU	0F8h		; Marker for EXTENDED 122 keys DCR 1815
+endif ; JAPAN
 
 DIAGS   SEGMENT AT 0FFFFH
         ORG     0
@@ -177,8 +187,8 @@ K30A    LABEL   BYTE
         DB      221,222,223,226,227     ; F16, F17, F18, F19, F20,
         DB      228,229,230,231         ; F21, F22, F23, F24,
         DB      -1,243,-1,-1            ; K#69, ErEOF, Break, Play,
-        DB      -1,-1,-1,-1,-1          ; Undef, Attn, CrSel, K#56, ExSel
-        DB      -1,253                  ; K#74, Clear,
+	DB	-1,-1,-1,-1,-1		; Undef, Attn, CrSel, K#56, ExSel
+	DB	-1,253 	                ; K#74, Clear,
 ifdef NOT_NTVDM
 ;;*     DB             -1,-1,-1         ;              Undef, K#109, Undef
 ;;*     DB      -1,-1,-1,-1,-1          ; Undef, Undef, K#94, K#14, Undef
@@ -186,6 +196,10 @@ else
         DB             -1,-1,-1         ;              Undef, K#109, Undef
         DB      -1,-1,-1,-1,-1          ; Undef, Undef, K#94, K#14, K#107
 endif
+ifdef JAPAN
+	DB	-1			; 07Eh, 07Fh.  DBCS Pseudo codes.
+					;  H_LAST_SCAN must be 07Fh for DBCS
+endif ; JAPAN
 
 H_LAST_SCAN     EQU     $-K30A+52h      ; Largest valid scan code in table
                                         ;  K30A K8 K15 K14 must have same ends
@@ -218,8 +232,8 @@ K8      LABEL   BYTE                    ;-------- CHARACTERS ---------
         DB      209,210,211,212,213     ; F16, F17, F18, F19, F20,
         DB      214,215,216,217         ; F21, F22, F23, F24,
         DB      -1,242,-1,-1            ; K#69, ErEOF, Break, Play,
-        DB      -1,-1,-1,-1,-1          ; Undef, Attn, CrSel, K#56, ExSel
-        DB      -1,252                  ; K#74, Clear,
+	DB	-1,-1,-1,-1,-1		; Undef, Attn, CrSel, K#56, ExSel
+	DB	-1,252                  ; K#74, Clear,
 ifdef NOT_NTVDM
 ;;*     DB             -1,-1,-1         ;              Undef, K#109, Undef
 ;;*     DB      -1,-1,-1,-1,-1          ; Undef, Undef, K#94, K#14, Undef
@@ -227,6 +241,9 @@ else
         DB             -1,-1,-1         ;              Undef, K#109, Undef
         DB      -1,-1,-1,-1,-1          ; Undef, Undef, K#94, K#14, K#107
 endif
+ifdef JAPAN
+	DB	-1                      ; 07Eh, 07Fh.  DBCS Pseudo codes.
+endif ; JAPAN
 
 ;-----  TABLES FOR LOWER CASE (USA)  --
 
@@ -253,13 +270,22 @@ K15     LABEL   BYTE
         DB      77,-1,79,80,81,82       ; Right, -1, End, Down, PgDn, Ins
         DB      83                      ; Del
         DB      -1,-1,'\',133,134       ; SysRq, Undef, WT, F11, F12
+ifndef JAPAN
         DB      -1,232,182,183,184      ; Undef, PA1, F13, F14, F15
+else ; JAPAN
+	DB	-1,232,236,237,238	; Undef, PA1, F13, F14, F15
+endif ; JAPAN
         DB      -1,-1,-1,-1,-1          ; Pause, Undef 5F-62
+ifndef JAPAN
         DB      185,186,187,188,189     ; F16, F17, F18, F19, F20,
         DB      190,191,192,193         ; F21, F22, F23, F24,
+else ; JAPAN
+	DB	239,244,245,246,247	; F16, F17, F18, F19, F20,
+	DB	248,249,250,192 	; F21, F22, F23, F24,
+endif ; JAPAN
         DB      -1,240,-1,-1            ; K#69, ErEOF, Break, Play,
-        DB      -1,-1,-1,-1,-1          ; Undef, Attn, CrSel, K#56, ExSel
-        DB      -1,251                  ; K#74, Clear,
+	DB	-1,-1,-1,-1,-1		; Undef, Attn, CrSel, K#56, ExSel
+	DB	-1,251                  ; K#74, Clear,
 ifdef NOT_NTVDM
 ;;*     DB             -1,-1,-1         ;              Undef, K#109, Undef
 ;;*     DB      -1,-1,-1,-1,-1          ; Undef, Undef, K#94, K#14, Undef
@@ -267,6 +293,9 @@ else
         DB             -1,-1,-1         ;              Undef, K#109, Undef
         DB      -1,-1,-1,-1,-1          ; Undef, Undef, K#94, K#14, K#107
 endif
+ifdef JAPAN
+	DB      -1                      ; 07Eh, 07Fh.  DBCS Pseudo codes.
+endif ; JAPAN
 
 ;-------  TABLES FOR UPPER CASE (USA)
 
@@ -292,13 +321,17 @@ K12     LABEL   BYTE
 K14     LABEL   BYTE
         DB      '789-456+1230.'         ; NUMLOCK STATE OF KEYPAD KEYS
         DB      -1,-1,'|',135,136       ; SysRq, Undef, WT, F11, F12
+ifndef JAPAN
         DB      -1,233,194,195,196      ; Undef, PA1, F13, F14, F15
+else ; JAPAN
+	DB	-1,233,193,195,196	; Undef, PA1, F13, F14, F15
+endif ; JAPAN
         DB      -1,-1,-1,-1,-1          ; Pause, Undef 5F-62
         DB      197,198,199,200,201     ; F16, F17, F18, F19, F20,
         DB      202,203,204,205         ; F21, F22, F23, F24,
         DB      -1,241,-1,-1            ; K#69, ErEOF, Break, Play,
-        DB      -1,-1,-1,-1,-1          ; Undef, Attn, CrSel, K#56, ExSel
-        DB      -1,251                  ; K#74, Clear,
+	DB	-1,-1,-1,-1,-1		; Undef, Attn, CrSel, K#56, ExSel
+	DB	-1,251                  ; K#74, Clear,
 ifdef NOT_NTVDM
 ;;*     DB             -1,-1,-1         ;              Undef, K#109, Undef
 ;;*     DB      -1,-1,-1,-1,-1          ; Undef, Undef, K#94, K#14, Undef
@@ -306,6 +339,9 @@ else
         DB             -1,-1,-1         ;              Undef, K#109, Undef
         DB      -1,-1,-1,-1,-1          ; Undef, Undef, K#94, K#14, K#107
 endif
+ifdef JAPAN
+        DB      -1                      ; 07Eh, 07Fh.  DBCS Pseudo codes.
+endif ; JAPAN
 PAGE
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;
@@ -322,16 +358,25 @@ PAGE
 ;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-                EVEN                    ; Keep KEYB_INT_9 entry on even boundry
-BEEP_PENDING    DB      NO              ; YES if a beep is needed
-SCAN_CODE       DB      0               ; Last SCAN code read
+		EVEN			; Keep KEYB_INT_9 entry on even boundry
+BEEP_PENDING	DB	NO		; YES if a beep is needed
+SCAN_CODE	DB	0		; Last SCAN code read
 
 KEYB_INT_9      PROC   NEAR
 
          JMP  SHORT KB_INT_1            ;; (YST)
 COPY_NLS1_FLAG  DB       0              ;; (YST)
 COUNTRY_FLAG    DB      -1              ; WHERE THE INT9 VECTOR POINTS
-
+ifdef JAPAN
+READ_ID2	DB	0		; Second byte from last READ ID
+BEEP_DELAY	DW	19		; Error beep delay, 19=Refresh loop,
+					;  the half cycle time for 1745 hz
+SCAN_CODE_SET	DB	01h		; In case of old DBCS keyboards, this
+					;  may be 81h or 82h.  Default is 01
+S_122_MARKER	DB	0F8h		; Marker for 122-KEYBOARD KEYS DCR 1815
+					;  Changed to E0 depending on INT 16h
+	EVEN				; Force to even location
+endif ; JAPAN
 KB_INT_1:
 
                                         ; Do NOT enable interrupts untill after
@@ -494,6 +539,10 @@ RST_RD_ID:
 TST_ID_2:
         AND     KB_FLAG_3,NOT LC_AB     ; RESET FLAG
         OR      KB_FLAG_3,KBX           ; INDICATE ENHANCED KEYBOARD WAS FOUND
+ifdef JAPAN
+					; If it responds to a read ID command
+	MOV	CS:READ_ID2,AL		; Save ID just read for ID checks
+endif ; JAPAN
         CMP     AL,TID_2                ; IS THIS US G-LAYOUT KBD  w 8042
         JE      NUM_LOCK_000            ;  JUMP IF SO
         CMP     AL,ID_2U                ; IS THIS US G-LAYOUT KBD  w/o 8042
@@ -506,7 +555,7 @@ TST_ID_2:
         CMP     AL,ID_2JG               ; IS THIS JPN KBD - G ?
         JE      NUM_LOCK_000            ; JUMP IF SO
         CMP     AL,ID_2JA               ; IS THIS JPN KBD - A ?
-        JNE     ID_EX                   ; EXIT IF NUM LOCK NOT REQUIRED
+	JNE	ID_EX			; EXIT IF NUM LOCK NOT REQUIRED
                                         ;  These ID's do not set NUM LOCK ON
                                         ;  ID_2AU = US P-LAYOUT KBD  w/o 8042
                                         ;  TID_2A = US P-LAYOUT KBD  w 8042
@@ -523,6 +572,21 @@ ID_EX:
         JMP     K26                     ; EXIT
 PAGE
 NOT_ID:
+ifdef JAPAN
+;	M005 -- Kermit merge changes + AN013				       ;AN013
+
+	TEST	BP,DBCS_OK		; Is a DBCS keyboard active?	;JP9009;AN013
+	JZ	NOT_DBCS		; Skip DBCS shift case checks	       ;AN013
+
+	MOV	BL,KB_FLAG		; Get shift key state flags now ;JP9009;AN013
+	; ntraid:mskkbug#3516: Alt+Capslock does not work	11/9/93 yasuho
+	CALL	DBCS_keyboard_support	; Go check for special shift key;JP9009;AN013
+					; We can't call because this is edited
+					; scan code directly. I comment it.
+					; 8/31/93 NT-J
+NOT_DBCS:								       ;AN013
+;	M005 -- End changes + AN013
+endif ; JAPAN
         CMP     AL,MC_E0                ; IS THIS THE GENERAL MARKER CODE?
         JNE     TEST_E1
         OR      KB_FLAG_3,LC_E0+KBX     ; SET FLAG BIT, SET KBX, AND
@@ -862,10 +926,15 @@ PAGE
 ;------ NOT IN HOLD STATE
                                         ; AL, AH = SCAN CODE (ALL MAKES)
 K28:                                    ; NO-HOLD-STATE
-	CMP	AL,H_LAST_SCAN		; TEST FOR OUT-OF-RANGE SCAN CODES
+        CMP     AL,H_LAST_SCAN          ; TEST FOR OUT-OF-RANGE SCAN CODES
         JA      SHORT K26               ; IGNORE IF OUT-OF-RANGE
-
+ifndef JAPAN
         TEST    BP,EXT_122              ; IS EXTENDED 122 KEYBOARD SUPPORT OK
+else ; JAPAN
+					; Must pass 07Eh and 07Fh DBCS pseudo's;AN013
+					; IS DBCS KEYBOARD support code active ;AN013
+	TEST	BP,EXT_122+DBCS_OK	;  or EXTENDED 122 KEYBOARD support OK ;AN013
+endif ; JAPAN
         JNZ     K28_122                 ; SKIP NON-122 OUT-OF-RANGE CHECK
 
 ifdef NOT_NTVDM
@@ -899,7 +968,11 @@ K28A:   JMP     K38                     ;  YES, THIS IS PHONY ALT STATE
 
 K29:                                    ; TEST-RESET
         TEST    BL,CTL_SHIFT            ; ARE WE IN CONTROL SHIFT ALSO?
+ifndef JAPAN
         JZ      K31                     ; NO_RESET
+else ; JAPAN
+	JZ	K31C			; NO_RESET, Not in Ctrl state
+endif ; JAPAN
         CMP     AL,DEL_KEY              ; SHIFT STATE IS THERE, TEST KEY
         JNE     K31A                    ; NO_RESET,  TRANSLATE TABLE SWAP
 
@@ -909,11 +982,40 @@ K29:                                    ; TEST-RESET
         AND     WORD PTR  KB_FLAG_3,KBX ; CLEAR ALL FLAG BITS EXCEPT KBX   PED 6-25-86
         JMP     RESET                   ; JUMP TO POWER ON DIAGNOSTICS
 
+ifdef JAPAN
+;------ SET COUNTRY FLAG TO INDICATE WHICH TABLE WE'RE USING, FOREIGN OR DOMESTIC
+
+K31A:	CMP	AL,CS:SD.HOT_KEY_ON_SCAN ; TEST FOR HOT KEY TO US
+	JNE	K31B
+	MOV	CS:COUNTRY_FLAG,00	; SET FLAG FOR DOMESTIC KEY'S
+	JMP	K26			; INTERRUPT RETURN
+
+K31B:	CMP	AL,CS:SD.HOT_KEY_OFF_SCAN ; TEST FOR HOT KEY TO FOREIGN
+	JNE	K31C			; IF NOT TEST FOR FRONT ENGRAV
+	MOV	CS:COUNTRY_FLAG,0FFH	; SET FLAGS FOR FOREIGN KEY'S
+	JMP	K26			; INTERRUPT RETURN
+
+
+;------ ALT STATE, OR CTRL AND ALT DOWN BUT NO HOT KEY F1/F2 OR DEL KEY        ;AN014
+
+K31C:	CMP	CS:COUNTRY_FLAG,0FFH	; Check for country translate flag set ;AN014
+	JNE	K31			; Else try ALT_KEY_PAD special cases   ;AN014
+
+	CALL	KEYB_STATE_PROCESSOR	; Let NLS handle it's differences      ;AN014
+	JC	K32A	;K26		;    TRANSLATIONS FOUND - EXIT
+endif ; JAPAN
+
 ;------ IN ALTERNATE SHIFT, RESET NOT FOUND
 
 K31:                                    ; NO-RESET
         CALL    KEYB_STATE_PROCESSOR
+ifndef JAPAN
         JC      K26                     ;    TRANSLATIONS FOUND - EXIT
+else ; JAPAN
+	JNC	K310
+        JMP     K26                     ;    TRANSLATIONS FOUND - EXIT
+K310:
+endif ; JAPAN
 
         CMP     AL,57                   ; TEST FOR SPACE KEY
         JNE     K311                    ; NOT THERE
@@ -933,6 +1035,7 @@ K312:
         JNE     K32                     ; SKIP TEST FOR LANG SWAP & CONT.
 K312A:  JMP     K37B                    ; GO PROCESS
 
+ifndef JAPAN
 ;------ SET COUNTRY FLAG TO INDICATE WHICH TABLE WE'RE USING, FOREIGN OR DOMESTIC
 
 K31A:   CMP     AL,CS:SD.HOT_KEY_ON_SCAN ; TEST FOR HOT KEY TO US
@@ -952,7 +1055,7 @@ K31C:   CMP     CS:COUNTRY_FLAG,0FFH
         JNE     K32                     ; TRY ALT_KEY_PAD
         CALL    KEYB_STATE_PROCESSOR
         JC      K32A    ;K26            ;    TRANSLATIONS FOUND - EXIT
-
+endif ; !JAPAN
 
 ;------ LOOK FOR KEY PAD ENTRY
 
@@ -1167,9 +1270,15 @@ K41A:   MOV     AX,114*256              ; START/STOP PRINTING SWITCH
 ;------ SET UP TO TRANSLATE CONTROL SHIFT
 
 K42:                                    ; NOT-KEY-55
-        CALL    KEYB_STATE_PROCESSOR
+ifdef JAPAN
+	CMP	CS:COUNTRY_FLAG,0FFH	; Check for country translate flag set
+	JNE	K42US			; Skip overhead if not in country mode
+endif ; JAPAN
+	CALL	KEYB_STATE_PROCESSOR
         JC      K449    ;K26            ; TRANSLATIONS FOUND - EXIT
-
+ifdef JAPAN
+K42US:
+endif ; JAPAN
         CMP     AL,15                   ; IS IT THE TAB KEY?
         JE      K42B                    ;  YES, XLATE TO FUNCTION CODE
         CMP     AL,53                   ; IS IT THE / KEY?
@@ -1188,9 +1297,15 @@ PAGE
 ;------ NOT IN CONTROL SHIFT
 
 K44:
-        CALL    KEYB_STATE_PROCESSOR
+ifdef JAPAN
+	CMP	CS:COUNTRY_FLAG,0FFH	; Check for country translate flag set
+	JNE	K44US			; Skip overhead if not in country mode
+endif ;JAPAN
+	CALL	KEYB_STATE_PROCESSOR
         JC      K449    ;K26            ; TRANSLATIONS FOUND - EXIT
-
+ifdef JAPAN
+K44US:
+endif ; JAPAN
         CMP     AL,55                   ; PRINT SCREEN KEY?
         JNE     K45                     ; NOT-PRINT-SCREEN
         TEST    BP,PC_LAP               ; IS THIS THE LAP COMPUTER?
@@ -1352,7 +1467,17 @@ K64:                                    ; TRANSLATE-SCAN-ORGD
 ;------ PUT CHARACTER INTO BUFFER
 
 K57:                                    ; BUFFER-FILL
-        CALL    BUFFER_FILL
+ifdef JAPAN
+	CMP	AH,0E0h 		; Was this the Ctrl-Enter key? DCR 1815;AN013
+	JE	Short K57N122		; Do not add 122 key marker    DCR 1815;AN013
+	CMP	AH,S_XKBD_SCAN		; Is it non 122-keyboard key?  DCR 1815;AN013
+	JBE	Short K57N122		; Yes, skip add of 122 marker  DCR 1815;AN013
+	CMP	CS:S_122_MARKER,0	;  Check special INT 16h case flag     ;AN013
+	JE	K57N122 		;  Skip F8 marker, if INT 16h broken   ;AN013
+	MOV	AL,S_122_MARK		; Add special marker F8 if 122 DCR 1815;AN013
+K57N122:								       ;AN013
+endif ; JAPAN
+	CALL	BUFFER_FILL
 K59:
         JMP     K26                     ;-- THAT'S ALL FOLKS --
 
@@ -1404,7 +1529,11 @@ BUFFER_FILL_ANY_CHAR  LABEL  NEAR
 ;; VERIFY IF THE CURRENT ROM LEVEL IN THE SYSTEM IS FOR THE ORIGINAL PC1
 
         TEST    BP,PC_81                ; CHECK FOR '81 DATE FLAG SET
+ifndef JAPAN
         JNE     NOT_PC1                 ; IF IT'S A LATER ROM RELEASE, BRANCH
+else ; JAPAN
+	JZ	NOT_PC1 		; IF IT'S A LATER ROM RELEASE, BRANCH
+endif ; JAPAN
 
         CMP     BX,OFFSET KB_BUFFER_END ; AT END OF BUFFER?
         JNE     K5                      ; NO, CONTINUE
@@ -1731,25 +1860,135 @@ chk_ibf proc    near
 
         push    ax                      ; Save register used
         push    cx
-        mov     cx,DLY_15MS             ; Timeout 15 milleseconds (15000/15.086;
+	mov	cx,DLY_15MS		; Timeout 15 milleseconds (15000/15.086;
 chk_ibfl:
+ifdef JAPAN
+	in	al,status_port		; Read status port
+	test	al,inpt_buf_full	; Check for input buffer empty
+	jz	chk_ibfe		; Exit if IBF off, no command pending
+endif ; JAPAN
         in      al,PORT_B               ; Read current refresh output bit
         and     al,refresh_bit          ; Mask all but refresh bit
         cmp     al,ah                   ; Did it change? (or first pass thru)
         jz      short chk_ibfl          ; No, wait for change, else continue
 
         mov     ah,al                   ; Save new refresh bit state
+ifndef JAPAN
         in      al,status_port          ; Read status port
         test    al,inpt_buf_full        ; Check for input buffer empty
         loopnz  chk_ibfl                ; Loop until input buf empty or timeout;
-
+else ; JAPAN
+	loop	chk_ibfl		; Loop until timeout		       
+chk_ibfe:				;  or exit when Input Buffer Full off
+endif ; JAPAN
         pop     cx
         pop     ax                      ; Restore register used
         ret                             ; Return to caller
 
 chk_ibf endp
 
+ifdef JAPAN
+;***********************************************************************;JP9009
+;*								       *;JP9009
+;*		      DBCS Common Keyboard Support		       *;JP9009
+;*								       *;JP9009
+;*	The DBCS common keyboard unique scan code is mapped to the     *;JP9009
+;*	temporary scan code. It is again mapped to the corresponding   *;JP9009
+;*	scan code/character code according the current shift staes.    *;JP9009
+;*								       *;JP9009
+;***********************************************************************;JP9009
+									;JP9009
+DBCS_keyboard_support	proc	near					;JP9009
+	cmp	al, 80h 			; Ignore break keys	;JP9009
+	jae	leave_it_to_common_method				;JP9009
+;AN013	  test	  cs:SD.KEYB_TYPE, DBCS_KB	  ; DBCS keyboard?	  ;JP9009
+;AN013	    jz	    leave_it_to_common_method				  ;JP9009
+	cmp	cs:SD.INVOKED_CP_TABLE, 932	; DBCS code page?	;JP9009
+	jb	leave_it_to_common_method				;JP9009
+		call	DBCS_keyboard_common_support			;JP9009
+		test	cs:SD.KEYB_TYPE, DBCS_OLD_KB			;JP9009
+		jz	leave_it_to_common_method_1			;JP9009
+			call	DBCS_old_keyboard_support		;JP9009
+	leave_it_to_common_method_1:					;JP9009
+		mov	ah, al		; ah = al = 'make' scan code    ;JP9009
+		mov	cs:scan_code, al; Set this because we don't know;JP9009
+					; who will use it later.	;JP9009
+    leave_it_to_common_method:						;JP9009
+	ret								;JP9009
+DBCS_keyboard_support	endp						;JP9009
+									;JP9009
+PSEUDO_SC_ALPHANUMERIC	equ	7eh					;JP9009
+PSEUDO_SC_HIRAGANA	equ	7fh					;JP9009
+									;JP9009
+DBCS_keyboard_common_support	proc	near				;JP9009
+	; Check if it is the Alphanumeric key or Kanji NO key		;JP9009
+	; of the DBCS new keyboard.					;JP9009
+	cmp	al, 3ah 			; CAPS key ?		;JP9009
+	jne	leave_it_to_common_method_2	; if not		;JP9009
 
+	mov	cx,cs:SD.KEYB_TYPE                                      ;QFESP4
+	and     cx,07h
+	cmp	cx,2				; 106 kbd?
+	jz	check_key_status
+	cmp	cx,3				; IBM-5576 002/003 kbd?
+	jz	check_key_status
+	cmp	cx,0				; 101 kbd?
+	jnz	leave_it_to_common_method_2
+
+	test	bl,(ALT_SHIFT or CTL_SHIFT or LEFT_SHIFT or RIGHT_SHIFT)
+	jz	leave_it_to_common_method_2
+        push    bx
+        and     bl,(ALT_SHIFT or CTL_SHIFT)
+	cmp	bl,(ALT_SHIFT or CTL_SHIFT)	;press alt and ctl ?
+        pop     bx
+	jz	leave_it_to_common_method_2
+	jmp	short convert_to_alphanumeric_2
+
+    check_key_status:							;QFESP4
+	test	bl, ALT_SHIFT						;JP9009
+	jnz	convert_to_alphanumeric 				;JP9009
+	test	bl, (LEFT_SHIFT or RIGHT_SHIFT) 			;JP9009
+	jnz	leave_it_to_common_method_2				;JP9009
+	jmp	short convert_to_alphanumeric_2 			;JP9009
+    convert_to_alphanumeric:						;JP9009
+	    test    cs:SD.KEYB_TYPE, DBCS_OLD_A_KB			;JP9009
+	    jnz     leave_it_to_common_method_2 			;JP9009
+    convert_to_alphanumeric_2:						;JP9009
+		mov	al, PSEUDO_SC_ALPHANUMERIC			;JP9009
+    leave_it_to_common_method_2:					;JP9009
+	ret								;JP9009
+DBCS_keyboard_common_support	endp					;JP9009
+									;JP9009
+
+;***********************************************************************;JP9009
+;*								       *;JP9009
+;*		      DBCS Old Keyboard Support 		       *;JP9009
+;*								       *;JP9009
+;*	The old DBCS keyboard unique scan codes is mapped to the       *;JP9009
+;*	temporary scan code. It is again mapped to the corresponding   *;JP9009
+;*	scan code/character code according the current shift staes.    *;JP9009
+;*								       *;JP9009
+;***********************************************************************;JP9009
+									;JP9009
+DBCS_old_keyboard_support	proc	near				;JP9009
+	mov	cx,cs:SD.KEYB_TYPE
+	and     cx,07h
+	cmp	cx,2				; 106 kbd?
+	jz	check_old_key_status
+	cmp	cx,3				; IBM-5576 002/003 kb?
+	jne	not_right_ALT_nor_hiragana
+check_old_key_status:
+
+	cmp	al, 38h 						;JP9009
+	jne	not_right_ALT_nor_hiragana				;JP9009
+	test	ds:KB_FLAG_3, LC_E0					;JP9009
+	jz	not_right_ALT_nor_hiragana				;JP9009
+		mov	al, PSEUDO_SC_HIRAGANA				;JP9009
+		and	ds:KB_FLAG_3, not LC_E0 			;JP9009
+    not_right_ALT_nor_hiragana: 					;JP9009
+	ret								;JP9009
+DBCS_old_keyboard_support	endp					;JP9009
+endif ; JAPAN
 
 DOSTI proc    near
       FSTI

@@ -365,29 +365,51 @@ NoPipe:
 
 ; Compaq bug fix -- exit from this loop on error
 
+ifndef NEC_98
 	jne	forerrorj			; jump on error
 
 ;;	je	CheckLParen
+else    ;NEC_98
+;;      jne     forerrorj                       ; jump on error ;NEC00
+
+        je      CheckLParen
+endif   ;NEC_98
 ;
 ; Not null.  Perhaps there are no spaces between this and the (:
 ;   FOR %i in(foo bar...
 ; Check for the Lparen here
 ;
+ifndef NEC_98
 ;;	CMP	AL,lparen
 ;;	JNZ	forerrorj
+else    ;NEC_98
+        CMP     AL,lparen
+        JNZ     forerrorj
+endif   ;NEC_98
 ;
 ; The token was in(...	We strip off the "in" part to simulate a separator
 ; being there in the first place.
 ;
+ifndef NEC_98
 ;;	ADD	[BX].argpointer,2		; advance source pointer
 ;;	ADD	[BX].arg_ocomptr,2		; advance original string
 ;;	SUB	[BX].arglen,2			; decrement the appropriate length
+else    ;NEC_98
+        ADD     [BX].argpointer,2               ; advance source pointer
+        ADD     [BX].arg_ocomptr,2              ; advance original string
+        SUB     [BX].arglen,2                   ; decrement the appropriate length
+endif   ;NEC_98
 ;
 ; SI now points past the in(.  Simulate a nextarg call that results in the
 ; current value.
 ;
+ifndef NEC_98
 ;;	MOV	ax,[si-1]			; get lparen and next char
 ;;	jmp	short lpcheck
+else    ;NEC_98
+        MOV     ax,[si-1]                       ; get lparen and next char
+        jmp     short lpcheck
+endif   ;NEC_98
 ;
 ;; end of Compaq bug fix
 

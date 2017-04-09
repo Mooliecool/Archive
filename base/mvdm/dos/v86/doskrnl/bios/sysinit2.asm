@@ -21,6 +21,9 @@ tab	equ	9
 
 switchnum	equ 11111000b		; which switches require number
 
+ifdef NEC_98
+	include bpb.inc
+endif   ;NEC_98
 	include syscall.inc
 	include doscntry.inc
 	include devsym.inc
@@ -28,7 +31,11 @@ switchnum	equ 11111000b		; which switches require number
 	include devmark.inc	; needed
 
 
+ifndef NEC_98
 stacksw equ	true		;include switchable hardware stacks
+else    ;NEC_98
+stacksw equ	false		;include switchable hardware stacks
+endif   ;NEC_98
 
 	if	ibmjapver
 noexec	equ	true
@@ -36,6 +43,11 @@ noexec	equ	true
 noexec	equ	false
 	endif
 
+ifdef NEC_98
+Bios_Data segment
+	extrn ec35_flag: byte
+Bios_Data ends
+endif   ;NEC_98
 
 sysinitseg segment public
 
@@ -70,11 +82,19 @@ assume	cs:sysinitseg,ds:nothing,es:nothing,ss:nothing
 
 	insert_blank	db	0	; M051: indicates that blank has been
 					; M051: inserted 
+ifdef	JAPAN
+	extrn	badmem2:byte,badld_pre2:byte
+	extrn	IsDBCSCodePage:near
+endif
 
 	public	int24,open_dev,organize,mem_err,newline,calldev,badload
 	public	prndev,auxdev,config,commnd,condev,getnum,badfil,prnerr
 	public	round,delim,print
+ifndef NEC_98
 	public	parseline,
+else    ;NEC_98
+	public	setparms, parseline, diddleback
+endif   ;NEC_98
 	public	setdoscountryinfo,set_country_path,move_asciiz
 	public	cntry_drv,cntry_root,cntry_path
 	public	delim
@@ -84,6 +104,88 @@ assume	cs:sysinitseg,ds:nothing,es:nothing,ss:nothing
 
 
 
+ifdef NEC_98
+;----------------------------------------------------------------------------
+;
+; procedure : setparms
+;
+; the following set of routines is used to parse the drivparm = command in
+; the config.sys file to change the default drive parameters.
+;
+;----------------------------------------------------------------------------
+;
+setparms	proc	near
+
+	push	ds
+	push	ax
+	push	bx
+	push	cx
+	push	dx
+
+	push	cs
+	pop	ds
+	assume	ds:sysinitseg
+
+	xor	bx,bx
+	mov	bl,byte ptr drive
+	inc	bl			; get it correct for ioctl
+					;  call (1=a,2=b...)
+	mov	dx,offset deviceparameters
+	mov	ah,ioctl
+	mov	al,generic_ioctl
+	mov	ch,rawio
+	mov	cl,set_device_parameters
+	int	21h
+	test	word ptr switches, flagec35
+	jz	not_ec35
+
+	mov	cl,byte ptr drive	; which drive was this for?
+
+	mov	ax,Bios_Data		; get Bios_Data segment
+	mov	ds,ax			; set Bios_Data segment
+	assume	ds:Bios_Data
+
+	mov	al,1			; assume drive 0
+	shl	al,cl			; set proper bit depending on drive
+	or	ds:ec35_flag,al 	; set the bit in the permanent flags
+
+not_ec35:
+	pop	dx			; fix up all the registers
+	pop	cx
+	pop	bx
+	pop	ax
+	pop	ds
+	assume	ds:nothing
+	ret
+
+setparms	endp
+
+;
+;----------------------------------------------------------------------------
+;
+; procedure : diddleback
+;
+; replace default values for further drivparm commands
+;
+;----------------------------------------------------------------------------
+;
+
+diddleback	proc	near
+
+	push	ds
+	push	cs
+	pop	ds
+	assume	ds:sysinitseg
+	mov	word ptr deviceparameters.dp_cylinders,80
+	mov	byte ptr deviceparameters.dp_devicetype, dev_3inch720kb
+	mov	word ptr deviceparameters.dp_deviceattributes,0
+	mov	word ptr switches,0	    ; zero all switches
+	pop	ds
+	assume	ds:nothing
+	ret
+
+diddleback	endp
+endif   ;NEC_98
 ;
 ;----------------------------------------------------------------------------
 ;
@@ -137,12 +239,21 @@ done_line:
 	jmp	short exitpl
 
 okay:
+ifndef NEC_98
 ;	mov	ax,word ptr switches
 ;	and	ax,0003h	    ; get flag bits for changeline and non-rem
 ;	mov	word ptr deviceparameters.dp_deviceattributes,ax
 ;	mov	word ptr deviceparameters.dp_tracktableentries, 0
 ;	clc			    ; everything is fine
 ;	call	setdeviceparameters
+else    ;NEC_98
+	mov	ax,word ptr switches
+	and	ax,0003h	    ; get flag bits for changeline and non-rem
+	mov	word ptr deviceparameters.dp_deviceattributes,ax
+	mov	word ptr deviceparameters.dp_tracktableentries, 0
+	clc			    ; everything is fine
+	call	setdeviceparameters
+endif   ;NEC_98
 exitpl:
 	pop	ds
 	ret
@@ -256,7 +367,11 @@ try_f:
 
 ; ensure that we do not get bogus form factors that are not supported
 
+ifndef NEC_98
 ;	mov	byte ptr deviceparameters.dp_devicetype,al
+else    ;NEC_98
+	mov	byte ptr deviceparameters.dp_devicetype,al
+endif   ;NEC_98
 	jmp	short done_ret
 
 try_t:
@@ -265,7 +380,11 @@ try_t:
 	test	cx,flagcyln
 	jz	try_s
 
+ifndef NEC_98
 ;	mov	word ptr deviceparameters.dp_cylinders,ax
+else    ;NEC_98
+	mov	word ptr deviceparameters.dp_cylinders,ax
+endif   ;NEC_98
 	jmp	short done_ret
 
 try_s:
@@ -285,6 +404,163 @@ done_ret:
 
 process_num	endp
 
+ifdef NEC_98
+;	M047 -- Begin modifications (too numerous to mark specifically)
+;
+;----------------------------------------------------------------------------
+;
+; procedure : setdeviceparameters
+;
+; setdeviceparameters sets up the recommended bpb in each bds in the
+; system based on the form factor. it is assumed that the bpbs for the
+; various form factors are present in the bpbtable. for hard files,
+; the recommended bpb is the same as the bpb on the drive.
+; no attempt is made to preserve registers since we are going to jump to
+; sysinit straight after this routine.
+;
+;	if we return carry, the DRIVPARM will be aborted, but presently
+;	  we always return no carry
+;
+;
+;	note:  there is a routine by the same name in msdioctl.asm
+;
+;----------------------------------------------------------------------------
+;
+
+setdeviceparameters	proc	near
+
+	push	es
+
+	push	cs
+	pop	es
+	assume	es:sysinitseg
+
+	xor	bx,bx
+	mov	bl,byte ptr deviceparameters.dp_devicetype
+	cmp	bl,dev_5inch
+	jnz	got_80
+
+	mov	word ptr deviceparameters.dp_cylinders,40	; 48 tpi=40 cyl
+
+got_80:
+	shl	bx,1			; get index into bpb table
+	mov	si,bpbtable[bx] 	; get address of bpb
+
+	mov	di,offset deviceparameters.dp_bpb ; es:di -> bpb
+	mov	cx,size A_BPB
+	cld
+	repe	movsb
+
+	pop	es
+	assume es:nothing
+
+	test	word ptr switches,flagseclim
+	jz	see_heads
+
+	mov	ax,word ptr slim
+	mov	word ptr deviceparameters.dp_bpb.bpb_sectorspertrack,ax
+
+see_heads:
+	test	word ptr switches,flagheads
+	jz	heads_not_altered
+
+	mov	ax,word ptr hlim
+	mov	word ptr deviceparameters.dp_bpb.bpb_heads,ax
+
+heads_not_altered:
+
+
+; set up correct media descriptor byte and sectors/cluster
+;   sectors/cluster is always 2 except for any one sided disk or 1.44M
+
+	mov	byte ptr deviceparameters.dp_bpb.bpb_sectorspercluster,2
+	mov	bl,0f0h 		; get default mediabyte
+
+;	preload the mediadescriptor from the bpb into bh for convenient access
+
+	mov	bh,byte ptr deviceparameters.dp_bpb.bpb_mediadescriptor
+
+	cmp	word ptr deviceparameters.dp_bpb.bpb_heads,2	; >2 heads?
+	ja	got_correct_mediad	; just use default if heads>2
+
+	jnz	only_one_head		; one head, do one head stuff
+
+;	two head drives will use the mediadescriptor from the bpb
+
+	mov	bl,bh			; get mediadescriptor from bpb
+
+;	two sided drives have two special cases to look for.  One is
+;	   a 320K diskette (40 tracks, 8 secs per track).  It uses
+;	   a mediaid of 0fch.  The other is 1.44M, which uses only
+;	   one sector/cluster.
+
+;	any drive with 18secs/trk, 2 heads, 80 tracks, will be assumed
+;	   to be a 1.44M and use only 1 sector per cluster.  Any other
+;	   type of 2 headed drive is all set.
+
+	cmp	deviceparameters.dp_bpb.bpb_sectorspertrack,18
+	jnz	not_144m
+	cmp	deviceparameters.dp_cylinders,80
+	jnz	not_144m
+
+;	We've got cyl=80, heads=2, secpertrack=18.  Set cluster size to 1.
+
+	jmp	short got_one_secperclus_drive
+
+
+;	check for 320K
+
+not_144m:
+	cmp	deviceparameters.dp_cylinders,40
+	jnz	got_correct_mediad
+	cmp	deviceparameters.dp_bpb.bpb_sectorspertrack,8
+	jnz	got_correct_mediad
+
+	mov	bl,0fch
+	jmp	short got_correct_mediad
+
+
+only_one_head:
+
+;	if we don't have a 360K drive, then just go use 0f0h as media descr.
+
+	cmp	deviceparameters.dp_devicetype,dev_5inch
+	jnz	got_one_secperclus_drive
+
+;	single sided 360K drive uses either 0fch or 0feh, depending on
+;	  whether sectorspertrack is 8 or 9.  For our purposes, anything
+;	  besides 8 will be considered 0fch
+
+	mov	bl,0fch 		; single sided 9 sector media id
+	cmp	word ptr deviceparameters.dp_bpb.bpb_sectorspertrack,8
+	jnz	got_one_secperclus_drive ; okay if anything besides 8
+
+	mov	bl,0feh 		; 160K mediaid
+
+;	we've either got a one sided drive, or a 1.44M drive
+;	  either case we'll use 1 sector per cluster instead of 2
+
+got_one_secperclus_drive:
+	mov	byte ptr deviceparameters.dp_bpb.bpb_sectorspercluster,1
+
+got_correct_mediad:
+	mov	byte ptr deviceparameters.dp_bpb.bpb_mediadescriptor,bl
+
+
+;	 Calculate the correct number of Total Sectors on medium
+;
+	mov	ax,deviceparameters.dp_cylinders
+	mul	word ptr deviceparameters.dp_bpb.bpb_heads
+	mul	word ptr deviceparameters.dp_bpb.bpb_sectorspertrack
+	mov	word ptr deviceparameters.dp_bpb.bpb_totalsectors,ax
+	clc				; we currently return no errors
+
+	ret
+
+setdeviceparameters	endp
+
+;	M047 -- end rewritten routine
+endif   ;NEC_98
 ;
 ;----------------------------------------------------------------------------
 ;
@@ -825,6 +1101,12 @@ skip_set_devmarksize:
 
 mem_err:
 	mov	dx,offset badmem
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badmem2
+@@:
+endif
 	push	cs
 	pop	ds
 	call	print
@@ -1352,6 +1634,12 @@ badfil:
 	mov	si,dx
 badload:
 	mov	dx,offset badld_pre	;want to print config error
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badld_pre2
+@@:
+endif
 	mov	bx, offset crlfm
 
 prnerr:
@@ -1578,6 +1866,10 @@ endif
         db      7,      "DOSONLY",      'O'  ; NTVDM 06-May-1993 sudeepb
 	db	0
 
+ifdef NEC_98
+public deviceparameters
+deviceparameters a_deviceparameters <0,dev_3inch720kb,0,80>
+endif   ;NEC_98
 hlim	    dw	    2
 slim        dw      9
 
@@ -1591,6 +1883,99 @@ public switches
 switches    dw	0
 
 
+ifdef NEC_98
+; the following are the recommended bpbs for the media that we know of so
+; far.
+
+; 48 tpi diskettes
+
+bpb48t	dw	512
+	db	2
+	dw	1
+	db	2
+	dw	112
+	dw	2*9*40
+	db	0fdh
+	dw	2
+	dw	9
+	dw	2
+	dd	0
+	dd	0
+
+; 96tpi diskettes
+
+bpb96t	dw	512
+	db	1
+	dw	1
+	db	2
+	dw	224
+	dw	2*15*80
+	db	0f9h
+	dw	7
+	dw	15
+	dw	2
+	dd	0
+	dd	0
+
+; 3 1/2 inch diskette bpb
+
+bpb35	dw	512
+	db	2
+	dw	1
+	db	2
+	dw	70h
+	dw	2*9*80
+	db	0f9h
+	dw	3
+	dw	9
+	dw	2
+	dd	0
+	dd	0
+
+bpb35h	dw	0200h
+	db	01h
+	dw	0001h
+	db	02h
+	dw	0e0h
+	dw	0b40h
+	db	0f0h
+	dw	0009h
+	dw	0012h
+	dw	0002h
+	dd	0
+	dd	0
+
+;
+; m037 - BEGIN
+;
+bpb288	dw	0200h
+	db	02h
+	dw	0001h
+	db	02h
+	dw	240
+	dw	2*36*80
+	db	0f0h
+	dw	0009h
+	dw	36
+	dw	0002h
+	dd	0
+	dd	0
+;
+; m037 - END
+;
+bpbtable    dw	    bpb48t		; 48tpi drives
+	    dw	    bpb96t		; 96tpi drives
+	    dw	    bpb35		; 3.5" drives
+; the following are not supported, so default to 3.5" media layout
+	    dw	    bpb35		; not used - 8" drives
+	    dw	    bpb35		; not used - 8" drives
+	    dw	    bpb35		; not used - hard files
+	    dw	    bpb35		; not used - tape drives
+	    dw	    bpb35h		; 3-1/2" 1.44mb drive
+	    dw	    bpb35		; ERIMO 			m037
+	    dw	    bpb288		; 2.88 MB diskette drives	m037
+
+endif   ;NEC_98
 switchlist  db	8,"FHSTDICN"	     ; preserve the positions of n and c.
 
 ; the following depend on the positions of the various letters in switchlist

@@ -32,6 +32,9 @@
 	include fastopen.inc
 	include curdir.inc
 	include dossvc.inc
+ifdef NEC_98
+	include dpb.inc
+endif   ;NEC_98
 	.cref
 	.list
 
@@ -165,7 +168,7 @@ Build_devJ:
 	MOV	[EXTERR_LOCUS],errLOC_Unk ; In the particular case of
 					; "finding" a char device
 					; set LOCUS to Unknown. This makes
-					; certain idiotic problems reported
+					; certain problems reported
 					; by a certain 3 letter OEM go away.
 
 ; Take name in name1 and pack it back into where wfp_start points.  This
@@ -1046,6 +1049,7 @@ Procedure   ValidateCDS,NEAR
 	ASSUME	CS:DOSCODE,SS:DOSDATA
 	clc
 	return
+ifndef NEC_98
 ifdef NTDOS
 Public DIR2001S,DIR2001E
 DIR2001S:
@@ -1140,6 +1144,7 @@ FatFail:
 	Leave
 	return
 endif
+endif   ;NEC_98
 EndProc ValidateCDS
 
 Break	<CheckThisDevice - Check for being a device>
@@ -1179,7 +1184,7 @@ Y_PathSkip:
 	JZ	Y_FoundEnd
 IFDEF  DBCS			;AN000;
 	invoke	Testkanj	;AN000;; 2/13/KK
-	jz	Notkanje	;AN000;; 2/13/KK
+	jz	Y_Notkanje	;AN000;; 2/13/KK
 	lodsb			;AN000;; 2/13/KK
 	or	al,al		;AN000;; Skip second byte 2/13/KK  removed
 	jz	Y_FoundEnd	;AN000;; 2/13/KK		   removed
@@ -1188,7 +1193,7 @@ Y_NotKanje:			;AN000;
   ENDIF 			;AN000;
 ;kanji load of next char too	  2/13/KK
 IFDEF DBCS
- kanji load of next char too
+;kanji load of next char too
 ENDIF
 	invoke	PathChrCmp		; is it a path char?
 	JNZ	Y_PathSkip
@@ -1258,7 +1263,7 @@ Y_CheckDone:
 	return
 EndProc CheckThisDevice
 
-ifdef 0
+ifdef NEC_98
 BREAK <LookupPath - call fastopen to get dir entry info>
 ;-----------------------------------------------------------------------------
 ;
@@ -1460,9 +1465,8 @@ GET_NEXT_ELEMENT:
 	POPF
 	RET
 EndProc InsertPath
-endif
+endif   ;NEC_98
 
 DOSCODE	ENDS
     END
-
 

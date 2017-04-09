@@ -141,7 +141,16 @@ ctty_move_filename:				;AN000; put filespec in srcbuf
 	jnz	ctty_move_filename		;AN000; no - keep moving
 	pop	si				;AN000; get line position back
 	mov	di,offset trangroup:parse_ctty	;AC000; Get adderss of PARSE_CTTY
+ifndef NEC_98
 	call	parse_check_eol 		;AN000; are we at end of line?
+else    ;NEC_98
+;	call	parse_check_eol 		;AN000; are we at end of line?	; NEC01 91/07/31 Del
+
+	xor	dx,dx				;AN000;				; NEC01 91/07/31
+	mov	[parse_last],si 		;AN018; save start of parameter	; NEC01 91/07/31
+	invoke	cmd_parse			;AN000; call parser		; NEC01 91/07/31
+	cmp	al,end_of_line			;AN000; Are we at end of line?	; NEC01 91/07/31
+endif   ;NEC_98
 	jz	nocolon 			;AN000; yes - continue
 
 ctty_error:
@@ -463,7 +472,6 @@ assume	ds:resgroup				;AN000;
 ;Sudeepb 05-Jul-1991; Removed above jmp to terminate the top level
 ;		      command.com.
 	CMDSVC	SVC_CMDEXITVDM		; Never returns
-	int	3
 
 ;AD060; mov	ah,multdos			;AN000; reset parse message pointers
 ;AD060; mov	al,message_2f			;AN000; call for message retriever

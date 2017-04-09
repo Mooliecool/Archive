@@ -52,7 +52,7 @@ CID_BR          EQU     055             ; Brazil
 CID_IC          EQU     354             ; Iceland
 CID_TR          EQU     090             ; Turkey
 CID_YU          EQU     038             ; YUGOSLAVIA
-CID_CS          EQU     042             ; CZECH
+CID_CS          EQU     420             ; CZECH
 CID_GK          EQU     030             ; GREEK  added 9/15/93
 CID_HU          EQU     036             ; HUNGARY
 CID_PL          EQU     048             ; POLAND
@@ -61,7 +61,7 @@ CID_JP          EQU     081             ; Japan         2/17/KK
 CID_KO          EQU     082             ; Korea         2/17/KK
 CID_PR          EQU     086             ; PRC           2/17/KK
 CID_TA          EQU     088             ; Taiwan        2/17/KK
-CID_TAI         EQU     886             ; Real Country Code for Taiwan   (EA)
+CID_TAI         EQU     886             ; Real Country/Region Code for Taiwan   (EA)
 CID_RU          EQU     007             ; Russia  (YST)
 CID_AL          EQU     355             ; Albania                        (EA)
 CID_AR          EQU     054             ; Argentina                      (EA)
@@ -74,7 +74,7 @@ CID_CL          EQU     056             ; Chile                          (EA)
 CID_CO          EQU     057             ; Columbia                       (EA)
 CID_CRO         EQU     384             ; Croatia                        (EA)
 CID_EC          EQU     593             ; Ecuador                        (EA)
-CID_MAC         EQU     389             ; FYR Macedonia                  (EA)
+CID_MAC         EQU     389             ; FYRO Macedonia                 (EA)
 CID_IE          EQU     353             ; Ireland                        (EA)
 CID_MX          EQU     052             ; Mexico                         (EA)
 CID_NZ          EQU     064             ; New Zealand                    (EA)
@@ -83,7 +83,7 @@ CID_SLN         EQU     386             ; Slovenia                       (EA)
 CID_ZA          EQU     027             ; South Africa                   (EA)
 CID_VE          EQU     058             ; Venezuela                      (EA)
 CID_YC          EQU     038             ; Yugoslavia Cyrillic            (EA)
-CID_HK          EQU     852             ; Hong Kong                      (EA)
+CID_HK          EQU     852             ; Hong Kong SAR                  (EA)
 CID_IN          EQU     091             ; Indea                          (EA)
 CID_MY          EQU     060             ; Malaysia                       (EA)
 CID_SG          EQU     065             ; Singapore                      (EA)
@@ -148,7 +148,7 @@ CP_CL           EQU     850             ; Chile                          (EA)
 CP_CO           EQU     850             ; Columbia                       (EA)
 CP_CRO          EQU     852             ; Croatia                        (EA)
 CP_EC           EQU     850             ; Ecuador                        (EA)
-CP_MAC          EQU     855             ; FYR Macedonia                  (EA)
+CP_MAC          EQU     855             ; FYRO Macedonia                 (EA)
 CP_IE           EQU     850             ; Ireland                        (EA)
 CP_MX           EQU     850             ; Mexico                         (EA)
 CP_NZ           EQU     437             ; New Zealand                    (EA)
@@ -156,7 +156,7 @@ CP_SM           EQU     855             ; Serbia/Montenegro              (EA)
 CP_SLN          EQU     852             ; Slovenia                       (EA)
 CP_ZA           EQU     437             ; South Africa                   (EA)
 CP_VE           EQU     850             ; Venezuela                      (EA)
-CP_HK           EQU     437             ; Hong Kong                      (EA)
+CP_HK           EQU     437             ; Hong Kong SAR                  (EA)
 CP_IN           EQU     437             ; Indea                          (EA)
 CP_MY           EQU     437             ; Malaysia                       (EA)
 CP_SG           EQU     437             ; Singapore                      (EA)
@@ -196,7 +196,7 @@ CODPAGE DW      0                       ; CODE PAGE ID
 RESV1   DW      0                       ; RESERVED
 RESV2   DW      0                       ; RESERVED
 CDPOINT DW      0                       ; POINTER TO COUNTRY DATA
-	DW      0
+        DW      0
 CTRYSTR ENDS
 
 
@@ -204,17 +204,17 @@ CENTRYSIZE      EQU  (TYPE CTRYSTR) - 2 ; SIZE OF COUNTRY ENTRY
 
 
 CTRYENT MACRO PARMS
-	 CTRYSTR <PARMS>
-	 CNTRYCNT = CNTRYCNT + 1
+         CTRYSTR <PARMS>
+         CNTRYCNT = CNTRYCNT + 1
 ENDM
 
 
 CTRYDAT STRUC
-	DW      0
-	DB      0
-	DB      0
-	DW      0
-	DW      0
+        DW      0
+        DB      0
+        DB      0
+        DW      0
+        DW      0
 CTRYDAT ENDS
 
 
@@ -222,29 +222,29 @@ CDATASIZE       EQU  (TYPE CTRYDAT) - 2 ; SIZE OF COUNTRY DATA
 
 
 CINFO   STRUC                           ; OFFSET   FIELD
-	DW      0                       ;    0     COUNTRY ID
-	DW      0                       ;    2     CODE PAGE
-	DW      0                       ;    4     DATE FORMAT
-	DB      0                       ;    5     CURRENCY SYMBOL (5 BYTES)
-	DB      0
-	DB      0
-	DB      0
-	DB      0
-	DB      0                       ;   10     1000 SEPARATOR
-	DB      0
-	DB      0                       ;   12     DECIMAL SEPARATOR
-	DB      0
-	DB      0                       ;   14     DATE SEPARATOR
-	DB      0
-	DB      0                       ;   16     TIME SEPARATOR
-	DB      0
-	DB      0                       ;   18     CURRENCY FORMAT FLAGS
-	DB      0                       ;   19     DIGITS IN CURRENCY
-	DB      0                       ;   20     TIME FORMAT
-	DD      0                       ;   21     RESERVED
-	DB      0                       ;   25     DATA LIST SEPARATOR
-	DB      0
-	DW      5 DUP (0)               ;   27     RESERVED
+        DW      0                       ;    0     COUNTRY ID
+        DW      0                       ;    2     CODE PAGE
+        DW      0                       ;    4     DATE FORMAT
+        DB      0                       ;    5     CURRENCY SYMBOL (5 BYTES)
+        DB      0
+        DB      0
+        DB      0
+        DB      0
+        DB      0                       ;   10     1000 SEPARATOR
+        DB      0
+        DB      0                       ;   12     DECIMAL SEPARATOR
+        DB      0
+        DB      0                       ;   14     DATE SEPARATOR
+        DB      0
+        DB      0                       ;   16     TIME SEPARATOR
+        DB      0
+        DB      0                       ;   18     CURRENCY FORMAT FLAGS
+        DB      0                       ;   19     DIGITS IN CURRENCY
+        DB      0                       ;   20     TIME FORMAT
+        DD      0                       ;   21     RESERVED
+        DB      0                       ;   25     DATA LIST SEPARATOR
+        DB      0
+        DW      5 DUP (0)               ;   27     RESERVED
 CINFO   ENDS
 
 
@@ -252,7 +252,7 @@ CINFOSIZE       EQU     TYPE CINFO      ; SIZE OF COUNTRY INFO TABLE
 
 
 CTABLE  STRUC
-	DB      0FFh
-	DB      'CTYINFO'
-	DW      CINFOSIZE
+        DB      0FFh
+        DB      'CTYINFO'
+        DW      CINFOSIZE
 CTABLE  ENDS

@@ -471,7 +471,6 @@ L_CTRL_TAB      EQU     $-RPL_K8
 ;;;;;;;;;;;;;;;;
 
 KEYB_COMMAND  PROC NEAR
-
         CALL    SYSLOADMSG              ;load messages
         JNC     VERSION_OK              ;if no carry then version ok
 
@@ -1292,6 +1291,12 @@ ERROR3:
         POP     AX
 
         MOV     AX,ERR_PART
+ifdef	BILINGUAL
+	or	ax,ax
+	jnz	ERR03_GO
+	mov	ax,8			; Value Disallow
+ERR03_GO:
+endif
         LEA     SI,SUBLIST_COMLIN
         MOV     DH,PARSE_ERR_CLASS      ; parse error message
         XOR     DL,DL                   ; no input
@@ -1841,8 +1846,20 @@ KEYB_SYS_ACTIVE DB   'KEYBOARD.SYS',00
 KEYB_SYS_LENG   EQU  14
 KEYB_SYS_A_LENG EQU  13
 
+ifdef JAPAN
+PUBLIC          FILE_NAME
+endif ; JAPAN
 FILE_NAME       DB   128 DUP(0)
-
+ifdef JAPAN
+PUBLIC     keyb_table
+keyb_table label byte             ; keyboard definition file search table
+;               len  driver name sub type
+           db    9, 'KEYAX.SYS', 1
+           db    9, 'KEY01.SYS', 2
+           db    9, 'KEY02.SYS', 3
+           db    10,'KEYJ31.SYS',4
+           db    0
+endif ; JAPAN
 FILE_NOT_FOUND  EQU  2
 PATH_NOT_FOUND  EQU  3
 ;
@@ -2102,4 +2119,3 @@ TEMP_SHARED_DATA SHARED_DATA_STR <>
 
 CODE    ENDS
         END
-

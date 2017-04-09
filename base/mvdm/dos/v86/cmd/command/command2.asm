@@ -571,6 +571,9 @@ ChkStderr:
 
 ChkOtherHand:
 	add	bx,3			; skip handles 3,4
+ifdef NEC_98
+	add	bx,4   			 ; skip handles 2,3,4
+endif   ;NEC_98
 	mov	cx,FILPERPROC - 5	; CX = # handles to close
 					;   (handles 0-4 already done)
 ;; williamh: March 30, 1993, don't close invalid handle , save some time

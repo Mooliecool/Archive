@@ -1875,10 +1875,12 @@ IF	TimeSW+DateSW			;AN000;(Check if time or date format is supported)
 ;***********************************************************************
 $P_Set_CDI proc 			;AN000;
 	lea	si,psdata_seg:$P_Country_Info ;AC034;
+ifndef BILINGUAL
 	cmp	psdata_seg:[si].$P_CDI_DateF,$P_NeedToBeRead ;AN000; already read ?
 	je	$P_Read_CDI		;AN000;
 
 	jmp	short $P_Set_CDI_Exit	;AN000; then do nothing
+endif
 
 $P_Read_CDI:				;AN000; else read CDI thru DOS
 	push	ds			;AN000;

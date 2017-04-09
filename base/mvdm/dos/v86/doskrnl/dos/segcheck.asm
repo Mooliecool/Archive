@@ -8,6 +8,9 @@
 	INCLUDE DEVSYM.INC
 	include sf.inc
 	include int2a.inc
+ifdef NEC_98
+	include dpb.inc
+endif   ;NEC_98
 	.list
 
 
@@ -141,7 +144,7 @@ Astmes      dw  ?
 Astarg      dd  ?
 AstFrame    ENDS
 
-ifdef 0
+ifdef NEC_98
 
 ;**	DPBCheck - Validate A DPB Pointer
 ;
@@ -181,7 +184,6 @@ DPBRet: RESTORE <DI,ES,SI,DS,BX,AX> ;	Done:
 	RET     6
 
 EndProc DPBCheck
-
 
 
 ;**	SFTCheck - Validate an SFT Pointer
@@ -300,8 +302,7 @@ BufNotFound:
 
 EndProc BUFCheck,NoCheck
 
-endif
-
+endif   ;NEC_98
 ENDIF
 
 DOSCODE	ENDS

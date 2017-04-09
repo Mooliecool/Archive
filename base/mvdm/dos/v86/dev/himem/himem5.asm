@@ -36,6 +36,9 @@
 
 	extrn	fInHMA:byte
 	extrn	EndText:byte
+ifdef NEC_98
+	extrn	InHMAMsg:byte
+endif   ;NEC_98
 _text	ends
 
 funky	segment	word public 'funky'
@@ -272,6 +275,9 @@ GetLinear	endp
 ;*									*
 ;*----------------------------------------------------------------------*
 
+ifdef NEC_98
+HMALen		dw	?		; Length of funky (without init code)
+endif   ;NEC_98
 	public	pack_and_truncate
 pack_and_truncate	proc	far
 
@@ -353,6 +359,7 @@ NoMoveEntry:
 	add	di,15			; round new segment to paragraph
 	and	di,not 15
 
+ifndef NEC_98
 InitFailed:
 	ifdef	debug_tsr
 	mov	ax,ds			; # paragraphs to keep =
@@ -419,10 +426,74 @@ we_are_quitting:
 	pop	ax
 	ret				; far return from driver init
 	endif
+else    ;NEC_98
+	ifdef	debug_tsr
+	mov	dx,di
+	shr	dx,4			; get # paragraphs to retain
+	mov	ax,3100h
+	int	21h
+	else
+InitFailed:
+	lds	si,[pReqHdr]		; discard the initialization code
+	mov	word ptr ds:[si].Address[0],di
+	mov	word ptr ds:[si].Address[2],es
+	mov	ds:[si].Status,100h ; Store return code - DONE
+
+	pop	ax		; throw away return from InitDriver
+
+	push	cs
+	call	an_iret		; call an iret in our segment
+
+	or	di, di
+	jz	we_are_quitting
+
+	mov	ds, textseg
+	assume	ds:_text
+	mov	ax, hiseg
+	mov	dd_int_loc,offset Interrupt	; replace Interrupt with
+						; tiny permanent stub
+
+	mov	ax, KiddValleyTop
+	sub	ax, KiddValley
+	add	ax, end_of_hiseg
+	sub	ax, HISEG_ORG		; size of resident funky including
+	mov	HMALen, ax
+
+	mov	ax, ((multMULT shl 8)+multMULTGETHMAPTR)
+	int	2fh
+	cmp	HMALen, bx
+	ja	we_are_quitting
+
+	cmp	di, HISEG_ORG
+	ja	we_are_quitting
+
+	mov	bx, HMALen
+	mov	ax, ((multMULT shl 8)+multMULTALLOCHMA)
+	int	2fh
+	cmp	di, 0ffffh
+	je	we_are_quitting
+
+	call	MoveHi
+
+we_are_quitting:
+	pop	bp
+	pop	si
+	pop	di
+	pop	es
+	pop	ds
+	pop	dx
+	pop	cx
+	pop	bx
+	pop	ax
+	ret				; far return from driver init
+	endif
+endif   ;NEC_98
 
 pack_and_truncate	endp
 
+ifndef NEC_98
 HMALen		dw	?		; Length of funky (without init code)
+endif   ;NEC_98
 
 
 ;
@@ -435,7 +506,11 @@ HMALen		dw	?		; Length of funky (without init code)
 MoveHi	proc	near
 	push	di			; remember offset in HMA
 	mov	si, HISEG_ORG
+ifndef NEC_98
 	mov	cx, cs:HMALen
+else    ;NEC_98
+	mov	cx, HMALen
+endif   ;NEC_98
 	mov	ax, textseg
 	mov	ds, ax
 	assume	ds:_text
@@ -481,5 +556,4 @@ an_iret	endp
 end_of_funky_seg:
 funky	ends
 	end
-
 

@@ -67,7 +67,7 @@ PL_LOGIC:                              ;;
    IFF  EITHER_ALT,NOT                 ;;
    ANDF EITHER_CTL,NOT                 ;;
 ;     IFF CAPS_STATE
-;         SET_FLAG DEAD_UPPER
+;	 SET_FLAG DEAD_UPPER
 ;     ELSEF
       IFF EITHER_SHIFT                 ;;
           SET_FLAG DEAD_UPPER          ;;
@@ -563,16 +563,32 @@ NON_DEAD:			       ;;
     ELSEF			       ;; ctl off, alt on at this point
       IFKBD XT_KB+AT_KB+JR_KB	       ;; XT, AT, JR keyboards. Nordics
 	 IFF EITHER_SHIFT	       ;; only.
-	    XLATT FOURTH_SHIFT	       ;; ALT + shift
-	 ELSEF			       ;;
-	    XLATT THIRD_SHIFT	       ;; ALT
+	    IFF CAPS_STATE
+		XLATT THIRD_SHIFT      ;; ALT + shift
+	    ELSEF
+		XLATT FOURTH_SHIFT
+	    ENDIFF
+	 ELSEF
+	    IFF CAPS_STATE	       ;;
+		XLATT FOURTH_SHIFT     ;; ALT
+	    ELSEF
+		XLATT THIRD_SHIFT
+	    ENDIFF
 	 ENDIFF 		       ;;
       ELSEF			       ;; ENHANCED keyboard
 	 IFF R_ALT_SHIFT	       ;; ALTGr
 	   IFF EITHER_SHIFT    	       ;;
-	     XLATT FOURTH_SHIFT	       ;;
+	     IFF CAPS_STATE
+		 XLATT THIRD_SHIFT
+	     ELSEF
+		 XLATT FOURTH_SHIFT    ;;
+	     ENDIFF
            ELSEF                       ;;
-	     XLATT THIRD_SHIFT	       ;;
+	     IFF CAPS_STATE
+		 XLATT FOURTH_SHIFT	;;
+	     ELSEF
+		 XLATT THIRD_SHIFT
+	     ENDIFF
            ENDIFF                      ;;
 	 ENDIFF 		       ;;
       ENDIFF			       ;;
@@ -837,17 +853,17 @@ COM_NA_UP_K1_END:                      ;;
    DB    -1,-1                         ;; Buffer entry for error character
                                        ;;
    DW    COM_THIRD_T1_END-$            ;; Size of xlat table
-   DB    TYPE_2_TAB                    ;; xlat options:
+   DB	 STANDARD_TABLE+ZERO_SCAN      ;; xlat options:
    DB    9                             ;; number of entries
-   DB    18,0A9H,12H                   ;; e ogonek
-   DB    24,0A2H,18H                   ;; o acute
-   DB    30,0A5H,1EH                   ;; a ogonek
-   DB    31,098H,1FH                   ;; s acute
-   DB    38,088H,26H                   ;; l slash
-   DB    44,0BEH,2CH                   ;; z dot
-   DB    45,0ABH,2DH                   ;; z acute
-   DB    46,086H,2EH                   ;; c acute
-   DB    49,0E4H,31H                   ;; n acute
+   DB	 18,0A9H		      ;; e ogonek
+   DB	 24,0A2H		      ;; o acute
+   DB	 30,0A5H		      ;; a ogonek
+   DB	 31,098H		      ;; s acute
+   DB	 38,088H		      ;; l slash
+   DB	 44,0BEH		      ;; z dot
+   DB	 45,0ABH		      ;; z acute
+   DB	 46,086H		      ;; c acute
+   DB	 49,0E4H		      ;; n acute
 COM_THIRD_T1_END:                      ;;
                                        ;;
    DW    0                             ;; Last xlat table
@@ -866,17 +882,17 @@ COM_THIRD_END:                         ;;
    DB    -1,-1                         ;; Buffer entry for error character
                                        ;;
    DW    COM_FOURTH_T1_END-$           ;; Size of xlat table
-   DB    TYPE_2_TAB                    ;; xlat options:
+   DB	 STANDARD_TABLE+ZERO_SCAN      ;; xlat options:
    DB    9                             ;; number of entries
-   DB    18,0A8H,12H                   ;; E ogonek
-   DB    24,0E0H,18H                   ;; O acute
-   DB    30,0A4H,1EH                   ;; A ogonek
-   DB    31,097H,1FH                   ;; S acute
-   DB    38,09DH,26H                   ;; L slash
-   DB    44,0BDH,2CH                   ;; Z dot
-   DB    45,08DH,2DH                   ;; Z acute
-   DB    46,08FH,2EH                   ;; C acute
-   DB    49,0E3H,31H                   ;; N acute
+   DB	 18,0A8H		      ;; E ogonek
+   DB	 24,0E0H			;; O acute
+   DB	 30,0A4H		      ;; A ogonek
+   DB	 31,097H		      ;; S acute
+   DB	 38,09DH		      ;; L slash
+   DB	 44,0BDH		      ;; Z dot
+   DB	 45,08DH		      ;; Z acute
+   DB	 46,08FH		      ;; C acute
+   DB	 49,0E3H		      ;; N acute
 COM_FOURTH_T1_END:		       ;;
 				       ;;
    DW	 0			       ;; Last xlat table

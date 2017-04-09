@@ -19,7 +19,7 @@
 ;		 MZ 11 May 1983     RmDir, ChDir, MkDir implemented
 ;		 EE 19 Oct 1983     RmDir no longer allows you to delete a
 ;				    current directory.
-;		 MZ 19 Jan 1983     Brain damaged applications rely on success
+;		 MZ 19 Jan 1983     some applications rely on success
 
 	.xlist
 	.xcref
@@ -42,7 +42,7 @@
 	I_Need	NoSetDir,BYTE		; TRUE => no exact match on splice
 	I_Need	cMeta,BYTE
 	I_Need	DrvErr,BYTE							;AN000;
-
+                I_Need  CURDRV,BYTE
 
 DOSCODE	SEGMENT
 
@@ -126,19 +126,39 @@ FCPYNEXT:
 	LODSB			      ; get char
 FFF:
 	CMP	AL,'\'                ; beginning of directory
+ifdef DBCS
+        JNZ     GGG
+else
 	JNZ	FOK		      ; no
 
 	invoke	UCase
+endif
 
 	STOSB			      ; put into user's buffer
 	LODSB			      ; 1st char of dir is 05?
 	CMP	AL,05H
+ifdef DBCS
+	JNZ	GGG		      ; no
+else
 	JNZ	FOK		      ; no
+endif
 FCHANGE:
 	MOV	AL,0E5H 	      ; make it E5
+ifdef DBCS
+	JMP  	FSKIP
+GGG:
+        invoke  TESTKANJ              ; Is Character lead byte of DBCS?
+        jz      FOK                   ; jump if not
+        stosb                         ; put into user's buffer
+        lodsb                         ; skip over DBCS character
+        jmp     short FSKIP           ; skip upcase
+endif
 FOK:
 	invoke	UCase
 
+ifdef DBCS
+FSKIP:
+endif
 	STOSB			      ; put into user's buffer
 	OR	AL,AL		      ; final char
 	JNZ	FCPYNEXT	      ; no
@@ -249,20 +269,28 @@ GotCDS:
 ;
 ; wfp_start points to the text.  See if it is long enough
 ;
-	CALL	Check_PathLen		;PTM.					;AN000;
-	JA	ChDirErrP
-	Context <DS>
-	mov	dx,wfp_start
-	mov	si,dx
-	HRDSVC	SVC_DEMSETCURRENTDIR
-	jnc	UpdateCDS
-	jmp	ChDirErrP
-UpdateCDS:
-	LES	DI,ThisCDS		; get logical CDS
-SkipRecency:
-	invoke	FStrCpy
-	XOR	AL,AL
-	transfer    Sys_Ret_OK
+
+   ; This call is necessary no more -- dem does it
+
+   ;     CALL    Check_PathLen           ;PTM.                                   ;AN000;
+   ;     JA      ChDirErrP
+
+; even if this call fails -- we still can do a successful change dir
+; win95 does not really care if you do a chdir on a long directory
+; if you try to get a current dir after that -- you get err 0x0f
+; (which is ERROR_INVALID_DRIVE)!!! 
+
+   
+        Context <DS>
+
+        mov     al, [curdrv]
+        mov     dx,wfp_start
+        mov     si,dx
+        les     di,ThisCDS
+        HRDSVC  SVC_DEMSETCURRENTDIR
+        jc      ChDirErrP
+        XOR     AL,AL
+        transfer    Sys_Ret_OK
 EndProc $CHDIR
 
 BREAK <$MkDir - Make a directory entry>
@@ -316,6 +344,13 @@ pathok:
 	HRDSVC	SVC_DEMCREATEDIR
 	ASSUME	ES:NOTHING
         JC      MkErrCheck                   ; no errors
+IFDEF JAPAN
+	; ntraid:mskkbug#3165,3174: Cannot make directory	10/31/93 yasuho
+	; MKDIR system call was return to NC if function is successful.
+	; But, some japanese application (e.g. install program) was
+	; checked AX register for how to error function call.
+	xor	ax, ax			; success. return code = 0
+ENDIF
         transfer Sys_Ret_OK
 
 
@@ -330,6 +365,13 @@ pathok:
 MkErrCheck:
         cmp     al, error_not_ready
         jz      MkErrP
+ifdef JAPAN
+        ; kksuzuka:#3833 for oasys/win2.3
+        cmp     al, 0b7h                ; ERROR_ALREADY_EXISTS from dem
+        jnz     MkNotExist
+        mov     al, error_access_denied
+MkNotExist:
+endif ; JAPAN
         jmp     short MkErr
 
 EndProc $MKDIR

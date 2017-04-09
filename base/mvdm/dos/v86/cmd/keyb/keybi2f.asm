@@ -36,7 +36,9 @@
 
         INCLUDE KEYBEQU.INC
         INCLUDE KEYBSHAR.INC
+ifndef JAPAN
         INCLUDE KEYBMAC.INC
+endif ; !JAPAN
         INCLUDE KEYBCMD.INC
         INCLUDE KEYBCPSD.INC
         INCLUDE KEYBI9C.INC
@@ -59,7 +61,11 @@ CODE    SEGMENT PUBLIC 'CODE'
 ;
 ; Input Registers:
 ;       AH = 0ADH
+; ifdef JAPAN
+;	AL = 80,81,82,83
+; else
 ;       AL = 80,81,82
+; endif
 ;
 ; Output Registers:
 ;       N/A
@@ -91,11 +97,18 @@ CODE    SEGMENT PUBLIC 'CODE'
 ;               Set COUNTRY_FLAG = 0FFH
 ;         ELSE
 ;               Set carry flag
+; ifdef JAPAN
+;	IF AL = 83 THEN
+;	  Return BL=COUNTRY_FLAG
+; endif
 ;       JMP to previous INT 2FH handler
 
 CP_QUERY        EQU     80H
 CP_INVOKE       EQU     81H
 CP_LANGUAGE     EQU     82H
+ifdef JAPAN
+CP_QLANGUAGE	EQU	83H
+endif ; JAPAN
 
 
 GET_KB_MODE     EQU   83H              ;; ONLY FOR RUSSIAN (YST)
@@ -172,7 +185,11 @@ INT_2F_CP_LANGUAGE:
         CMP     AL,CP_LANGUAGE          ; Q..Set default language??
 
 
+ifdef JAPAN
+	jnz	INT_2F_CP_QLANG		; go check for query language
+else ; !JAPAN
         jnz     int2f_ret               ; don't handle undefined functions
+endif ; !JAPAN
 
 ;       Now, if BL=0 or 0ffh, we'll set COUNTRY_FLAG to that value.
 
@@ -230,6 +247,16 @@ INT_2F_SET_KB_MODE:                    ;;                                  |
 
 int2f_ret:
         ret
+
+ifdef JAPAN
+INT_2F_CP_QLANG:
+	CMP	AL,CP_QLANGUAGE
+	jnz	int2f_ret
+
+	mov	bl,cs:COUNTRY_FLAG
+	ret
+endif ; JAPAN
+
 KEYB_INT_2F     ENDP
 
 CODE    ENDS

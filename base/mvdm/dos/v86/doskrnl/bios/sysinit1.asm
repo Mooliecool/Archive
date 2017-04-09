@@ -12,6 +12,10 @@ break	macro	; dummy empty macro
 	endm
 	include version.inc
 	include biosseg.inc
+ifdef NEC_98
+	include bpb.inc
+	include dpb.inc
+endif   ;NEC_98
 	include sysvar.inc
 	include curdir.inc
 	include pdb.inc
@@ -53,9 +57,21 @@ multMULTGETHMAPTR	equ	1
 multMULTALLOCHMA	equ	2
 
 
+ifndef NEC_98
 stacksw equ     true                    ;include switchable hardware stacks
+else    ;NEC_98
+stacksw equ	false			;include switchable hardware stacks
+endif   ;NEC_98
+
+ifdef JAPAN
+; CDS structure has 88 bytes size each drive with Real DOS
+; Ichitaro ver5 checks drive type of each drive
+; It should be assigned to other bit
+mycds_size equ	88			; size of curdir_list_jpn.
+else ; !JAPAN
 mycds_size equ	71			; size of curdir_list. if it is not
 					;the same, then will generate compile error.
+endif ; !JAPAN
 
 if DEBUG				; BUGBUG - Jeez, remove this!
   dossize equ	0b200h
@@ -71,16 +87,23 @@ noexec	equ	   false
 
 ;     if mycds_size <> curdirlen,then force a compilatiaon error.
 
+ifdef JAPAN
+	if	mycds_size ne curdirlen_JPN
+	%out	!!! sysinit1 compilation failed. different cds size !!!
+	.errne	mycds_size eq curdirlen_JPN
+	endif
+else
 	if	mycds_size ne curdirlen
 	%out	!!! sysinit1 compilation failed. different cds size !!!
 	.errne	mycds_size eq curdirlen
 	endif
+endif
 
 	if	not ibmjapver
 	extrn	 re_init:far
 	endif
 
-	ifdef	TAIWAN
+	ifdef	xxTAIWANxx ; no needed to TAIWAN, gchang 06/22/94
 	extrn	cdosinit:near
 	endif
 
@@ -157,12 +180,15 @@ multrk_off2 equ 00000001b		;user specified multitrack=off.
 	extrn	MoveDOSIntoHMA:dword
 	extrn	SysinitPresent:byte
         extrn   DemInfoFlag:byte
+ifndef NEC_98
 	extrn	spc_mse_int10:dword
 	extrn	int29Perf:dword
 
 	extrn	outchr:near
+endif   ;NEC_98
 Bios_Data       ends
 
+ifndef NEC_98
 ; NTVDM 16-Sep-1992 Jonle
 ; Softpc Kbd, mouse, emm drivers
 SpcKbdSeg  segment
@@ -177,6 +203,7 @@ SpcMseSeg  segment
         extrn   SpcMseBeg:byte
         extrn   SpcMseEnd:byte
 SpcMseSeg  ends
+endif   ;NEC_98
 
 SpcEmmSeg  segment
         extrn   InitSpcEmm:near
@@ -214,6 +241,14 @@ sysinitseg segment
 	extrn	AllocUMB:near
         extrn   toomanydrivesmsg:byte                           ; M029
 
+ifdef	JAPAN
+	extrn	badcom2:byte,toomanydrivesmsg2:byte
+	extrn	IsDBCSCodePage:near
+endif
+ifdef NEC_98
+	extrn	SI_end:byte
+	extrn	deviceparameters:byte
+endif   ;NEC_98
 
         ;NTVDM
         extrn   MseDev:byte              ; internal mouse driver name
@@ -454,6 +489,7 @@ int&a	endp
         endm
 
 
+ifndef NEC_98
 DOCLI:
     FCLI
     ret
@@ -462,6 +498,7 @@ DOSTI:
     ret
 DOIRET:
     FIRET
+endif   ;NEC_98
 
 
 ;********************************************************************
@@ -593,6 +630,12 @@ fatal   proc    near
 	mov	si,cs
 	mov	ds,si
 	mov	si,offset fatal_msg
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	si,offset fatal_msg2
+@@:
+endif
 
 ;SR;
 ;   We set all foci to this VM to issue the stack failure message
@@ -678,6 +721,10 @@ seg_reinit_ptr	label dword
 		dw	offset Bios_Code:seg_reinit
 temp_bcode_seg	dw	Bios_Code
 
+ifdef NEC_98
+fake_floppy_drv db 0			;set to 1 if this machine
+					;does not have any floppies!!!
+endif   ;NEC_98
 
 ;variables for stack initialization program.
 
@@ -699,7 +746,11 @@ singlebuffersize dw	?		; maximum sector size + buffer header
 files	db	8			; enough files for pipe
 fcbs	db	4			; performance for recycling
 keep	db	0			; keep original set
+ifndef NEC_98
 num_cds db	1			; minimum needed is 1, so that initialization does'nt have a problem
+else    ;NEC_98
+num_cds db	5			; 5 net drives
+endif   ;NEC_98
 confbot dw	?
 alloclim dw	?
 DirStrng db	"A:\",0                 ; string for the root directory of a drive
@@ -711,6 +762,10 @@ linecount dw	0			;  line count in config.sys
 showcount db	'     ',cr,lf,'$'	;  used to convert linecount to ascii.
 buffer_linenum dw 0			; line count for "buffers=" command if entered.
 
+ifdef NEC_98
+sys_model_byte db 0ffh			;model byte used in sysinit
+sys_scnd_model_byte db 0		;secondary model byte used in sysinit
+endif   ;NEC_98
 
 buf_prev_off dw 0
 
@@ -805,16 +860,7 @@ tempstack db	80h dup (?)
 
 goinit:
 
-ifdef JAPAN
-	mov	ah,50h			; set crt mode
-	mov	al,0
-	mov	bx,81			; for JAPAN
-	int	10h
-	mov	ah,50h			; set keyboard mode
-	mov	al,0
-	mov	bx,81			; for JAPAN
-	int	16h
-endif
+ifndef NEC_98
 	cld
 
 ;; Before we installed spckbd.asm (we hook a lot of vectors there),
@@ -834,6 +880,57 @@ endif
 	pop	ds
 	xor	si,si
 	mov	di,si
+else    ;NEC_98
+move_myself:
+	cld			; set up move
+	xor	si,si
+	mov	di,si
+
+	if	msver
+	mov	cx,cs:[memory_size]
+	cmp	cx,1		; 1 means do scan
+	jnz	noscan
+	mov	cx,2048 	; start scanning at 32k boundary
+	xor	bx,bx
+
+memscan:inc	cx
+	jz	setend
+	mov	ds,cx
+	mov	al,[bx]
+	not	al
+	mov	[bx],al
+	cmp	al,[bx]
+	not	al
+	mov	[bx],al
+	jz	memscan
+setend:
+	mov	cs:[memory_size],cx
+	endif
+
+	if	ibmver or ibmjapver
+	mov	cx,cs:[memory_size]
+	endif
+
+noscan: 				; cx is mem size in para
+;
+;	cas -- a) if we got our memory size from the ROM, we should test it
+;		  before we try to run.
+;	       b) in any case, we should check for sufficient memory and give
+;		  an appropriate error diagnostic if there isn't enough
+;
+	push	cs
+	pop	ds
+
+;	cas note:  It would be better to put dos + bios_code BELOW sysinit
+;	  that way it would be easier to slide them down home in a minimal
+;	  memory system after sysinit.	As it is, you need room to keep
+;	  two full non-overlapping copies, since sysinit sits between the
+;	  temporary home and the final one.  the problem with doing that
+;	  is that sys*.asm are filled with "mov ax,cs, sub ax,11h" type stuff.
+
+	dec	cx			; one para for an arena at end of mem
+					; in case of UMBs
+endif   ;NEC_98
         mov     ax, offset sysinitgrp:SI_end   ; need this much room for sysinit
 	call	off_to_para
 	sub	cx,ax
@@ -965,9 +1062,21 @@ sysin:
         call    DOCLI
 	mov	ax,cs
 	mov	ss,ax
+ifndef NEC_98
 	align	2		; assembler wouldn't let me do an "and 0fffeh"
 locstack label	byte		;  on the mov sp,offset locstack
 	mov	sp,offset locstack	; set stack
+else    ;NEC_98
+;M069 start
+locstack =	(offset $ - offset sysinit$) and 0FFFEh
+	mov	sp, locstack		; set stack
+	
+;M069 - ensure no NMI window exists here
+;	align	2		; assembler wouldn't let me do an "and 0fffeh"
+;locstack label byte		;  on the mov sp,offset locstack
+;	mov	sp,offset locstack	; set stack
+
+endif   ;NEC_98
 
         call    DOSTI
 
@@ -1009,6 +1118,7 @@ locstack label	byte		;  on the mov sp,offset locstack
 ;	currently pointed to by es:di.	use the offsets specified in the
 ;	definition of the sysinitvars struct in inc\sysvar.inc
 
+ifndef NEC_98
 	mov	ah,88h
 ;; IBM ps/2 90 int 15(ah = 88h) read a coms byte(0B6h) which we don't support.
 ;; it returns 0 on this query.
@@ -1018,6 +1128,22 @@ locstack label	byte		;  on the mov sp,offset locstack
 ;;	jc	no_ext_memory
 	mov	es:[di].sysi_ext_mem,ax ;save extended memory size
 ;;	or	ax, ax
+else    ;NEC_98
+;----------------------------------------------------------- NEC 91/05/10 -----
+	push	ds
+	xor	ax,ax
+	mov	ds,ax
+	mov	al,byte ptr ds:[401h]
+	pop	ds
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1
+	mov	es:[di].sysi_ext_mem,ax ;save extended memory size
+endif   ;NEC_98
 no_ext_memory:
 	mov	ax,es:[di.sysi_maxsec]	; get the sector size
 	add	ax,bufinsiz		; size of buffer header
@@ -1060,6 +1186,7 @@ not_386_system:
 
 	sub	ax,cx
 	mov	[confbot],ax		; temp "unsafe" location
+ifndef NEC_98
 ;	push	es			; preserve pointer to DOSINFO data
 ;	push	di
 
@@ -1082,6 +1209,30 @@ not_386_system:
 
 ;	pop	di			; restore pointer to DOSINFO data
 ;	pop	es
+else    ;NEC_98
+        push    es                      ; preserve pointer to DOSINFO data
+        push    di
+
+; setup and initialize the temporary buffer
+
+        les     di,es:[di.sysi_buf]     ;get the buffer chain entry pointer
+        mov     word ptr es:[di.Dirty_Buff_Count],0
+        mov     word ptr es:[di.Buff_Queue],0
+        mov     word ptr es:[di.Buff_Queue+2],ax
+        mov     es,ax
+        xor     ax,ax
+        mov     di,ax                   ;es:di -> single buffer
+
+        mov     es:[di.buf_next],ax     ;points to itself
+        mov     es:[di.buf_prev],ax     ;points to itself
+
+        mov     word ptr es:[di.buf_id],00ffh ;free buffer,clear flag
+        mov     word ptr es:[di.buf_sector],0
+        mov     word ptr es:[di.buf_sector+2],0
+
+        pop     di                      ; restore pointer to DOSINFO data
+        pop     es
+endif   ;NEC_98
 
 	push	cs
 	pop	ds
@@ -1130,6 +1281,12 @@ not_386_system:
         cmp     byte ptr [TooManyDrivesFlag],0  ;Q: >24 partitions? M029
         je      no_err                          ;  N: continue      M029
         mov     dx,offset TooManyDrivesMsg      ;  Y: print error message M029
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset TooManyDrivesMsg2
+@@:
+endif
         call	print                           ;		    M029
 no_err:						;		    M029
 
@@ -1165,11 +1322,11 @@ ProcessConfig:
         assume  ds:nothing
 
 
-ifndef  TAIWAN
+ifndef  xxTAIWANxx
 
 	call	doconf			;do pre-scan for dos=high/low
 
-else	; taiwan
+else	; xxTAIWANxx ; no needed to TAIWAN, gchang 06/22/94
 
 	call	chkoemlocaldrv
 	mov	cs:oemdriverinst,ax
@@ -1186,7 +1343,7 @@ else	; taiwan
 	call	chklocalexist		;check if local dev drv exist
 					;if not found,system halt
 	call	recovercsiint		;recover csi interrupt vector
-endif	; taiwan
+endif	; xxTAIWANxx ; no needed to TAIWAN, gchang 06/22/94
 
 
 
@@ -1245,6 +1402,7 @@ do_multi_pass:
 ; NTVDM
 ; Copy softpc keyboard driver resident code to start of free mem
 ; Install Softpc IVT hooks
+ifndef NEC_98
         mov     al,devmark_spc
         call    setdevmark
         mov     es, cs:[devmark_addr]
@@ -1294,6 +1452,9 @@ do_multi_pass:
         mov     word ptr cs:old08, ax
         lodsw
         mov     word ptr cs:old08+2, ax
+else    ;NEC_98
+	 bop   5fh
+endif   ;NEC_98
 
 
 ; NTVDM
@@ -1356,6 +1517,7 @@ NoEmmServices:
 ; Install Softpc Mouse driver in UMB if can else in LOW memory
 ; This must be done after himem.sys is loaded for umb support
 ;
+ifndef NEC_98
         mov     cx, offset sysinitgrp:SpcMseEnd
         sub     cx, offset sysinitgrp:SpcMseBeg  ; cx,    size of SpceMse
         mov     di, offset MseDev
@@ -1374,6 +1536,7 @@ NoEmmServices:
         pop     ds
         call    sysinitgrp:InstSpcMse
 
+endif   ;NEC_98
 
 
         call    ShrinkUMB
@@ -1418,7 +1581,9 @@ dolast:
 
 	cmp	runhigh, 0		; are we running low
 	je	@f			; yes, no CPM hack needed
+ifndef NEC_98
 	call	CPMHack			; make ffff:d0 same as 0:c0
+endif   ;NEC_98
 @@:
 
 
@@ -1460,6 +1625,14 @@ ConfigDone:
 
 skip_free_sysinitbase:
 
+ifdef NEC_98
+	cmp	runhigh, 0
+	je	@f
+;----------------------------------------------------------- NEC 91/05/10 -----
+;	call	InstVDiskHeader 	; Install VDISK header (allocates some mem from DOS)
+;------------------------------------------------------------------------------
+@@:
+endif   ;NEC_98
 if	noexec
 	mov	bp,ds			;save command.com segment
 	push	ds
@@ -1624,6 +1797,12 @@ okld:
 
 comerr:
 	mov	dx,offset badcom ;want to print command error
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset badcom2
+@@:
+endif
 	extrn	badfil:near
 	call	badfil
 	public	stall
@@ -1683,6 +1862,12 @@ LdngLo:
 	pop	ds
 	mov	ah, 9
 	mov	dx, offset DOSLOMSG		; inform user that we are
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx, offset DOSLOMSG2
+@@:
+endif
 	int	21h				;  loading low
 
 	; actually move the dos, and reinitialize it.
@@ -1780,7 +1965,7 @@ MovDOSHi	endp
 
 
 MovDOSLo	proc	near
-	call	AllocMemForDOS			; incestuosly!!!
+	call	AllocMemForDOS			; 
 	mov	es, ax				; pass the segment to MovBIOS
 	call	MovBIOS
 ;
@@ -1937,6 +2122,12 @@ FatalErr:
 	push	cs
 	pop	ds
 	mov	dx, offset FEMsg
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f			; if Kanji mode
+	mov	dx, offset FEMsg2
+@@:
+endif
 	mov	ah, 9h
 	int	21h
         cli
@@ -2000,11 +2191,26 @@ AllocHMA	proc near
 	dec	ax
 	jz	@f		; error if not able to allocate HMA
 
+ifndef NEC_98
 ;
 ;------ Himem may be lying because it has allocated mem for int 15
 ;
 	mov	ah, 88h
 	int	15h
+else    ;NEC_98
+	push	ds
+	xor	ax,ax
+	mov	ds,ax
+	mov	al,byte ptr ds:[401h]
+	pop	ds
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1
+endif   ;NEC_98
 	cmp	ax, 64		; less than 64 K of hma ?
 	jb	grabhma_error
 
@@ -2092,6 +2298,148 @@ FTryToMovDOSHi	proc	far
 FTryToMovDOSHi	endp
 
 
+ifdef NEC_98
+;
+;----------------------------------------------------------------------------
+;
+; following piece of code will be moved into a para boundary. And the para
+; address posted in seg of int 19h vector. Offset of int 19h will point to
+; VDint19. This is to protect HMA from apps which use VDISK header method
+; to determine free extended memory.
+;
+; For more details read "power programming" column by Ray Duncan in the
+; May 30 1989 issue of PC Magazine (pp 377-388) [USING EXTENDED MEMORY,PART 1]
+;
+;----------------------------------------------------------------------------
+;
+StartVDHead	label	byte
+;
+;-------------- what follows is a dummy device driver header (not used by DOS)
+;
+		dd	0		; link to next device driver
+		dw	8000h		; device attribute
+		dw	0		; strategy routine offset
+		dw	0		; interrupt routine offset
+		db	1		; number of units
+		db	7 dup(0)	; reserved area
+VDiskSig1	db	'VDISK'
+
+VLEN1		equ	($-offset VDiskSig1)
+
+		db	'  V3.3'	; vdisk label
+		db	15 dup (0)	; pad
+		dw	0		; bits 0-15 of free HMA
+		db	11h		; bits 16-23 of free HMA (1M + 64K)
+
+VDInt19:
+		db	0eah		; jmp to old vector
+OldVDInt19	dd	?		; Saved int 19 vector
+
+EndVDHead	label	byte
+;
+;
+VDiskHMAHead	db	0,0,0		; non-bootable disk
+VDiskSig2	db	'VDISK'
+
+VLEN2		equ	($-offset VDiskSig2)
+
+		db	'3.3'		; OEM - signature
+		dw	128		; number of bytes/sector
+		db	1		; sectors/cluster
+		dw	1		; reserved sectors
+		db	1		; number of FAT copies
+		dw	64		; number of root dir entries
+		dw	512		; number of sectors
+		db	0feh		; media descriptor
+		dw	6		; number of sectors/FAT
+		dw	8		; sectors per track
+		dw	1		; number of heads
+		dw	0		; number of hodden sectors
+		dw	440h		; Start of free HMA in K (1M+64K)
+EndVDiskHMAHead label	byte
+;
+;
+;----------------------------------------------------------------------------
+;
+; procedure : InstVDiskHeader
+;
+;	      Installs the VDISK header to reserve the 64k of HMA
+;	      It puts a 32 byte header at 10000:0 and
+;	      another header at (seg of int19):0
+;
+; Inputs : None
+;
+; Outputs : None
+;
+; USES : DS,SI,AX,CX,DX
+;
+;----------------------------------------------------------------------------
+;
+		assume	ds:nothing
+
+InstVDiskHeader proc	near
+
+		xor	ax, ax
+		mov	ds, ax			; seg of int vect table
+;
+;-------------- save old int 19 vector
+;
+		mov	ax, word ptr ds:[19h*4]
+		mov	word ptr OldVDint19, ax
+		mov	ax, word ptr ds:[19h*4+2]
+		mov	word ptr OldVDint19+2, ax
+;
+;-------------- calculate seg of new int 19 handler
+;
+		mov	ah, 48h 		; allocate memory
+		mov	bx, (offset EndVDHead - offset StartVDHead + 15) shr 4
+		int	21h
+
+;	if carry, fatal hanging error!!!!!
+
+		dec	ax			; point to arena
+		mov	es, ax
+		mov	word ptr es:[arena_owner], 8	; owner = System
+		mov	word ptr es:[arena_name], 'CS'	; System Code
+		inc	ax
+		mov	es, ax			; get back to allocated memory
+;
+;-------------- install new int 19 vector
+;
+		cli				; no reboots at this time
+		mov	word ptr ds:[19h*4], (offset VDint19 - offset StartVDHead)
+		mov	word ptr ds:[19h*4+2], ax
+;
+;-------------- move the code into proper place
+;
+		mov	cx, (offset EndVDHead - offset StartVDHead)
+		mov	si, offset StartVDHead
+		xor	di, di
+		push	cs
+		pop	ds
+		cld
+		rep	movsb
+		sti				; BUGBUG is sti OK now?
+;
+;-------------- mov the HMA VDisk head into HMA
+;
+		push	di
+		push	es
+
+		mov	ax, 0ffffh
+		mov	es, ax
+		mov	di, 10h
+		mov	cx, (offset EndVDiskHMAHead - offset VDiskHMAHead)
+		mov	si, offset VDiskHMAHead
+		rep	movsb			; ds already set to cs
+
+		pop	di
+		pop	es
+
+		ret
+
+InstVDiskHeader endp
+endif   ;NEC_98
 ;
 ;----------------------------------------------------------------------------
 ;
@@ -2126,6 +2474,40 @@ SaveFreeHMAPtr	proc	near
 		assume	ds:nothing
 		ret
 SaveFreeHMAPtr	endp
+ifdef NEC_98
+;----------------------------------------------------------------------------
+;
+; procedure : IsVDiskInstalled
+;
+;		Checks for the presence of VDISK header at 1MB boundary
+;		& INT 19 vector
+;
+; Inputs  : A20 flag should be ON
+; Outputs : Zero set if VDISK header found else Zero cleared
+;
+;----------------------------------------------------------------------------
+;
+IsVDiskInstalled proc	near
+		xor	ax, ax
+		mov	ds, ax
+		mov	ds, word ptr ds:[19*4+2]
+		mov	si, offset VDiskSig1 - offset StartVDHead
+		mov	cx, VLEN1
+		push	cs
+		pop	es
+		mov	di, offset VDiskSig1
+		rep	cmpsb
+		je	@f
+		mov	ax, 0ffffh
+		mov	ds, ax
+		mov	si, 10h+(offset VDiskSig2 - offset VDiskHMAHead)
+		mov	di, offset VDiskSig2
+		mov	cx, VLEN2
+		rep	cmpsb
+@@:
+		ret			; returns the Zero flag
+IsVDiskInstalled endp
+endif   ;NEC_98
 ;
 ;
 ;----------------------------------------------------------------------------
@@ -2185,7 +2567,11 @@ Procedure TempCDS
 	xor	ch,ch			; (cx) = # of block devices
 	mov	es:[di.sysi_ncds],cl	; one CDS per device
 	mov	al,cl
+ifdef JAPAN
+	mov	ah,size curdir_list_JPN
+else
 	mov	ah,size curdir_list
+endif
 	mul	ah			; (ax) = byte size for those CDSs
 	call	pararound		; (ax) = paragraph size for CDSs
 	mov	si,[confbot]
@@ -2195,6 +2581,9 @@ Procedure TempCDS
 	mov	word ptr es:[di.sysi_cds + 2],si
 	mov	ax,si
 	mov	word ptr es:[di.sysi_cds],0	; set address of CDS list
+ifdef NEC_98
+	lds	si,es:[di.sysi_dpb]	; (ds:si) = address of first DPB
+endif   ;NEC_98
 	assume	ds:nothing
 	mov	es,ax
 	xor	di,di			; (es:di) = address of 1st CDS
@@ -2226,14 +2615,18 @@ foogo:
         or      dx,dx                   ; have we found one fixed drive?
         jnz     fixed_drv2              ; NZ -> yes dont do IOCTL check
 
+ifndef NEC_98
         cmp     byte ptr DirStrng, 'B'
         jbe     not_fixed               ; 'A' and 'B' are always removable
 
+endif   ;NEC_98
+        push    bx
         mov     bl,byte ptr DirStrng
         sub     bl,'A'
         inc     bl                      ; C is 3
         mov     ax,4408h
         int     21h                     ; Is drive removable
+        pop     bx
         jc      fixed_drv               ; Could'nt find means NET hence fixed
         or      ax,ax
         jnz     fixed_drv
@@ -2256,6 +2649,12 @@ fill_in:
 	mov	ax,2
 	FOLLOWS CURDIR_END,CURDIR_FLAGS,2
 	stosw				; Save CURDIR_END
+ifdef JAPAN
+; CDS structure has 88 bytes size each drive with Real DOS
+; Ichitaro ver5 checks drive type of each drive
+; It should be had the same size
+        add     di,size curdirJPN_reserve  ; skip until next CDS
+endif ; !JAPAN
 
 	inc	byte ptr DirStrng
 	pop	cx
@@ -2432,13 +2831,20 @@ buf1:
 	mov	ax,[memlo]
 	mov	word ptr es:[di.sysi_cds],ax
 	mov	al,cl
+ifdef JAPAN
+	mov	ah,size curdir_list_JPN
+else
 	mov	ah,size curdir_list
+endif
 	mul	ah
 	call	pararound
 	add	[memhi],ax
 
 	or	[setdevmarkflag],for_devmark
 	call	round			; check for mem error before initializing
+ifdef NEC_98
+	lds	si,es:[di.sysi_dpb]
+endif   ;NEC_98
 	assume	ds:nothing
 	les	di,es:[di.sysi_cds]
 	call	fooset
@@ -2453,6 +2859,14 @@ buf1:
 	pop	ds
 	assume	ds:sysinitseg
 
+ifdef NEC_98
+	cmp	word ptr [stack_addr],-1 ;has the user entered "stacks=" command?
+	je	doinstallstack		;then install as specified by the user
+	cmp	[sys_scnd_model_byte],0 ;pc1,xt has the secondary model byte = 0
+	jne	doinstallstack		;other model should have default stack of 9,128
+	cmp	[sys_model_byte],0feh	;pc1, pc/xt or pc portable ?
+	jae	skipstack
+endif   ;NEC_98
 doinstallstack:
 	mov	ax,[stack_count]	; stack_count = 0?
 	or	ax,ax			;then,stack size must be 0 too.
@@ -2837,7 +3251,11 @@ install_seg_set:
 ;hkn; the environment pointer is made 0. so the current environment ptr.
 ;hkn; will be the same as pdb_environ which after dosinit is 0.
 
+ifndef NEC_98
 	mov	cs:[instexe.exec0_environ],0 ; set the environment seg.
+else    ;NEC_98
+	mov	cs:[instexe.exec0_environ],ax ; set the environment seg.
+endif   ;NEC_98
 
 
 	mov	word ptr cs:[instexe.exec0_com_line+2],ax ; set the seg.
@@ -2953,7 +3371,20 @@ sysinit_base:
 	mov	ah,9
 	push	cs
 	pop	ds
+ifdef	JAPAN
+	call	IsDBCSCodePage
+endif
 	mov	dx,offset mem_alloc_err_msgx - sysinit_base
+ifdef JAPAN
+	jz	sb_next			; if Kanji mode
+	mov	si,dx
+@@:
+	lodsb
+	or	al,al
+	jnz	@b
+	mov	dx,si
+sb_next:
+endif
 	int	21h
 	jmp	$			; hang here!!!!
 
@@ -2987,7 +3418,11 @@ sum1:
 	loop	sum1
 ;now,sum up sysinit module.
 sum_sys_code:
+ifndef NEC_98
 	mov	si,offset locstack	; starting after the stack.
+else    ;NEC_98
+	mov	si, locstack		; starting after the stack.  M069
+endif   ;NEC_98
 					;  this does not cover the possible stack code!!!
         mov     cx,offset sysinitgrp:SI_end    ; SI_end is the label at the end of sysinit
 	sub	cx,si			;  from after_checksum to SI_end
@@ -3010,6 +3445,119 @@ mem_alloc_err_msgx:
 
 end_sysinit_base label byte
 
+ifdef NEC_98
+;-------------------------------------------------------------------------
+; Set_Buffer
+;
+;function: set buffers in the real memory.				
+;	   lastly set the memhi,memlo for the next available free address.
+;
+;input:    ds:bx -> buffinfo.
+;	   [memhi]:[memlo = 0] = available space for the hash bucket.	
+;	   singlebuffersize = buffer header size + sector size		
+;
+;output:   buffers Queue established.					
+;	   [memhi]:[memlo] = address of the next available free space.	
+;
+
+set_buffer proc near
+
+	assume	ds:nothing
+	xor	dl, dl				; assume buffers not in HMA
+	call	GetBufferAddr
+	je	@f
+	mov	dl, 1				; buffers in HMA
+@@:
+	mov	word ptr ds:[bx].Buff_Queue,di	; head of Buff Q
+	mov	word ptr ds:[bx].Buff_Queue[2],es
+	mov	word ptr ds:[bx.Dirty_Buff_Count],0 ;set dirty_count to 0.
+
+	mov	ax, di
+	mov	cx, [buffers]
+	push	di				; remember first buffer
+
+;	for each buffer
+
+nxt_buff:
+	call	set_buffer_info 		;set buf_link,buf_id...
+	mov	di, ax
+	loop	nxt_buff
+
+	sub	di, [singlebuffersize]		; point to last buffer
+
+	pop	cx				; get first buffer
+	mov	word ptr es:[di].buf_next, cx	; last->next = first
+	xchg	cx, di
+	mov	word ptr es:[di].buf_prev, cx	; first->prev = last
+
+	or	dl, dl				; In HMa ?
+	jz	@f				; no
+	mov	byte ptr ds:[bx].Buff_In_HMA, 1
+	mov	ax, memhi			; seg of scratch buff
+	mov	word ptr ds:[bx].Lo_Mem_Buff, 0 ; offset of sctarch buff is 0
+	mov	word ptr ds:[bx].Lo_Mem_Buff[2], ax
+	mov	ax, singlebuffersize		; size of scratch buff
+	sub	ax, bufinsiz			; buff head not reqd
+@@:
+	add	memlo, ax
+	or	[setdevmarkflag], for_devmark
+	call	round
+	ret
+set_buffer endp
+
+;;---------------------------------------------------------------------------
+;
+; procedure : GetBufferAddr
+;
+;		Gets the buffer address either in HMA or in Lo Mem
+;
+; returns in es:di the buffer adress
+; returns NZ if allocated in HMA
+;
+;;---------------------------------------------------------------------------
+
+GetBufferAddr	proc	near
+		push	bx
+		push	dx
+		mov	ax, singlebuffersize
+		mul	buffers
+		add	ax, 15
+		and	ax, not 15		; para round
+		mov	bx, ax
+		mov	ax, ((multMULT shl 8)+multMULTALLOCHMA)
+		int	2fh
+		cmp	di, 0ffffh
+		jne	got_hma
+		mov	di, 0			; dont xor di,di Z flag needed
+		mov	es, [memhi]
+got_hma:
+		pop	dx
+		pop	bx
+		ret
+GetBufferAddr	endp
+
+
+set_buffer_info proc
+
+;function: set buf_link,buf_id,buf_sector
+;
+;in: es:di -> buffer header to be set.
+;    ax = di
+;
+;out:
+;    above entries set.
+
+	push	[buf_prev_off]
+	pop	es:[di.buf_prev]
+	mov	buf_prev_off,ax
+	add	ax,[singlebuffersize]		;adjust ax
+	mov	word ptr es:[di.buf_next],ax
+	mov	word ptr es:[di.buf_id],00ffh	;new buffer free
+	mov	word ptr es:[di.buf_sector],0	;to compensate the masm 3 bug
+	mov	word ptr es:[di.buf_sector+2],0 ;to compensate the masm 3 bug
+	ret
+set_buffer_info endp
+endif   ;NEC_98
 ;------------------------------------------------------------------------------
 ; ibmstack initialization routine.
 	if	stacksw
@@ -3361,7 +3909,7 @@ setdevmark proc
 setdevmark endp
 
 
-	ifdef	TAIWAN
+	ifdef	xxTAIWANxx ; no needed to TAIWAN, gchang 06/22/94
 
 ;---------------------
 ; entry : none
@@ -3398,7 +3946,11 @@ chkoemlocaldrv proc near
 	ret
 chkoemlocaldrv endp
 
+ifndef NEC_98
 config_sys db	"C:\CONFIG.SYS",0
+else    ;NEC_98
+config_sys db	"\CONFIG.SYS",0
+endif   ;NEC_98
 sizeofconfig dw 0
 filehandle dw	0
 workingmemptr dw 0
@@ -3994,14 +4546,33 @@ csisystemerror:
 	push	cs
 	pop	ds
 	mov	dx,offset bootfailmsg
+ifdef	JAPAN
+	call	IsDBCSCodePage
+	jz	@f			; if Kanji mode
+	mov	dx,offset bootfailmsg2
+@@:
+endif
 	mov	ah,9
 	int	21h
 	cli
 	hlt
 	ret
 
+ifdef NEC_98
+	include msbio.cl7		; bootfailmsg
+endif   ;NEC_98
 chklocalexist endp
         endif
 
+ifdef NEC_98
+DOCLI:
+    FCLI
+    ret
+DOSTI:
+    FSTI
+    ret
+DOIRET:
+    FIRET
+endif   ;NEC_98
 sysinitseg ends
 	end

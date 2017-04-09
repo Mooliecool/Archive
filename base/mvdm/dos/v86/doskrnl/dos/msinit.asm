@@ -63,7 +63,11 @@
 
 
 
+ifndef NEC_98
 BData   segment at 70h
+else    ;NEC_98
+BData   segment at 60h
+endif   ;NEC_98
 
         extrn   DosDataSg:word          ; using this to access the data seg
 
@@ -95,6 +99,9 @@ DOSDATA SEGMENT
         extrn   DPBHead:dword           ; long pointer to dpb chain(NT:always -1)
         extrn   sft_addr:dword          ; pointer to open file list
         extrn   numio:byte              ; number of physical drives
+ifdef NEC_98
+        extrn   buffhead:dword          ; pointer to buffer chain
+endif   ;NEC_98
         extrn   endmem:word             ; first unavailable address in memory
         extrn   currentpdb:word         ; current process id
         extrn   createpdb:byte          ; true => create a new pdb
@@ -194,6 +201,10 @@ DOSCODE SEGMENT
         extrn   LowInt28Addr:dword
 
         extrn   dosdseg:word            ; used by InitGetDseg macro
+ifdef NEC_98
+        extrn   irett2:near             ;NEC add
+        extrn   lirett2:near            ;NEC add
+endif   ;NEC_98
 
 
         public  sysbuf
@@ -211,7 +222,11 @@ initiret:
 ; pointer to the BIOS data segment that will be available just to the
 ; initialization code
 
+ifndef NEC_98
 InitBioDataSeg  dw      70H
+else    ;NEC_98
+InitBioDataSeg  dw      60H
+endif   ;NEC_98
 
 
 ; Convert AX from a number of bytes to a number of paragraphs (round up).
@@ -292,25 +307,28 @@ ParaRound       endp
         SVC     SVC_DEMGETDRIVES
         mov     [numio],al
 
+ifdef NEC_98
+ifdef NTVDMDBG
+        SVC     SVC_ISDEBUG
+        mov     [SCS_ISDEBUG],al
+endif
+endif   ;NEC_98
         test    [SCS_ISDEBUG],ISDBG_DEBUGGEE
         je      @f
-        SAVEREG <ax,bx,dx,di,es>
+        SAVEREG <ax,bx,cx,dx,di,es>
         mov     bx, cs                  ; current base of DOS
         xor     cx, cx
         mov     dx, offset memstrt      ; get offset of end of code
         add     dx, offset MSDAT001e    ; add in length of data segment
         adc     cx, 0                   ; cx:dx now size
 
-        mov     ax, SYMOP_LOAD SHL 8 + ID_NTDOS
-        SVC     SVC_DEMSYSTEMSYMBOLOP
-
-        mov     bx, 2                   ; bugbug: Hardcoded segment number
+        mov     di, 2                   ; Hardcoded segment number
         mov     es, es:[DosDataSg]      ; Get location of dos data
 
         mov     ax, SYMOP_MOVE SHL 8 + ID_NTDOS
         SVC     SVC_DEMSYSTEMSYMBOLOP
 
-        RESTOREREG <es,di,dx,bx,ax>
+        RESTOREREG <es,di,dx,cx,bx,ax>
 @@:
 
         push    dx
@@ -413,8 +431,12 @@ ParaRound       endp
 ; instance table entry.
 
         push    si                      ; preserve pointer to device chain
+ifndef NEC_98
         mov     cx, 7                   ; There are 7 entries in the instance table
                                         ; M019
+else    ;NEC_98
+        mov     cx, 8           ; There are 8 entries in the instance table
+endif   ;NEC_98
         mov     si, (offset dosdata:Instance_Table) + 2 ; point si to segment field
 Instance_init_loop:
         mov     word ptr ds:[si], ds    ; set offset in instance entry
@@ -433,7 +455,7 @@ OldInstance_init_loop:
         loop    OldInstance_init_loop
         pop     si                      ; restore pointer to device chain
 ;
-;End of WIN386 2.xx compatibility bullshit
+;End of WIN386 2.xx compatibility code
 
         push    es
         pop     ds
@@ -621,8 +643,24 @@ iset2:
         add     di,8                    ; skip vector 30h & 31h
 
 
+ifndef NEC_98
         mov     cx,14                   ; set 14 offsets (skip 2 between each)
                                         ;   sets offsets for ints 32h-3fh
+else    ;NEC_98
+                                        ; for AP(Power Graph,e.t.c)
+        stosw                           ; set offset for int 32h
+        add     di,2
+        
+        push    ax                      ; set offset for int33h
+        mov     ax,offset doscode:irett2        ; mouse driver
+        stosw
+        add     di,2
+        pop     ax
+
+        mov     cx,12                   ; set 12 offsets (skip 2 between each)
+                                        ;   sets offsets for ints 34h-3fh
+
+endif   ;NEC_98
 iset3:
         stosw
         add     di,2
@@ -730,6 +768,14 @@ endif
         mov     word ptr es:[si.sysi_country_tab + 2],es
         mov     word ptr es:[si.sysi_initvars + 2],es
 
+ifdef NEC_98
+        ; buffhead -> dosdata:hashinitvar 
+
+        mov     word ptr es:[buffhead+2],es     ; BUGBUG - unused, remove this
+        mov     si,offset dosdata:hashinitvar   ; and all other references
+        mov     word ptr es:[buffhead],si
+
+endif   ;NEC_98
         pop     dx                      ; restore address of arena
 
         mov     word ptr [dmaadd+2],dx
@@ -898,11 +944,14 @@ seg_reinit      proc    far
         jz      @f
         test    [SCS_ISDEBUG],ISDBG_DEBUGGEE
         je      @f
-        SAVEREG <ax,bx>
-        mov     bx, 1                   ; bugbug: Hardcoded segment number
+        SAVEREG <ax,bx,cx,dx,di>
+        mov     bx, cs                  ; moving from here
+        xor     cx, cx
+        mov     dx, offset memstrt      ; get offset of end of code
+        mov     di, 1                   ; Hardcoded segment number
         mov     ax, (SYMOP_MOVE + SYMOP_CLEANUP) SHL 8 + ID_NTDOS
         SVC     SVC_DEMSYSTEMSYMBOLOP   ; segment already in es
-        RESTOREREG <bx,ax>
+        RESTOREREG <di,dx,cx,bx,ax>
 @@:
 
         call    patch_misc_segments     ; patch in segments for sharer and
@@ -1167,6 +1216,13 @@ no_fast_patch:
         mov     word ptr [si.DWD_lpExterrLocus + 2],ds
         mov     word ptr [si.DWD_lpSCS_ToSync + 2],ds
         mov     word ptr [si.DWD_lpSftAddr + 2],ds
+        mov     word ptr [si.DWD_lpExterr + 2], ds
+        mov     word ptr [si.DWD_lpExterrActionClass + 2], ds
+;
+;       inform dem of new locations
+;
+;
+        SVC     SVC_SETDOSVARLOCATION
 
         pop     ax
         pop     es
@@ -1239,8 +1295,23 @@ po_iset3:
         add     di,8            ; skip vector 30h & 31h
 
 
+ifndef NEC_98
         mov     cx,14           ; set 14 offsets (skip 2 between each)
                                 ;   sets offsets for ints 32h-3fh
+else    ;NEC_98
+                                        ; for AP(Power Graph,e.t.c)
+        stosw                           ; set offset for int 32h
+        add     di,2
+        
+        push    ax                      ; set offset for int33h
+        mov     ax,offset dosdata:lirett2       ; mouse driver
+        stosw
+        add     di,2
+        pop     ax
+
+        mov     cx,12                   ; set 12 offsets (skip 2 between each)
+                                        ;   sets offsets for ints 34h-3fh
+endif   ;NEC_98
 po_iset4:
         stosw
         add     di,2
@@ -1376,7 +1447,4 @@ doscode ends
  DPUBLIC <sr_done, version_fake_table, xxx>
 
         end
-
-
-
 

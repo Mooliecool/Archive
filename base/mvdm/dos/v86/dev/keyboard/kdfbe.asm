@@ -669,7 +669,16 @@ COM_DK_TH_K1_END:		       ;;
 				       ;;
    DW	 COM_AL_LO_T1_END-$	       ;; Size of xlat table
    DB	 STANDARD_TABLE 	       ;; xlat options:
-   DB	 5			       ;; number of entries
+   DB	 14			       ;; number of entries
+   DB	  2,"&"                        ;;
+   DB	  3,"‚"                        ;; acute - e
+   DB	  4,'"'                        ;;
+   DB	  5,"'"                        ;;
+   DB	  6,"("                        ;;
+   DB	  8,"Š"                        ;; grave - e
+   DB	  9,"!"                        ;;
+   DB	 10,"‡"                        ;; c - cedilla small
+   DB	 11,"…"                        ;;
    DB	 16,'a'                        ;; small a
    DB	 17,'z'                        ;; small z
    DB	 30,'q'                        ;; small q
@@ -695,7 +704,17 @@ COM_AL_LO_END:			       ;;
 				       ;;
    DW	 COM_AL_UP_T1_END-$	       ;; Size of xlat table
    DB	 STANDARD_TABLE 	       ;; xlat options:
-   DB	 5			       ;; number of entries
+   DB	 15			       ;; number of entries
+   DB	  2,'1'                        ;;
+   DB	  3,'2'                        ;;
+   DB	  4,'3'                        ;;
+   DB	  5,'4'                        ;;
+   DB	  6,'5'                        ;;
+   DB	  7,'6'                        ;;
+   DB	  8,'7'                        ;;
+   DB	  9,'8'                        ;;
+   DB	 10,'9'                        ;;
+   DB	 11,'0'                        ;;
    DB	 16,'A'                        ;; caps  A
    DB	 17,'Z'                        ;; caps  Z
    DB	 30,'Q'                        ;; caps  Q
@@ -722,17 +741,8 @@ COM_AL_UP_END:			       ;;
 				       ;;
    DW	 COM_NA_LO_T1_END-$	       ;; Size of xlat table
    DB	 STANDARD_TABLE 	       ;; xlat options:
-   DB	 20			       ;; number of entries
+   DB	 11			       ;; number of entries
    DB	 41,"ý"                        ;; superscript 2
-   DB	  2,"&"                        ;;
-   DB	  3,"‚"                        ;; acute - e
-   DB	  4,'"'                        ;;
-   DB	  5,"'"                        ;;
-   DB	  6,"("                        ;;
-   DB	  8,"Š"                        ;; grave - e
-   DB	  9,"!"                        ;;
-   DB	 10,"‡"                        ;; c - cedilla small
-   DB	 11,"…"                        ;;
    DB	 12,")"                        ;;
    DB	 13,"-"                        ;;
    DB	 27,"$"                        ;;
@@ -764,17 +774,8 @@ COM_NA_LO_END:			       ;;
 				       ;;
    DW	 COM_NA_LO_T1_K2_END-$	       ;; Size of xlat table
    DB	 STANDARD_TABLE 	       ;; xlat options:
-   DB	 19			       ;; number of entries
+   DB	 10			       ;; number of entries
    DB	 41,"<"                        ;;
-   DB	  2,"&"                        ;;
-   DB	  3,"‚"                        ;; acute - e
-   DB	  4,'"'                        ;;
-   DB	  5,"'"                        ;;
-   DB	  6,"("                        ;;
-   DB	  8,"Š"                        ;; grave - e
-   DB	  9,"!"                        ;;
-   DB	 10,"‡"                        ;; c - cedilla small
-   DB	 11,"…"                        ;;
    DB	 12,")"                        ;;
    DB	 13,"-"                        ;;
    DB	 27,"$"                        ;;
@@ -803,16 +804,7 @@ COM_NA_LO_K2_END:		       ;;
 				       ;;
    DW	 COM_NA_LO_K1_T1_END-$	       ;; Size of xlat table
    DB	 STANDARD_TABLE 	       ;; xlat options:
-   DB	 19			       ;; number of entries
-   DB	  2,"&"                        ;;
-   DB	  3,"‚"                        ;; acute - e
-   DB	  4,'"'                        ;;
-   DB	  5,"'"                        ;;
-   DB	  6,"("                        ;;
-   DB	  8,"Š"                        ;;
-   DB	  9,"!"                        ;;
-   DB	 10,"‡"                        ;; c - cedilla small
-   DB	 11,"…"                        ;;
+   DB	 10			       ;; number of entries
    DB	 12,")"                        ;;
    DB	 13,"-"                        ;;
    DB	 27,"$"                        ;;
@@ -843,17 +835,7 @@ COM_NA_LO_K1_END:			       ;;
 				       ;;
    DW	 COM_NA_UP_T1_END-$	       ;; Size of xlat table
    DB	 STANDARD_TABLE 	       ;; xlat options:
-   DB	 20			       ;; number of entries
-   DB	  2,'1'                        ;;
-   DB	  3,'2'                        ;;
-   DB	  4,'3'                        ;;
-   DB	  5,'4'                        ;;
-   DB	  6,'5'                        ;;
-   DB	  7,'6'                        ;;
-   DB	  8,'7'                        ;;
-   DB	  9,'8'                        ;;
-   DB	 10,'9'                        ;;
-   DB	 11,'0'                        ;;
+   DB	 10			       ;; number of entries
    DB	 12,0F8H		       ;; degree symbol
    DB	 13,"_"                        ;;
    DB	 27,"*"                        ;;
@@ -883,18 +865,8 @@ COM_NA_UP_END:			       ;;
 				       ;;
    DW	 COM_NA_UP_T1_K1_END-$	       ;; Size of xlat table
    DB	 STANDARD_TABLE 	       ;; xlat options:
-   DB	 20			       ;; number of entries
+   DB	 10			       ;; number of entries
    DB	 41,'œ'                        ;;
-   DB	  2,'1'                        ;;
-   DB	  3,'2'                        ;;
-   DB	  4,'3'                        ;;
-   DB	  5,'4'                        ;;
-   DB	  6,'5'                        ;;
-   DB	  7,'6'                        ;;
-   DB	  8,'7'                        ;;
-   DB	  9,'8'                        ;;
-   DB	 10,'9'                        ;;
-   DB	 11,'0'                        ;;
    DB	 12,0F8H		       ;; degree symbol
    DB	 13,"_"                        ;;
    DB	 27,"*"                        ;;
@@ -925,18 +897,8 @@ COM_NA_UP_K1_END:		       ;;
 				       ;;
    DW	 COM_NA_UP_T1_K2_END-$	       ;; Size of xlat table
    DB	 STANDARD_TABLE 	       ;; xlat options:
-   DB	 20			       ;; number of entries
+   DB	 10			       ;; number of entries
    DB	 41,'>'                        ;;
-   DB	  2,'1'                        ;;
-   DB	  3,'2'                        ;;
-   DB	  4,'3'                        ;;
-   DB	  5,'4'                        ;;
-   DB	  6,'5'                        ;;
-   DB	  7,'6'                        ;;
-   DB	  8,'7'                        ;;
-   DB	  9,'8'                        ;;
-   DB	 10,'9'                        ;;
-   DB	 11,'0'                        ;;
    DB	 12,0F8H		       ;; degree symbol
    DB	 13,"_"                        ;;
    DB	 27,"*"                        ;;
@@ -1223,7 +1185,7 @@ BE_437_XLAT:			       ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 				       ;;
    DW	 CP437_NA_LO_END-$	       ;; length of state section
-   DB	 NON_ALPHA_LOWER	       ;; State ID
+   DB	 ALPHA_LOWER    	       ;; State ID
    DW	 ANY_KB 		       ;; Keyboard Type
    DB	 -1,-1			       ;; default ignore error state
 				       ;;
@@ -1472,7 +1434,7 @@ BE_850_XLAT:			       ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 				       ;;
    DW	 CP850_NA_LO_END-$	       ;; length of state section
-   DB	 NON_ALPHA_LOWER	       ;; State ID
+   DB	 ALPHA_LOWER    	       ;; State ID
    DW	 ANY_KB 		       ;; Keyboard Type
    DB	 -1,-1			       ;; default ignore error state
 				       ;;

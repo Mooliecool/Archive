@@ -76,10 +76,6 @@ JP_LOGIC:                              ;;
 ;; exit from INT 9.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
                                        ;;
-IFKBD DBCS_OLD_A_KB                    ;;                               ;JP9009
-   XLATT DBCS_OLD_A                    ;;                               ;JP9009
-ENDIFF                                 ;;                               ;JP9009
-                                       ;;
 IFF  EITHER_ALT, NOT                   ;;                              ;JP900807
 ANDF EITHER_CTL, NOT                   ;;                              ;JP900807
    IFF  LC_E0                          ;; Avoid accidentally translating
@@ -144,25 +140,17 @@ LOGIC_END:                             ;;
 ;
 ;       Hardware Scan Codes
 ;
+ifndef NT35
+HW_SC_SINGLE_QUOTE      equ     29h
+endif ; NT3.51
 HW_SC_0                 equ     0bh                             ;JP9007
 HW_SC_HAT               equ     0dh                             ;JP9007
-HW_SC_BACK_SLASH_NEW    equ     73h
-HW_SC_BACK_SLASH        equ     73h
+HW_SC_BACK_SLASH        equ     56h
 HW_SC_YEN_NEW           equ     7dh
-HW_SC_YEN_OLD           equ     2bh
-HW_SC_CONV              equ     79h
-HW_SC_NO_CONV           equ     7bh
-HW_SC_HALF_FULL_NEW     equ     29h
-HW_SC_HALF_FULL_OLD     equ     77h
-HW_SC_HIRAGANA          equ     70h             ; new G only
-HW_SC_KATAKANA          equ     70h             ; old G only
-HW_SC_KATAKANA_A        equ     70h             ; old A only
-HW_SC_KANJI_OLD_A       equ     68h
-HW_SC_TANGO_TOHROKU_A   equ     67h                             ;JP9009
-HW_SC_PAD_COMMA         equ     33h                             ;JP900807
-;JP9009 PSEUDO_SC_HIRAGANA      equ     7dh
-PSEUDO_SC_ALPHANUMERIC  equ     7eh
-PSEUDO_SC_HIRAGANA      equ     7fh                             ;JP9009
+HW_SC_CONV              equ     5bh
+HW_SC_NO_CONV           equ     5ah
+HW_SC_KANJI		equ	71h
+HW_SC_KATAKANA          equ     72h
 
 HW_SC_TORIKESHI         equ     55h                             ;JP9009
 HW_SC_PA1               equ     5ah                             ;JP9009
@@ -228,61 +216,6 @@ JP_COMMON_XLAT:                        ;;
    DW    -1                            ;; code page
                                        ;;
                                        ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: Common                                                    ;JP9009
-;; STATE: DBCS Old A Keyboard Unique Keys                               ;JP9009
-;; KEYBOARD TYPES: Old DBCS keyboard                                    ;JP9009
-;; TABLE TYPE: Translate                                                ;JP9009
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                               ;JP9009
-                                       ;;                               ;JP9009
-   DW    COM_OLD_A_END-$               ;; length of state section       ;JP9009
-   DB    DBCS_OLD_A                    ;; State ID                      ;JP9009
-   DW    DBCS_OLD_KB                   ;; Keyboard Type                 ;JP9009
-   DB    -1,-1                         ;; Buffer entry for error char   ;JP9009
-                                       ;;                               ;JP9009
-   DW    COM_OLD_A_T1_END-$            ;; Size of xlat table            ;JP9009
-   DB    STANDARD_TABLE                ;; xlat options:                 ;JP9009
-   DB    16                            ;; number of entries             ;JP9009
-   DB    HW_SC_SHUHRYOH , -1           ;;                               ;JP9009
-   DB    HW_SC_CLEAR    , -1           ;;                               ;JP9009
-   DB    HW_SC_MESSAGE  , -1           ;;                               ;JP9009
-   DB    HW_SC_SIZE_CONV, -1           ;;                               ;JP9009
-   DB    HW_SC_TORIKESHI, -1           ;;                               ;JP9009
-   DB    HW_SC_COPY     , -1           ;;                               ;JP9009
-   DB    HW_SC_CSR_BLINK, -1           ;;                               ;JP9009
-   DB    HW_SC_INTERRUPT, -1           ;;                               ;JP9009
-   DB    HW_SC_UF1      , -1           ;;                               ;JP9009
-   DB    HW_SC_UF2      , -1           ;;                               ;JP9009
-   DB    HW_SC_UF3      , -1           ;;                               ;JP9009
-   DB    HW_SC_UF4      , -1           ;;                               ;JP9009
-   DB    HW_SC_ERASE_EOF, -1           ;;                               ;JP9009
-   DB    HW_SC_ATTENTION, -1           ;;                               ;JP9009
-   DB    HW_SC_PA1      , -1           ;;                               ;JP9009
-   DB    HW_SC_PA2      , -1           ;;                               ;JP9009
-COM_OLD_A_T1_END:                      ;;                               ;JP9009
-   DW    0                             ;; Size of xlat table - null     ;JP9009
-COM_OLD_A_END:                         ;;                        table  ;JP9009
-                                       ;;                               ;JP9009
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: Common                                                   ;SK900807
-;; STATE: Numeric Pad Case                                             ;SK900807
-;; KEYBOARD TYPES: New & Old DBCS keyboard                             ;SK900807
-;; TABLE TYPE: Translate                                               ;SK900807
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                              ;SK900807
-                                       ;;                              ;SK900807
-   DW    COM_PAD_K1_END-$              ;; length of state section      ;SK900807
-   DB    NUMERIC_PAD                   ;; State ID                     ;SK900807
-   DW    G_KB + P_KB + DBCS_OLD_KB     ;; Keyboard Type                ;SK900807
-   DB    -1,-1                         ;; Buffer entry for error char  ;SK900807
-                                       ;;                              ;SK900807
-   DW    COM_PAD_K1_T1_END-$           ;; Size of xlat table           ;SK900807
-   DB    TYPE_2_TAB                    ;; xlat options:                ;SK900807
-   DB    1                             ;; number of entries            ;SK900807
-   db    HW_SC_PAD_COMMA, ',', EXTENDED_CODE_E0                        ;SK900807
-COM_PAD_K1_T1_END:                     ;;                              ;SK900807
-   DW    0                             ;; Size of xlat table - null    ;SK900807
-COM_PAD_K1_END:                        ;;                        table ;SK900807
-                                       ;;                              ;SK900807
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                              ;SK900807
 ;; CODE PAGE: Common
 ;; STATE: Alt Case
@@ -292,59 +225,29 @@ COM_PAD_K1_END:                        ;;                        table ;SK900807
                                        ;;
    DW    COM_ALT_K1_END-$              ;; length of state section
    DB    ALT_CASE                      ;; State ID
-   DW    G_KB + P_KB                   ;; Keyboard Type
+   DW    G_KB + P_KB + DBCS_OLD_KB     ;; Keyboard Type                ;SK900807
    DB    -1,-1                         ;; Buffer entry for error character
                                        ;;
    DW    COM_ALT_K1_T1_END-$           ;; Size of xlat table
    DB    TYPE_2_TAB                    ;; xlat options:
-   DB    7                             ;; number of entries
-   db      HW_SC_BACK_SLASH_NEW, -1, HW_SC_BACK_SLASH                   ;\\\\\
-   db      HW_SC_YEN_NEW, -1, HW_SC_YEN_NEW
-   db      HW_SC_HALF_FULL_NEW, EXTENDED_CODE, EXT_KANJI                ;SK9006
-   db      PSEUDO_SC_ALPHANUMERIC, EXTENDED_CODE, EXT_KANJI_NO
-   db      HW_SC_HIRAGANA, EXTENDED_CODE, EXT_ROMAJI                    ;SK9006
+ifdef NT35
+   DB    5                             ;; number of entries
+   db      HW_SC_YEN_NEW, -1, HW_SC_BACK_SLASH
+   db      HW_SC_KANJI, EXTENDED_CODE, EXT_KANJI_NO
+   db      HW_SC_KATAKANA, EXTENDED_CODE, EXT_ALPHA_NUMERIC_CTRL
    db      HW_SC_CONV, EXTENDED_CODE, EXT_CONV_4
    db      HW_SC_NO_CONV, EXTENDED_CODE, EXT_NO_CONV_4
+else ; NT3.51
+   DB    1                             ;; number of entries
+   db      HW_SC_SINGLE_QUOTE, EXTENDED_CODE, EXT_KANJI
+endif ; NT3.51
 COM_ALT_K1_T1_END:                     ;;
                                        ;;
    DW    0                             ;; Size of xlat table - null table
                                        ;;
 COM_ALT_K1_END:                        ;;
                                        ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: Common
-;; STATE: Alt Case
-;; KEYBOARD TYPES: Old DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-                                       ;;
-   DW    COM_ALT_K2_END-$              ;; length of state section
-   DB    ALT_CASE                      ;; State ID
-   DW    DBCS_OLD_KB                   ;; Keyboard Type
-   DB    -1,-1                         ;; Buffer entry for error character
-                                       ;;
-   DW    COM_ALT_K2_T2_END-$           ;; Size of xlat table
-   DB    TYPE_2_TAB                    ;; xlat options:
-   DB    10                             ;; number of entries             ;JP9009
-   db      HW_SC_BACK_SLASH, -1, HW_SC_BACK_SLASH
-   db      HW_SC_YEN_OLD, -1, HW_SC_YEN_OLD
-
-   db      PSEUDO_SC_HIRAGANA, EXTENDED_CODE, EXT_ROMAJI
-   db      PSEUDO_SC_ALPHANUMERIC, EXTENDED_CODE, EXT_ALPHA_NUMERIC_ALT
-   db      HW_SC_KATAKANA, EXTENDED_CODE, EXT_KANJI_NO                  ;SK9006
-   db      HW_SC_HALF_FULL_OLD, EXTENDED_CODE, EXT_HALF_FULL_ALT        ;SK9006
-
-   db      HW_SC_CONV, EXTENDED_CODE, EXT_CONV_4
-   db      HW_SC_NO_CONV, EXTENDED_CODE, EXT_NO_CONV_4
-   db      HW_SC_KANJI_OLD_A, EXTENDED_CODE, EXT_KANJI_NO               ;JP9009
-   ; The followings are for A-keyboard emulation.                       ;JP9009
-   db      HW_SC_TANGO_TOHROKU_A, EXTENDED_CODE, EXT_TANGO_ALT_A        ;JP9009
-COM_ALT_K2_T2_END:                     ;;
-                                       ;;
-   DW    0                             ;; Size of xlat table - null table
-                                       ;;
-COM_ALT_K2_END:                        ;;
-                                       ;;
+ifdef NT3.5 ; not 101 Japanese keyboard
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; CODE PAGE: Common
 ;; STATE: Ctrl Case
@@ -354,20 +257,15 @@ COM_ALT_K2_END:                        ;;
                                        ;;
    DW    COM_CTRL_K1_END-$             ;; length of state section
    DB    CTRL_CASE                     ;; State ID
-   DW    G_KB + P_KB                   ;; Keyboard Type
+   DW    G_KB + P_KB + DBCS_OLD_KB     ;; Keyboard Type                ;SK900807
    DB    -1,-1                         ;; Buffer entry for error character
                                        ;;
    DW    COM_CTRL_K1_T1_END-$          ;; Size of xlat table
    DB    TYPE_2_TAB                    ;; xlat options:
-   DB    10                            ;; number of entries
-   db      1ah, -1, 1ah         ; throw away !!!  ('@')
-   db      1bh, 1bh, 1bh        ; CTRL+'[' = ESC
-   db      2bh, 1dh, 2bh        ; CTRL+']' = GS
-   DB      HW_SC_BACK_SLASH_NEW, 1ch, HW_SC_BACK_SLASH; CTRL+'\' = FS   ;\\\\\
-   db      HW_SC_YEN_NEW, 1ch, HW_SC_YEN_NEW    ; CTRL+'\' = FS
-   db      HW_SC_HALF_FULL_NEW, EXTENDED_CODE, EXT_HALF_FULL_CTRL       ;SK9006
-   db      PSEUDO_SC_ALPHANUMERIC, EXTENDED_CODE, EXT_ALPHA_NUMERIC_CTRL
-   db      HW_SC_HIRAGANA, EXTENDED_CODE, EXT_HIRAGANA_CTRL             ;SK9006
+   DB    5                             ;; number of entries
+   DB      HW_SC_YEN_NEW, 1ch, HW_SC_BACK_SLASH
+   db      HW_SC_KANJI, EXTENDED_CODE, EXT_KANJI_CTRL
+   db      HW_SC_KATAKANA, EXTENDED_CODE, EXT_ROMAJI
    db      HW_SC_CONV, EXTENDED_CODE, EXT_CONV_3
    db      HW_SC_NO_CONV, EXTENDED_CODE, EXT_NO_CONV_3
 COM_CTRL_K1_T1_END:                    ;;
@@ -378,40 +276,6 @@ COM_CTRL_K1_END:                       ;;
                                        ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; CODE PAGE: Common
-;; STATE: Ctrl Case
-;; KEYBOARD TYPES: Old DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-                                       ;;
-   DW    COM_CTRL_K2_END-$             ;; length of state section
-   DB    CTRL_CASE                     ;; State ID
-   DW    DBCS_OLD_KB                   ;; Keyboard Type
-   DB    -1,-1                         ;; Buffer entry for error character
-                                       ;;
-   DW    COM_CTRL_K2_T2_END-$          ;; Size of xlat table
-   DB    TYPE_2_TAB                    ;; xlat options:
-   DB    12                            ;; number of entries             ;JP9009
-   db      1ah, 1bh, 1ah        ; CTRL+'[' = ESC
-   db      1bh, 1dh, 1bh        ; CTRL+']' = GS
-   db      29h, -1, 29h         ; throw away !!!  ('@')
-   db      HW_SC_BACK_SLASH, 1ch, HW_SC_BACK_SLASH; CTRL+'\' = FS
-   db      PSEUDO_SC_HIRAGANA, EXTENDED_CODE, EXT_HIRAGANA_CTRL
-   db      PSEUDO_SC_ALPHANUMERIC, EXTENDED_CODE, EXT_ALPHA_NUMERIC_CTRL
-   db      HW_SC_KATAKANA, EXTENDED_CODE, EXT_KATAKANA_CTRL             ;SK9006
-   db      HW_SC_HALF_FULL_OLD, EXTENDED_CODE, EXT_HALF_FULL_CTRL       ;SK9006
-   db      HW_SC_CONV, EXTENDED_CODE, EXT_CONV_3
-   db      HW_SC_NO_CONV, EXTENDED_CODE, EXT_NO_CONV_3
-   db      HW_SC_KANJI_OLD_A, EXTENDED_CODE, EXT_KANJI_CTRL             ;JP9009
-   ; The followings are for A-keyboard emulation.                       ;JP9009
-   db      HW_SC_TANGO_TOHROKU_A, EXTENDED_CODE, EXT_TANGO_CTRL_A       ;JP9009
-COM_CTRL_K2_T2_END:                    ;;
-                                       ;;
-   DW    0                             ;; Size of xlat table - null table
-                                       ;;
-COM_CTRL_K2_END:                       ;;
-                                       ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: Common
 ;; STATE: Non-Alpha Lower Case
 ;; KEYBOARD TYPES: New DBCS keyboard
 ;; TABLE TYPE: Translate
@@ -419,22 +283,15 @@ COM_CTRL_K2_END:                       ;;
                                        ;;
    DW    COM_NA_LO_K1_END-$            ;; length of state section
    DB    NON_ALPHA_LOWER               ;; State ID
-   DW    G_KB + P_KB                   ;; Keyboard Type
+   DW    G_KB + P_KB + DBCS_OLD_KB     ;; Keyboard Type                ;SK900807
    DB    -1,-1                         ;; Buffer entry for error character
                                        ;;
    DW    COM_NA_LO_K1_T1_END-$         ;; Size of xlat table
    DB    TYPE_2_TAB                    ;; xlat options:
-   DB    12                            ;; number of entries
-   db      0dh, '^'          , 0dh
-   db      1ah, '@'          , 1ah
-   db      1bh, '['          , 1bh
-   db      28h, ':'          , 28h
-   db      2bh, ']'          , 2bh
-   db      HW_SC_BACK_SLASH_NEW, '\', HW_SC_BACK_SLASH                  ;\\\\\
-   db      HW_SC_YEN_NEW, '\'       , HW_SC_YEN_NEW
-   db      HW_SC_HALF_FULL_NEW, EXTENDED_CODE, EXT_HALF_FULL            ;SK9006
-   db      PSEUDO_SC_ALPHANUMERIC, EXTENDED_CODE, EXT_ALPHA_NUMERIC
-   db      HW_SC_HIRAGANA, EXTENDED_CODE, EXT_HIRAGANA                  ;SK9006
+   DB    5                             ;; number of entries
+   db      HW_SC_YEN_NEW, '\', HW_SC_BACK_SLASH
+   db      HW_SC_KANJI, EXTENDED_CODE, EXT_KANJI
+   db      HW_SC_KATAKANA, EXTENDED_CODE, EXT_KATAKANA
    db      HW_SC_CONV, EXTENDED_CODE, EXT_CONV_1
    db      HW_SC_NO_CONV, EXTENDED_CODE, EXT_NO_CONV_1
 COM_NA_LO_K1_T1_END:                      ;;
@@ -445,41 +302,6 @@ COM_NA_LO_K1_END:                      ;;
                                        ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; CODE PAGE: Common
-;; STATE: Non-Alpha Lower Case
-;; KEYBOARD TYPES: Old DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-                                       ;;
-   DW    COM_NA_LO_K2_END-$            ;; length of state section
-   DB    NON_ALPHA_LOWER               ;; State ID
-   DW    DBCS_OLD_KB                   ;; Keyboard Type
-   DB    -1,-1                         ;; Buffer entry for error character
-                                       ;;
-   DW    COM_NA_LO_T2_K2_END-$         ;; Size of xlat table
-   DB    TYPE_2_TAB                    ;; xlat options:
-   DB    14                            ;; number of entries             ;JP9009
-   db      0dh, '^'          , 0dh
-   db      1ah, '['          , 1ah
-   db      1bh, ']'          , 1bh
-   db      28h, ':'          , 28h
-   db      29h, '@'          , 29h
-   db      HW_SC_BACK_SLASH, '\', HW_SC_BACK_SLASH
-   db      PSEUDO_SC_HIRAGANA, EXTENDED_CODE, EXT_HIRAGANA
-   db      PSEUDO_SC_ALPHANUMERIC, EXTENDED_CODE, EXT_ALPHA_NUMERIC
-   db      HW_SC_KATAKANA, EXTENDED_CODE, EXT_KATAKANA                  ;SK9006
-   db      HW_SC_HALF_FULL_OLD, EXTENDED_CODE, EXT_HALF_FULL            ;SK9006
-   db      HW_SC_CONV, EXTENDED_CODE, EXT_CONV_1
-   db      HW_SC_NO_CONV, EXTENDED_CODE, EXT_NO_CONV_1
-   db      HW_SC_KANJI_OLD_A, EXTENDED_CODE, EXT_KANJI                  ;JP9009
-   ; The followings are for A-keyboard emulation.                       ;JP9009
-   db      HW_SC_TANGO_TOHROKU_A, EXTENDED_CODE, EXT_TANGO_A            ;JP9009
-COM_NA_LO_T2_K2_END:                   ;;
-                                       ;;
-   DW    0                             ;; Size of xlat table - null table
-COM_NA_LO_K2_END:                      ;;
-                                       ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: Common
 ;; STATE: Non-Alpha Upper Case
 ;; KEYBOARD TYPES: New DBCS keyboard
 ;; TABLE TYPE: Translate
@@ -487,31 +309,15 @@ COM_NA_LO_K2_END:                      ;;
                                        ;;
    DW    COM_NA_UP_K1_END-$            ;; length of state section
    DB    NON_ALPHA_UPPER               ;; State ID
-   DW    G_KB + P_KB                   ;; Keyboard Type
+   DW    G_KB + P_KB + DBCS_OLD_KB     ;; Keyboard Type                ;SK900807
    DB    -1,-1                         ;; Buffer entry for error character
                                        ;;
    DW    COM_NA_UP_T1_K1_END-$         ;; Size of xlat table
    DB    TYPE_2_TAB                    ;; xlat options:
-   DB    19                            ;; number of entries
-   db      03h, '"', 03h
-   db      07h, '&', 07h
-   db      08h, "'", 08h
-   db      09h, '(', 09h
-   db      0ah, ')', 0ah
-   db      HW_SC_0, EXTENDED_CODE , 0bh     ; only for KKC              ;SK9007
-   db      0ch, '=', 0ch
-   db      HW_SC_HAT, '~', 0dh                                          ;SK9007
-   db      1ah, '`', 1ah
-   db      1bh, '{', 1bh
-   db      27h, '+', 27h
-   db      28h, '*', 28h
-   db      2bh, '}', 2bh
-   db      HW_SC_BACK_SLASH_NEW, '_', HW_SC_BACK_SLASH                  ;\\\\\\
-   db      HW_SC_YEN_NEW, '|', HW_SC_YEN_NEW
-
-   db      HW_SC_HALF_FULL_NEW, EXTENDED_CODE, EXT_HALF_FULL_UPPER      ;SK9006
-   db      HW_SC_HIRAGANA, EXTENDED_CODE, EXT_KATAKANA                  ;SK9006
-
+   DB    5                             ;; number of entries
+   db      HW_SC_YEN_NEW, '|', HW_SC_BACK_SLASH
+   db      HW_SC_KANJI, EXTENDED_CODE, EXT_HALF_FULL
+   db      HW_SC_KATAKANA, EXTENDED_CODE, EXT_HIRAGANA
    db      HW_SC_CONV, EXTENDED_CODE, EXT_CONV_2
    db      HW_SC_NO_CONV, EXTENDED_CODE, EXT_NO_CONV_2
 COM_NA_UP_T1_K1_END:                   ;;
@@ -520,48 +326,7 @@ COM_NA_UP_T1_K1_END:                   ;;
 COM_NA_UP_K1_END:                      ;;
                                        ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: Common
-;; STATE: Non-Alpha Upper Case
-;; KEYBOARD TYPES: Old DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-                                       ;;
-   DW    COM_NA_UP_K2_END-$            ;; length of state section
-   DB    NON_ALPHA_UPPER               ;; State ID
-   DW    DBCS_OLD_KB                   ;; Keyboard Type
-   DB    -1,-1                         ;; Buffer entry for error character
-                                       ;;
-   DW    COM_NA_UP_T2_K2_END-$         ;; Size of xlat table
-   DB    TYPE_2_TAB                    ;; xlat options:
-   DB    21                            ;; number of entries             ;JP9009
-   db      03h, '"', 03h
-   db      07h, '&', 07h
-   db      08h, "'", 08h
-   db      09h, '(', 09h
-   db      0ah, ')', 0ah
-   db      HW_SC_0, EXTENDED_CODE , 0bh     ; only for KKC              ;SK9007
-   db      0ch, '=', 0ch
-   db      HW_SC_HAT, '~', 0dh                                          ;SK9007
-   db      1ah, '{', 1ah
-   db      1bh, '}', 1bh
-   db      27h, '+', 27h
-   db      28h, '*', 28h
-   db      29h, '`', 29h
-   db      HW_SC_BACK_SLASH, '_', HW_SC_BACK_SLASH
-   db      PSEUDO_SC_HIRAGANA, EXTENDED_CODE, EXT_HIRAGANA_UPPER
-   db      HW_SC_KATAKANA, EXTENDED_CODE, EXT_KANJI                     ;SK9006
-   db      HW_SC_HALF_FULL_OLD, EXTENDED_CODE, EXT_HALF_FULL_UPPER      ;SK9006
-   db      HW_SC_CONV, EXTENDED_CODE, EXT_CONV_2
-   db      HW_SC_NO_CONV, EXTENDED_CODE, EXT_NO_CONV_2
-   db      HW_SC_KANJI_OLD_A, EXTENDED_CODE, EXT_KANJI_UPPER            ;JP9009
-   ; The followings are for A-keyboard emulation.                       ;JP9009
-   db      HW_SC_TANGO_TOHROKU_A, EXTENDED_CODE, EXT_TANGO_SHIFT_A      ;JP9009
-COM_NA_UP_T2_K2_END:                   ;;
-                                       ;;
-   DW    0                             ;; Size of xlat table - null table
-COM_NA_UP_K2_END:                      ;;
-                                       ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+endif ; NT3.5 non 101 Japanese keyboard
    DW    0                             ;; LAST STATE
 COMMON_XLAT_END:                       ;;
                                        ;;
@@ -579,54 +344,6 @@ JP_932_XLAT:                           ;;
    DW    CP932_XLAT_END - $            ;;
    DW    932                           ;;
                                        ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 932
-;; STATE: Alt Case
-;; KEYBOARD TYPES: Old A Type DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   DW    CP932_ALT_K1_END - $          ;; length of state section
-   DB    ALT_CASE                      ;; State ID
-   DW    DBCS_OLD_A_KB                 ;; Keyboard Type
-   DB    -1, -1                        ;; Buffer entry for error character
-   DW    CP932_ALT_K1_T1_END - $       ;; Size of xlat table
-   DB    TYPE_2_TAB                    ;; xlat options:
-   DB    1                             ;; number of entries
-   db      HW_SC_KATAKANA_A, EXTENDED_CODE, EXT_KATAKANA_ALT_A          ;JP9009
-CP932_ALT_K1_T1_END:                   ;;
-   DW    0                             ;;
-CP932_ALT_K1_END:                      ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 932
-;; STATE: Ctrl Case
-;; KEYBOARD TYPES: Old A Type DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-                                       ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 932
-;; STATE: Non-Alpha Lower Case
-;; KEYBOARD TYPES: Old A Type DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-                                       ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 932
-;; STATE: Non-Alpha Upper Case
-;; KEYBOARD TYPES: Old A Type DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   DW    CP932_NA_UP_K1_END - $          ;; length of state section
-   DB    NON_ALPHA_UPPER               ;; State ID
-   DW    DBCS_OLD_A_KB                 ;; Keyboard Type
-   DB    -1, -1                        ;; Buffer entry for error character
-   DW    CP932_NA_UP_K1_T1_END - $       ;; Size of xlat table
-   DB    TYPE_2_TAB                    ;; xlat options:
-   DB    1                             ;; number of entries
-   db      HW_SC_KATAKANA_A, EXTENDED_CODE, EXT_KATAKANA_SHIFT_A        ;JP9009
-CP932_NA_UP_K1_T1_END:                   ;;
-   DW    0                             ;;
-CP932_NA_UP_K1_END:                      ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    DW    0                             ;;
 CP932_XLAT_END:                        ;;
@@ -647,192 +364,6 @@ JP_437_XLAT:                           ;;
    DW    437                           ;;
                                        ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 437                                                       ;JP9009
-;; STATE: DBCS Old A Keyboard Unique Keys                               ;JP9009
-;; KEYBOARD TYPES: Old DBCS keyboard                                    ;JP9009
-;; TABLE TYPE: Translate                                                ;JP9009
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                               ;JP9009
-                                       ;;                               ;JP9009
-   DW    CP437_OLD_A_END-$             ;; length of state section       ;JP9009
-   DB    DBCS_OLD_A                    ;; State ID                      ;JP9009
-   DW    DBCS_OLD_KB                   ;; Keyboard Type                 ;JP9009
-   DB    -1,-1                         ;; Buffer entry for error char   ;JP9009
-                                       ;;                               ;JP9009
-   DW    CP437_OLD_A_T1_END-$          ;; Size of xlat table            ;JP9009
-   DB    STANDARD_TABLE                ;; xlat options:                 ;JP9009
-   DB    3                             ;; number of entries             ;JP9009
-   DB    HW_SC_KANJI_OLD_A, -1         ;;                               ;JP9009
-   DB    HW_SC_KATAKANA_A , -1         ;;                               ;JP9009
-   DB    HW_SC_TANGO_TOHROKU_A, -1     ;;                               ;JP9009
-CP437_OLD_A_T1_END:                    ;;                               ;JP9009
-   DW    0                             ;; Size of xlat table - null     ;JP9009
-CP437_OLD_A_END:                       ;;                        table  ;JP9009
-                                       ;;                               ;JP9009
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 437
-;; STATE: Alt Case
-;; KEYBOARD TYPES: New DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   DW    CP437_ALT_K1_END - $         ;; length of state section
-   DB    ALT_CASE                     ;; State ID
-   DW    G_KB + P_KB                  ;; Keyboard Type
-   DB    -1, -1                        ;; Buffer entry for error character
-   DW    CP437_ALT_K1_T1_END - $      ;; Size of xlat table
-   DB    STANDARD_TABLE                ;; xlat options:
-   DB    4                             ;; number of entries
-   db   HW_SC_CONV, ' '
-   db   HW_SC_NO_CONV, ' '
-   db   HW_SC_HALF_FULL_NEW, -1
-   db   HW_SC_HIRAGANA, ' '
-CP437_ALT_K1_T1_END:                  ;;
-   DW    0                             ;;
-CP437_ALT_K1_END:                     ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 437
-;; STATE: Alt Case
-;; KEYBOARD TYPES: Old DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   DW    CP437_ALT_K2_END - $         ;; length of state section
-   DB    ALT_CASE                     ;; State ID
-   DW    DBCS_OLD_KB                  ;; Keyboard Type
-   DB    -1, -1                        ;; Buffer entry for error character
-   DW    CP437_ALT_K2_T2_END - $      ;; Size of xlat table
-   DB    STANDARD_TABLE                ;; xlat options:
-   DB    4                             ;; number of entries
-   db   HW_SC_CONV, ' '
-   db   HW_SC_NO_CONV, ' '
-   db   HW_SC_HALF_FULL_OLD, -1
-   db   HW_SC_KATAKANA, ' '
-CP437_ALT_K2_T2_END:                  ;;
-   DW    0                             ;;
-CP437_ALT_K2_END:                     ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 437
-;; STATE: Ctrl Case
-;; KEYBOARD TYPES: New DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   DW    CP437_CTRL_K1_END - $         ;; length of state section
-   DB    CTRL_CASE                     ;; State ID
-   DW    G_KB + P_KB                   ;; Keyboard Type
-   DB    -1, -1                        ;; Buffer entry for error character
-   DW    CP437_CTRL_K1_T1_END - $      ;; Size of xlat table
-   DB    STANDARD_TABLE                ;; xlat options:
-   DB    4                             ;; number of entries
-   db   HW_SC_CONV, ' '
-   db   HW_SC_NO_CONV, ' '
-   db   HW_SC_HALF_FULL_NEW, -1
-   db   HW_SC_HIRAGANA, ' '
-CP437_CTRL_K1_T1_END:                  ;;
-   DW    0                             ;;
-CP437_CTRL_K1_END:                     ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 437
-;; STATE: Ctrl Case
-;; KEYBOARD TYPES: Old DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   DW    CP437_CTRL_K2_END - $         ;; length of state section
-   DB    CTRL_CASE                     ;; State ID
-   DW    DBCS_OLD_KB                  ;; Keyboard Type
-   DB    -1, -1                        ;; Buffer entry for error character
-   DW    CP437_CTRL_K2_T2_END - $      ;; Size of xlat table
-   DB    STANDARD_TABLE                ;; xlat options:
-   DB    4                             ;; number of entries
-   db   HW_SC_CONV, ' '
-   db   HW_SC_NO_CONV, ' '
-   db   HW_SC_HALF_FULL_OLD, -1
-   db   HW_SC_KATAKANA, ' '
-CP437_CTRL_K2_T2_END:                  ;;
-   DW    0                             ;;
-CP437_CTRL_K2_END:                     ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 437
-;; STATE: Non-Alpha Lower Case
-;; KEYBOARD TYPES: New DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   DW    CP437_NA_LO_K1_END - $         ;; length of state section
-   DB    NON_ALPHA_LOWER                ;; State ID
-   DW    G_KB + P_KB                  ;; Keyboard Type
-   DB    -1, -1                        ;; Buffer entry for error character
-   DW    CP437_NA_LO_K1_T1_END - $      ;; Size of xlat table
-   DB    STANDARD_TABLE                ;; xlat options:
-   DB    4                             ;; number of entries
-   db   HW_SC_CONV, ' '
-   db   HW_SC_NO_CONV, ' '
-   db   HW_SC_HALF_FULL_NEW, -1
-   db   HW_SC_HIRAGANA, ' '
-CP437_NA_LO_K1_T1_END:                  ;;
-   DW    0                             ;;
-CP437_NA_LO_K1_END:                     ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 437
-;; STATE: Non-Alpha Lower Case
-;; KEYBOARD TYPES: Old DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   DW    CP437_NA_LO_K2_END - $         ;; length of state section
-   DB    NON_ALPHA_LOWER                ;; State ID
-   DW    DBCS_OLD_KB                  ;; Keyboard Type
-   DB    -1, -1                        ;; Buffer entry for error character
-   DW    CP437_NA_LO_K2_T2_END - $      ;; Size of xlat table
-   DB    STANDARD_TABLE                ;; xlat options:
-   DB    4                             ;; number of entries
-   db   HW_SC_CONV, ' '
-   db   HW_SC_NO_CONV, ' '
-   db   HW_SC_HALF_FULL_OLD, -1
-   db   HW_SC_KATAKANA, ' '
-CP437_NA_LO_K2_T2_END:                  ;;
-   DW    0                             ;;
-CP437_NA_LO_K2_END:                     ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 437
-;; STATE: Non-Alpha Upper Case
-;; KEYBOARD TYPES: New DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   DW    CP437_NA_UP_K1_END - $         ;; length of state section
-   DB    NON_ALPHA_UPPER                ;; State ID
-   DW    G_KB + P_KB                  ;; Keyboard Type
-   DB    -1, -1                        ;; Buffer entry for error character
-   DW    CP437_NA_UP_K1_T1_END - $      ;; Size of xlat table
-   DB    STANDARD_TABLE                ;; xlat options:
-   DB    6                             ;; number of entries             ;SK9007
-   db   HW_SC_0, '~'                                                    ;SK9007
-   db   HW_SC_HAT, -1                                                   ;SK9007
-   db   HW_SC_CONV, ' '
-   db   HW_SC_NO_CONV, ' '
-   db   HW_SC_HALF_FULL_NEW, -1
-   db   HW_SC_HIRAGANA, ' '
-CP437_NA_UP_K1_T1_END:                  ;;
-   DW    0                             ;;
-CP437_NA_UP_K1_END:                     ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CODE PAGE: 437
-;; STATE: Non-Alpha Upper Case
-;; KEYBOARD TYPES: Old DBCS keyboard
-;; TABLE TYPE: Translate
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   DW    CP437_NA_UP_K2_END - $         ;; length of state section
-   DB    NON_ALPHA_UPPER                ;; State ID
-   DW    DBCS_OLD_KB                  ;; Keyboard Type
-   DB    -1, -1                        ;; Buffer entry for error character
-   DW    CP437_NA_UP_K2_T2_END - $      ;; Size of xlat table
-   DB    STANDARD_TABLE                ;; xlat options:
-   DB    6                             ;; number of entries             ;SK9007
-   db   HW_SC_0, '~'                                                    ;SK9007
-   db   HW_SC_HAT, -1                                                   ;SK9007
-   db   HW_SC_CONV, ' '
-   db   HW_SC_NO_CONV, ' '
-   db   HW_SC_HALF_FULL_OLD, -1
-   db   HW_SC_KATAKANA, ' '
-CP437_NA_UP_K2_T2_END:                  ;;
-   DW    0                             ;;
-CP437_NA_UP_K2_END:                     ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    DW    0                             ;;
 CP437_XLAT_END:                        ;;
                                        ;;
@@ -840,4 +371,3 @@ CP437_XLAT_END:                        ;;
 
 CODE     ENDS                          ;;
          END                           ;;
-

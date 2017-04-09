@@ -48,7 +48,11 @@ memS       EQU     1			; Small model
 ; --------------------------------------------------------
 ;  non ISA Version |   FALSE             FALSE
 ;
+ifndef NEC_98
 IBMVER          EQU     TRUE
+else    ;NEC_98
+IBMVER          EQU     FALSE
+endif   ;NEC_98
 IBMCOPYRIGHT    EQU     FALSE
 
 ;smr; removal of bufferflag; BUFFERFLAG	EQU	NOT IBMCOPYRIGHT
@@ -56,7 +60,11 @@ IBMCOPYRIGHT    EQU     FALSE
 ;mw 8/23/90 ; removal of ROMVER, superceded by ROMDOS and ROMEXEC, above...
 ; ROMVER		EQU	FALSE
 
+ifndef NEC_98
 CPU8086		EQU	FALSE
+else    ;NEC_98
+CPU8086		EQU	TRUE
+endif   ;NEC_98
 
 ifndef	MSVER	
 MSVER           EQU     NOT IBMVER
@@ -96,12 +104,13 @@ IBM             EQU     IBMVER
 ;
 ;
 ;
-;	To build Country depend version, Define JAPAN, KOREA or TAIWAN
+;	To build Country/Region depend version, Define JAPAN, KOREA ,TAIWAN or PRC
 ;	by using MASM option via Dos environment.
 ;
 ;	ex.		set MASM=-DJAPAN
 ;			set MASM=-DKOREA
 ;			set MASM=-DTAIWAN
+;			set MASM=-DPRC
 ;
 ;****************************************************************************
 
@@ -113,7 +122,7 @@ IBMJAPVER  EQU	   FALSE		; if TRUE define DBCS also
 IBMJAPAN   EQU	   FALSE		; if TRUE define DBCS also
 
 
-	ifdef TAIWAN
+	ifdef xxTAIWANxx
 CSIBIOS    EQU	   FALSE		; BIOS	       CSI
 CSIDRV	   EQU	   TRUE 		; Device Drive CSI
 CSITSR	   EQU	   FALSE		; TSR	       CSI
@@ -138,10 +147,16 @@ DB_SP_HI EQU	 81h
 DB_SP_LO EQU	 40h
 	endif
 
-	ifdef TAIWAN
-DB_SPACE EQU	 8130h
-DB_SP_HI EQU	 81h
-DB_SP_LO EQU	 30h
+	ifdef TAIWAN ; by gchang, 06/23/94
+DB_SPACE EQU	 0A140h
+DB_SP_HI EQU	 0A1h
+DB_SP_LO EQU	 40h
+	endif
+
+	ifdef PRC ; by gchang, 06/23/94
+DB_SPACE EQU	 0A1A1h
+DB_SP_HI EQU	 0A1h
+DB_SP_LO EQU	 0A1h
 	endif
 
 	ifdef KOREA
@@ -177,5 +192,4 @@ endif
 	endif
 
 	ENDIF
-
 

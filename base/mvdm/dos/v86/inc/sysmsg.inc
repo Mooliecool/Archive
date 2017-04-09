@@ -221,6 +221,16 @@ STDERR			EQU	0002H  ;; Standard Error Output device handle
 STDAUX			EQU	0003H  ;; Standard Auxiliary device handle
 STDPRN			EQU	0004H  ;; Standard Printer device handle
 
+ifdef BILINGUAL
+
+; BILINGUAL equates
+
+EXT_MSG_ADJ		EQU	90
+PARSE_MSG_ADJ		EQU	11
+UTILITY_MSG_ADJ		EQU	8000
+
+endif
+
 ; Reserved Message Service equates
 
 NEARmsg 		 =	TRUE   ;; \
@@ -547,4 +557,3 @@ $M_INDEX =  $M_INDEX + 4			 ;  Set next available table location
 						 ;
 ENDM						 ;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-

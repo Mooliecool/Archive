@@ -45,7 +45,7 @@
 
 
 
-	To build Country depend version, Define JAPAN, KOREA or TAIWAN
+	To build Country/Region depend version, Define JAPAN, KOREA or TAIWAN
 	by using CL option via Dos environment.
 
 	ex.		set CL=-DJAPAN
@@ -114,3 +114,4 @@
 	#endif
 #endif
 
+

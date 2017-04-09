@@ -319,6 +319,12 @@ BadCall:
 	PUBLIC Irett
 Irett:
         jmp     iret_com
+ifdef NEC_98
+        ; NEC NT Final 93/12/11 M.ANZAI
+	PUBLIC Irett2
+Irett2:
+	iret
+endif   ;NEC_98
 
 	; An alternative method of entering the system is to perform a
 	; CALL 5 in the program segment prefix with the contents of CL
@@ -364,6 +370,19 @@ Call_Entry:				; System call entry point and dispatcher
 
 	entry	COMMAND 		; Interrupt call entry point (int 21h)
 
+ifdef NEC_98
+	DB	90H,90h,90h
+	JMP @F
+JMP_RTN0:
+	JMP	SetCtrlShortEntry
+JMP_RTN1:
+	JMP	$Set_Printer_Flag	; If equal jmp directly to function
+JMP_RTN2:
+	JMP	$Get_Current_PDB	; Yes, jmp directly to function
+JMP_RTN3:
+	JMP	$Set_Current_PDB	; Yes, jmp directly to function
+@@:
+endif   ;NEC_98
 IF	NOT IBM
 
 	cmp	AH,SET_OEM_HANDLER
@@ -396,20 +415,18 @@ DOSDispCall0:
 endif
 
         cmp     AH,SET_CTRL_C_TRAPPING  ; Check Minimum special case #
-	jb	SaveAllRegs		; Not special case so continue
+        jb	     SaveAllRegs		; Not special case so continue
+ifndef NEC_98
         jnz     sch01
         jmp     SetCtrlShortEntry
 sch01:
-
 	cmp	AH,SET_PRINTER_FLAG	; Check Max case number
 	ja	SaveAllRegs		; Not special case so continue
 	jz	$Set_Printer_Flag	; If equal jmp directly to function
-
 	cmp	AH,GET_CURRENT_PDB	; Is this a Get PSP call (51h)?
-        jnz     gcp01                   ; Yes, jmp directly to function
-        jmp     $Get_Current_PDB        ; Yes, jmp directly to function
+            jnz     gcp01                   ; Yes, jmp directly to function
+            jmp     $Get_Current_PDB        ; Yes, jmp directly to function
 gcp01:
-
 	cmp	AH,GETCURRENTPSP	; Is this a Get PSP call (62h)?
 	jnz	ddc0			; Yes, jmp directly to function
 	jmp	$GET_CURRENT_PDB	; Yes, jmp directly to function
@@ -418,6 +435,34 @@ ddc0:
 	jnz	cmndI			; Yes, jmp directly to function
 	jmp	$Set_Current_PDB	; Yes, jmp directly to function
 cmndI:
+
+else    ;NEC_98
+;            jz      SetCtrlShortEntry
+	jz	JMP_RTN0
+	cmp	AH,SET_PRINTER_FLAG	; Check Max case number
+	ja	SaveAllRegs		; Not special case so continue
+;            jz      $Set_Printer_Flag       ; If equal jmp directly to function
+	jz	JMP_RTN1
+	cmp	AH,GET_CURRENT_PDB	; Is this a Get PSP call (51h)?
+;	jz	$Get_Current_PDB	; Yes, jmp directly to function
+	jz	JMP_RTN2
+	cmp	AH,GETCURRENTPSP	; Is this a Get PSP call (62h)?
+;	jz	$GET_CURRENT_PDB	; Yes, jmp directly to function
+	jz	JMP_RTN2
+	cmp	AH,SET_CURRENT_PDB	; Is this a Set PSP call (50h) ?
+ifndef ROMDOS
+;	jz	$Set_Current_PDB	; Yes, jmp directly to function
+	jz	JMP_RTN3
+else
+	; jump out of range by *two* bytes!
+	jnz	@f
+;	jmp	$Set_Current_PDB
+	JMP	JMP_RTN3
+@@:
+endif
+
+endif   ;NEC_98
+
 
 
 ifdef NTVDMDBG
@@ -812,6 +857,7 @@ DO_OEM_FUNC:
 	jmp	BadCall 		; Handler not initialized
 
 OEM_JMP:
+ifndef NEC_98
 	push	ES
 	pop	DS
 	pop	ES
@@ -820,6 +866,16 @@ OEM_JMP:
 
 	jmp	Oem_Handler
 
+else    ;NEC_98
+;----- NEC NT DOS5.0A 93/04/23 -----
+	extrn	JMP_Oem_Handler:far
+
+	push	ax
+	push	es
+	mov	ax,offset DosData:JMP_Oem_Handler
+	push	ax
+	retf				; jmp back to data segment (emsmnt.asm)
+endif   ;NEC_98
 ENDIF
 
 
@@ -846,7 +902,7 @@ PrintCall PROC	Near
 
 	test	BugTyp,TypSyscall
 	retz
-					; Going to print the sucker out.
+					; Going to print it out.
 					; Lookup the name string
 	SAVE	<BX>
 	sub	BX,BX
@@ -918,7 +974,4 @@ DOSCODE    ENDS
 	END
 
 ; ==========================================================================
-
-
-
 

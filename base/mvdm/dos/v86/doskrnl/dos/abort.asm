@@ -87,6 +87,14 @@ reset_free_jfn:
 ;
 
 	context DS			; SS is DOSDATA
+ifdef NEC_98
+	CallInstall Net_Abort, multNet, 29
+if installed
+	call    JShare + 4 * 4
+else
+	call    mftCloseP
+endif
+endif   ;NEC_98
 	assume  ds:nothing
 ;
 ; Scan the FCB cache for guys that belong to this process and zap their ref
@@ -131,8 +139,16 @@ Scan:
 ;
         call    Close_NT_Handle
 next:
-	inc     bx
-	jmp     scan
+        inc     bx
+        jmp     scan
+
+;
+; This call releases all LFN resources associated with this
+; process
+;
+;
+        mov ax, 0h        ; set fn to 0
+        HRDSVC  SVC_DEMLFNENTRY
 
 EndProc DOS_Abort
 
@@ -149,5 +165,4 @@ Close_NT_Handle:
 
 DOSCODE    ENDS
     END
-
 

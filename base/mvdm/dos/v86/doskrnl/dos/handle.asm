@@ -209,26 +209,26 @@ Procedure   $Commit,NEAR
 ;       Grab the SFT pointer from the JFN.
 
         call    SFFromHandle            ; get system file entry
-	DLJC	CommitError		 ; error return
+        DLJC    CommitError              ; error return
         context DS                      ; For DOS_CLOSE
         MOV     WORD PTR [ThisSFT],DI   ; save offset of pointer
         MOV     WORD PTR [ThisSFT+2],ES ; save segment value
 
 ; ES:DI point to SFT
-	TEST	WORD PTR ES:[DI.sf_flags], devid_device + devid_file_clean
-	jne	CommitOk
-	MOV	BP, WORD PTR ES:[DI.sf_NTHandle]
-	MOV	AX, WORD PTR ES:[DI.sf_NTHandle + 2]
-	SVC	SVC_DEMCOMMIT
-	jc	CommitError
+        TEST    WORD PTR ES:[DI.sf_flags], devid_device + devid_file_clean
+        jne     CommitOk
+        MOV     BP, WORD PTR ES:[DI.sf_NTHandle]
+        MOV     AX, WORD PTR ES:[DI.sf_NTHandle + 2]
+        SVC     SVC_DEMCOMMIT
+        jc      CommitError
 
 CommitOk:
-	mov	AH, Commit
+        mov     AH, Commit
         transfer    SYS_RET_OK
 
 CommitError:
-	ASSUME	DS:NOTHING
-	transfer    SYS_RET_ERR
+        ASSUME  DS:NOTHING
+        transfer    SYS_RET_ERR
 
 EndProc $Commit
 
@@ -438,7 +438,7 @@ rdsNoDec:
         mov     cx, ax                        ; can do this much
         or      cx, cx
         jnz     rdsOK
-        jmp     READ_ERR                      ; Silly user gave offset of ffff
+        jmp     READ_ERR                      ; user gave offset of ffff
 rdsOK:
 
         test    es:[di.sf_flags],devid_device
@@ -465,18 +465,18 @@ do_slowr:
         test    es:[di.sf_flags],sf_nt_seek ;set ZF for emulation
         HRDSVC  SVC_DEMREAD
         jnc     dor2
-	jmp	do_err
+        jmp     do_err
 dor2:
         add     word ptr es:[di.sf_position],ax
         adc     word ptr es:[di.sf_position+2],0
-	xchg	ax, cx			    ;cx = bytes read, ax=bytes to read
-	or	cx, cx
-	jne	dow25
-	test	es:[di.sf_flags], sf_nt_pipe_in   ;read 0 bytes on pipe?
-	je	dow25
+        xchg    ax, cx                      ;cx = bytes read, ax=bytes to read
+        or      cx, cx
+        jne     dow25
+        test    es:[di.sf_flags], sf_nt_pipe_in   ;read 0 bytes on pipe?
+        je      dow25
 ;; the file is for piping. guard for EOF
-	mov	cx, ax			    ;restore bytesto read
-	jmp	pipe_wait_data_eof
+        mov     cx, ax                      ;restore bytesto read
+        jmp     pipe_wait_data_eof
 
 dowrite:
         push    cx
@@ -536,21 +536,21 @@ wr_special:
 
 ;; we got nothing, try to make sure it is a real EOF.
 pipe_wait_data_eof:
-	mov	bp,word ptr es:[di.sf_NTHandle]     ;set up NT handle again
+        mov     bp,word ptr es:[di.sf_NTHandle]     ;set up NT handle again
         mov     ax,word ptr es:[di.sf_NTHandle+2]
-	SVC	SVC_DEMPIPEFILEDATAEOF		    ;probe for new data or EOF
-	jz	pipe_wait_data_eof		    ;not eof, no new data, wait
-	jnc	pipe_read_new_data		    ;new data, not eof, read it
+        SVC     SVC_DEMPIPEFILEDATAEOF              ;probe for new data or EOF
+        jz      pipe_wait_data_eof                  ;not eof, no new data, wait
+        jnc     pipe_read_new_data                  ;new data, not eof, read it
 ;; EOF encounter, mask off sf_nt_pipe_in so we will treat it as an ordinary file
-	and	word ptr es:[di.sf_flags], NOT(sf_nt_pipe_in)
-	mov	word ptr es:[di.sf_size], bp
-	mov	word ptr es:[di.sf_size + 2], ax    ;update the file size
+        and     word ptr es:[di.sf_flags], NOT(sf_nt_pipe_in)
+        mov     word ptr es:[di.sf_size], bp
+        mov     word ptr es:[di.sf_size + 2], ax    ;update the file size
 pipe_read_new_data:
-	mov	bp,word ptr es:[di.sf_NTHandle]     ;NT file handle
+        mov     bp,word ptr es:[di.sf_NTHandle]     ;NT file handle
         mov     ax,word ptr es:[di.sf_NTHandle+2]
         mov     si,word ptr es:[di.sf_position]
-	mov	bx,word ptr es:[di.sf_position+2]   ; bx:si is the current position
-	jmp	do_read				    ;read it again
+        mov     bx,word ptr es:[di.sf_position+2]   ; bx:si is the current position
+        jmp     do_read                             ;read it again
 
 ;; Extended Open
 devread:
@@ -651,14 +651,14 @@ LSeekError:
 CHKOWN_OK:
 
         test    es:[di.sf_flags],devid_device
-	jz	lseekcheckpipe
+        jz      lseekcheckpipe
         jmp     devseek
 lseekcheckpipe:
         CMP     AL,2                    ; is the seek value correct?
-	ja	lseekfile_error
-	test	es:[di.sf_flags], sf_nt_pipe_in;seek in pipe?
-	je	lseekDisp		;no, regular stuff
-	jmp	lseekpipe		;yes, do pipe speical
+        ja      lseekfile_error
+        test    es:[di.sf_flags], sf_nt_pipe_in;seek in pipe?
+        je      lseekDisp               ;no, regular stuff
+        jmp     lseekpipe               ;yes, do pipe speical
 lseekfile_error:
         MOV     EXTERR_LOCUS,errLoc_Unk ; Extended Error Locus  ;smr;SS Override
         error   error_invalid_function  ; invalid method
@@ -736,44 +736,44 @@ LseekOK:
         transfer    SYS_RET_OK          ; successful return
 
 lseekpipe:
-	push	ax
-	push	cx
-	push	dx
-	cmp	al, 2			;seek from EOF?
-	je	lseekpipe_wait_eof	;yes, must wait for EOF
-	cmp	al, 1			;seek from current position?
-	jne	lseekpipe_00		;no, must seek from the head
+        push    ax
+        push    cx
+        push    dx
+        cmp     al, 2                   ;seek from EOF?
+        je      lseekpipe_wait_eof      ;yes, must wait for EOF
+        cmp     al, 1                   ;seek from current position?
+        jne     lseekpipe_00            ;no, must seek from the head
 ;;lseek from current position.
 ;;if current position + offset > file size, wait for EOF
-	add	dx, word ptr es:[di.sf_position]	; new absolute position
-	adc	cx, word ptr es:[di.sf_position + 2]
+        add     dx, word ptr es:[di.sf_position]        ; new absolute position
+        adc     cx, word ptr es:[di.sf_position + 2]
 lseekpipe_00:
 ;;lseek from the beginning of the file
 ;;if the new position is beyond file size, wait for EOF
 ;;
-	cmp	cx, word ptr es:[di.sf_size + 2]   ;make sure the new position
-	ja	lseekpipe_wait_eof	  ;is within the current file size
-	cmp	dx, word ptr es:[di.sf_size]
-	ja	lseekpipe_wait_eof
-	mov	ax, cx			  ; return (DX:AX) as the new position
-	xchg	dx, ax
-	mov	word ptr es:[di.sf_position], ax     ;; update new position to SFT
-	mov	word ptr es:[di.sf_position + 2], dx
-	add	sp, 6			;throw away saved registers
-	jmp	short lseekOK
+        cmp     cx, word ptr es:[di.sf_size + 2]   ;make sure the new position
+        ja      lseekpipe_wait_eof        ;is within the current file size
+        cmp     dx, word ptr es:[di.sf_size]
+        ja      lseekpipe_wait_eof
+        mov     ax, cx                    ; return (DX:AX) as the new position
+        xchg    dx, ax
+        mov     word ptr es:[di.sf_position], ax     ;; update new position to SFT
+        mov     word ptr es:[di.sf_position + 2], dx
+        add     sp, 6                   ;throw away saved registers
+        jmp     short lseekOK
 
 lseekpipe_wait_eof:
         mov     bp,word ptr es:[di.sf_NTHandle]
         mov     ax,word ptr es:[di.sf_NTHandle+2]   ; AX:BP is 32bit handle
-	SVC	SVC_DEMPIPEFILEEOF
-	jnc	lseekpipe_wait_eof		    ;not eof, wait
-	mov	word ptr es:[di.sf_size], bp	    ;file size
-	mov	word ptr es:[di.sf_size + 2], ax
-	and	word ptr es:[di.sf_flags], NOT(sf_nt_pipe_in);becomes an ordinary file
-	pop	dx
-	pop	cx
-	pop	ax
-	jmp	lseekDisp
+        SVC     SVC_DEMPIPEFILEEOF
+        jnc     lseekpipe_wait_eof                  ;not eof, wait
+        mov     word ptr es:[di.sf_size], bp        ;file size
+        mov     word ptr es:[di.sf_size + 2], ax
+        and     word ptr es:[di.sf_flags], NOT(sf_nt_pipe_in);becomes an ordinary file
+        pop     dx
+        pop     cx
+        pop     ax
+        jmp     lseekDisp
 
 EndProc $LSeek
 
@@ -808,7 +808,7 @@ BREAK <FileTimes - modify write times on a handle>
 ;          ES:DI buffer of EA list
 ;
 ;
-;
+;       Extended to support win95 apis, see demlfn.c in dos/dem
 ;
 ;   Error returns:
 ;           AX = error_invalid_function
@@ -817,6 +817,15 @@ BREAK <FileTimes - modify write times on a handle>
 
 procedure   $File_Times,NEAR
         ASSUME  CS:DOSCODE,SS:DOSDATA
+
+
+
+ifdef old_rubbish
+
+;
+; This code is not needed anymore
+;
+;
         cmp     al, 2                   ; correct subfunction ?
         jae     inval_func
 
@@ -857,6 +866,18 @@ ret_ok:
 inval_func:
         mov     ExtErr_Locus,errLoc_Unk ; Extended Error Locus  ;SS Override
         error   error_invalid_function  ; give bad return
+endif
+
+        ;
+        ; Everything is done in dem
+        ;
+
+        HRDSVC  SVC_DEMFILETIMES
+        jc      FileTimesError
+        transfer SYS_RET_OK
+FileTimesError:
+        transfer SYS_RET_ERR
+
 
 EndProc $File_Times
 
@@ -942,7 +963,7 @@ Procedure   CheckOwner,NEAR
         test    [IsWin386],1
         jz      no_win386               ;win386 is not present
         xor     ax,ax                   ;set the zero flag
-        jmp     short skip_win386       
+        jmp     short skip_win386
 
 no_win386:
 

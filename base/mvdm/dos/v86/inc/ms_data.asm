@@ -52,7 +52,11 @@ MSDAT001S       label byte
         I_am    RenBuf,128              ; buffer for rename destination
 ; Buffer for search calls
         I_am    SEARCHBUF,53            ; internal search buffer
+ifdef	  JAPAN
+        I_am    DummyCDS,curdirLen_JPN
+else
         I_am    DummyCDS,curdirLen
+endif
 ;
 ; End of contiguous buffer
 ;

@@ -25,9 +25,15 @@
 	include curdir.inc
         include cmdsvc.inc
         include dossvc.inc
+ifdef NEC_98
+        include dpb.inc
+endif   ;NEC_98
         .cref
         .list
 
+ifdef NEC_98
+Installed = TRUE
+endif   ;NEC_98
         I_need  ThisCDS,DWORD           ; pointer to CDS used
         I_need  CDSAddr,DWORD           ; pointer to CDS table
         I_need  CDSCount,BYTE           ; number of CDS entries
@@ -36,13 +42,20 @@
                                         ; current drive)
         I_need  NUMIO,BYTE              ; Number of physical drives
         I_need  fSharing,BYTE           ; TRUE => no redirection allowed
-	I_need	DummyCDS,curdirLen	; buffer for dummy cds
+        I_need  DummyCDS,80h            ; buffer for dummy cds
+ifdef JAPAN
+	I_need	NetCDS,curdirLen_Jpn	; buffer for Net cds
+else
 	I_need	NetCDS,curdirLen	; buffer for Net cds
+endif
         I_need  DIFFNAM,BYTE            ; flag for MyName being set
         I_need  MYNAME,16               ; machine name
         I_need  MYNUM,WORD              ; machine number
         I_need  EXTERR_LOCUS,BYTE       ; Extended Error Locus
         I_need  DrvErr,BYTE             ; drive error
+ifdef NEC_98
+        I_need  DPBHEAD,DWORD           ; beginning of DPB chain
+endif   ;NEC_98
 
 
 DOSCODE SEGMENT
@@ -126,6 +139,36 @@ ASS_ERR:
 
 EndProc $AssignOper
 
+ifdef NEC_98
+Break <FIND_DPB - Find a DPB from a drive number>
+
+;**     FIND_DPB - Find a DPB from a Drive #
+;
+;       ENTRY   AL has drive number A = 0
+;       EXIT    'C' set
+;                   No DPB for this drive number
+;               'C' clear
+;                   DS:SI points to DPB for drive
+;       USES    SI, DS, Flags
+
+Procedure FIND_DPB,NEAR
+        ASSUME  CS:DOSCODE,SS:DOSDATA
+
+        LDS     SI,DPBHEAD              ;smr;SS Override
+fdpb5:  CMP     SI,-1
+        JZ      fdpb10
+        CMP     AL,[SI].dpb_drive
+        jz      ret_label               ; Carry clear (retz)
+        LDS     SI,[SI].dpb_next_dpb
+        JMP     fdpb5
+
+fdpb10: STC
+
+ret_label:
+        return
+
+EndProc FIND_DPB
+endif   ;NEC_98
         Break <InitCDS - set up an empty CDS>
 
 
@@ -349,7 +392,11 @@ Procedure   GetCDSFromDrv,NEAR
 	xor	ch,ch
 sync_loop:
 	or	word ptr ds:[si.CURDIR_FLAGS],CURDIR_tosync
+ifdef JAPAN
+	MOV	BX,SIZE CurDir_list_jpn
+else
 	MOV	BX,SIZE CurDir_list
+endif
 	ADD	SI,bx
 	loop	sync_loop
 	RESTORE <CX,BX>
@@ -366,31 +413,12 @@ no_sync:
 	cmp	al,25
 	ja	gcds_err
 
-        	mov	si,OFFSET DOSDATA:NetCDS
+        mov     si,OFFSET DOSDATA:NetCDS
 	.errnz	CURDIR_TEXT
 	push	ss
         pop     ds
 
-        ; If its the first time, sync NetCDS
-
-        test    word ptr ds:[si.CURDIR_FLAGS],CURDIR_tosync
-        jnz     net_first
-
-        ; Check if the NetCDS is already for the same drive. If so dont sync.
-        ; Be safe. Dont assume that drive letter in CDS will allways be upper
-        ; case. Check for both upper and lower case.
-
         push    ax
-        add     al,'A'
-        cmp     al,byte ptr ds:[si.CURDIR_TEXT]
-        je      net_in_sync
-        add     al,20h                          ; 'A' is 41h and 'a' is 61h
-        cmp     al,byte ptr ds:[si.CURDIR_TEXT]
-        je      net_in_sync
-        pop     ax
-
-net_first:
-	push	ax
         CMDSVC  SVC_CMDGETCURDIR        ; ds:si is buffer to get current dir
 
 net_in_sync:
@@ -408,7 +436,11 @@ gcds_err:
 GetCDS:
         SAVE    <BX,AX>
         LDS     SI,[CDSAddr]            ; get pointer to table  ;smr;SS Override
+ifdef JAPAN
+        MOV     BL,SIZE CurDir_list_jpn ; size in convenient spot
+else
         MOV     BL,SIZE CurDir_list     ; size in convenient spot
+endif
         MUL     BL                      ; get net offset
         ADD     SI,AX                   ; convert to true pointer
 	RESTORE <AX,BX>
@@ -430,5 +462,3 @@ EndProc GetCDSFromDrv
 
 DOSCODE ends
         END
-
-

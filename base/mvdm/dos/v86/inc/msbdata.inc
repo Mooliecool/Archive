@@ -10,9 +10,15 @@
 ;				;  then our segment is already open and
 ;				;  we'll actually generate code
 
+ifndef NEC_98
 Bdata	segment at 70h
 	assume	cs:Bdata
 	org	3		; fixed location in Bios_Data segment
+else    ;NEC_98
+Bdata	segment at 60h
+	assume	cs:Bdata
+	org	23h		; fixed location in Bios_Data segment
+endif   ;NEC_98
 int_2f	=	0		; define dummy so msbdata will assemble
 
 	endif

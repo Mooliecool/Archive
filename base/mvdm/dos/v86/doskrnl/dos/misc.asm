@@ -132,6 +132,24 @@ entry	$SLEAZEFUNCDL
 SET_AL_RET:
 ;	MOV	AL,error_invalid_drive	; Assume error				;AC000;
 	JC	BADSLDRIVE
+ifdef NEC_98
+;------------------10/01/93 NEC for MAOIX--------------------------------------
+BIOSCODE	equ	0060h		; BIOS code segment
+LPTABLE 	equ	006ch		; Points to Lptable
+
+	push	ax
+	push	bx
+	push	ds
+	mov	bx,BIOSCODE
+	mov	ds,bx
+	mov	bx,LPTABLE
+	xlat				; Get DA/UA in AL
+	mov	ah,01h			; Dummy verify command
+	pop	ds
+	pop	bx
+	int	1bh			; Dummy ROM call
+	pop	ax
+endif   ;NEC_98
 	HRDSVC	SVC_DEMGETDRIVEFREESPACE
 	JC	SET_AL_RET		; User FAILed to I 24
 	mov	[FATBYTE],al

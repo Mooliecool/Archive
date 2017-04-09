@@ -453,7 +453,7 @@ PARSE_DISPLAYMODE  PROC 	       ;;					;AN000;
      MOV  [BP+DI].BOX_WIDTH,0		  ;;					;AN000;
      MOV  [BP+DI].BOX_HEIGHT,0		  ;;					;AN000;
      MOV  [BP+DI].PRINT_OPTIONS,0	  ;; Default to NO print options	;AN000;
-     MOV  [BP+DI].NUM_DISP_MODE,0      ;; Get ready to INC this sucker		;AN000;
+     MOV  [BP+DI].NUM_DISP_MODE,0      ;; Get ready to INC this 		;AN000;
      MOV  [BP+DI].NEXT_DISP_MODE,-1    ;; This is the last DISPLAYMODE for now! ;AN000;
      MOV  AX,BLOCK_END		       ;;					;AN000;
      MOV  [BP+DI].DISP_MODE_LIST_PTR,AX;; Start mode list at end of new block	;AN000;

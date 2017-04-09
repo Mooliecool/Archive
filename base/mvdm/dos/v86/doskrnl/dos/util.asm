@@ -103,7 +103,7 @@ procedure   SFFromHandle,NEAR
 	CALL    pJFNFromHandle          ; get jfn pointer
 	retc                            ; return if error
 	CMP     BYTE PTR ES:[DI],-1     ; unused handle
-	JNZ     GetSF                   ; nope, suck out SF
+	JNZ     GetSF                   ; nope, take out SF
 	fmt     TypAccess,LevSFN,<"$p: Illegal SFN $x:$x\n">,<ES,DI>
 	MOV     AL,error_invalid_handle ; appropriate error
 	jump    ReturnCarry             ; signal it

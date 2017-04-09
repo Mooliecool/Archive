@@ -149,7 +149,7 @@ extern	      char     *Parse_Ptr;						      /* ;an003; dms; pointer to command 
 extern	      struct mem_classif mem_table[MAX_CLDATA_INDEX];
 extern		  int	   noof_progs;
 
-extern	      struct sublistx sublist[4];
+extern	      struct sublistx sublist[5];
 
 extern	      char    *SingleDrive;
 extern	      char    *MultipleDrives;
@@ -231,3 +231,4 @@ extern void sysloadmsg(union REGS *, union REGS *);
 extern void sysdispmsg(union REGS *, union REGS *);
 extern void sysgetmsg(union REGS *, struct SREGS *, union REGS *);
 extern void parse(union REGS *, union REGS *);
+

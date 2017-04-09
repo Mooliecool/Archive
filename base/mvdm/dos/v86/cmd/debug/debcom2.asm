@@ -1087,7 +1087,7 @@ CLSFLE:
 	RETURN
 
 EXELOAD:
-	POP	[RETSAVE]		; Suck up return addr
+	POP	[RETSAVE]		; pull up return addr
 	INC	BYTE PTR [NEWEXEC]
 	MOV	BX,[USER_PROC_PDB]
 	MOV	AX,BEGSEG

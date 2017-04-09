@@ -61,11 +61,23 @@ exit:
 	int	21h			;terminate ourselves
 exec_err:
 	mov	dx,offset ErrMsg		;Error executing command.com
+ifdef BILINGUAL
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset ErrMsg2
+@@:
+endif
 	mov	al,1
 	call	dispmsg
 	jmp	short	exit
 do_help:
 	mov	dx,offset HelpMsg		;Display help for loadfix
+ifdef BILINGUAL
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset HelpMsg2
+@@:
+endif
 	call	dispmsg
 	xor	al,al
 	jmp	short exit
@@ -175,11 +187,23 @@ execp_ret:
 	ret
 no_parms:
 	mov	dx,offset NoParms
+ifdef BILINGUAL
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset NoParms2
+@@:
+endif
 	call	dispmsg
 	stc
 	jmp	short execp_ret
 no_comspec:
 	mov	dx,offset NoComspec
+ifdef BILINGUAL
+	call	IsDBCSCodePage
+	jz	@f
+	mov	dx,offset NoComspec2
+@@:
+endif
 	call	dispmsg
 	stc
 	jmp	short execp_ret
@@ -333,6 +357,36 @@ scasbx:
 
 scasb1	endp
 
+
+ifdef BILINGUAL
+IsDBCSCodePage	proc	near
+	push	ax
+	push	bx
+
+	mov	ax,4f01h		; get code page
+	xor	bx,bx
+	int	2fh
+
+ifdef JAPAN
+	cmp	bx,932
+endif
+ifdef KOREA
+	cmp	bx,949
+endif
+ifdef TAIWAN
+	cmp	bx,950
+endif
+ifdef PRC
+	cmp	bx,936
+endif
+
+	pop	bx
+	pop	ax
+	ret
+IsDBCSCodePage	endp
+endif
+
+
 ;**************************
 ;Data
 ;**************************
@@ -373,3 +427,4 @@ code	ends
 	end	start
 
 
+

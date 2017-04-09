@@ -261,7 +261,7 @@ BATEOF:
 
 ;SR; BugBug
 ; There is a good reason why this carriage return is being returned here. 
-;This was part of the old code, thanks to some brain-damaged coding. Because,
+;This was part of the old code. Because,
 ;of the way the caller is structured, a fake CR has to be returned again on
 ;EOF to ensure the termination of the caller's loop. If echo is on, this
 ;results in an extra linefeed after the batchfile is run if the last line of
@@ -836,7 +836,7 @@ SKIPLFEED:
 ;BatchEOF == 1 now, after returning a CR-LF. The next call to GetBatByt
 ;to get the EOF has not been made yet because we encountered the Goto. On
 ;all other cases, EOF will be hit while trying to read the next line and
-;we are fine. I know, I know, what a massive hack from hell!! God help us!!
+;we are fine.
 ;
 	push	es
 	mov	es,Batch

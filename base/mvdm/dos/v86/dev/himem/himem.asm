@@ -113,8 +113,10 @@
 	public	PrevInt2f
 	public	MoveIt
 	public	fCanChangeA20
+ifndef NEC_98
 	public	IsVDISKIn
 	public	fVDISK
+endif   ;NEC_98
 
 	public	LocalEnableA20
 	public	LocalDisableA20
@@ -124,7 +126,11 @@
 	public	xLocalDisableA20
 	public	IsA20On
 	public	winbug_fix
+ifndef NEC_98
 	public	ATA20Delay
+else    ;NEC_98
+	public	fAltA20Routine
+endif   ;NEC_98
 	public	AddMem
 
 	public	TopOfTextSeg
@@ -225,9 +231,21 @@ callers_cs	dw	0
 TopOfTextSeg	dw	0	; size of retained driver
 pPPFIRet	dw	PPFIRet ; The offset of an IRET for the POPFF macro
 pReqHdr		dd	?	; Pointer to MSDOS Request Header structure
+ifndef NEC_98
 pInt15Vector	dw	15h*4,0 ; Pointer to the INT 15 Vector
+else    ;NEC_98
+pInt15Vector	dw	1fh*4,0 ; Pointer to the INT 15 Vector
+endif   ;NEC_98
 PrevInt15	dd	0	; Original INT 15 Vector
 PrevInt2f	dd	0	; Original INT 2f Vector
+ifdef NEC_98
+pInt220Vector   dw      0dch*4,0; Pointer to the INT 220 Vector
+PrevInt220      dd      0       ; Original INT 220 Vector
+pInt20Vector    dw      20h*4,0 ; Pointer to the INT 20 Vector
+PrevInt20       dd      0       ; Original INT 20 Vector
+pInt21Vector    dw      21h*4,0 ; Pointer to the INT 21 Vector
+PrevInt21       dd      0       ; Original INT 21 Vector
+endif   ;NEC_98
 fHMAInUse	db	0	; High Memory Control Flag, != 0 -> In Use
 fCanChangeA20	db	1	; A20 Enabled at start? (assume changable)
 fHMAMayExist	db	0	; True if the HMA could exist at init time
@@ -238,7 +256,11 @@ fInHMA		db	0	; true if hiseg is in HMA
 fVDISK		db	0	; True if a VDISK device was found
 
 fA20Check	db	0	; True if A20 handler supports On/Off check
+ifndef NEC_98
 ATA20Delay	db	0	; Type of AT A20 delay in use (0 - NUM_ALT_A20)
+else    ;NEC_98
+fAltA20Routine	db	0	; True if alternative A20 routine in use
+endif   ;NEC_98
 EnableCount	dw	0	; A20 Enable/Disable counter
 fGlobalEnable	dw	0	; Global A20 Enable/Disable flag
 MinHMASize	dw	0	; /HMAMIN= parameter value
@@ -250,14 +272,28 @@ MemCorr		dw	0	; KB of memory at FA0000 on AT&T 6300 Plus.
 OldStackSeg	dw	0	; Stack segment save area for 6300 Plus.
 				;      Needed during processor reset.
 
+ifndef NEC_98
 	if	NUM_A20_RETRIES
 A20Retries	db	0	; Count of retires remaining on A20 diddling
 	endif
+else    ;NEC_98
+I2fCheckNH_Tbl	dd	0	; Old Pointer (ES:BX) for Windows ins NEC <91.09.27>
+		db	3,0	; version
+		db	01h	; type for instance is INT Vector
+		db	0	; R.F.U
+		dw	offset	_text:PrevInt15 ; offset
+I2f_seg 	dw	0	;
+		dw	4	;
+		dw	1fh	;
+		dd	-1	;
+endif   ;NEC_98
 
 A20State	db	0	; recored the current A20 state
+ifndef NEC_98
 	public	lpExtA20Handler
 
 lpExtA20Handler dd	0	; Far entry point to an external A20 handler
+endif   ;NEC_98
 
 ;*----------------------------------------------------------------------*
 ;*									*
@@ -343,7 +379,11 @@ Int2fHandler proc   far
         call    DOSTI           ; Flush any queued interrupts
 
 	cmp	ah,43h		; Function 43h?
+ifndef NEC_98
 	jne     I2fNextInt
+else    ;NEC_98
+	jne	I2fChk_NH	; check for Windows 3.0 function INS NEC <91.09.27>
+endif   ;NEC_98
 	or	al,al		; Subfunction 0?
 	jne     I2fNextSub	; No, continue
 
@@ -365,6 +405,25 @@ I2fNextSub:
 I2fNextInt:
         call    DOCLI           ; Disable interrupts again
 	jmp	[PrevInt2f]
+
+ifdef NEC_98
+; check N/H depend data for Windows 3.0 		;INS NEC <91.09.27>
+
+I2fChk_NH:			; check N/H depended data
+	cmp	ax,167fh
+	jne	I2fNextInt	; No, goto next handler
+	cmp	dx,0		; check sub function
+	jne	I2fNextInt	; No, goto next handler
+	mov	word ptr [I2fCheckNH_Tbl], bx	; offset
+	mov	bx,es				;
+	mov	word ptr [I2fCheckNH_Tbl+2],bx	; segment
+	mov	bx,cs				;
+	mov	[I2f_Seg],bx			;
+	push	cs				;
+	pop	es				;
+	mov	bx,offset I2fCheckNH_Tbl	;
+	jmp	I2fNextInt	; goto next handler
+endif   ;NEC_98
 
 Int2fHandler endp
 
@@ -393,7 +452,7 @@ xLocalDisableA20 dw	LocalDisableA20		; Function 06h
 	dw	IsA20On				; Function 07h
 	dw	QueryExtMemory			; Function 08h
 	dw	AllocExtMemory			; Function 09h
-	dw	FreeExtMemory			; Function 0Ah
+FreeMem dw	FreeExtMemory			; Function 0Ah
 MoveIt	dw	MoveBlock			; Function 0Bh
 	dw	LockExtMemory			; Function 0Ch
 	dw	UnlockExtMemory			; Function 0Dh
@@ -478,10 +537,14 @@ XCCheckHook:
 	push	dx			; save callers DX
 	call	HookInt15		; claim all remaining ext mem
 	pop	dx
+ifdef NEC_98
+	call	HookInt220		; start emulating Int220
+endif   ;NEC_98
 
 XCCheckVD:
 	popff				; End of critical section
 
+ifndef NEC_98
 	cmp	[fVDISK],0		; was VDISK found?
 	je	XCCallFunc
 	pop	ax			; Yes, Un-preserve AX and return error
@@ -489,6 +552,7 @@ XCCheckVD:
 	mov	bl,ERR_VDISKFOUND
 	xor	dx,dx
 	jmp	short XCExit
+endif   ;NEC_98
 
 ;	Call the appropriate API function.
 
@@ -503,8 +567,13 @@ XCCallFunc:
 	pop	ax			; restore callers ax for function
 
 	mov	di,ControlJumpTable[di]	; get function address
+ifndef NEC_98
 	or	di,di
 	jns	CallLowSegFn		; brif it's in the low segment
+else    ;NEC_98
+	cmp	di,HISEG_ORG
+	jb	CallLowSegFn		; brif it's in the low segment
+endif   ;NEC_98
 
 	cmp	fInHMA, 0		; is the hiseg in HMA ?
 	jz	InLoMem
@@ -713,6 +782,9 @@ debug_dump	endp
 	endif
 
 	if	debug_vers or tdump
+ifdef NEC_98
+RowCol	dw	1700H		; ins NEC <90.07.11> Y.Ueno
+endif   ;NEC_98
 
 hex_word:
 	push	ax
@@ -734,10 +806,197 @@ cofa:
 ;	mov	dl,al
 ;	mov	ah,2
 ;	int	21h
+ifndef NEC_98
 	mov	ah,0eh
 	mov	bx,7
 	int	10h
 	ret
+else    ;NEC_98
+;======================CHG NEC <90.07.11> Y.Ueno =============================
+	push	bx				; save callers regs
+	push	cx
+	push	dx
+	push	si
+	push	di
+	push	es
+	push	ds
+
+	push	dx				; save this segment for later
+
+	mov	ds, dx				; DS -> data segment
+	mov	dx, ds:[RowCol] 		; DX = current row/col
+
+	cmp	al, CR				; is character a CR?
+	jne	short kp1
+	mov	dl, 0				; yes, go to column 0
+	jmp	short kp3				; jump to common code
+kp1:
+	cmp	al, LF				; is character a LF?
+	jne	short kp2
+	inc	dh				; yes, go to next row
+	jmp	short kp3				; jump to common code
+kp2:
+	cmp	al, TAB 			; is it a tab
+	jne	short kp12
+	and	dl, 0f8h			; mask off low 3 bits (8 ch)
+	add	dl, 8				; move to next tab position
+	jmp	short kp3				; jmp to common code
+kp12:
+	cmp	al, BS				; is it backspace
+	jne	short kp13
+	dec	dl				; back up one column
+	jmp	short kp3				; goto common code
+kp13:
+;	Must be ordinary character. Write it to screen, update position
+
+;@@@
+	XOR	AH,AH			;
+	push	ax			; save char/attr
+	mov	al, dh			; AL = row
+	mov	ah, 80			; multiplier, 80 char per row
+	mul	ah			; AX = cell at start of row
+	mov	bh, 0
+	mov	bl, dl			; BX = column
+	add	bx, ax			; BX = cell
+	shl	bx, 1			; BX = byte offset of cell
+	mov	ax, 0a000h		; screen para for real mode
+	mov	es, ax			; ES -> screen
+	pop	es:[bx] 		; write character
+	inc	dl			; update column
+kp3:
+;	Common code, first check for line wrap:
+
+	cmp	dl, 80			; beyond rhs of screen?
+	jl	short kp4
+	mov	dl, 0			; go to col 0
+	inc	dh			; and move to next line
+kp4:
+;	Now check for scroll needed:
+
+	cmp	dh, 24			; are we off end of screen?
+	jl	short kp5
+
+;	Now scroll screen
+
+	mov	ax, 0a000h		; screen para for real mode
+	mov	ds, ax			; DS -> screen
+	mov	es, ax			; ES -> screen
+
+	mov	di, 0			; ES:DI = copy destination
+	mov	si, 160 		; DS:SI = copy source
+	mov	cx, 2000-160		; copy word count
+	cld
+	rep	movsw			; scroll
+
+;	Blank bottom line
+
+	mov	al, ' '
+;@@@
+	mov	ah, 0			; AX = blank character
+
+	mov	cx, 80			; number of cells to blank
+	mov	di, 4000-320		; ES:DI = start point
+	rep	stosw
+
+;	Update position
+
+	mov	dh, 23			; new row
+kp5:
+	pop	ds			; set DS to data again
+	mov	ds:[RowCol], dx 	; update row/col
+
+;@@@
+	call	SetCursor
+
+	pop	ds			; restore regs
+	pop	es
+	pop	di
+	pop	si
+	pop	dx
+	pop	cx
+	pop	bx
+
+	ret
+;***	SetCursor - updates cursor position
+;
+;	This routine reprograms the 6845 cursor position, and
+;	stores the new cursor position in the ROM bios data area.
+;
+;	ENTRY	DUAL MODE
+;		DH, DL = row, col
+;
+;	EXIT	cursor updated
+;
+;	USES	ax, bx, cx, flags
+;
+
+CRT_COLS	equ	04ah
+CURSOR_POSN	equ	050h
+CRT_START	equ	04eh
+ADDR_6845	equ	063h
+
+	push	ds
+	mov	bx, 40h
+	mov	ds, bx
+
+;	Save new position in BIOS data area
+
+	mov	ds:[CURSOR_POSN], dx
+
+;	Calculate offset on screen
+
+	mov	al, dh				; row
+;	mul	byte ptr ds:[CRT_COLS]		; row * cols
+	MOV	AH,80
+	mul	AH				; row * cols
+	mov	bl, dl				; bl = column
+	mov	bh, 0				; bx = column
+	add	ax, bx				; ax = offset in screen
+	sal	ax, 1				; double for attribute bytes
+;	mov	cx, ds:[CRT_START]		; cx = start point of screen
+	mov	cx, 0h				; cx = start point of screen
+	ADD	AX,CX
+	MOV	DX,AX
+;	sar	cx, 1				; convert to char count only
+
+;	Now program 6845
+
+	mov	al,49h
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	OUT	62H,AL
+	MOV	AX,DX
+	SHR	AX,1
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	OUT	60H,AL
+	MOV	AL,AH
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	JMP	SHORT $+2
+	OUT	60H,AL
+	POP	DS
+	RET
+
+;=============================================================================
+endif   ;NEC_98
 
 space:
 	mov	al,' '
@@ -789,6 +1048,7 @@ HookInt15   proc    near
 
 	push    es
 
+ifndef NEC_98
 	call    IsVDISKIn		; has a VDISK been installed?
 	cmp	[fVDISK],0
 	je	HINoVD			; No, continue
@@ -815,6 +1075,16 @@ HINoVD:                                 ; notify softpc of hooking I15
 @@:					;   addresses
 
 	sub	ax,[MemCorr]    	; 6300 Plus may have memory at FA0000h
+else    ;NEC_98
+;====================== chg NEC <90.07.11> Y.Ueno ======================
+	push	es
+	mov	ax,40h
+	mov	es,ax
+	sub	ah,ah
+	mov	al,byte ptr es:[0001]	; get extend memory size
+	shl	ax,7			; convert to k byte size
+	pop	es
+endif   ;NEC_98
 	cmp	ax,64
 	jb	HIInitMemory		; Less than 64K free?  Then no HMA.
 	cmp	Int15MemSize, 0		; are we supporting int 15 memory
@@ -825,8 +1095,10 @@ HIInitMemory:
 
 ;	Init the first handle to be one huge free block.
 
+ifndef NEC_98
 	or	ax, ax			; don't do it if no Int 15 memory avail
 	jz	HISkipInit
+endif   ;NEC_98
 
 	mov	cx,1024			; base is just above 1 meg
 
@@ -840,15 +1112,44 @@ HIInitMemory:
 	mov	bx, Int15MemSize
 @@:	add	cx,bx
 	sub     ax,bx
+ifdef NEC_98
+	push	es
+	push	ax
+	mov	ax, 40h
+	mov	es, ax
+	pop	ax
+	push	ax
+	add	ax,127			; set 128k boundly
+	shr	ax,7
+	sub	byte ptr es:[0001h],al
+	pop	ax
+	pop	es
+endif   ;NEC_98
 	call	AddMem			; add that to memory table
 
+ifndef NEC_98
 HISkipInit:
+else    ;NEC_98
+;	Save the current INT 15 vector.
+
+	les	si,dword ptr pInt15Vector
+
+;	Exchange the old vector with the new one.
+
+	mov	ax,offset Int15Handler
+	xchg	ax,es:[si][0]
+	mov	word ptr [PrevInt15][0],ax
+	mov	ax,cs
+	xchg	ax,es:[si][2]
+	mov	word ptr [PrevInt15][2],ax
+endif   ;NEC_98
 
         pop     es
 	ret
 
 HookInt15   endp
 
+ifndef NEC_98
 ;*----------------------------------------------------------------------*
 ;*									*
 ;*  IsVDISKIn -								*
@@ -919,6 +1220,7 @@ IVIFoundIt:
 	ret
 
 IsVDISKIn   endp
+endif   ;NEC_98
 
 
 ;*----------------------------------------------------------------------*
@@ -937,9 +1239,13 @@ IsVDISKIn   endp
 ;*									*
 ;*----------------------------------------------------------------------*
 
+ifdef NEC_98
+I15RegSave  dw	?
+endif   ;NEC_98
 
 Int15Handler proc   far
 
+ifndef NEC_98
 	cmp	ah,88h			; request == report free ext mem?
 	je	I15ExtMem
 
@@ -997,9 +1303,578 @@ I15BlkMov:
 I15HExit:
 	add	sp,2			; 'pop' A20 state flag
         jmp     DOIRET                  ; Uses flags from lower level handler
+else    ;NEC_98
+
+	cmp	ah,90h			; Is it a Block Move ?
+	jne	I15HNext		; No , continue
+
+	call	DOCLI			; Make sure interrupts are off
+	pusha				; Preserve the registers
+
+	mov	al, 8			; ins NEC <90.11.14> Y.Ueno
+	out	37h, al 		;	"
+
+	call	IsA20On
+	mov	cs:[I15RegSave],ax	; store A20's state
+	popa				; Restore the registers
+
+;	Call the previous Int 15h handler.
+
+	pushf				; Simualate an interrupt
+	call	cs:[PrevInt15]
+	pushf				; bug ? ins NEC <90.07.12> Y.Ueno
+	pusha				; Preserve previous handler's return
+	cmp	cs:[I15RegSave],0	; Restore A20
+	je	I15HExit		; It was off, continue
+	mov	ax,1
+	call	A20Handler		; turn A20 back on
+
+I15HExit:
+
+	mov	al, 09h 		; ins NEC <90.11.14> Y.Ueno
+	out	37h, al 		;	"
+
+	popa				; Restore the previous handler's return
+	popf				; bug ? chg NEC <90.07.12> Y.Ueno
+	retf	2			;		"
+;;;	iret				;		"
+
+I15HNext:
+	jmp	cs:[PrevInt15]		; continue down the int 15h chain
+
+endif   ;NEC_98
 
 Int15Handler endp
 
+ifdef NEC_98
+;*----------------------------------------------------------------------*
+;*									*
+;*  HookInt220 -							*
+;*									*
+;*	Insert the INT 220 hook 					*
+;*									*
+;*  ARGS:   None							*
+;*									*
+;*  RETS:   None							*
+;*									*
+;*  REGS:   AX, SI, and Flags are clobbered				*
+;*									*
+;*  EXTERNALLY NON-REENTRANT						*
+;*	Interrupts must be disabled before calling this function.	*
+;*									*
+;*----------------------------------------------------------------------*
+
+HookInt220   proc    near
+
+	push	cx
+	mov	cl,81h
+	xor	ax,ax
+	int	220			; Get size of extended memory
+	pop	cx
+	or	ax,ax			; no extendec memory?
+	jz	HI220Exit		;   don't hook Int220
+
+;	Exchange the old vector with the new one.
+
+	push	es
+
+	les	si,dword ptr pInt220Vector	; ES:SI points Int220 vector
+	mov	ax,offset Int220Handler
+	xchg	ax,es:[si][0]
+	mov	word ptr [PrevInt220][0],ax
+	mov	ax,cs
+	xchg	ax,es:[si][2]
+	mov	word ptr [PrevInt220][2],ax
+
+	pop	es
+
+HI220Exit:
+	ret
+
+HookInt220   endp
+
+;*----------------------------------------------------------------------*
+;*									*
+;*  Int220Handler -							*
+;*									*
+;*	Hooks Function 81h/82h and emulate it by twiddling EMB table	*
+;*									*
+;*  ARGS:   CL = Function, AX = Subfunction				*
+;*	    BX = Size of memory requested in 128k block, if function 81h*
+;*									*
+;*  RETS:   Function 81h						*
+;*		AX = 0	(if success)					*
+;*		BX = Start addr 					*
+;*		DX = End addr						*
+;*									*
+;*		AX = 01h (if fail)					*
+;*		BX = size of available memory in blocks of 128k 	*
+;*									*
+;*	    Function 82h						*
+;*		AX = size of availabel memory in blocks of 128k 	*
+;*		BX = Start addr 					*
+;*		DX = End addr						*
+;*									*
+;*  REGS:   AX, BX, (DX) is clobbered					*
+;*									*
+;*----------------------------------------------------------------------*
+
+USER_DX 	equ	6
+USER_BX 	equ	10
+USER_AX 	equ	12
+
+I220EmlTbl	dw	offset Eml_81
+		dw	offset Eml_82
+
+
+Int220Handler proc   far
+
+	cmp	cl,81h			; Function 81h?
+	jne	I220HCmp82		;
+	cmp	ax,0001h		; Sub function 01h?
+	jne	I220HNext		;
+	jmp	short I220HStart	;   yes
+I220HCmp82:
+	cmp	cl,82h			; Function 82h?
+	jne	I220HNext		;
+	cmp	ax,0000h		; Subfunction 00Hh?
+	jne	I220HNext		;
+					;
+I220HStart:				;   yes
+	sti
+	push	es
+	push	ds
+	push	ax
+	push	bx
+	push	cx
+	push	dx
+	push	di
+	push	si
+	push	bp
+
+	mov	bp,sp
+	mov	dx,ss
+	mov	es,dx
+	push	cs
+	pop	ds
+
+	mov	si,offset I220EmlTbl
+	sub	cl,81h
+	xor	ch,ch
+	shl	cx,1
+	add	si,cx
+	call	[si]			; call our Int 220 handler.
+
+	pop	bp
+	pop	si
+	pop	di
+	pop	dx
+	pop	cx
+	pop	bx
+	pop	ax
+	pop	ds
+	pop	es
+
+	iret
+
+
+I220HNext:
+	jmp	cs:[PrevInt220] 	; continue down the int 220 chain
+
+Int220Handler endp
+
+;*----------------------------------------------------------------------*
+;*									*
+;*  EML_81 -								*
+;*									*
+;*	Emulate Int220h Function 81h					*
+;*									*
+;*  ARGS:   Int 220 regs but DS, ES, BP, CX				*
+;*									*
+;*  RETS:   Values are set into AX, BX, DX on the stacks		*
+;*									*
+;*  REGS:   AX, BX, CX, DX, SI, DI and Flags are clobbered		*
+;*									*
+;*----------------------------------------------------------------------*
+
+EML_81	proc   near
+
+	push	bx			; save size of memory requested
+	mov	ax,bx
+	call	GetInt220mem		; return available memory size in CX
+					;   handle in DX, SI
+	pop	ax
+	cmp	cx,ax			; is there enough memory?
+	jb	E81Nomem		;  no
+
+	or	ax,ax			; requested size = 0 ?
+	jz	E81ReqZero		;  yes
+
+	mov	bx,dx			; ax:size,bx:free handle,si:unused handle
+	call	AllocInt220mem		; allocate memory for this Int 220
+	mov	[bp].USER_BX,bx 		; start addr
+	mov	[bp].USER_DX,dx 		; ending addr
+	mov	word ptr [bp].USER_AX,0000h	; indicates sucsess
+	jmp	short E81Exit
+
+E81ReqZero:
+	mov	word ptr [bp].USER_BX,0010h	; start addr
+	mov	word ptr [bp].USER_DX,0010h	; ending addr
+	mov	word ptr [bp].USER_AX,0000h	; indicates sucsess
+	jmp	short E81Exit
+
+E81Nomem:
+	mov	[bp].USER_BX,cx 		; size of abailable memories
+	mov	word ptr [bp].USER_AX,0001h	; indicate not enough memories
+
+E81Exit:
+	ret
+
+EML_81	endp
+
+;*----------------------------------------------------------------------*
+;*									*
+;*  EML_82 -								*
+;*									*
+;*	Emulate Int220h Function 82h					*
+;*									*
+;*  ARGS:   Int 220 regs but DS, ES, BP, CX				*
+;*									*
+;*  RETS:   Values are set into AX, BX, DX on the stacks		*
+;*									*
+;*  REGS:   AX, BX, CX, DX, SI, DI and Flags are clobbered		*
+;*									*
+;*----------------------------------------------------------------------*
+
+OwnersPSP	dw	0		;
+OwnersHandle	dw	0		;
+
+EML_82	proc   near
+
+	mov	ax,0ffffh		; fake request size
+	call	GetInt220mem		; return maximum available memory in AX
+					;   handle in BX, SI
+	or	ax,ax			; available size = 0 ?
+	jz	E82Nomem		; yes
+
+					; ax:size,bx:free handle,si:unused handle
+	call	AllocInt220mem		; allocate memory for this Int 220
+	mov	[bp].USER_BX,bx 	; start addr
+	mov	[bp].USER_DX,dx 	; ending addr
+	mov	[bp].USER_AX,ax 	; size of memory allocated
+	mov	[OwnersHandle],cx	; save handle of allocated block
+
+	mov	ax,6200h
+	int	21h
+	mov	[OwnersPSP],bx		; save current process's PSP
+					; we'll hook INt20h/21h from now on
+
+;	Exchange the old vector with the new one.
+
+	push	es
+	cli
+
+	les	si,dword ptr pInt20Vector	; replace Int20h vector
+	mov	ax,offset Int20_Hooker		;   with addr of Int20_Hooker
+	xchg	ax,es:[si][0]			;
+	mov	word ptr [PrevInt20][0],ax	;
+	mov	ax,cs				;
+	xchg	ax,es:[si][2]			;
+	mov	word ptr [PrevInt20][2],ax	;
+
+	les	si,dword ptr pInt21Vector	; replace Int21h vector
+	mov	ax,offset Int21_Hooker		;   with addr of Int21_Hooker
+	xchg	ax,es:[si][0]			;
+	mov	word ptr [PrevInt21][0],ax	;
+	mov	ax,cs				;
+	xchg	ax,es:[si][2]			;
+	mov	word ptr [PrevInt21][2],ax	;
+
+	sti
+	pop	es
+	jmp	short E82Exit
+
+E82Nomem:
+	mov	word ptr [bp].USER_BX,0010h	; start addr
+	mov	word ptr [bp].USER_DX,0010h	; ending addr
+	mov	word ptr [bp].USER_AX,0000h	; no blocks was allocated
+
+E82Exit:
+	ret
+
+EML_82	endp
+
+;*----------------------------------------------------------------------*
+;*									*
+;*  Int20_Hooker -							*
+;*  Int21_Hooker -							*
+;*									*
+;*	Hooks Int20h/21h						*
+;*									*
+;*  ARGS:   AH = Function						*
+;*									*
+;*  REGS:   All Regs are preserved					*
+;*									*
+;*  EXIT:   Fall through previous Int20h/21h handler			*
+;*									*
+;*----------------------------------------------------------------------*
+
+Intnum		db	0		; number of Int we are handling
+
+Int21_Hooker proc   far
+
+	mov	cs:[Intnum],21h
+	cmp	ah,00h
+	je	I2xHStart
+	cmp	ah,4ch
+	jne	I2xHNext
+
+
+Int20_Hooker proc   far
+
+I2xHStart:
+	push	ax
+	push	bx
+	mov	ax,6200h
+	pushf
+	call	cs:[PrevInt21]		; Int21h GetPSP Function
+	cmp	bx,cs:[OwnersPSP]	; this process own memory block?
+	pop	bx
+	pop	ax
+	jne	I2xHNext
+
+	push	ax
+	push	bx
+	push	cx
+	push	dx
+	push	di
+	push	si
+	push	ds
+	push	cs
+	pop	ds			; ds <- _text seg
+	push	es
+
+	mov	es,[hiseg]		; es <- funky seg
+	mov	dx,[OwnersHandle]	; handle of block owned by this process
+	mov	di,FreeMem		; get funtion in funky segment
+	push	cs			; set up far return
+	call	call_hi_in_di		; call into high segment
+
+;------------------------------------------------------------------------------
+;	Restore the old vector.
+;	 we won't hook Int20h/21h no longer.
+
+	cli
+
+	les	di,dword ptr pInt20Vector	; restore Int20h vector
+	mov	ax,word ptr [PrevInt20][0]	;
+	stosw					;
+	mov	ax,word ptr [PrevInt20][2]	;
+	stosw					;
+
+	les	di,dword ptr pInt21Vector	; restore Int21h vector
+	mov	ax,word ptr [PrevInt21][0]	;
+	stosw					;
+	mov	ax,word ptr [PrevInt21][2]	;
+	stosw					;
+;------------------------------------------------------------------------------
+
+	pop	es
+	pop	ds
+	pop	si
+	pop	di
+	pop	dx
+	pop	cx
+	pop	bx
+	pop	ax
+
+I2xHNext:
+	cmp	cs:[Intnum],21h
+	je	I21HNext
+
+I20HNext:
+	jmp	cs:[PrevInt20]		; continue down the int 20h chain
+
+I21HNext:
+	mov	cs:[Intnum],0
+	jmp	cs:[PrevInt21]		; continue down the int 21h chain
+
+Int20_Hooker endp
+Int21_Hooker endp
+
+	assume	ds:_text
+;*----------------------------------------------------------------------*
+;*									*
+;*  GetInt220mem -							*
+;*									*
+;*	Serach for available memory block for Int220 in EMB table	*
+;*									*
+;*  ARGS:   AX = size of memories requested in blocks of 128k		*
+;*									*
+;*  RETS:   AX = size of maximam EMB block in blocks of 128k		*
+;*	    BX = handle of maximam availabel EMB block			*
+;*	    CX = size of available EMB block whith the nearest		*
+;*		   size to request, in blocks of 128k			*
+;*	    DX = handle of available EMB block whith the nearest	*
+;*		   size to request					*
+;*	    SI = handle of unused EMB block				*
+;*									*
+;*  REGS:   AX, BX, CX, DX, SI, DI and Flags are clobbered		*
+;*									*
+;*----------------------------------------------------------------------*
+
+hMax		dw	0		; Handle of block that has max size
+MaxSize 	dw	0		; Max. size found so far
+hNearest	dw	0		; Handle of block that has nearest size
+					;   with request size
+NearestSize	dw	0		; Nearest size with request size
+hUnused 	dw	0		; Handle of unused block
+
+
+GetInt220mem	proc   near
+
+	mov	[hMax],0000h
+	mov	[MaxSize],0000h
+	mov	[hNearest],0000h
+	mov	[NearestSize],0ffffh
+	mov	[hUnused],0000h
+
+;	scan for largest FREE block
+
+	push	es
+	mov	es,[hiseg]
+	assume	es:funky
+	mov	bx,[KiddValley]
+	mov	cx,[cHandles]		; Loop through the handle table
+GI220Loop:
+	cmp	[bx].Flags,FREEFLAG	; Is this block free?
+	jne	GI220Anused		;   no
+
+	mov	di,[bx].base
+	mov	si,di
+	add	si,[bx].Len		; si has end addr of free block
+	and	si,0ff80h		; round off to 128k boundary
+
+	add	di,127			; di had start addr of free block
+	and	di,0ff80h		; 128k boundary
+
+	sub	si,di			; available size in kbytes
+	jnc	GI220Gotmem
+	xor	si,si			; size = 0
+GI220Gotmem:
+	shr	si,7			; convert to number of blocks
+
+	cmp	si,[MaxSize]		; is this the largest so far?
+	jbe	GI220Nearest
+	mov	[MaxSize],si		; Yes, save it away
+	mov	[hMax],bx		; save handle
+
+GI220Nearest:
+	cmp	si,ax			; is this larger than request?
+	jb	GI220Bottom
+	cmp	si,[NearestSize]	; is this the nearest so far?
+	jae	GI220Bottom
+	mov	[NearestSize],si	; Yes save it away
+	mov	[hNearest],bx		; save handle
+	jmp	short GI220Bottom
+
+GI220Anused:
+	cmp	[bx].Flags,UNUSEDFLAG	; Is this block unused?
+	jne	GI220Bottom
+	cmp	[hUnused],0		; did we already find an unused handle?
+	jne	GI220Bottom
+	mov	[hUnused],bx		; save this guy away
+
+GI220Bottom:
+	add	bx,SIZE Handle
+	loop	GI220Loop
+
+	cmp	[hMax],0		; Is there some free blocks
+	je	GI220Nomem		;   no
+	mov	ax,[MaxSize]
+	mov	bx,[hMax]
+	mov	cx,[MaxSize]
+	mov	dx,[hMax]
+	mov	si,[hUnused]
+	cmp	[hNearest],0
+	je	GI220Exit
+	mov	cx,[NearestSize]
+	mov	dx,[hNearest]
+	jmp	short GI220Exit
+
+GI220Nomem:
+	xor	ax,ax			; no memory available
+	xor	cx,cx			;
+
+GI220Exit:
+	pop	es
+	assume	es:nothing
+	ret
+
+
+GetInt220mem	endp
+
+;*----------------------------------------------------------------------*
+;*									*
+;*  AllocInt220mem -							*
+;*									*
+;*	Set memory block for Int220 onto EMB table			*
+;*									*
+;*  ARGS:   AX = size of memories requested in blocks of 128k		*
+;*	    BX = handle of free EMB block				*
+;*	    SI = handle of unused EMB block				*
+;*									*
+;*  RETS:   AX = size of EMB blocks allocated in blocks of 128k 	*
+;*	    BX = start addr of allocated memories			*
+;*	    DX = ending addr of allocated memoies			*
+;*	    CX = handle of allocated EMB block				*
+;*									*
+;*  REGS:   AX, BX, CX, DX and Flags are clobbered			*
+;*									*
+;*----------------------------------------------------------------------*
+
+AllocInt220mem	proc   near
+
+	push	es
+	mov	es,[hiseg]
+	assume	es:funky
+	shl	ax,7			; request size in kbytes
+
+	or	si,si			; is there a unused block?
+	jz	AI220AllocAll		;   no, allocate entire block
+
+	cmp	ax,[bx].Len
+	je	AI220AllocAll
+
+	mov	dx,[bx].Base
+	mov	cx,dx
+	add	dx,[bx].Len		; end of free block
+	and	dx,007fh		; size beyond 128k boundary
+	add	dx,ax
+	mov	[si].Len,dx
+	sub	[bx].Len,dx
+	add	cx,[bx].Len
+	mov	[si].Base,cx
+	mov	bx,si
+
+AI220AllocAll:
+	mov	[bx].Flags,USEDFLAG	; New.Flags = USED
+	shr	ax,7			; size of block allocated
+	mov	cx,bx			; handle of block allocated
+	mov	dx,[bx].Base
+	add	dx,[bx].Len
+	and	dx,0ff80h
+	shr	dx,6			; end addr
+	mov	bx,dx
+	sub	bx,ax
+	sub	bx,ax			; start addr
+
+	pop	es
+	assume	es:nothing
+	ret
+
+AllocInt220mem	endp
+endif   ;NEC_98
 
 ;*----------------------------------------------------------------------*
 ;*									*
@@ -1198,6 +2073,7 @@ GlobalDisableA20 endp
 
 LocalEnableA20 proc near
 
+ifndef NEC_98
         call    DOCLI                   ; This is a non-reentrant function
 
 	cmp	[fCanChangeA20],1	; Can we change A20?
@@ -1252,6 +2128,48 @@ disp_a20_err:
 	endif
 	ret
 
+else    ;NEC_98
+        call    DOCLI                   ; This is a non-reentrant function
+
+	cmp	[fCanChangeA20],1	; Can we change A20?
+	jne	LEARet			; No, don't touch A20
+
+; From 2.14 - 2.25 the following 3 lines were commented out.  This caused
+; at least four (seemingly different) bugs on PS/2 systems.  The problem
+; seems to be that the PS2_A20Handler returns an error code if called to
+; enable when A20 is already on (other handlers do this also!).  JimMat
+
+	call	IsA20On 		; If A20 is already on, don't do
+	or	ax,ax			;   it again, but if it isn't on,
+	jnz	LEAIncIt		;   then make it so
+
+	mov	ax,1			; attempt to turn A20 on
+	call	A20Handler		; Call machine-specific A20 handler
+
+	or	ax,ax
+	jz	LEAA20Err
+
+LEAIncIt:
+	inc	[EnableCount]
+LEARet:
+	mov	ax,1			; return success
+	xor	bl,bl
+	ret
+
+LEAA20Err:
+	mov	bl,ERR_A20		; some A20 error occurred
+
+	xor	ax,ax
+	if	debug_vers
+disp_a20_err:
+	pusha
+	mov	al,'#'
+	call	cofa
+	popa
+	endif
+	ret
+endif   ;NEC_98
+
 LocalEnableA20 endp
 
 
@@ -1280,6 +2198,7 @@ LocalDisableA20 proc near
 	cmp	[EnableCount],0		; make sure the count's not zero
 	je	LDAA20Err
 
+ifndef NEC_98
 if	NUM_A20_RETRIES
 
 	mov	A20Retries,NUM_A20_RETRIES
@@ -1287,6 +2206,7 @@ if	NUM_A20_RETRIES
 LDATestIt:
 
 endif
+endif   ;NEC_98
 	call	IsA20On 		; Currently on or off?
 
 	cmp     [EnableCount],1		; Only if the count = 1 should A20 be
@@ -1306,6 +2226,7 @@ LDAStayOn:
 LDASetIt:
 	call	A20Handler		; Call machine-specific A20 handler
 
+ifndef NEC_98
 ife	NUM_A20_RETRIES
 	or	ax,ax			; If we're not doing retries, then
 	jz	LDAA20Err		;   use A20 handler's error return
@@ -1314,6 +2235,10 @@ else
 	jnz	LDATestIt		;   test current state, else return
 	jmp	short LDAA20Err 	;   an error condition
 endif
+else    ;NEC_98
+	or	ax,ax			; If we're not doing retries, then
+	jz	LDAA20Err		;   use A20 handler's error return
+endif   ;NEC_98
 
 LDADecIt:
 	dec	[EnableCount]
@@ -1471,7 +2396,7 @@ AM02:
 	cmp	ax,[bx].Base
 	jb	AM05		; brif no overlap at all
 
-;	   Now suck the block at [bx] up into our block in registers so
+;	   Now put the block at [bx] up into our block in registers so
 ;	   that we can continue the scan.  There may be other adjacent
 ;	   blocks, even in the case of no overlap, fr'instance when a
 ;	   block is added which entirely fills the gap between two others.
@@ -1533,5 +2458,4 @@ DOIRET:
 
 _text	ends
 	end
-
 

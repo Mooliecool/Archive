@@ -1,14 +1,18 @@
 #************************* makefile for messages **************************
-!IFNDEF COUNTRY
-COUNTRY =usa-ms
+!IFNDEF LANGUAGE
+LANGUAGE =usa
 !ENDIF
 
+idx=$(LANGUAGE)\$(LANGUAGE).idx
+msg=$(LANGUAGE)\$(LANGUAGE).msg
 
 #
-#######################	dependencies begin here. #########################
+####################### dependencies begin here. #########################
 #
 
-all: $(COUNTRY).idx
+all: $(idx)
 
-$(COUNTRY).idx: $(COUNTRY).msg
-    -$(_NTBINDIR)\private\mvdm\tools16\buildidx $(COUNTRY).msg
+$(idx): $(msg)
+    cd $(LANGUAGE)
+    -$(_NTBINDIR)\tools\tools16\buildidx $(LANGUAGE).msg
+    cd ..

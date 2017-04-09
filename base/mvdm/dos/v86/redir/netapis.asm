@@ -259,11 +259,11 @@ common_server_enum:
 
 ;
 ; we are going to set the caller's BX and CX irrespective of whether we have
-; meaningful values in them. The reason: WinUnPack is brain-dead. This function
+; meaningful values in them. This function
 ; is used to unpack a real-mode buffer into a protect-mode buffer, and it uses
-; the returned EntriesRead in BX to do so. It's brain-dead because it doesn't
+; the returned EntriesRead in BX to do so. It's bad because it doesn't
 ; look at the return code until after its tried to unpack BX elements from its
-; buffer, which probably contains crap. This took me a day to find out why its
+; buffer. This took me a day to find out why its
 ; blowing up in 16-bit windows protect-mode netapi.dll, and probably means that
 ; if the real DOS redir ever returned anything other than a list of servers,
 ; then windows would fall over too. (Actually, the real redir does the right

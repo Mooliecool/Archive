@@ -402,7 +402,7 @@ start   endp
 ;*  InstallInterruptHandlers
 ;*
 ;*      Sets the interrupt handlers for all the ints we use - 2a, 2f, 5c
-;*      and NETWORK_INTERRUPT (0e)
+;*      and NETWORK_INTERRUPT (0b)
 ;*
 ;*  ENTRY       es = PSP segment
 ;*              ds =
@@ -469,12 +469,12 @@ InstallInterruptHandlers proc
 ; we have to pinch int NETWORK_INTERRUPT for Netbios and DLC
 ;
 
-        mov     ax,3500h OR NETWORK_INTERRUPT
+        mov     ax,3500h OR NETWORK_VECTOR
         int     21h
         mov     word ptr OldNetworkHandler,bx
         mov     word ptr OldNetworkHandler+2,es
         mov     dx,offset ResidentCode:IntNetworkHandler
-        mov     ax,2500h OR NETWORK_INTERRUPT
+        mov     ax,2500h OR NETWORK_VECTOR
         int     21h
 
 ;if DEBUG
@@ -502,7 +502,7 @@ InstallInterruptHandlers endp
 ;*  RestoreInterruptHandlers
 ;*
 ;*      Resets the interrupt handlers for all the ints we use - 2a, 2f, 5c
-;*      and NETWORK_INTERRUPT (0e). Called in the event we cannot complete
+;*      and NETWORK_INTERRUPT (0b). Called in the event we cannot complete
 ;*      installation
 ;*
 ;*  ENTRY       OldMultHandler, Old2aHandler, Old5cHandler, OldNetworkHandler
@@ -540,7 +540,7 @@ RestoreInterruptHandlers proc
         int     21h
 
         lds     dx,OldNetworkHandler
-        mov     ax,2500h OR NETWORK_INTERRUPT
+        mov     ax,2500h OR NETWORK_VECTOR
         int     21h
 
 ;if DEBUG
