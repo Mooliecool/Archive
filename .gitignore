@@ -31,3 +31,5 @@ buildchk.err
 /base/mvdm/dos/v86/cmd/share/share.map
 /base/mvdm/dos/v86/dev/himem/himem.map
 /base/mvdm/dos/v86/lib/xmm.lib
+/base/mvdm/dos/v86/cmd/mem/mem.map
+/base/mvdm/dos/v86/cmd/setver/setver.map
