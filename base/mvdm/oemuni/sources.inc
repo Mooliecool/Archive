@@ -13,14 +13,6 @@ Abstract:
     compiler switches and libraries that are unique for the component being
     built.
 
-
-History:
-    Created 14-Jan-1993 Jonle
-    from template created 12-Apr-1990 by Steve Wood (stevewo)
-
-
-NOTE:   Commented description of this file is in \nt\public\oak\bin\sources.tpl
-
 !ENDIF
 
 MAJORCOMP=mvdm
@@ -30,16 +22,17 @@ TARGETNAME=oemuni
 TARGETPATH=obj
 TARGETTYPE=LIBRARY
 
-TARGETLIBS=
+INCLUDES=..\;..\..\inc;
 
-NTPROFILEINPUT=YES
+SOURCES=..\file.c \
+        ..\process.c
 
-INCLUDES=.;..\inc
-
-SOURCES=file.c \
-        process.c
+W32_SB=1
 
 UMTYPE=console
 UMTEST=toemuni
-UMAPPL=
-UMLIBS=$(ALT_PROJECT)\$(O)\oemuni.lib
+UMLIBS=$(O)\oemuni.lib
+SOURCES_USED=..\sources.inc
+
+# No overflow checking for the VDM
+BUFFER_OVERFLOW_CHECKS=0

@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <oemuni.h>
 #include "oem.h"
+#include "dpmtbls.h"
 
 
 
@@ -22,6 +23,9 @@ CheckForSameCurdir(
     UNICODE_STRING CurrentDir;
     BOOL rv;
 
+    if(!PathName) {
+        return FALSE;
+        }
 
     CurDir = &(NtCurrentPeb()->ProcessParameters->CurrentDirectory);
 
@@ -101,16 +105,29 @@ Routine Description:
         *  on files opend for generic read, so we add
         *  FILE_WRITE_ATTRIBUTES to the Desired access.
         */
-    hFile = CreateFileW( Unicode->Buffer,
-                         dwDesiredAccess == GENERIC_READ
-                             ? dwDesiredAccess | FILE_WRITE_ATTRIBUTES
-                             : dwDesiredAccess,
-                         dwShareMode,
-                         lpSecurityAttributes,
-                         dwCreationDisposition,
-                         dwFlagsAndAttributes,
-                         hTemplateFile
-                         );
+    if(NtCurrentTeb()->Vdm) {
+        hFile = DPM_CreateFileW( Unicode->Buffer,
+                                 dwDesiredAccess == GENERIC_READ
+                                     ? dwDesiredAccess | FILE_WRITE_ATTRIBUTES
+                                     : dwDesiredAccess,
+                                 dwShareMode,
+                                 lpSecurityAttributes,
+                                 dwCreationDisposition,
+                                 dwFlagsAndAttributes,
+                                 hTemplateFile
+                                 );
+    } else {
+        hFile = CreateFileW( Unicode->Buffer,
+                             dwDesiredAccess == GENERIC_READ
+                                 ? dwDesiredAccess | FILE_WRITE_ATTRIBUTES
+                                 : dwDesiredAccess,
+                             dwShareMode,
+                             lpSecurityAttributes,
+                             dwCreationDisposition,
+                             dwFlagsAndAttributes,
+                             hTemplateFile
+                             );
+    }
 
 
        /*
@@ -121,26 +138,94 @@ Routine Description:
         */
     if (hFile == INVALID_HANDLE_VALUE && dwDesiredAccess == GENERIC_READ)
       {
-        hFile = CreateFileW( Unicode->Buffer,
-                             dwDesiredAccess,
-                             dwShareMode,
-                             lpSecurityAttributes,
-                             dwCreationDisposition,
-                             dwFlagsAndAttributes,
-                             hTemplateFile
-                             );
+        if(NtCurrentTeb()->Vdm) {
+            hFile = DPM_CreateFileW( Unicode->Buffer,
+                                     dwDesiredAccess,
+                                     dwShareMode,
+                                     lpSecurityAttributes,
+                                     dwCreationDisposition,
+                                     dwFlagsAndAttributes,
+                                     hTemplateFile
+                                     );
+        } else {
+            hFile = CreateFileW( Unicode->Buffer,
+                                 dwDesiredAccess,
+                                 dwShareMode,
+                                 lpSecurityAttributes,
+                                 dwCreationDisposition,
+                                 dwFlagsAndAttributes,
+                                 hTemplateFile
+                                 );
         }
-
+    }
     return hFile;
 }
 
 
 
+BOOL   
+APIENTRY
+SetVolumeLabelOem(
+    LPSTR  pszRootPath,
+    LPSTR  pszVolumeName 
+    )
+
+/*++
+
+Routine Description:
+
+    Oem thunk to SetVolumeLabelW
+
+--*/
+
+{
+    UNICODE_STRING  UnicodeRootPath;
+    PUNICODE_STRING UnicodeVolumeName;
+    OEM_STRING OemString;
+    BOOL       bRet = FALSE;
+    NTSTATUS Status;
+
+    UnicodeVolumeName = &NtCurrentTeb()->StaticUnicodeString;
+    InitOemString(&OemString, pszVolumeName);
+    Status = RtlOemStringToUnicodeString(UnicodeVolumeName,&OemString,FALSE);
+    if ( !NT_SUCCESS(Status) ) {
+        if ( Status == STATUS_BUFFER_OVERFLOW ) {
+            SetLastError(ERROR_FILENAME_EXCED_RANGE);
+            }
+        else {
+            BaseSetLastNTError(Status);
+            }
+        return(FALSE);
+    }
+    
+    InitOemString(&OemString, pszRootPath);
+    Status = RtlOemStringToUnicodeString(&UnicodeRootPath, &OemString, TRUE);
+    if ( !NT_SUCCESS(Status) ) {
+        if ( Status == STATUS_BUFFER_OVERFLOW ) {
+            SetLastError(ERROR_FILENAME_EXCED_RANGE);
+            }
+        else {
+            BaseSetLastNTError(Status);
+            }
+        return(FALSE);
+        }
+
+    bRet = DPM_SetVolumeLabelW(UnicodeRootPath.Buffer,
+                               UnicodeVolumeName->Buffer
+                               );
+
+    RtlFreeUnicodeString(&UnicodeRootPath);
+
+    return(bRet);
+}
+
+
 BOOL
 APIENTRY
-SetFileAttributesOem(
+SetFileAttributesOemSys(
     LPSTR lpFileName,
-    DWORD dwFileAttributes
+    DWORD dwFileAttributes,
+    BOOL  fSysCall
     )
 
 /*++
@@ -148,6 +233,9 @@ SetFileAttributesOem(
 Routine Description:
 
     Oem thunk to SetFileAttributesW
+
+    fSysCall: TRUE if call is made on behalf of the system.
+              FALSE if this is exposed as (part of) an API thunk.
 
 --*/
 
@@ -168,19 +256,32 @@ Routine Description:
             }
         return FALSE;
         }
-    return ( SetFileAttributesW(
-                Unicode->Buffer,
-                dwFileAttributes
-                )
-            );
+    
+    if(!NtCurrentTeb()->Vdm) {
+        fSysCall = TRUE;
+    }
+    if(fSysCall) {
+        return ( SetFileAttributesW(
+                    Unicode->Buffer,
+                    dwFileAttributes
+                    )
+                );
+        }
+    else {
+        return ( DPM_SetFileAttributesW(
+                    Unicode->Buffer,
+                    dwFileAttributes
+                    )
+                );
+        }
 }
-
 
 
 DWORD
 APIENTRY
-GetFileAttributesOem(
-    LPSTR lpFileName
+GetFileAttributesOemSys(
+    LPSTR lpFileName,
+    BOOL  fSysCall
     )
 
 /*++
@@ -189,6 +290,8 @@ Routine Description:
 
     OEM thunk to GetFileAttributesW
 
+    fSysCall: TRUE if call is made on behalf of the system.
+              FALSE if this is exposed as (part of) an API thunk.
 --*/
 
 {
@@ -209,7 +312,16 @@ Routine Description:
             }
         return 0xFFFFFFFF;
         }
-    return ( GetFileAttributesW(Unicode->Buffer) );
+
+    if(!NtCurrentTeb()->Vdm) {
+        fSysCall = TRUE;
+    }
+    if(fSysCall) {
+        return ( GetFileAttributesW(Unicode->Buffer) );
+        }
+    else {
+        return ( DPM_GetFileAttributesW(Unicode->Buffer) );
+        }
 }
 
 
@@ -245,7 +357,11 @@ Routine Description:
             }
         return FALSE;
         }
-    return ( DeleteFileW(Unicode->Buffer) );
+    if(NtCurrentTeb()->Vdm) {
+        return(DPM_DeleteFileW(Unicode->Buffer));
+    } else {
+        return(DeleteFileW(Unicode->Buffer));
+    }
 }
 
 
@@ -299,9 +415,15 @@ Routine Description:
         UnicodeNewFileName.Buffer = NULL;
         }
 
-    ReturnValue = MoveFileExW(Unicode->Buffer,
-                              UnicodeNewFileName.Buffer,
-                              MOVEFILE_COPY_ALLOWED);
+    if(NtCurrentTeb()->Vdm) {
+        ReturnValue = DPM_MoveFileExW(Unicode->Buffer,
+                                      UnicodeNewFileName.Buffer,
+                                      MOVEFILE_COPY_ALLOWED);
+    } else {
+        ReturnValue = MoveFileExW(Unicode->Buffer,
+                                  UnicodeNewFileName.Buffer,
+                                  MOVEFILE_COPY_ALLOWED);
+    }
 
     if (UnicodeNewFileName.Buffer != NULL) {
         RtlFreeUnicodeString(&UnicodeNewFileName);
@@ -360,9 +482,15 @@ Routine Description:
         UnicodeNewFileName.Buffer = NULL;
         }
 
-    ReturnValue = MoveFileExW(Unicode->Buffer,
-                              UnicodeNewFileName.Buffer,
-                              fdwFlags);
+    if(NtCurrentTeb()->Vdm) {
+        ReturnValue = DPM_MoveFileExW(Unicode->Buffer,
+                                      UnicodeNewFileName.Buffer,
+                                      fdwFlags);
+    } else {
+        ReturnValue = MoveFileExW(Unicode->Buffer,
+                                  UnicodeNewFileName.Buffer,
+                                  fdwFlags);
+    }
 
     if (UnicodeNewFileName.Buffer != NULL) {
         RtlFreeUnicodeString(&UnicodeNewFileName);
@@ -407,7 +535,11 @@ Routine Description:
             }
         return INVALID_HANDLE_VALUE;
         }
-    ReturnValue = FindFirstFileW(Unicode->Buffer,&FindFileData);
+    if(NtCurrentTeb()->Vdm) {
+        ReturnValue = DPM_FindFirstFileW(Unicode->Buffer,&FindFileData);
+    } else {
+        ReturnValue = FindFirstFileW(Unicode->Buffer,&FindFileData);
+    }
     if ( ReturnValue == INVALID_HANDLE_VALUE ) {
         return ReturnValue;
         }
@@ -427,7 +559,11 @@ Routine Description:
         Status = RtlUnicodeStringToOemString(&OemString,&UnicodeString,FALSE);
     }
     if ( !NT_SUCCESS(Status) ) {
-        FindClose(ReturnValue);
+        if(NtCurrentTeb()->Vdm) {
+            DPM_FindClose(ReturnValue);
+        } else {
+            FindClose(ReturnValue);
+        }
         BaseSetLastNTError(Status);
         return INVALID_HANDLE_VALUE;
         }
@@ -460,7 +596,11 @@ Routine Description:
     UNICODE_STRING UnicodeString;
     WIN32_FIND_DATAW FindFileData;
 
-    ReturnValue = FindNextFileW(hFindFile,&FindFileData);
+    if(NtCurrentTeb()->Vdm) {
+        ReturnValue = DPM_FindNextFileW(hFindFile,&FindFileData);
+    } else {
+        ReturnValue = FindNextFileW(hFindFile,&FindFileData);
+    }
     if ( !ReturnValue ) {
         return ReturnValue;
         }
@@ -487,15 +627,14 @@ Routine Description:
 }
 
 
-
-
 DWORD
 APIENTRY
-GetFullPathNameOem(
+GetFullPathNameOemSys(
     LPCSTR lpFileName,
     DWORD nBufferLength,
     LPSTR lpBuffer,
-    LPSTR *lpFilePart
+    LPSTR *lpFilePart,
+    BOOL  fSysCall
     )
 
 /*++
@@ -504,12 +643,18 @@ Routine Description:
 
     Oem thunk to GetFullPathNameW
 
+    fSysCall: TRUE if call is made on behalf of the system.
+              FALSE if this is exposed as (part of) an API thunk.
 --*/
 
 {
 
     NTSTATUS Status;
     ULONG UnicodeLength;
+#ifdef FE_SB
+    ULONG FilePartLength;
+    UNICODE_STRING UnicodeFilePart;
+#endif
     UNICODE_STRING UnicodeString;
     UNICODE_STRING UnicodeResult;
     OEM_STRING OemString;
@@ -540,18 +685,42 @@ Routine Description:
         return 0;
         }
 
-    UnicodeLength = RtlGetFullPathName_U(
-                        UnicodeString.Buffer,
-                        (MAX_PATH<<1),
-                        Ubuff,
-                        FilePartPtr
-                        );
+    if(!NtCurrentTeb()->Vdm) {
+        fSysCall = TRUE;
+    }
+    if(fSysCall) {
+        UnicodeLength = RtlGetFullPathName_U(
+                            UnicodeString.Buffer,
+                            (MAX_PATH<<1),
+                            Ubuff,
+                            FilePartPtr
+                            );
+        }
+    else {
+        UnicodeLength = DPM_RtlGetFullPathName_U(
+                            UnicodeString.Buffer,
+                            (MAX_PATH<<1),
+                            Ubuff,
+                            FilePartPtr
+                            );
+        }
+
+#ifdef FE_SB
+    // BugFix: can't listed with file open dialog of MS's app 1995.3.7 V-HIDEKK
+    RtlInitUnicodeString( &UnicodeFilePart, Ubuff );
+    UnicodeLength = RtlUnicodeStringToOemSize( &UnicodeFilePart );
+#else
     UnicodeLength >>= 1;
+#endif
     if ( UnicodeLength && UnicodeLength < nBufferLength ) {
         RtlInitUnicodeString(&UnicodeResult,Ubuff);
         Status = RtlUnicodeStringToOemString(&OemResult,&UnicodeResult,TRUE);
         if ( NT_SUCCESS(Status) ) {
+#ifdef FE_SB
+            RtlMoveMemory(lpBuffer,OemResult.Buffer,UnicodeLength);
+#else
             RtlMoveMemory(lpBuffer,OemResult.Buffer,UnicodeLength+1);
+#endif
             RtlFreeOemString(&OemResult);
 
             if ( ARGUMENT_PRESENT(lpFilePart) ) {
@@ -559,7 +728,13 @@ Routine Description:
                     *lpFilePart = NULL;
                     }
                 else {
+#ifdef FE_SB
+                    RtlInitUnicodeString(&UnicodeFilePart,FilePart);
+                    FilePartLength = RtlUnicodeStringToOemSize( &UnicodeFilePart );
+                    *lpFilePart = (PSZ)(UnicodeLength - FilePartLength);
+#else
                     *lpFilePart = (PSZ)(FilePart - Ubuff);
+#endif
                     *lpFilePart = *lpFilePart + (ULONG)lpBuffer;
                     }
                 }
@@ -603,12 +778,25 @@ Routine Description:
     DWORD ReturnValue;
 
     Unicode = &NtCurrentTeb()->StaticUnicodeString;
-    Unicode->Length = (USHORT)RtlGetCurrentDirectory_U(
-                                    Unicode->MaximumLength,
-                                    Unicode->Buffer
-                                    );
+    if(NtCurrentTeb()->Vdm) {
+        Unicode->Length = (USHORT)DPM_RtlGetCurrentDirectory_U(
+                                        Unicode->MaximumLength,
+                                        Unicode->Buffer
+                                        );
+    } else {
+        Unicode->Length = (USHORT)RtlGetCurrentDirectory_U(
+                                        Unicode->MaximumLength,
+                                        Unicode->Buffer
+                                        );
+    }
 
+#ifdef FE_SB
+    ReturnValue = RtlUnicodeStringToOemSize( Unicode );
+    if ( nBufferLength > ReturnValue-1 ) {
+
+#else
     if ( nBufferLength > (DWORD)(Unicode->Length>>1) ) {
+#endif
         OemString.Buffer = lpBuffer;
         OemString.MaximumLength = (USHORT)(nBufferLength+1);
         Status = RtlUnicodeStringToOemString(&OemString,Unicode,FALSE);
@@ -620,9 +808,12 @@ Routine Description:
             ReturnValue = OemString.Length;
             }
         }
+#ifndef FE_SB
     else {
         ReturnValue = ((Unicode->Length)>>1)+1;
         }
+#endif
+
     return ReturnValue;
 }
 
@@ -664,7 +855,11 @@ Routine Description:
         }
 
     if (!CheckForSameCurdir(Unicode))  {
-        Status = RtlSetCurrentDirectory_U(Unicode);
+        if(NtCurrentTeb()->Vdm) {
+            Status = DPM_RtlSetCurrentDirectory_U(Unicode);
+        } else {
+            Status = RtlSetCurrentDirectory_U(Unicode);
+        }
         if ( !NT_SUCCESS(Status) ) {
             BaseSetLastNTError(Status);
             return FALSE;
@@ -707,7 +902,11 @@ Routine Description:
             }
         return FALSE;
         }
-    return ( CreateDirectoryW(Unicode->Buffer,lpSecurityAttributes) );
+    if(NtCurrentTeb()->Vdm) {
+        return ( DPM_CreateDirectoryW(Unicode->Buffer,lpSecurityAttributes) );
+    } else {
+        return ( CreateDirectoryW(Unicode->Buffer,lpSecurityAttributes) );
+    }
 }
 
 
@@ -744,7 +943,11 @@ Routine Description:
             }
         return FALSE;
         }
-    return ( RemoveDirectoryW(Unicode->Buffer) );
+    if(NtCurrentTeb()->Vdm) {
+        return ( DPM_RemoveDirectoryW(Unicode->Buffer) );
+    } else {
+        return ( RemoveDirectoryW(Unicode->Buffer) );
+    }
 }
 
 
@@ -786,7 +989,11 @@ Routine Description:
             }
         return 1;
         }
-    return (GetDriveTypeW(Unicode->Buffer));
+    if(NtCurrentTeb()->Vdm) {
+        return (DPM_GetDriveTypeW(Unicode->Buffer));
+    } else {
+        return (GetDriveTypeW(Unicode->Buffer));
+    }
 }
 
 
@@ -830,14 +1037,25 @@ Routine Description:
             }
         return FALSE;
         }
-    return ( GetDiskFreeSpaceW(
-                Unicode->Buffer,
-                lpSectorsPerCluster,
-                lpBytesPerSector,
-                lpNumberOfFreeClusters,
-                lpTotalNumberOfClusters
-                )
-            );
+    if(NtCurrentTeb()->Vdm) {
+        return ( DPM_GetDiskFreeSpaceW(
+                    Unicode->Buffer,
+                    lpSectorsPerCluster,
+                    lpBytesPerSector,
+                    lpNumberOfFreeClusters,
+                    lpTotalNumberOfClusters
+                    )
+                );
+    } else {
+        return ( GetDiskFreeSpaceW(
+                    Unicode->Buffer,
+                    lpSectorsPerCluster,
+                    lpBytesPerSector,
+                    lpNumberOfFreeClusters,
+                    lpTotalNumberOfClusters
+                    )
+                );
+    }
 }
 
 
