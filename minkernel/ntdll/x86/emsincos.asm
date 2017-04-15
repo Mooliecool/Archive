@@ -62,7 +62,7 @@ lab eFSINCOS
 	ret
 
 lab eFsincosNotSNaN
-ifdef NTX86
+ifdef NT386
         push    eax
         mov     eax, dword ptr SEL[rsi]
         mov     dword ptr SEL[rdi], eax
@@ -273,7 +273,7 @@ lab SinCosReduce
 	mov	SEL[TEMP1.wMan1],	2168h
 	mov	SEL[TEMP1.wMan0], 0c235h
 
-ifdef NTX86
+ifdef NT386
         mov     edi, TEMP1
 else
 	mov	edi, edataOFFSET TEMP1

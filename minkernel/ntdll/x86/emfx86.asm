@@ -1,7 +1,7 @@
-        subttl  emfx86.asm - 32 bit Emulator Interrupt Handler
+        subttl  emf386.asm - 32 bit Emulator Interrupt Handler
         page
 ;***
-;emfx86.asm - 32 bit Emulator Interrupt Handler
+;emf386.asm - 32 bit Emulator Interrupt Handler
 ;
 ;        IBM/Microsoft Confidential
 ;
@@ -33,7 +33,7 @@
 ; if necessary into ES:ESI and calls a routine to emulate the instruction.
 ; Most of the dispatching is done through tables. (see comments in CONST)
 ;
-; The instruction dispatching is designed to favor the x86 addressing modes
+; The instruction dispatching is designed to favor the 386 addressing modes
 
 
 ifdef _DOS32EXT                 ; JWM
@@ -46,7 +46,7 @@ public _Ms32KrnlHandler
 _Ms32KrnlHandler:
 endif
 
-ifdef   NTX86
+ifdef   NT386
 
 ;
 ; NPXEmulatorTable is a table read by the Windows/NT kernel in
@@ -66,7 +66,7 @@ ifdef  DEBUG
 endif
         cld                             ; clear direction flag forever
 
-ifdef NTX86
+ifdef NT386
 
 
 ;-- BUGBUG - bryanwi - 16Oct91 - Hack FP fix, not pointing IDT:7 at this
@@ -324,7 +324,7 @@ pe30:
 
 
 
-;       x86 address modes
+;       386 address modes
 
 ;       SIB does not handle SS overrides for ebp
 
@@ -384,7 +384,7 @@ SIB10:
         jmp     short CommonMemory
 
 
-;       x86 single register addressing
+;       386 single register addressing
 
         ALIGN   4
 
@@ -413,7 +413,7 @@ Exx10:
         jmp     short CommonMemory
 
 
-;       x86 direct addressing
+;       386 direct addressing
 
         ALIGN   4
 

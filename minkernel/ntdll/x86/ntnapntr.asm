@@ -24,9 +24,9 @@
 ;
 ;--
 
-include ksx86.inc
+include ks386.inc
 include callconv.inc                    ; calling convention macros
-include macx86.inc
+include mac386.inc
 include ntnap.inc
 
 .386

@@ -158,7 +158,7 @@ RootAligned:
 	div	bh			;See how close we are
 	add	bh,al			;quotient + divisor (always sets CY)
 FirstTrialRoot:
-;Avoid RCR because it takes 9 clocks on x86.  Use SHRD (3 clocks) instead.
+;Avoid RCR because it takes 9 clocks on 386.  Use SHRD (3 clocks) instead.
 	mov	dl,1			;Need bit set
 	shrd	bx,dx,1			;(quotient + divisor)/2
 ;bx has 9-bit approx. square root, normalized
@@ -178,7 +178,7 @@ StartThirdIteration:
 	div	ebx			;Test approximation
 	stc				;Set bit for rounding (= 2.328E-10)
 	adc	ebx,eax			;quotient + divisor + round bit
-;Avoid RCR because it takes 9 clocks on x85.  Use SHRD (3 clocks) instead.
+;Avoid RCR because it takes 9 clocks on 386.  Use SHRD (3 clocks) instead.
 	mov	dl,1			;Need bit set
 	shrd	ebx,edx,1		;(quotient + divisor)/2, rounded
 ;ebx has 32-bit approx. square root, normalized
@@ -243,7 +243,7 @@ ShiftRoot:
 ;Now divide root*2 by 2, preserving LSB as rounding bit and filling
 ;eax with 1's as sticky bits.
 ;
-;Avoid RCR because it takes 9 clocks on x86.  Use SHRD (3 clocks) instead.
+;Avoid RCR because it takes 9 clocks on 386.  Use SHRD (3 clocks) instead.
 	mov	eax,-1
 	shrd	eax,esi,1		;Move round bit to MSB of eax
 	shrd	esi,ebx,1

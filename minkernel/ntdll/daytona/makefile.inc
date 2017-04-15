@@ -2,31 +2,25 @@
 !include ..\$(TARGET_DIRECTORY).inc
 !endif
 
-obj\$(TARGET_DIRECTORY)\usrstubs.obj: \
-    $(TARGET_DIRECTORY)\usrstubs.$(ASM_SUFFIX) obj\$(TARGET_DIRECTORY)\ntdll.def
+SERVICES_DIR=$(O)
+SERVICES_TAB=$(SERVICES_DIR)\services.tab
+SERVICES_STB=..\..\ntos\ke\$(TARGET_DIRECTORY)\services.stb
+NTDLL_XTR=$(O)\ntdll.xtr
 
-ntdll.xtr: $(NTROOT)\base\ntos\ke\services.tab
-    gensrv -f ntdll.xtr $(_NTROOT)\private\ntos\ke
+$(SERVICES_TAB): ..\..\ntos\ke\services.tab
+    @echo Creating $@ from $**
+    $(C_PREPROCESSOR) $** > $@
 
-$(TARGET_DIRECTORY)\usrstubs.$(ASM_SUFFIX): $(NTROOT)\base\ntos\ke\services.tab
-    gensrv -d $(TARGET_DIRECTORY) -e $(ASM_SUFFIX) $(TARGET_BRACES) $(NTROOT)\base\ntos\ke
+$(O)\usrstubs.obj: \
+    $(O)\usrstubs.$(ASM_SUFFIX) $(O)\ntdll.def
 
-obj\$(TARGET_DIRECTORY)\ntdll.def: ..\ntdlldef.src ..\$(TARGET_DIRECTORY)def.src ntdll.xtr
-    copy ..\ntdlldef.src+..\$(TARGET_DIRECTORY)def.src+ntdll.xtr obj\$(TARGET_DIRECTORY)\ntdll.pp
-    $(TARGET_CPP) /EP $(CDEFINES) obj\$(TARGET_DIRECTORY)\ntdll.pp > obj\$(TARGET_DIRECTORY)\ntdll.def
-    -del obj\$(TARGET_DIRECTORY)\ntdll.pp
+$(NTDLL_XTR): $(SERVICES_TAB)
+    gensrv -f $(NTDLL_XTR) -s ..\..\ntos\ke $(SERVICES_DIR)
 
-#..\ntprop.cxx: ..\..\..\dcomidl\ntprop.cxx
-#        copy $** $@
+$(O)\usrstubs.$(ASM_SUFFIX): $(SERVICES_TAB) $(SERVICES_STB)
+    gensrv -d $(O) -e $(ASM_SUFFIX) $(TARGET_BRACES) -s ..\..\ntos\ke\$(TARGET_DIRECTORY) $(SERVICES_DIR)
 
-#..\ntpropb.cxx: ..\..\..\dcomidl\ntpropb.cxx
-#        copy $** $@
-
-#..\propstm.cxx: ..\..\..\dcomidl\propstm.cxx
-#        copy $** $@
-
-#..\propvar.cxx: ..\..\..\dcomidl\propvar.cxx
-#        copy $** $@
-
-#..\stgvarb.cxx: ..\..\..\dcomidl\stgvarb.cxx
-#        copy $** $@
+$(DLLDEF): ..\ntdlldef.src ..\$(TARGET_DIRECTORY)def.src $(NTDLL_XTR)
+    copy ..\ntdlldef.src+..\$(TARGET_DIRECTORY)def.src+$(NTDLL_XTR) $(O)\$(TARGETNAME).pp
+    $(TARGET_CPP) /EP $(CDEFINES) $(O)\$(TARGETNAME).pp > $@
+    -del $(O)\$(TARGETNAME).pp

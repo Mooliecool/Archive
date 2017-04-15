@@ -25,7 +25,7 @@
 
 .386p
         .xlist
-include ksx86.inc
+include ks386.inc
 include callconv.inc                    ; calling convention macros
         .list
 

@@ -40,7 +40,7 @@ ecode           ends
 
 assume  cs:ecode
 
-ifdef NTX86
+ifdef NT386
 assume ds:nothing
 assume fs:edata
 else
@@ -52,12 +52,12 @@ assume  es:nothing
 assume  gs:nothing
 assume  ss:nothing
 
-ifdef NTX86
-        include  ksx86.inc
-        include  ntx86npx.inc
+ifdef NT386
+        include  ks386.inc
+        include  nt386npx.inc
         include  callconv.inc
-        include ..\..\ntos\vdm\x86\vdmtb.inc
-endif                           ; NTX86
+        include  vdmtb.inc
+endif                           ; NT386
 
 ;*******************************************************************************
 ;
@@ -65,12 +65,12 @@ endif                           ; NTX86
 ;
 ;*******************************************************************************
 
-ifdef  NTX86
+ifdef  NT386
         EXTRNP   _NtRaiseException,3
         EXTRNP   _RtlRaiseStatus,1
         EXTRNP   _ZwRaiseException,3
         EXTRNP   _NpxNpSkipInstruction,1
-endif           ; NTX86
+endif           ; NT386
 
 ifdef _DOS32EXT
         extern  _SelKrnGetEmulData:NEAR
@@ -88,7 +88,7 @@ endif           ; CRUISER
 ;
 ;*******************************************************************************
 
-ifdef NTX86
+ifdef NT386
         EMSEG EQU FS
 else
         EMSEG EQU DS
@@ -115,9 +115,9 @@ page
 
 edata   segment
 
-ifdef NTX86
+ifdef NT386
         db size EmulatorTebData dup (?) ; Make space for varibles
-else					; ifdef NTX86
+else					; ifdef NT386
 
 Numlev          equ     8               ; Number of stack registers
 
@@ -178,7 +178,7 @@ ControlWord     label   word
     ErrMask     db      ?
     dummy       db      ?
 
-endif                                   ; ifdef NTX86 else
+endif                                   ; ifdef NT386 else
 
 ;*******************************************************************************
 ;
@@ -228,7 +228,7 @@ __fpemulatorbegin equ       $           ; emulator really starts here
         include emerror.asm             ; error handler
         include emdisp.asm              ; dispatch tables
 
-        include emfx86.asm              ; Flat x86 emulation entry
+        include emfx86.asm              ; Flat 386 emulation entry
         include emdecode.asm            ; instruction decoder
 
         include emarith.asm             ; arithmetic dispatcher
@@ -248,7 +248,7 @@ __fpemulatorbegin equ       $           ; emulator really starts here
         include emftran.asm             ; transcendentals
         include emlsenv.asm
         include emfsqrt.asm             ; square root
-ifndef NTX86
+ifndef NT386
         include emccall.asm
 endif
 

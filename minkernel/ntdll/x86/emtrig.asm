@@ -501,14 +501,14 @@ SineNotTiny:
 	call	EvalPolySetup		;In emftran.asm
 SineFinish:
 
-ifdef NTX86
+ifdef NT386
         mov	edi,YFloatTemp
 else
 	mov	edi,offset edata:FloatTemp
 endif
 	call	PolyMulDouble		;Last coefficient in R(x^2)
 
-ifdef NTX86
+ifdef NT386
 	mov	edi,YArgTemp		;Point to original x
 else
 	mov	edi,offset edata:ArgTemp ;Point to original x
@@ -516,7 +516,7 @@ endif
 
 	call	PolyMulDouble		;Compute x * R(x^2)
 
-ifdef NTX86
+ifdef NT386
 	mov	edi,YArgTemp		;Point to original x
 else
 	mov	edi,offset edata:ArgTemp ;Point to original x

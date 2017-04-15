@@ -6,7 +6,7 @@ X86_SOURCES=..\x86\critsect.asm \
             ..\x86\npxnp.c      \
             x86\usrstubs.asm
 
-ASM_DEFINES=-DNTX86
+ASM_DEFINES=-DNT386
 
 CONDITIONAL_INCLUDES= \
 	$(CONDITIONAL_INCLUDES) \

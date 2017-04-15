@@ -24,7 +24,7 @@
 ;
 ;
 ;   WARNING!!!!!!!!!! This code is duplicated in
-;   windows\base\client\x86\critsect.asm
+;   windows\base\client\i386\critsect.asm
 ;
 ;   Some day we should put it in a .inc file that both include.
 ;
@@ -32,7 +32,7 @@
 
 .486p
         .xlist
-include ksx86.inc
+include ks386.inc
 include callconv.inc                    ; calling convention macros
         .list
 

@@ -36,17 +36,15 @@ LARGE_INTEGER MapBeginTime, MapEndTime, MapElapsedTime;
 
 #if defined (_X86_)
 extern PVOID LdrpLockPrefixTable;
+extern PVOID __safe_se_handler_table[]; /* base of safe handler entry table */
+extern UCHAR __safe_se_handler_count;   /* absolute symbol whose address is
+                                           the count of table entries */
 
 //
 // Specify address of kernel32 lock prefixes
 //
 
-extern ULONG __security_cookie;         /* /GS security cookie */
-
-extern PVOID __safe_se_handler_table[]; /* base of safe handler entry table */
-extern UCHAR __safe_se_handler_count;   /* absolute symbol whose address is
-                                           the count of table entries */
-
+/*
 IMAGE_LOAD_CONFIG_DIRECTORY _load_config_used = {
     0,                          // Reserved
     0,                          // Reserved
@@ -58,10 +56,25 @@ IMAGE_LOAD_CONFIG_DIRECTORY _load_config_used = {
     0,                          // DeCommitFreeBlockThreshold
     0,                          // DeCommitTotalFreeThreshold
     &LdrpLockPrefixTable,       // LockPrefixTable
-    0, 0, 0, 0, 0, 0, 0,        // Reserved
-    &__security_cookie,
-    __safe_se_handler_table,
-    (ULONG)&__safe_se_handler_count
+    0, 0, 0, 0, 0, 0, 0         // Reserved
+};
+*/
+
+IMAGE_LOAD_CONFIG_DIRECTORY _load_config_used = {
+    sizeof(_load_config_used),     // size
+    0,                             // Reserved
+    0,                             // Reserved
+    0,                             // Reserved
+    0,                             // GlobalFlagsClear
+    0,                             // GlobalFlagsSet
+    0,                             // CriticalSectionTimeout (milliseconds)
+    0,                             // DeCommitFreeBlockThreshold
+    0,                             // DeCommitTotalFreeThreshold
+    (ULONG_PTR) &LdrpLockPrefixTable,  // LockPrefixTable
+    0, 0, 0, 0, 0, 0, 0,            // Reserved
+    0,                             // & security_cookie
+    (ULONG_PTR)__safe_se_handler_table,
+    (ULONG_PTR)&__safe_se_handler_count
 };
 
 void

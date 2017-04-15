@@ -52,7 +52,7 @@ ifdef   _DOS32EXT
         popfd                                   ; JWM, 9/6/91
 endif                                           ; DOS32EXT
 
-ifdef NTX86
+ifdef NT386
 if DBG
         push    dword ptr [esp+8]               ; On checked build, allow
         popfd                                   ; single step to work
@@ -238,7 +238,7 @@ EmExcept        ENDP
 
 endif                   ; ifdef _DOS32EXT
 
-ifdef NTX86
+ifdef NT386
 
 ISIZE                   equ     4
 ISizeEC                 equ     (ContextFrameLength + ISIZE - 1) and (not (ISIZE - 1))
@@ -459,7 +459,7 @@ RaiseExceptRet:
 ExceptNotHandled:
 EmExcept        ENDP
 
-endif                   ; ifdef NTX86
+endif                   ; ifdef NT386
 
 ifdef  DEBUG
 

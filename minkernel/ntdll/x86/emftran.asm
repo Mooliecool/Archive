@@ -383,7 +383,7 @@ EvalPoly:
 
 PolyLoop:
 	push	ebp			;Save loop count
-ifdef NTX86
+ifdef NT386
         mov	edi,YFloatTemp
 else
 	mov	edi,offset edata:FloatTemp
@@ -417,7 +417,7 @@ AddToZero:
 Eval2Poly:
 	call	EvalPolySetup
 	push	edi
-ifdef NTX86
+ifdef NT386
         mov	edi,YArgTemp
 else
 	mov	edi,offset edata:ArgTemp

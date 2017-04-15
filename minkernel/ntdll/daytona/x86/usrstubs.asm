@@ -22,7 +22,7 @@
 ;
 ;--
 
-include ksx86.inc
+include ks386.inc
 include callconv.inc
 
 .386

@@ -227,7 +227,7 @@ ComPopX:
 
 PopOneOver:
 	mov	EMSEG:[CURstk],BEGstk		;JWM
-ifdef NTX86
+ifdef NT386
 	mov	EMSEG:[INITstk].bTAG,bTAG_EMPTY
 else
 	mov	EMSEG:[XINITstk].bTAG,bTAG_EMPTY
@@ -236,7 +236,7 @@ endif
 
 PopTwoOver:
 	mov	EMSEG:[CURstk],BEGstk+Reg87Len	;JWM
-ifdef NTX86
+ifdef NT386
 	mov	EMSEG:[BEGstk].bTAG,bTAG_EMPTY
 else
 	mov	EMSEG:[XBEGstk].bTAG,bTAG_EMPTY
