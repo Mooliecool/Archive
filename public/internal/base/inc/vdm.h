@@ -1,6 +1,6 @@
 /*++
 
-Copyright (c) 1991  Microsoft Corporation
+Copyright (c) Microsoft Corporation.  All rights reserved.
 
 Module Name:
 
@@ -33,6 +33,12 @@ typedef enum _VdmServiceClass {
     VdmQueryDir,
     VdmPrinterDirectIoOpen,
     VdmPrinterDirectIoClose,
+    VdmPrinterInitialize,
+    VdmSetLdtEntries,
+    VdmSetProcessLdtInfo,
+    VdmAdlibEmulation,
+    VdmPMCliControl,
+    VdmQueryVdmProcess
 } VDMSERVICECLASS, *PVDMSERVICECLASS;
 
 
@@ -51,6 +57,15 @@ typedef struct _VdmQueryDirInfo {
     PUNICODE_STRING FileName;
     ULONG FileIndex;
 } VDMQUERYDIRINFO, *PVDMQUERYDIRINFO;
+
+//
+// Definitions for VdmQueryVdmProcessData
+//
+
+typedef struct _VDM_QUERY_VDM_PROCESS_DATA {
+        HANDLE          ProcessHandle;
+        BOOLEAN         IsVdmProcess;
+}VDM_QUERY_VDM_PROCESS_DATA, *PVDM_QUERY_VDM_PROCESS_DATA;
 
 #endif
 
@@ -108,11 +123,7 @@ typedef struct _VdmVirtualIca{
 #else  // _VDMNTOS_
 
 /* XLATON */
-#if defined(_PC98_)
-#define  FIXED_NTVDMSTATE_SEGMENT   0x60
-#else  // !_PC98_
 #define  FIXED_NTVDMSTATE_SEGMENT   0x70
-#endif // _PC98_
 
 #define  FIXED_NTVDMSTATE_OFFSET    0x14
 #define  FIXED_NTVDMSTATE_LINEAR    ((FIXED_NTVDMSTATE_SEGMENT << 4) + FIXED_NTVDMSTATE_OFFSET)
@@ -142,21 +153,43 @@ typedef struct _VdmVirtualIca{
 #define VDM_BREAK_DEBUGGER      0x00000010
 #define VDM_PROFILE             0x00000020
 #define VDM_ANALYZE_PROFILE     0x00000040
+#define VDM_TRACE_HISTORY       0x00000080
 
 #define VDM_32BIT_APP           0x00000100
 #define VDM_VIRTUAL_INTERRUPTS  0x00000200
 #define VDM_ON_MIPS             0x00000400
 #define VDM_EXEC                0x00000800
 #define VDM_RM                  0x00001000
+#define VDM_USE_DBG_VDMEVENT    0x00004000
 
 #define VDM_WOWBLOCKED          0x00100000
 #define VDM_IDLEACTIVITY        0x00200000
 #define VDM_TIMECHANGE          0x00400000
 #define VDM_WOWHUNGAPP          0x00800000
 
+#define VDM_HANDSHAKE           0x01000000
+
 #define VDM_PE_MASK             0x80000000
 
 /* XLATOFF */
+
+#if DBG
+#define INITIAL_VDM_TIB_FLAGS (VDM_USE_DBG_VDMEVENT | VDM_BREAK_DEBUGGER | VDM_TRACE_HISTORY)
+#else
+#define INITIAL_VDM_TIB_FLAGS (VDM_USE_DBG_VDMEVENT | VDM_BREAK_DEBUGGER)
+#endif
+
+
+//
+// bits defined in Eflags
+//
+#define EFLAGS_TF_MASK  0x00000100
+#define EFLAGS_IF_MASK  0x00000200
+#define EFLAGS_PL_MASK  0x00003000
+#define EFLAGS_NT_MASK  0x00004000
+#define EFLAGS_RF_MASK  0x00010000
+#define EFLAGS_VM_MASK  0x00020000
+#define EFLAGS_AC_MASK  0x00040000
 
 //
 // If the size of the structure is changed, ke\i386\instemul.asm must
@@ -179,8 +212,7 @@ typedef struct _Vdm_FaultHandler {
 } VDM_FAULTHANDLER, *PVDM_FAULTHANDLER;
 
 #pragma pack(1)
-/* XLATON */
-typedef struct _VdmPmStackInfo {        /* VDMTIB */
+typedef struct _VdmDpmiInfo {        /* VDMTIB */
     USHORT LockCount;
     USHORT Flags;
     USHORT SsSelector;
@@ -191,9 +223,76 @@ typedef struct _VdmPmStackInfo {        /* VDMTIB */
     ULONG  DosxIntIretD;
     ULONG  DosxFaultIret;
     ULONG  DosxFaultIretD;
-} VDM_PMSTACKINFO, *PVDM_PMSTACKINFO;
-/* XLATOFF */
+    ULONG  DosxRmReflector;
+} VDM_DPMIINFO, *PVDM_DPMIINFO;
 #pragma pack()
+
+//
+// Interrupt handler flags
+//
+
+#define VDM_INT_INT_GATE        0x00000001
+#define VDM_INT_TRAP_GATE       0x00000000
+#define VDM_INT_32              0x00000002
+#define VDM_INT_16              0x00000000
+#define VDM_INT_HOOKED          0x00000004
+
+#pragma pack(1)
+//
+// CAVEAT: This structure was designed to be exactly 64 bytes in size.
+// There is code that assumes that an array of these structures
+// will fit neatly into a 4096 byte page.
+//
+typedef struct _VdmTraceEntry {
+    USHORT Type;
+    USHORT wData;
+    ULONG lData;
+    ULONG Time;
+    ULONG eax;
+    ULONG ebx;
+    ULONG ecx;
+    ULONG edx;
+    ULONG esi;
+    ULONG edi;
+    ULONG ebp;
+    ULONG esp;
+    ULONG eip;
+    ULONG eflags;
+    USHORT cs;
+    USHORT ds;
+    USHORT es;
+    USHORT fs;
+    USHORT gs;
+    USHORT ss;
+} VDM_TRACEENTRY, *PVDM_TRACEENTRY;
+#pragma pack()
+
+#pragma pack(1)
+typedef struct _VdmTraceInfo {
+    PVDM_TRACEENTRY pTraceTable;
+    UCHAR Flags;
+    UCHAR NumPages;             // size of trace buffer in 4k pages
+    USHORT CurrentEntry;
+    LARGE_INTEGER TimeStamp;
+} VDM_TRACEINFO, *PVDM_TRACEINFO;
+#pragma pack()
+
+//
+// Definitions for flags in VDM_TRACEINFO
+//
+
+#define VDMTI_TIMER_MODE    3
+#define VDMTI_TIMER_TICK    1
+#define VDMTI_TIMER_PERFCTR 2
+#define VDMTI_TIMER_STAT    3
+#define VDMTI_TIMER_PENTIUM 3
+
+//
+// Kernel trace entry types
+//
+#define VDMTR_KERNEL_OP_PM  1
+#define VDMTR_KERNEL_OP_V86 2
+#define VDMTR_KERNEL_HW_INT 3
 
 
 #if defined(i386)
@@ -208,6 +307,8 @@ typedef struct _VdmIcaUserData {
     PULONG                 pIretHooked;
     PULONG                 pAddrIretBopTable;
     PHANDLE                phWowIdleEvent;
+    PLARGE_INTEGER         pIcaTimeout;
+    PHANDLE                phMainThreadSuspended;
 }VDMICAUSERDATA, *PVDMICAUSERDATA;
 
 typedef struct _VdmDelayIntsServiceData {
@@ -222,23 +323,60 @@ typedef struct _VDMSET_INT21_HANDLER_DATA {
         BOOLEAN     Gate32;
 }VDMSET_INT21_HANDLER_DATA, *PVDMSET_INT21_HANDLER_DATA;
 
+typedef struct _VDMSET_LDT_ENTRIES_DATA {
+        ULONG Selector0;
+        ULONG Entry0Low;
+        ULONG Entry0Hi;
+        ULONG Selector1;
+        ULONG Entry1Low;
+        ULONG Entry1Hi;
+}VDMSET_LDT_ENTRIES_DATA, *PVDMSET_LDT_ENTRIES_DATA;
+
+typedef struct _VDMSET_PROCESS_LDT_INFO_DATA {
+        PVOID LdtInformation;
+        ULONG LdtInformationLength;
+}VDMSET_PROCESS_LDT_INFO_DATA, *PVDMSET_PROCESS_LDT_INFO_DATA;
+
+//
+// Define the action code of VDM_ADLIB_DATA
+//
+
+#define ADLIB_USER_EMULATION     0      // default action
+#define ADLIB_DIRECT_IO          1
+#define ADLIB_KERNEL_EMULATION   2
+
+typedef struct _VDM_ADLIB_DATA {
+        USHORT VirtualPortStart;
+        USHORT VirtualPortEnd;
+        USHORT PhysicalPortStart;
+        USHORT PhysicalPortEnd;
+        USHORT Action;
+}VDM_ADLIB_DATA, *PVDM_ADLIB_DATA;
+
+//
+// Definitions for Protected Mode DOS apps cli control
+//
+
+#define PM_CLI_CONTROL_DISABLE  0
+#define PM_CLI_CONTROL_ENABLE   1
+#define PM_CLI_CONTROL_CHECK    2
+#define PM_CLI_CONTROL_SET      3
+#define PM_CLI_CONTROL_CLEAR    4
+
+typedef struct _VDM_PM_CLI_DATA {
+        ULONG Control;
+}VDM_PM_CLI_DATA, *PVDM_PM_CLI_DATA;
+
+//
+// Definitions for VdmInitialize
+//
+
+typedef struct _VDM_INITIALIZE_DATA {
+        PVOID           TrapcHandler;
+        PVDMICAUSERDATA IcaUserData;
+}VDM_INITIALIZE_DATA, *PVDM_INITIALIZE_DATA;
+
 #if defined (_NTDEF_)
-NTSTATUS
-NtVdmControl(
-    IN VDMSERVICECLASS Service,
-    IN OUT PVOID ServiceData
-    );
-
-//
-// Interrupt handler flags
-//
-
-#define VDM_INT_INT_GATE        0x00000001
-#define VDM_INT_TRAP_GATE       0x00000000
-#define VDM_INT_32              0x00000002
-#define VDM_INT_16              0x00000000
-
-
 typedef enum _VdmEventClass {
     VdmIO,
     VdmStringIO,
@@ -247,19 +385,20 @@ typedef enum _VdmEventClass {
     VdmBop,
     VdmError,
     VdmIrq13,
+    VdmHandShakeAck,
     VdmMaxEvent
 } VDMEVENTCLASS, *PVDMEVENTCLASS;
 
 // VdmPrinterInfo
 
-#define VDM_NUMBER_OF_LPT		3
+#define VDM_NUMBER_OF_LPT       3
 
-#define PRT_MODE_NO_SIMULATION		1
-#define PRT_MODE_SIMULATE_STATUS_PORT	2
-#define PRT_MODE_DIRECT_IO		3
-#define PRT_MODE_VDD_CONNECTED		4
+#define PRT_MODE_NO_SIMULATION  1
+#define PRT_MODE_SIMULATE_STATUS_PORT   2
+#define PRT_MODE_DIRECT_IO      3
+#define PRT_MODE_VDD_CONNECTED  4
 
-#define PRT_DATA_BUFFER_SIZE	16
+#define PRT_DATA_BUFFER_SIZE    16
 
 typedef struct _Vdm_Printer_Info {
     PUCHAR prt_State;
@@ -305,6 +444,15 @@ typedef ULONG VDMINTACKINFO;
 #define VDMINTACK_SLAVE      0x00010000
 #define VDMINTACK_AEOI       0x00020000
 
+// Family table definition for Dynamic Patch Module support
+typedef struct _tagFAMILY_TABLE {
+    int      numHookedAPIs;           // number of hooked API's in this family
+    PVOID    hModShimEng;             // hMod of shim engine
+    PVOID    hMod;                    // hMod of associated loaded dll.
+    PVOID   *DpmMisc;                 // ptr to DPM Module specific data
+    PVOID   *pDpmShmTbls;             // array of ptrs to API family shim tables
+    PVOID   *pfn;                     // array of ptrs to hook functions
+} FAMILY_TABLE, *PFAMILY_TABLE;
 
 typedef struct _VdmEventInfo {
     ULONG Size;
@@ -329,19 +477,21 @@ typedef struct _VdmEventInfo {
 
 typedef struct _Vdm_Tib {
     ULONG Size;
-    VDM_INTERRUPTHANDLER VdmInterruptHandlers[256];
-    VDM_FAULTHANDLER VdmFaultHandlers[32];
+    PVDM_INTERRUPTHANDLER VdmInterruptTable;
+    PVDM_FAULTHANDLER VdmFaultTable;
     CONTEXT MonitorContext;
     CONTEXT VdmContext;
     VDMEVENTINFO EventInfo;
     VDM_PRINTER_INFO PrinterInfo;
     ULONG TempArea1[2];                 // Scratch area
     ULONG TempArea2[2];                 // Scratch aArea
-    VDM_PMSTACKINFO PmStackInfo;
+    VDM_DPMIINFO DpmiInfo;
+    VDM_TRACEINFO TraceInfo;
+    ULONG IntelMSW;
+    LONG NumTasks;
+    PFAMILY_TABLE *pDpmFamTbls;  // array of ptrs to API family tables
+    BOOLEAN ContinueExecution;
 } VDM_TIB, *PVDM_TIB;
-
-#define EFLAGS_TF_MASK  0x00000100
-#define EFLAGS_NT_MASK  0x00004000
 
 //
 // Feature flags returned by NtVdmControl(VdmFeatures...)

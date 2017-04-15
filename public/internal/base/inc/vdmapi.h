@@ -1,6 +1,6 @@
 /*++ BUILD Version: 0001    // Increment this if a change has global effects
 
-Copyright (c) 1990  Microsoft Corporation
+Copyright (c) 1990-1998 Microsoft Corporation
 
 Module Name:
 
@@ -46,6 +46,10 @@ Revision History:
                                          // startupinfo structure was filled in.
 #define ASKING_FOR_ENVIRONMENT   0x400   // ask for environment only
 #define ASKING_FOR_SEPWOW_BINARY 0x800   // Caller is Separate WOW
+#define ASKING_FOR_WOWPROCLIST  0x1000   // get the list of wow processes
+#define ASKING_FOR_WOWTASKLIST  0x4000   // get the list of tasks in this wow process
+#define ASKING_TO_ADD_WOWTASK   0x8000   // add info about a wow task.  
+    
 
 typedef struct _VDMINFO {
     ULONG  iTask;
@@ -76,6 +80,26 @@ typedef struct _VDMINFO {
     USHORT CurDrive;
     BOOLEAN fComingFromBat;
 } VDMINFO, *PVDMINFO;
+
+//
+// used to store shared task and ntvdm process info list 
+//
+
+#define MAX_SHARED_OBJECTS  200
+
+typedef struct _SHAREDTASK {
+    DWORD   dwThreadId;
+    WORD    hTask16;
+    WORD    hMod16;
+    CHAR    szModName[9];
+    CHAR    szFilePath[128];
+} SHAREDTASK, *LPSHAREDTASK;
+
+typedef struct _SHAREDPROCESS {
+    DWORD   dwProcessId;
+    DWORD   dwAttributes;           // WOW_SYSTEM for shared WOW
+    LPTHREAD_START_ROUTINE pfnW32HungAppNotifyThread;  // For VDMTerminateTask
+} SHAREDPROCESS, *LPSHAREDPROCESS;
 
 
 // for CmdBatNotification
@@ -134,7 +158,7 @@ CmdBatNotification(
     IN ULONG    fBeginEnd
 );
 
-VOID
+NTSTATUS
 APIENTRY
 RegisterWowExec(
     IN HANDLE   hwndWowExec
