@@ -2,7 +2,7 @@
 
 
 /* File created by MIDL compiler version 3.00.44 */
-/* at Fri Nov 15 09:36:29 1996
+/* at Fri Mar 13 00:49:44 2015
  */
 /* Compiler settings for oaidl.idl:
     Oicf (OptLev=i2), W1, Zp8, env=Win32, ms_ext, c_ext
@@ -123,7 +123,7 @@ void __RPC_USER MIDL_user_free( void __RPC_FAR * );
 
 /****************************************
  * Generated header for interface: __MIDL__intf_0000
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [local] */ 
@@ -160,7 +160,7 @@ extern RPC_IF_HANDLE __MIDL__intf_0000_v0_0_s_ifspec;
 
 /****************************************
  * Generated header for interface: IOleAutomationTypes
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [auto_handle][unique][version] */ 
@@ -791,7 +791,7 @@ extern RPC_IF_HANDLE IOleAutomationTypes_v1_0_s_ifspec;
 
 /****************************************
  * Generated header for interface: ICreateTypeInfo
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [local][unique][uuid][object] */ 
@@ -1416,7 +1416,7 @@ void __RPC_STUB ICreateTypeInfo_LayOut_Stub(
 
 /****************************************
  * Generated header for interface: ICreateTypeInfo2
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [local][unique][uuid][object] */ 
@@ -2033,7 +2033,7 @@ void __RPC_STUB ICreateTypeInfo2_SetName_Stub(
 
 /****************************************
  * Generated header for interface: ICreateTypeLib
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [local][unique][uuid][object] */ 
@@ -2333,7 +2333,7 @@ void __RPC_STUB ICreateTypeLib_SaveAllChanges_Stub(
 
 /****************************************
  * Generated header for interface: ICreateTypeLib2
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [local][unique][uuid][object] */ 
@@ -2571,7 +2571,7 @@ void __RPC_STUB ICreateTypeLib2_SetHelpStringDll_Stub(
 
 /****************************************
  * Generated header for interface: IDispatch
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [unique][uuid][object] */ 
@@ -2802,7 +2802,7 @@ void __RPC_STUB IDispatch_RemoteInvoke_Stub(
 
 /****************************************
  * Generated header for interface: IEnumVARIANT
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [unique][uuid][object] */ 
@@ -2967,7 +2967,7 @@ void __RPC_STUB IEnumVARIANT_Clone_Stub(
 
 /****************************************
  * Generated header for interface: ITypeComp
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [unique][uuid][object] */ 
@@ -3130,7 +3130,7 @@ void __RPC_STUB ITypeComp_RemoteBindType_Stub(
 
 /****************************************
  * Generated header for interface: ITypeInfo
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [unique][uuid][object] */ 
@@ -3712,7 +3712,7 @@ void __RPC_STUB ITypeInfo_LocalReleaseVarDesc_Stub(
 
 /****************************************
  * Generated header for interface: ITypeInfo2
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [unique][uuid][object] */ 
@@ -4347,7 +4347,7 @@ void __RPC_STUB ITypeInfo2_GetAllImplTypeCustData_Stub(
 
 /****************************************
  * Generated header for interface: ITypeLib
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [unique][uuid][object] */ 
@@ -4710,7 +4710,7 @@ void __RPC_STUB ITypeLib_LocalReleaseTLibAttr_Stub(
 
 /****************************************
  * Generated header for interface: ITypeLib2
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [unique][uuid][object] */ 
@@ -4974,7 +4974,7 @@ void __RPC_STUB ITypeLib2_GetAllCustData_Stub(
 
 /****************************************
  * Generated header for interface: ITypeChangeEvents
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [local][unique][uuid][object] */ 
@@ -5119,7 +5119,7 @@ void __RPC_STUB ITypeChangeEvents_AfterTypeChange_Stub(
 
 /****************************************
  * Generated header for interface: IErrorInfo
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [local][unique][uuid][object] */ 
@@ -5303,7 +5303,7 @@ void __RPC_STUB IErrorInfo_GetHelpContext_Stub(
 
 /****************************************
  * Generated header for interface: ICreateErrorInfo
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [local][unique][uuid][object] */ 
@@ -5487,7 +5487,7 @@ void __RPC_STUB ICreateErrorInfo_SetHelpContext_Stub(
 
 /****************************************
  * Generated header for interface: ISupportErrorInfo
- * at Fri Nov 15 09:36:29 1996
+ * at Fri Mar 13 00:49:44 2015
  * using MIDL 3.00.44
  ****************************************/
 /* [unique][uuid][object] */ 

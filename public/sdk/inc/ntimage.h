@@ -1002,7 +1002,12 @@ typedef struct _IMAGE_LOAD_CONFIG_DIRECTORY {
     ULONG   VirtualMemoryThreshold;
     ULONG   ProcessHeapFlags;
     ULONG   ProcessAffinityMask;
-    ULONG   Reserved[ 3 ];
+    USHORT  CSDVersion;
+    USHORT  Reserved1;
+    ULONG   EditList;                   // VA
+    ULONG   SecurityCookie;             // VA
+    ULONG   SEHandlerTable;             // VA
+    ULONG   SEHandlerCount;
 } IMAGE_LOAD_CONFIG_DIRECTORY, *PIMAGE_LOAD_CONFIG_DIRECTORY;
 
 
