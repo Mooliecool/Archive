@@ -22,6 +22,8 @@ NOTE:   Commented description of this file is in \nt\bak\bin\sources.tpl
 
 !ENDIF
 
+!include $(PROJECT_ROOT)\ntdll\ntdll.inc
+
 MAJORCOMP=ntos
 MINORCOMP=rtl
 
