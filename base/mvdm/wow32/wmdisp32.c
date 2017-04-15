@@ -20,7 +20,7 @@
 #ifdef FE_IME
 #include "wownls.h"
 #include "ime.h"
-#include "prshtp.h"
+//#include "prshtp.h"
 #endif // FE_IME
 
 MODNAME(wmdisp32.c);
@@ -3253,8 +3253,12 @@ UINT GetNMHDRextensionSize(LPNMHDR pnmhdr32)
             case LVN_COLUMNCLICK:
             case LVN_BEGINDRAG:
             case LVN_BEGINRDRAG:
+            
+            // FIXME: Enable the following when we are ready.
+            /*
             case LVN_HOTTRACK:
                 return sizeof(NM_LISTVIEW);
+            */
 
             case LVN_BEGINLABELEDITA:
             case LVN_ENDLABELEDITA:
@@ -3279,8 +3283,11 @@ UINT GetNMHDRextensionSize(LPNMHDR pnmhdr32)
             case LVN_ODSTATECHANGED:
                 return sizeof(NM_ODSTATECHANGE);
 
+            // FIXME: Enable the following when we are ready.
+            /*
             case LVN_ITEMACTIVATE:
                 return sizeof(NMKEY);
+            */
 
             default:
                 goto unknown_nmhdr_code;
@@ -3299,6 +3306,9 @@ UINT GetNMHDRextensionSize(LPNMHDR pnmhdr32)
             case PSN_WIZNEXT:
             case PSN_WIZFINISH:
             case PSN_QUERYCANCEL:
+            
+            // FIXME: Enable the following when we are ready.
+            /*
             case PSN_TRANSLATEACCELERATOR:
             case PSN_QUERYINITIALFOCUS:
             case PSN_HASHELP:          // this one "is dead" - RaymondC
@@ -3309,6 +3319,7 @@ UINT GetNMHDRextensionSize(LPNMHDR pnmhdr32)
 
             case PSN_LASTCHANCEAPPLY:  // this is undocumented
                 return sizeof(NMHDR);  // (in widows\inc\prshtp.h)
+            */
 
             default:
                 goto unknown_nmhdr_code;
@@ -3364,8 +3375,12 @@ UINT GetNMHDRextensionSize(LPNMHDR pnmhdr32)
             case TVN_BEGINDRAGW:
             case TVN_BEGINRDRAGW:
             case TVN_DELETEITEMW:
+            
+            // FIXME: Enable the following when we are ready.
+            /*
             case TVN_SINGLEEXPAND:
                 return sizeof(NM_TREEVIEW);
+            */
 
             case TVN_GETDISPINFOA:
             case TVN_SETDISPINFOA:
@@ -3380,9 +3395,12 @@ UINT GetNMHDRextensionSize(LPNMHDR pnmhdr32)
             case TVN_KEYDOWN:
                 return sizeof(TV_KEYDOWN);
 
+            // FIXME: Enable the following when we are ready.
+            /*
             case TVN_GETINFOTIPA:
             case TVN_GETINFOTIPW:
                 return sizeof(NMTVGETINFOTIP);
+            */
 
             default:
                 goto unknown_nmhdr_code;

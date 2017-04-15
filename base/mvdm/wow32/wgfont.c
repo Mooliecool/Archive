@@ -632,7 +632,13 @@ ULONG FASTCALL WG32GetCurLogFont(PVDMFRAME pFrame)
 //  either the FONTS dir or the SYSTEM dir.
 //
 
+void LoadOCRFont(void)
+{
+    return;
+}
 
+// FIXME: Enable the following when we are ready.
+/*
 void LoadOCRFont(void)
 {
     char  szFontPath[MAX_PATH];
@@ -680,3 +686,4 @@ void LoadOCRFont(void)
         }
     }
 }        
+*/

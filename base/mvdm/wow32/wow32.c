@@ -33,7 +33,7 @@
 #include <stdarg.h>
 #include <ntcsrdll.h>
 
-#include <tsappcmp.h>
+//#include <tsappcmp.h>
 
 
 /* Function Prototypes */
@@ -203,6 +203,16 @@ PVOID pfnMoveFileA;                // Used with GtCompMoveFileA   in wkgthunk.c
 
 
 
+BOOL IsTerminalAppServer(void)
+{
+    //
+    // NOTE: This is always false in NT 4.0.
+    //
+    
+    return FALSE;
+}
+
+/*
 // Given to us by the terminal server folks to detect if we are in TS.
 BOOL IsTerminalAppServer(void)
 {
@@ -218,6 +228,7 @@ BOOL IsTerminalAppServer(void)
     return fIsWTS;
 
 }
+*/
 
 BOOLEAN
 W32DllInitialize(
@@ -296,11 +307,14 @@ Return Value:
             ccb = cbSystemDirLen + 1;
             pszSystemDirectory = malloc_w_or_die(ccb);
             RtlCopyMemory(pszSystemDirectory, szBuf, ccb);
-
+            
+            /*
             if(!GetSystemWindowsDirectory(szBuf, sizeof szBuf) ) {
                WOW32ASSERTMSG(FALSE, "WOW32: couldnt get windows directory, terminating.\n");
                WOWStartupFailed();  // never returns.
             }
+            */
+            GetWindowsDirectory(szBuf, sizeof szBuf);
             GetShortPathName(szBuf, szBuf, sizeof szBuf);
             cbWindowsDirLen = strlen(szBuf);
             ccb = cbWindowsDirLen + 1;
@@ -343,6 +357,7 @@ Return Value:
 
         InitializeListHead(&TimerList);
 
+        /*
         if (IsTerminalAppServer()) {
             //
             // Load tsappcmp.dll
@@ -360,6 +375,7 @@ Return Value:
             }
 
         }
+        */
 
         //
         // WHISTLER RAID BUG 366613

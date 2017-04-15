@@ -19,17 +19,18 @@ PASS1_PUBLISH={$(O)\wow32.lib=$(SDK_LIB_PATH)\wow32.lib}
 !endif
 
 TARGETLIBS= \
-    $(SDK_LIB_PATH)\kernl32p.lib \
     $(WINDOWS_LIB_PATH)\gdi32p.lib \
     $(WINDOWS_LIB_PATH)\user32p.lib \
-    $(WINDOWS_LIB_PATH)\apphelp.lib \
+    $(SDK_LIB_PATH)\kernel32.lib \
     $(SDK_LIB_PATH)\advapi32.lib \
     $(SDK_LIB_PATH)\shell32.lib \
     $(SDK_LIB_PATH)\ntvdm.lib \
     $(MVDM_TREE)\oemuni\$(ALT_PROJECT_FE)\$(O)\oemuni.lib     \
     $(SDK_LIB_PATH)\comdlg32.lib \
     $(SDK_LIB_PATH)\version.lib \
-    $(SDK_LIB_PATH)\userenv.lib
+    #$(SDK_LIB_PATH)\userenv.lib
+    #$(WINDOWS_LIB_PATH)\apphelp.lib \
+    #$(SDK_LIB_PATH)\kernl32p.lib \
 
 DLLENTRY=W32DllInitialize
 DLLBASE=0xffb0000
@@ -128,8 +129,8 @@ SOURCES= \
     ..\wnman.c     \
     ..\wwmman.c    \
     ..\wow32.rc    \
-    ..\wshimdb.c   \
     ..\wdpm.c
+#   ..\wshimdb.c   \
 
 !IFNDEF MSC_WARNING_LEVEL
 MSC_WARNING_LEVEL=/W3
@@ -168,3 +169,5 @@ LINKER_FLAGS=$(LINKER_FLAGS) /pdb:$(O)\wow32_$(ALT_PROJECT).pdb
 
 # No overflow checking for the VDM
 BUFFER_OVERFLOW_CHECKS=0
+
+NO_SAFESEH=1

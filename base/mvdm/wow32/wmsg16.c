@@ -1395,6 +1395,8 @@ mem1:
         }
         break;
 
+     // FIXME: Enable the following when we are ready.
+     /*
      case WM_CHANGEUISTATE:   // 0x127
      case WM_UPDATEUISTATE:   // 0x128
      case WM_QUERYUISTATE:    // 0x129
@@ -1406,6 +1408,7 @@ mem1:
         *plParamNew = 0;
 
         break;
+    */
 
 
     }  // end switch
@@ -1668,6 +1671,8 @@ VOID FASTCALL UnThunkWMMsg16(LPMSGPARAMEX lpmpex)
         }
         break;
 
+    // NOTE: Enable the following when we are ready.
+    /*
     case WM_CHANGEUISTATE:   // 0x127
     case WM_UPDATEUISTATE:   // 0x128
     case WM_QUERYUISTATE:    // 0x129
@@ -1678,6 +1683,7 @@ VOID FASTCALL UnThunkWMMsg16(LPMSGPARAMEX lpmpex)
         }
 
         break;
+    */
 
 
 #ifdef FE_IME

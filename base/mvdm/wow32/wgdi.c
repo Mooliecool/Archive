@@ -1683,6 +1683,8 @@ ULONG FASTCALL WG32Escape(PVDMFRAME pFrame)
             }
             break;
 
+        // FIXME: Enable the following when we are ready.
+        /*
         // Win'95 really messed us up here.  They changed the DRAWPATTERNRECT
         // structure instead of defining a new DRAWPATTERNRECT32 struct.
         // On NT, all metafiles are 32-bit. So if an app is building a metafile,
@@ -1737,6 +1739,7 @@ ULONG FASTCALL WG32Escape(PVDMFRAME pFrame)
                 }
             }
             break;
+        */
 
         default:
             {

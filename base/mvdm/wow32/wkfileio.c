@@ -1561,7 +1561,10 @@ ULONG FASTCALL WK32WOWFileOpen(PVDMFRAME pFrame)
             }
             // See if they are trying to open a .ini file, and if it doesn't exist,
             // copy it to the user's home dir from the system dir
-            else if ((gpfnTermsrvCORIniFile != NULL) &&
+            
+            else if (
+            // FIXME: Enable the following when we are ready.
+            //else if ((gpfnTermsrvCORIniFile != NULL) &&
                      WOW32_strstr(lpFileName,".INI")) {
                 pwch = malloc_w((MAX_PATH + 1)*sizeof(WCHAR));
                 if (pwch) {

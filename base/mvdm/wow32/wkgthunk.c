@@ -202,6 +202,8 @@ BOOL GtCompGetVersionExA(LPOSVERSIONINFO lpVersionInfo)
 
     bReturn = GetVersionExA(lpVersionInfo);
  
+    // FIXME: Enable the following when we are ready.
+    /*
     // WHISTLER RAID BUG 366613
     // Business Plan Pro was failing to install because of a version problem.
     // Added compatibility flag for version lie to fix the problem. Solution is 
@@ -209,7 +211,7 @@ BOOL GtCompGetVersionExA(LPOSVERSIONINFO lpVersionInfo)
     if(CURRENTPTD()->dwWOWCompatFlagsEx & WOWCFEX_PLATFORMVERSIONLIE)
     {   PFLAGINFOBITS pFlagInfoBits;
         LPSTR *pFlagArgv;
-        pFlagInfoBits = CheckFlagInfo(WOWCOMPATFLAGSEX, WOWCFEX_PLATFORMVERSIONLIE);        
+        pFlagInfoBits = CheckFlagInfo(WOWCOMPATFLAGSEX, WOWCFEX_PLATFORMVERSIONLIE);
         
 
         if(pFlagInfoBits && pFlagInfoBits->dwFlagArgc == 6 && pFlagInfoBits->pFlagArgv) {
@@ -245,6 +247,7 @@ BOOL GtCompGetVersionExA(LPOSVERSIONINFO lpVersionInfo)
 
         }  
     }
+    */
     
     return bReturn;
 }

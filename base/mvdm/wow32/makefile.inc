@@ -20,9 +20,10 @@ $(O)\wowit.c $(O)\wowit.h: ..\genwowit.c ..\wow.it
 -FORCE:MULTIPLE
 -IGNORE:4001,4037,4039,4065,4070,4078,4087,4089
 -NODEFAULTLIB
+-safeseh:no
 -debug
--version:5.00
--osversion:5.00
+-version:4.50
+-osversion:4.50
 -subsystem:console,4.00
 -base:@$(COFFBASE_TXT_FILE),usermode
 -entry:mainCRTStartup

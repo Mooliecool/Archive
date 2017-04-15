@@ -599,13 +599,15 @@ BOOL FASTCALL WM32CBGetDropDownControlRect (LPWM32MSGPARAMEX lpwm32mpex)
 
 BOOL FASTCALL  WM32CBComboFocus (LPWM32MSGPARAMEX lpwm32mpex)
 {
+/*
 #if (CBEC_SETCOMBOFOCUS != 0x166)
 #error The USER Guys changed CBEC_SETCOMBOFOCUS again
 #endif
 
 #if (CBEC_KILLCOMBOFOCUS != 0x167)
 #error The USER Guys changed CBEC_KILLCOMBOFOCUS again
-#endif    
+#endif
+*/
 
     if (lpwm32mpex->fThunk) {
         lpwm32mpex->Parm16.WndProc.wMsg =
