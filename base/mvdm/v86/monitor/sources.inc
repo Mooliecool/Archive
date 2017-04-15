@@ -26,20 +26,17 @@ NOTE:   Commented description of this file is in \nt\bak\bin\sources.tpl
 
 MAJORCOMP=v86
 MINORCOMP=monitor
-
 TARGETNAME=monitor
 TARGETPATH=obj
 TARGETTYPE=LIBRARY
 
-TARGETLIBS=
+MVDMDIR=$(PROJECT_ROOT)\mvdm
 
-INCLUDES=                       \
-    ..\..\inc;                  \
-    ..\..\softpc.new\base\inc;  \
-    ..\..\softpc.new\host\inc;  \
-    ..\..\..\inc
-
-NTPROFILEINPUT=YES
+INCLUDES=\
+    ..\x86;\
+    $(MVDMDIR)\inc;\
+    $(MVDMDIR)\softpc.new\base\inc;\
+    $(MVDMDIR)\softpc.new\host\inc
 
 SOURCES=
 

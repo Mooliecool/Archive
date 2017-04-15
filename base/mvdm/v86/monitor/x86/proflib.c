@@ -47,7 +47,7 @@ Revision History:
 #include <nturtl.h>
 #include <string.h>
 #include <stdio.h>
-#include <\nt\private\ntos\dll\ldrp.h>
+#include "..\..\..\..\private\ntos\dll\ldrp.h"
 
 NTSTATUS
 InitializeKernelProfile ( VOID );
@@ -563,11 +563,10 @@ RtlpOpenProfileOutputFile()
     UNICODE_STRING FileName;
     IO_STATUS_BLOCK IoStatusBlock;
     BOOLEAN TranslationStatus;
-    RTL_RELATIVE_NAME RelativeName;
+    RTL_RELATIVE_NAME_U RelativeName;
     PVOID FreeBuffer;
 
-
-    TranslationStatus = RtlDosPathNameToNtPathName_U(
+    TranslationStatus = RtlDosPathNameToRelativeNtPathName_U(
                             L"\\profile.out",
                             &FileName,
                             NULL,
@@ -580,7 +579,7 @@ RtlpOpenProfileOutputFile()
     FreeBuffer = FileName.Buffer;
 
     if ( RelativeName.RelativeName.Length ) {
-        FileName = *(PUNICODE_STRING)&RelativeName.RelativeName;
+        FileName = RelativeName.RelativeName;
         }
     else {
         RelativeName.ContainingDirectory = NULL;
@@ -608,6 +607,7 @@ RtlpOpenProfileOutputFile()
                 0L
                 );
 
+    RtlReleaseRelativeName(&RelativeName);
     RtlFreeHeap(RtlProcessHeap(),0,FreeBuffer);
     if ( !NT_SUCCESS(Status) ) {
         return NULL;
@@ -626,10 +626,10 @@ RtlpDeleteProfileOutputFile()
     IO_STATUS_BLOCK IoStatusBlock;
     FILE_DISPOSITION_INFORMATION Disposition;
     BOOLEAN TranslationStatus;
-    RTL_RELATIVE_NAME RelativeName;
+    RTL_RELATIVE_NAME_U RelativeName;
     PVOID FreeBuffer;
 
-    TranslationStatus = RtlDosPathNameToNtPathName_U(
+    TranslationStatus = RtlDosPathNameToRelativeNtPathName_U(
                             L"\\profile.out",
                             &FileName,
                             NULL,
@@ -643,7 +643,7 @@ RtlpDeleteProfileOutputFile()
     FreeBuffer = FileName.Buffer;
 
     if ( RelativeName.RelativeName.Length ) {
-        FileName = *(PUNICODE_STRING)&RelativeName.RelativeName;
+        FileName = RelativeName.RelativeName;
         }
     else {
         RelativeName.ContainingDirectory = NULL;
@@ -669,6 +669,7 @@ RtlpDeleteProfileOutputFile()
                 FILE_SHARE_DELETE,
                 FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE
                 );
+    RtlReleaseRelativeName(&RelativeName);
     RtlFreeHeap(RtlProcessHeap(),0,FreeBuffer);
     if ( !NT_SUCCESS(Status) ) {
         return;

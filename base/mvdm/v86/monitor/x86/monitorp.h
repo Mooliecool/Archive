@@ -33,7 +33,8 @@ typedef unsigned int UINT;
 #include <nt_mon.h>   // for softpc base definitions
 #include <nt_reset.h>
 #include <monregs.h>
-#include <vdmtib.h>
+
+//extern VDM_TIB VdmTib;
 
 #define EFLAGS_INTERRUPT_MASK 0x00000200L
 #define EFLAGS_V86_MASK       0x00020000L
@@ -66,7 +67,6 @@ extern ULONG VdmSize;
 extern LDT_ENTRY *Ldt;
 extern ULONG   IntelBase;          // base memory address
 extern ULONG   VdmDebugLevel;      // used to control debugging
-extern ULONG   IntelMSW;           // Msw value (no msw in context)
 extern ULONG   VdmSize;            // Size of memory in VDM
 extern PVOID  CurrentMonitorTeb;   // thread that is currently executing instructions.
 extern BOOLEAN IRQ13BeingHandled;  // true until IRQ13 eoi'ed
@@ -156,7 +156,6 @@ VOID control_bop(VOID);
 VOID diskette_io(VOID);
 VOID host_unsimulate(VOID);
 VOID DispatchPageFault (ULONG,ULONG);
-
 
 NTSTATUS
 FastEnterPm(

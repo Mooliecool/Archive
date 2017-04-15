@@ -24,6 +24,10 @@ Revision History:
 
 #include <monitorp.h>
 
+#if defined(NEC_98)
+VOID WaitVsync();
+#endif // NEC_98
+
 BOOL
 DpmiHwIntHandler(
     ULONG IntNumber
@@ -34,6 +38,14 @@ IRQ13_Eoi(
     int IrqLine,
     int CallCount
     );
+
+#if defined(NEC_98)
+VOID
+IRQ13_Eoi_real(
+    int IrqLine,
+    int CallCount
+    );
+#endif // NEC_98
 
 BOOLEAN IRQ13BeingHandled;  // true until IRQ13 eoi'ed
 
@@ -61,7 +73,12 @@ Return Value:
 
 
 
+#if defined(NEC_98)
+    Bool = RegisterEOIHook( 8, IRQ13_Eoi);
+    Bool = RegisterEOIHook( 14, IRQ13_Eoi_real);
+#else  // !NEC_98
     Bool = RegisterEOIHook( 13, IRQ13_Eoi);
+#endif // !NEC_98
     if (!Bool) {
 #if DBG
         DbgPrint("NtVdm : Could not register IRQ 13 Eoi handler\n");
@@ -125,6 +142,13 @@ Notes:
 
     host_ica_lock();
 
+    if (CurrentMonitorTeb == NtCurrentTeb() && !getIF() && (getMSW() & MSW_PE)) {
+        VDM_PM_CLI_DATA cliData;
+
+        cliData.Control = PM_CLI_CONTROL_CHECK;
+        NtVdmControl(VdmPMCliControl, &cliData);
+    }
+
     if (Type == CPU_TIMER_TICK) {
 
             //
@@ -135,6 +159,7 @@ Notes:
             lock or dword ptr [eax], VDM_INT_TIMER
         }
     } else if (Type == CPU_HW_INT) {
+
 
         if (*pNtVDMState & VDM_INT_HARDWARE) {
             goto EarlyExit;
@@ -271,6 +296,7 @@ Return Value:
 {
     int InterruptNumber;
     ULONG IretHookAddress = 0L;
+    PVDM_TIB VdmTib;
 
     InterruptNumber = ica_intack(&IretHookAddress);
     if (InterruptNumber == -1) { // skip spurious ints
@@ -279,8 +305,9 @@ Return Value:
 
     DpmiHwIntHandler(InterruptNumber);
 
+    VdmTib = (PVDM_TIB)(NtCurrentTeb()->Vdm);
     if (IretHookAddress) {
-        BOOL Frame32 = (BOOL) VdmTib.PmStackInfo.Flags;
+        BOOL Frame32 = (BOOL) VdmTib->DpmiInfo.Flags;
         BOOL Stack32;
         USHORT SegSs, VdmCs;
         ULONG VdmSp, VdmEip;
@@ -289,11 +316,11 @@ Return Value:
 
         SegSs = getSS();
         VdmStackPointer = Sim32GetVDMPointer(((ULONG)SegSs) << 16, 1, TRUE);
-    
+
         //
         // Figure out how many bits of sp to use
         //
-    
+
         if (Ldt[(SegSs & ~0x7)/sizeof(LDT_ENTRY)].HighWord.Bits.Default_Big) {
             VdmSp = getESP();
             StackOffset = 12;
@@ -316,16 +343,21 @@ Return Value:
         VdmEip = (IretHookAddress & 0xFFFF);
 
         if (Frame32) {
-            *(PULONG)(VdmStackPointer - 4) = VdmTib.VdmContext.EFlags;
+            *(PULONG)(VdmStackPointer - 4) = VdmTib->VdmContext.EFlags;
             *(PULONG)(VdmStackPointer - 8) = (ULONG) VdmCs;
             *(PULONG)(VdmStackPointer - 12) = VdmEip;
         } else {
-            *(PUSHORT)(VdmStackPointer - 2) = (USHORT) VdmTib.VdmContext.EFlags;
+            *(PUSHORT)(VdmStackPointer - 2) = (USHORT) VdmTib->VdmContext.EFlags;
             *(PUSHORT)(VdmStackPointer - 4) = VdmCs;
             *(PUSHORT)(VdmStackPointer - 6) = (USHORT) VdmEip;
         }
     }
 
+#if defined(NEC_98)
+        if(InterruptNumber == 0xA) {
+                WaitVsync();
+        }
+#endif // NEC_98
 }
 
 
@@ -342,13 +374,38 @@ IRQ13_Eoi(
        //  if CallCount is less than Zero, then the interrupt request
        //  is being canceled.
        //
+#if defined(NEC_98)
+  if( getMSW() & MSW_PE ){
+#endif // NEC_98
     if (CallCount < 0) {
         return;
         }
 
     IRQ13BeingHandled = FALSE;
+
+#if defined(NEC_98)
+  }
+#endif // NEC_98
 }
 
+#if defined(NEC_98)
+VOID
+IRQ13_Eoi_real(
+    int IrqLine,
+    int CallCount
+    )
+{
+    UNREFERENCED_PARAMETER(IrqLine);
+    UNREFERENCED_PARAMETER(CallCount);
+
+    if( !(getMSW() & MSW_PE) ){
+        if (CallCount < 0) {
+            return;
+        }
+        IRQ13BeingHandled = FALSE;
+    }
+}
+#endif // NEC_98
 
 
 
@@ -375,14 +432,16 @@ Return Value:
 {
 
     PVOID VdmStackPointer;
+    PVDM_TIB VdmTib;
 
-    if (IntelMSW & MSW_PE) {
-        BOOL Frame32 = (BOOL) VdmTib.PmStackInfo.Flags;
+    VdmTib = (PVDM_TIB)(NtCurrentTeb()->Vdm);
+    if (VdmTib->IntelMSW & MSW_PE) {
+        BOOL Frame32 = (BOOL) VdmTib->DpmiInfo.Flags;
         ULONG FrameSize;
 
         if (Frame32) {
             FrameSize = 12;
-        } else { 
+        } else {
             FrameSize = 6;
         }
 
@@ -398,16 +457,16 @@ Return Value:
 
         if (Frame32) {
 
-            VdmTib.VdmContext.EFlags = *(PULONG)((PCHAR)VdmStackPointer + 8);
+            VdmTib->VdmContext.EFlags = *(PULONG)((PCHAR)VdmStackPointer + 8);
             setCS(*(PUSHORT)((PCHAR)VdmStackPointer + 4));
-            VdmTib.VdmContext.Eip = *((PULONG)VdmStackPointer);
+            VdmTib->VdmContext.Eip = *((PULONG)VdmStackPointer);
 
         } else {
 
-            VdmTib.VdmContext.EFlags = (VdmTib.VdmContext.EFlags & 0xFFFF0000) |
+            VdmTib->VdmContext.EFlags = (VdmTib->VdmContext.EFlags & 0xFFFF0000) |
                                         ((ULONG) *(PUSHORT)((PCHAR)VdmStackPointer + 4));
             setCS(*(PUSHORT)((PCHAR)VdmStackPointer + 2));
-            VdmTib.VdmContext.Eip = (VdmTib.VdmContext.Eip & 0xFFFF0000) | 
+            VdmTib->VdmContext.Eip = (VdmTib->VdmContext.Eip & 0xFFFF0000) |
                                         ((ULONG) *(PUSHORT)((PCHAR)VdmStackPointer));
 
         }
@@ -418,7 +477,7 @@ Return Value:
 
         setSP((USHORT) (getSP() + 6));
 
-        (USHORT)(VdmTib.VdmContext.EFlags) = *((PUSHORT)((PCHAR)VdmStackPointer + 4));
+        (USHORT)(VdmTib->VdmContext.EFlags) = *((PUSHORT)((PCHAR)VdmStackPointer + 4));
         setCS(*((PUSHORT)((PCHAR)VdmStackPointer + 2)));
         setIP(*((PUSHORT)VdmStackPointer));
 
