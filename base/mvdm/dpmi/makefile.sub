@@ -11,7 +11,7 @@ ALT_PROJECT_TARGET=.
 
 SRC     = .
 DEST=$(ALT_PROJECT)\$(_OBJ_DIR)\$(PLATFORM)
-INCLUDE = -I..\wow16\inc -I..\inc -I$(PROJECT_INC_PATH)
+INCLUDE = -I..\wow16\inc -I..\inc -I$(PROJECT_INC_PATH) -I$(SDK_INC_PATH)
 
 !if !$(FREEBUILD)
 DBGOPTS = -DDBG=1
@@ -24,7 +24,7 @@ DBGOPTS = -DDBG=0
 LINKCMD = $(DEST)\dosx.exe/far/map/cp:1,$(DEST)\dosx.map;
 
 
-!IF $(386)
+!IF $(X86)
 EXTRA_OPTIONS = -Di386 -DMD
 OPTIONS = -DDEBUG=0 $(DBGOPTS) -DWOW -DWOW_x86 $(EXTRA_OPTIONS) -D?QUIET
 !ELSE
@@ -45,7 +45,7 @@ OBJS =  $(DEST)\dxstrt.obj   $(DEST)\dxmain.obj    $(DEST)\dxintr.obj  \
         $(DEST)\dxnetbio.obj    $(DEST)\dxdisk.obj  \
         $(DEST)\dxini.obj       $(DEST)\dxoem.obj     $(DEST)\dxemm.obj   \
         $(DEST)\dxendpm.obj     $(DEST)\dxfind.obj  \
-!IF $(386)
+!IF $(X86)
         $(DEST)\ntnpxem.obj     \
 !ENDIF
         $(DEST)\dxdma.obj       $(DEST)\dxemm2.obj
@@ -67,7 +67,7 @@ $(DEST)\dosx.exe: $(OBJS) dosx.def
     @echo $(DEST)\dxbug.obj   +    >>$(DEST)\tmp.lnk
     @echo $(DEST)\dxend.obj   +    >>$(DEST)\tmp.lnk
     @echo $(DEST)\dxmsg.obj+    >>$(DEST)\tmp.lnk
-!IF $(386)
+!IF $(X86)
     @echo $(DEST)\ntnpxem.obj  +    >>$(DEST)\tmp.lnk
 !ENDIF
     @echo $(DEST)\dxendpm.obj +    >>$(DEST)\tmp.lnk
