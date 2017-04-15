@@ -641,7 +641,7 @@ typedef struct {
 #define JLD_UNRESOLVED_ERR	3			/* could not resolve all addresses */
 #define JLD_BADMACH_ERR		4			/* wrong machine type for binary */
 #define JLD_DUPSYMB_ERR		5			/* wrong machine type for binary */
-#define JLD_INTERNAL_ERR	6			/* screw up !! */
+#define JLD_INTERNAL_ERR	6			/* fatal error !! */
 #define JLD_SPACE_ERR	 	7			/* not enough memory */
 #define JLD_PATCH_ERR	 	8			/* patcher encountered relocation error */
 #define JLD_INTERSEGREL_ERR	9			/* relative relocation request between

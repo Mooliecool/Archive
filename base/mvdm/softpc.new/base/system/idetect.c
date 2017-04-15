@@ -22,7 +22,7 @@ REVISION HISTORY        :
 First version           : 31-Aug-89, simplified Phil's idea, and
 			  produced an interface.
 
-SUBMODULE NAME          : 
+SUBMODULE NAME          :
 
 SOURCE FILE NAME        : idetect.c
 
@@ -52,7 +52,7 @@ SccsID = @(#)idetect.c  1.11 10/11/93 Copyright Insignia Solutions Ltd.
 ---------------------------------------------------------------------
 [1.2 DATATYPES FOR [1.1] (if not basic C types)]
 
-	STRUCTURES/TYPEDEFS/ENUMS: 
+	STRUCTURES/TYPEDEFS/ENUMS:
 		
 ---------------------------------------------------------------------
 [1.3 INTERMODULE IMPORTS]
@@ -70,13 +70,13 @@ SccsID = @(#)idetect.c  1.11 10/11/93 Copyright Insignia Solutions Ltd.
 =====================================================================
 GLOBAL                  int idle_no_video
 
-PURPOSE                 cleared by gvi layer, and video bios ; 
+PURPOSE                 cleared by gvi layer, and video bios ;
 			set by this interface every time tick.
 			keeps track of video activity.
 
 GLOBAL                  int idle_no_disk
 
-PURPOSE                 cleared by disk bios ; 
+PURPOSE                 cleared by disk bios ;
 			set by this interface every time tick.
 			keeps track of video activity.
 
@@ -93,7 +93,7 @@ PROCEDURE         :     void idle_ctl((int)flag)
 
 PURPOSE           :     enable/disable idle detect.
 		
-PARAMETERS         
+PARAMETERS
 
 	flag      :     0       - disable
 			other   - enable.
@@ -107,7 +107,7 @@ PROCEDURE         :     void idetect((int)event)
 
 PURPOSE           :     idle detect interface.
 		
-PARAMETERS         
+PARAMETERS
 
 	event     :     IDLE_INIT       - initialise (clears all
 					  counters)
@@ -132,10 +132,10 @@ PROCEDURE         :     void idle_set((int)minpoll, (int)minperiod)
 
 PURPOSE           :     configure parameters for idling.
 		
-PARAMETERS         
+PARAMETERS
 
 	minpoll   :     0       - don't change
-			other   - specify minimum #.of unsuccessful kybd 
+			other   - specify minimum #.of unsuccessful kybd
 				  polls to be made in 1 time tick
 				  to qualify as an idle time period.
 	minperiod :     0       - don't change
@@ -171,7 +171,7 @@ IMPORT void WaitIfIdle(void);
 IMPORT VOID PrioWaitIfIdle(half_word);
 #endif  /* NTVDM */
 
-/* [3.2 INTERMODULE EXPORTS]                                            */ 
+/* [3.2 INTERMODULE EXPORTS]                                            */
 #include "idetect.h"
 
 /*
@@ -212,25 +212,42 @@ static int minFailedPolls = 10;
 
 
 #else
-#include <vdm.h>
-  
+#include "vdm.h"
+
 /*  NTVDM
  *  Some of our static global variables are located in 16 bit memory area
  *  so we reference as pointers, inititializaed by kb_setup_vectors
  */
+#if defined(NEC_98)
+word pICounterwork = 0;
+word CharPollsPerTickwork = 0;
+word MinConsecutiveTickswork =0;
+#endif   //NEC_98
 word minFailedPolls = 8;
 word ienabled = 0;
 word ShortIdle=0;
 word IdleNoActivity = 0;
 
 
+#if defined(NEC_98)
+word *pICounter = &pICounterwork;
+#else    //NEC_98
 word *pICounter;
+#endif   //NEC_98
 #define i_counter (*pICounter)
 
+#if defined(NEC_98)
+word *pCharPollsPerTick = &CharPollsPerTickwork;
+#else    //NEC_98
 word *pCharPollsPerTick;
+#endif   //NEC_98
 #define nCharPollsPerTick (*pCharPollsPerTick)
 
+#if defined(NEC_98)
+word *pMinConsecutiveTicks = &MinConsecutiveTickswork ;
+#else    //NEC_98
 word *pMinConsecutiveTicks;
+#endif   //NEC_98
 #define minConsecutiveTicks (*pMinConsecutiveTicks)
 
 #endif  /* NTVDM */
@@ -481,10 +498,10 @@ void idle_set (minpoll, minperiod)
 int minpoll, minperiod;
 {
 	if (minperiod > 0)
-		minConsecutiveTicks = minperiod;
+		minConsecutiveTicks = (word)minperiod;
 
 	if (minpoll > 0)
-		minFailedPolls = minpoll;
+		minFailedPolls = (word)minpoll;
 }
 
 void idle_ctl (flag)
@@ -497,7 +514,7 @@ int flag;
     if (IdleDisabledFromPIF)    /* configured setting overrides normal control*/
 	ienabled = 0;
     else
-	ienabled = flag;
+	ienabled = (word)flag;
 #endif /* PIG */
 #else
 	ienabled = flag;

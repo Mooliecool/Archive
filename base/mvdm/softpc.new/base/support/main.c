@@ -3,9 +3,9 @@
 /*
  * SoftPC Revision 3.0
  *
- * Title	: Main program 
+ * Title	: Main program
  *
- * Description	: Call initialisation functions then call simulate to 
+ * Description	: Call initialisation functions then call simulate to
  *	 	  do the work.
  *
  * Author	: Rod Macgregor
@@ -51,15 +51,21 @@
 #include "yoda.h"
 //#include "host_env.h"
 
-#ifndef CPU_40_STYLE	/* defined in CpuH */
 extern	void	host_start_cpu();	/* Start up the Intel emulation */
-#endif
+
+GLOBAL VOID    mouse_driver_initialisation(void);
+GLOBAL void    InitialiseDosEmulation(int, char **);
+GLOBAL ULONG   setup_global_data_ptr();
 
 void init_virtual_drivers IPT0();
 
 IMPORT void host_set_yoda_ints IPT0();
 IMPORT void host_applClose IPT0();
+#if defined(NEC_98)
+IMPORT void setup_NEC98_globals IPT0();
+#else    //NEC_98
 IMPORT void setup_vga_globals IPT0();
+#endif   //NEC_98
 #ifdef ANSI
 extern void host_applInit(int argc, char *argv[]);
 #else
@@ -97,7 +103,6 @@ INT host_main IFN2(INT, argc, CHAR **, argv)
 INT      main IFN2(INT, argc, CHAR **, argv)
 #endif  /* host_main */
 {
-  IMPORT ULONG setup_global_data_ptr();
 
 #ifndef	CPU_40_STYLE
   IMPORT ULONG Gdp;
@@ -183,7 +188,9 @@ INT      main IFN2(INT, argc, CHAR **, argv)
    *
    * Setup the initial gfi funtion pointers before going into config
    */
+#ifndef NEC_98
   gfi_init();
+#endif   //NEC_98
 
   /*
    * Initialise any Windows 3.x compliant DOS Drivers.
@@ -215,6 +222,7 @@ INT      main IFN2(INT, argc, CHAR **, argv)
   ProfileInit();
 #endif	/*PROFILE*/
 
+#ifndef NEC_98
 #if defined(NTVDM) || defined(macintosh)
 /* Read the cmos from file to emulate data not being
  * lost between invocations of SoftPC
@@ -238,6 +246,7 @@ INT      main IFN2(INT, argc, CHAR **, argv)
   cmos_equip_update();
 
 #endif
+#endif   //NEC_98
 
 /*
  * initialise the cpu
@@ -276,12 +285,19 @@ INT      main IFN2(INT, argc, CHAR **, argv)
 	(VOID) setup_global_data_ptr();
 #endif	/* not A3CPU */
 
+#if defined(NEC_98)
+        setup_NEC98_globals();
+#else    //NEC_98
 #ifndef GISP_SVGA
 	setup_vga_globals();
 #else /* GISP_SVGA */
 	setupHwVGAGlobals( );
 #endif /* GISP_SVGA */
+#endif   //NEC_98
 
+#if defined(NEC_98)
+  host_init_screen();
+#else   //NEC_98
 #ifdef REAL_VGA
 	if (screen_init == 0)
 	{
@@ -292,6 +308,7 @@ INT      main IFN2(INT, argc, CHAR **, argv)
 #ifdef REAL_VGA
 	}
 #endif /* REAL_VGA */
+#endif   //NEC_98
 
 #ifdef IPC
   host_susp_q_init();
@@ -329,8 +346,7 @@ INT      main IFN2(INT, argc, CHAR **, argv)
 
 /**/
 
-
-GLOBAL void init_virtual_drivers IFN0()
+GLOBAL void init_virtual_drivers (void)
 {
 #ifdef HFX
 	hfx_driver_initialisation();

@@ -1,12 +1,12 @@
 /*
  * ==========================================================================
- *	Name:		nt_event.h
- *	Author:		Tim
- *	Derived From:
- *	Created On:	27 Jan 93
- *	Purpose:	External defs for nt_event.c
+ *      Name:           nt_event.h
+ *      Author:         Tim
+ *      Derived From:
+ *      Created On:     27 Jan 93
+ *      Purpose:        External defs for nt_event.c
  *
- *	(c)Copyright Insignia Solutions Ltd., 1993. All rights reserved.
+ *      (c)Copyright Insignia Solutions Ltd., 1993. All rights reserved.
  * ==========================================================================
  */
 
@@ -34,6 +34,7 @@ IMPORT ULONG CntrlHandlerState;
 #define CNTRL_SYSTEMROOTCONSOLE  0x40000
 #define CNTRL_PUSHEXIT           0x80000
 
+#define INVALID_HANDLE           (HANDLE)-1
 
 void nt_start_event_thread(void);
 void nt_remove_event_thread(void);
@@ -57,3 +58,9 @@ extern DWORD ToggleKeyState;
 extern HANDLE hWndConsole;
 extern PointerAttachedWindowed;
 extern BOOL DelayedReattachMouse;
+extern ULONG EventThreadKeepMode;
+extern HANDLE hSuspend;             // request both app and console threads to be suspened
+extern HANDLE hResume;              // Signal that console and app threads can continue
+extern HANDLE hConsoleSuspended;    // Signal console thread is suspended
+extern HANDLE hMainThreadSuspended; // Signal app thread is suspended
+

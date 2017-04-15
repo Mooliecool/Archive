@@ -59,7 +59,16 @@ static char SccsID[]="@(#)com.c	1.45 04/26/94 Copyright Insignia Solutions Ltd."
 #include "hg_cpu.h"	/* GISP CPU interface */
 #endif /* GISP_CPU */
 
+#ifndef NEC_98
 LOCAL UTINY selectBits[4] = { 0x1f, 0x3f, 0x7f, 0xff } ;
+#endif // NEC_98
+
+#if defined(NEC_98)
+// PC-9861K IR ¨ Read Signal IR State
+#define CH2_INT(IR) (IR == 3 ? 0 : IR == 5 ? 1 : IR == 6 ? 2 : 3)
+#define CH3_INT(IR) (IR == 3 ? 0 : IR == 10 ? 1 : IR == 12 ? 2 : 3)
+#endif
+
 /*
  * =====================================================================
  * The rs232 adaptor state
@@ -67,7 +76,7 @@ LOCAL UTINY selectBits[4] = { 0x1f, 0x3f, 0x7f, 0xff } ;
  */
 
 /*
- * batch_size, current_count 
+ * batch_size, current_count
  *	The IRET_HOOKS parameters batch_size and curr_count are used to prevent
  *	the number of interrupts that are emulated in one batch getting too
  *	large. When we reach the batch size we'll unhook the interrupt, and
@@ -76,6 +85,45 @@ LOCAL UTINY selectBits[4] = { 0x1f, 0x3f, 0x7f, 0xff } ;
  *	These variables are used to prevent multiple quick events or batches
  *	running at once on a single adapter.
  */
+#if defined(NEC_98)
+static struct ADAPTER_STATE
+{
+        BUFFER_REG      tx_buffer;
+        BUFFER_REG      rx_buffer;
+        DIVISOR_LATCH   divisor_latch;
+        COMMAND8251     command_write_reg;
+        MODE8251        mode_set_reg;
+        MASK8251        int_mask_reg;
+        STATUS8251      read_status_reg;
+        SIGNAL8251      read_signal_reg;
+        TIMER_MODE      timer_mode_set_reg;
+
+        int break_state;        /* either OFF or ON */
+        int dtr_state;          /* either OFF or ON */
+        int rts_state;          /* either OFF or ON */
+
+        int RXR_enable_state;   /* either OFF or ON */
+        int TXR_enable_state;   /* either OFF or ON */
+
+        int mode_set_state;     /* either OFF or ON */
+            // ON = next command port access is mode set. OFF = command write.
+        int timer_mode_state;   /* either OFF or ON */
+            // Timer conunter latch mode ON = MSB read. OFF = LSB read.
+        int timer_LSB_set_state;/* either OFF or ON */
+            // Timer conunter LSB set ON = LSB set. OFF = no.
+        int timer_MSB_set_state;/* either OFF or ON */
+            // Timer conunter MSB set ON = MSB set. OFF = no.
+
+        int rx_ready_interrupt_state;
+        int tx_ready_interrupt_state;
+        int tx_empty_interrupt_state;
+
+        int hw_interrupt_priority;
+        int com_baud_ind;
+        int had_first_read;
+} adapter_state[3];
+#else // NEC_98
+
 static struct ADAPTER_STATE
 {
 	BUFFER_REG tx_buffer;
@@ -129,6 +177,7 @@ static struct ADAPTER_STATE
 #else
 #define MODEM_STATE_CHANGE()
 #endif
+#endif // NEC_98
 
 
 #ifdef IRET_HOOKS
@@ -155,7 +204,9 @@ static int com_critical[NUM_SERIAL_PORTS];
 /*
  * Used to determine whether a flush input is needed for a LCR change
  */
+#ifndef NEC_98
 static LINE_CONTROL_REG LCRFlushMask;
+#endif // NEC_98
 
 /*
  *	Please note that the following arrays have been made global in order
@@ -259,6 +310,41 @@ IBOOL tx_pacing_enabled = FALSE;
  * Static forward declarations
  * =====================================================================
  */
+#if defined(NEC_98)
+static void raise_rxr_interrupt IPT1(struct ADAPTER_STATE *, asp);
+static void raise_txr_interrupt IPT1(struct ADAPTER_STATE *, asp);
+static void raise_txe_interrupt IPT1(struct ADAPTER_STATE *, asp);
+static void raise_interrupt IPT1(struct ADAPTER_STATE *, asp);
+static void clear_interrupt IPT1(struct ADAPTER_STATE *, asp);
+static void com_flush_input IPT1(int, adapter);
+static void com_send_not_finished IPT1(int, adapter);
+static void do_wait_on_send IPT1(long, adapter);
+void   com_inb IPT2(io_addr, port, half_word *, value);
+void   com_outb IPT2(io_addr, port, half_word, value);
+void   com_recv_char IPT1(int, adapter);
+GLOBAL void recv_char IPT1(long, adapter);
+void   com_modem_change IPT1(int, adapter);
+static void modem_change IPT1(int, adapter);
+static void set_recv_char_status IPT1(struct ADAPTER_STATE *, asp);
+static void set_xmit_char_status IPT1(struct ADAPTER_STATE *, asp);
+static void set_break IPT1(int, adapter);
+void SetRSBaud( word BaudRate );
+static void set_baud_rate IPT1(int, adapter);
+static void set_mask_8251 IPT2(int, adapter, int, value);
+//static void read_mask_8251 IPT2(int, adapter, int, value);
+static void read_signal_8251 IPT1(int, adapter);
+static void set_mode_8251 IPT2(int, adapter, int, value);
+static void set_dtr IPT1(int, adapter);
+static void set_rts IPT1(int, adapter);
+static void super_trace IPT1(char *, string);
+void   com1_flush_printer IPT0();
+void   com2_flush_printer IPT0();
+static void com_reset IPT1(int, adapter);
+GLOBAL VOID com_init IPT1(int, adapter);
+void   com_post IPT1(int, adapter);
+void   com_close IPT1(int, adapter);
+//int    Bus_Clock = 0;             // ADD 93.9.14
+#else  // NEC_98
 static void raise_rls_interrupt IPT1(struct ADAPTER_STATE *, asp);
 static void raise_rda_interrupt IPT1(struct ADAPTER_STATE *, asp);
 static void raise_ms_interrupt IPT1(struct ADAPTER_STATE *,asp);
@@ -301,12 +387,71 @@ static void lsr_change(struct ADAPTER_STATE *asp, unsigned int error);
 static void recv_char_from_fifo(struct ADAPTER_STATE *asp);
 #endif
 #endif
+#endif // NEC_98
 
 /*
  * =====================================================================
  * Subsidiary functions - for interrupt emulation
  * =====================================================================
  */
+
+#if defined(NEC_98)
+static void raise_txr_interrupt IFN1(struct ADAPTER_STATE *, asp)
+{
+
+//      PRINTDBGNEC98( NEC98DBG_int_trace,
+//                    ("COMMS : raise_txr_interrupt : INT MASK = %x \n",asp->int_mask_reg.all) );
+        /*
+         * Check if txr interrupt is enabled
+         */
+        if ( asp->int_mask_reg.bits.TXR_enable == 0 )
+                return;
+
+        /*
+        * Raise interrupt
+         */
+        raise_interrupt(asp);
+        asp->tx_ready_interrupt_state = ON;
+
+}
+
+static void raise_txe_interrupt IFN1(struct ADAPTER_STATE *, asp)
+{
+
+//      PRINTDBGNEC98( NEC98DBG_int_trace,
+//                    ("COMMS : raise_txe_interrupt : INT MASK = %x \n",asp->int_mask_reg.all) );
+        /*
+         * Check if txe interrupt is enabled
+         */
+        if ( asp->int_mask_reg.bits.TXE_enable == 0 )
+                return;
+
+        /*
+     * Raise interrupt
+       */
+        raise_interrupt(asp);
+        asp->tx_empty_interrupt_state = ON;
+
+}
+
+static void raise_rxr_interrupt IFN1(struct ADAPTER_STATE *, asp)
+{
+
+//      PRINTDBGNEC98( NEC98DBG_int_trace,
+//                    ("COMMS : raise_rxr_interrupt : INT MASK = %x \n",asp->int_mask_reg.all) );
+        /*
+         * Check if data available interrupt is enabled
+         */
+        if ( asp->int_mask_reg.bits.RXR_enable == 0 )
+                return;
+
+        /*
+         * Raise interrupt
+         */
+        raise_interrupt(asp);
+        asp->rx_ready_interrupt_state = ON;
+}
+#else // NEC_98
 
 static void raise_rls_interrupt IFN1(struct ADAPTER_STATE *, asp)
 {
@@ -427,7 +572,43 @@ static void generate_iir IFN1(struct ADAPTER_STATE *, asp)
 		asp->int_id_reg.bits.interrupt_ID = 0;
 	}
 }
+#endif // NEC_98
 
+#if defined(NEC_98)
+static void raise_interrupt IFN1(struct ADAPTER_STATE *, asp)
+{
+        /*
+         * Make sure that some thing else has not raised an interrupt
+         * already.
+         */
+        if ( ( asp->rx_ready_interrupt_state == OFF )
+        &&   ( asp->tx_ready_interrupt_state == OFF )
+        &&   ( asp->tx_empty_interrupt_state == OFF ) )
+        {
+//          PRINTDBGNEC98( NEC98DBG_int_trace,
+//                        ("COMMS : raise_interrupt IRQ = %d \n", asp->hw_interrupt_priority) );
+//                ica_hw_interrupt(0, asp->hw_interrupt_priority, 1);
+                ica_hw_interrupt((asp->hw_interrupt_priority < 8 ? 0 : 1), (asp->hw_interrupt_priority & 7), 1);
+        }
+}
+
+static void clear_interrupt IFN1(struct ADAPTER_STATE *, asp)
+{
+        /*
+         * Make sure that some thing else has not raised an interrupt
+         * already.  If so then we cant drop the line.
+         */
+        if ( ( asp->rx_ready_interrupt_state == OFF )
+        &&   ( asp->tx_ready_interrupt_state == OFF )
+        &&   ( asp->tx_empty_interrupt_state == OFF ))
+        {
+//          PRINTDBGNEC98( NEC98DBG_int_trace,
+//                        ("COMMS : clear_interrupt IRQ = %d \n",asp->hw_interrupt_priority));
+//                ica_clear_int(0, asp->hw_interrupt_priority);
+                ica_clear_int((asp->hw_interrupt_priority < 8 ? 0 : 1), (asp->hw_interrupt_priority & 7));
+        }
+}
+#else // NEC_98
 static void raise_interrupt IFN1(struct ADAPTER_STATE *, asp)
 {
 	/*
@@ -437,7 +618,7 @@ static void raise_interrupt IFN1(struct ADAPTER_STATE *, asp)
 	if ( ( asp->receiver_line_status_interrupt_state      == OFF )
 	&&   ( asp->data_available_interrupt_state            == OFF )
 	&&   ( asp->tx_holding_register_empty_interrupt_state == OFF )
-	&&   ( asp->modem_status_interrupt_state              == OFF ) 
+	&&   ( asp->modem_status_interrupt_state              == OFF )
 #if defined(NTVDM) && defined(FIFO_ON)
     &&   (asp->fifo_timeout_interrupt_state               == OFF )
 #endif
@@ -461,7 +642,7 @@ static void clear_interrupt IFN1(struct ADAPTER_STATE *, asp)
 	if ( ( asp->receiver_line_status_interrupt_state      == OFF )
 	&&   ( asp->data_available_interrupt_state            == OFF )
 	&&   ( asp->tx_holding_register_empty_interrupt_state == OFF )
-	&&   ( asp->modem_status_interrupt_state              == OFF ) 
+	&&   ( asp->modem_status_interrupt_state              == OFF )
 #if defined(NTVDM) && defined(FIFO_ON)
     &&   ( asp->fifo_timeout_interrupt_state              == OFF )
 #endif
@@ -470,6 +651,8 @@ static void clear_interrupt IFN1(struct ADAPTER_STATE *, asp)
 		ica_clear_int(0, asp->hw_interrupt_priority);
 	}
 }
+#endif // NEC_98
+
 #if defined(NTVDM) && defined(FIFO_ON)
 
 static void raise_fifo_timeout_interrupt(struct ADAPTER_STATE *asp)
@@ -504,16 +687,16 @@ static void com_flush_input IFN1(int, adapter)
 {
 	struct ADAPTER_STATE *asp = &adapter_state[adapter];
 	int finished, error_mask;
-	long input_ready = 0; 
+	long input_ready = 0;
 
 	sure_note_trace1(RS232_VERBOSE, "flushing the input for COM%c",
 		adapter+'1');
 	finished=FALSE;
-	while(!finished) 
+	while(!finished)
 	{
 		host_com_ioctl(adapter, HOST_COM_INPUT_READY,
 			(long)&input_ready);
-		if (input_ready) 
+		if (input_ready)
 		{
 			host_com_read(adapter, (UTINY *)&asp->rx_buffer,
 				&error_mask);
@@ -526,6 +709,15 @@ static void com_flush_input IFN1(int, adapter)
 	set_xmit_char_status(asp);
 }
 
+#if defined(NEC_98)
+static void com_send_not_finished(int adapter)
+{
+        struct ADAPTER_STATE *asp = &adapter_state[adapter];
+
+        asp->read_status_reg.bits.tx_ready=0;
+        asp->read_status_reg.bits.tx_empty=0;
+}
+#else // NEC_98
 static void com_send_not_finished IFN1(int, adapter)
 {
 	struct ADAPTER_STATE *asp = &adapter_state[adapter];
@@ -533,8 +725,20 @@ static void com_send_not_finished IFN1(int, adapter)
 	asp->line_status_reg.bits.tx_holding_empty=0;
 	asp->line_status_reg.bits.tx_shift_empty=0;
 }
+#endif // NEC_98
 
 
+#if defined(NEC_98)
+static void do_wait_on_send IFN1(long, adapter)
+{
+	extern	void	host_com_send_delay_done IPT2(long, p1, int, p2);
+	struct ADAPTER_STATE *asp;
+
+	asp= &adapter_state[adapter];
+	set_xmit_char_status(asp);
+	host_com_send_delay_done(adapter, TX_delay[asp->com_baud_ind]);
+}
+#else // NEC_98
 #ifndef NTVDM
 static void do_wait_on_send IFN1(long, adapter)
 {
@@ -546,8 +750,348 @@ static void do_wait_on_send IFN1(long, adapter)
 	host_com_send_delay_done(adapter, TX_delay[asp->com_baud_ind]);
 }
 #endif
+#endif // NEC_98
 
 
+#if defined(NEC_98)
+void com_inb IFN2(io_addr, port, half_word *, value)
+{
+        int adapter = adapter_for_port(port);
+        struct ADAPTER_STATE *asp = &adapter_state[adapter];
+        long modem_status = 0;
+        long input_ready = 0;
+        boolean adapter_was_critical;
+
+        host_com_lock(adapter);
+        switch(port)
+        {
+        case RS232_CH1_TX_RX:   // CH.1 DATA READ
+        case RS232_CH2_TX_RX:   // CH.2 DATA READ
+        case RS232_CH3_TX_RX:   // CH.3 DATA READ
+                IDLE_comlpt();
+                /*
+                 * Read of rx buffer
+                 */
+            //Flushing on first read removes characters from
+            //the communications system that are needed !!!!
+            //This assumes that the first read from the comms
+            //system will return one character only. This is
+            //a false assumption under NT windows.
+                *value = asp->rx_buffer;
+
+//              PRINTDBGNEC98( NEC98DBG_in_trace1,
+//                            ("COMMS : Data PORT IN = %x, In data = %x \n",port,asp->rx_buffer) );
+
+                adapter_was_critical =
+                        (asp->read_status_reg.bits.rx_ready == 1);
+
+                asp->read_status_reg.bits.rx_ready = 0;
+                asp->rx_ready_interrupt_state = OFF;
+                clear_interrupt(asp);
+
+                    /*
+                     * Adapter out of critical region,
+                     * check for further input
+                     */
+                if (adapter_was_critical)
+                {
+                    host_com_char_read(adapter,                 // ADD 93.3.3
+                     asp->command_write_reg.bits.rx_enable);    // ADD 93.3.3
+                }
+#ifndef PROD
+                //DAB printf("%c",isprint(toascii(*value))?toascii(*value):'?');
+                if (com_trace_fd)
+                {
+                        if (com_dbg_pollcount)
+                        {
+                                fprintf(com_trace_fd,"\n");
+                                com_dbg_pollcount = 0;
+                        }
+                        fprintf(com_trace_fd,"RX %x (%c)\n",*value,
+                                isprint(toascii(*value))?toascii(*value):'?');
+                }
+#endif
+                break;
+
+        case RS232_CH1_STATUS:  // CH.1 READ STATUS
+        case RS232_CH2_STATUS:  // CH.2 READ STATUS
+        case RS232_CH3_STATUS:  // CH.3 READ STATUS
+
+                /* get current modem input state */
+                host_com_ioctl(adapter, HOST_COM_MODEM, (long)&modem_status);
+                asp->read_status_reg.bits.DR =
+                                (modem_status & HOST_COM_MODEM_DSR)  ? 1 : 0;
+
+                /* BREAK status is not supported. */
+                asp->read_status_reg.bits.break_detect = 0;
+
+                *value = asp->read_status_reg.all;
+
+//              PRINTDBGNEC98( NEC98DBG_in_trace2,
+//                            ("COMMS : Status PORT IN = %x, Status = %x \n",port,asp->read_status_reg.all) );
+
+//      DbgPrint("COMMS : Status PORT IN = %x, Status = %x \n",port,asp->read_status_reg.all);
+
+                if ((!asp->read_status_reg.bits.tx_ready) ||
+                        (!asp->read_status_reg.bits.tx_empty))
+                {
+                        IDLE_comlpt();
+                }
+
+// This fix is used to get polling applications to work under the MS mult-
+// threaded comms model. This fix calls host_com_poll if RX interrupts are
+// disabled and the receive buffer is empty. Host_com_poll() will prime
+// the adapter with RX data if any is available
+
+                break;
+
+        case RS232_CH1_MASK:    // CH.1 READ MASK (CH.1 ONLY)
+                *value = (asp->int_mask_reg.all & 0x7);
+//              PRINTDBGNEC98( NEC98DBG_in_trace1,
+//                            ("COMMS : Mask PORT IN = %x, Mask = %x \n",port,(asp->int_mask_reg.all & 0x7)) );
+                break;
+
+        case RS232_CH1_SIG:     // CH.1 READ SIGNAL
+                read_signal_8251(adapter);
+                *value = asp->read_signal_reg.all;
+//              PRINTDBGNEC98( NEC98DBG_in_trace3,
+//                            ("COMMS : Status PORT IN = %x, Signal = %x \n",port,asp->read_signal_reg.all) );
+                break;
+        case RS232_CH2_SIG:     // CH.2 READ SIGNAL
+                read_signal_8251(adapter);
+                asp->read_signal_reg.bits.IR = CH2_INT(asp->hw_interrupt_priority);
+                *value = asp->read_signal_reg.all;
+//              PRINTDBGNEC98( NEC98DBG_in_trace3,
+//                            ("COMMS : Status PORT IN = %x, Signal = %x \n",port,asp->read_signal_reg.all) );
+                break;
+        case RS232_CH3_SIG:     // CH.3 READ SIGNAL
+                read_signal_8251(adapter);
+                asp->read_signal_reg.bits.IR = CH3_INT(asp->hw_interrupt_priority);
+                *value = asp->read_signal_reg.all;
+//              PRINTDBGNEC98( NEC98DBG_in_trace3,
+//                            ("COMMS : Status PORT IN = %x, Signal = %x \n",port,asp->read_signal_reg.all) );
+                break;
+
+
+        }
+#ifndef PROD
+        if (io_verbose & RS232_VERBOSE)
+        {
+                if (((port & 0xf) == 0xd) && (*value == 0x60))
+                        fprintf(trace_file,".");
+                else
+                {
+                        sprintf(buf, "com_inb() - port %x, returning val %x", port,
+                                *value);
+                        trace(buf, DUMP_REG);
+                }
+        }
+#endif
+    host_com_unlock(adapter);
+}
+
+
+void com_outb IFN2(io_addr, port, half_word, value)
+{
+        int adapter = adapter_for_port(port);
+        struct ADAPTER_STATE *asp = &adapter_state[adapter];
+        int i;
+        int org_da;
+// PORT C 37h
+        int value2;
+        if (port == 0x37)
+            adapter = COM1;
+//  PORT C 37h
+        host_com_lock(adapter);
+//      PRINTDBGNEC98( NEC98DBG_out_trace,
+//                    ("COMMS : PORT OUT = %x\n            DATA = %x\n",port,value) );
+
+#ifndef PROD
+        if (io_verbose & RS232_VERBOSE)
+        {
+                sprintf(buf, "com_outb() - port %x, set to value %x",
+                        port, value);
+                trace(buf, DUMP_REG);
+        }
+#endif
+
+        switch(port)
+        {
+        case RS232_CH1_TX_RX:   // CH.1 DATA WRITE
+        case RS232_CH2_TX_RX:   // CH.2 DATA WRITE
+        case RS232_CH3_TX_RX:   // CH.3 DATA WRITE
+                IDLE_comlpt();
+                /*
+                 * Write char from tx buffer
+                 */
+                asp->tx_ready_interrupt_state = OFF;
+                clear_interrupt(asp);
+                asp->tx_buffer = value;
+                asp->read_status_reg.bits.tx_ready = 0;
+                asp->read_status_reg.bits.tx_empty = 0;
+                if ( asp->command_write_reg.bits.send_break == 0 )
+                host_com_write(adapter, asp->tx_buffer);
+                    add_q_event_t(do_wait_on_send,
+                    0 , adapter);
+#ifdef SHORT_TRACE
+                if ( io_verbose & RS232_VERBOSE )
+                {
+                        sprintf(buf,"%cTX  <- %x (%c)\n",
+                                id_for_adapter(adapter), value,
+                                isprint(toascii(value))?toascii(value):'?');
+                        super_trace(buf);
+                }
+#endif
+#ifndef PROD
+                if (com_trace_fd)
+                {
+                        if (com_dbg_pollcount)
+                        {
+                                fprintf(com_trace_fd,"\n");
+                                com_dbg_pollcount = 0;
+                        }
+                        fprintf(com_trace_fd,"TX %x (%c)\n",value,
+                                isprint(toascii(value))?toascii(value):'?');
+                }
+#endif
+                break;
+
+        case RS232_CH1_CMD_MODE:    // CH.1 WRITE COMMAND/MODE
+        case RS232_CH2_CMD_MODE:    // CH.2 WRITE COMMAND/MODE
+        case RS232_CH3_CMD_MODE:    // CH.3 WRITE COMMAND/MODE
+                if (asp->mode_set_state == OFF) { // command set
+                    org_da = asp->command_write_reg.bits.rx_enable;
+                    /*
+                     * Optimisation - DOS keeps re-writing this register
+                     */
+                    asp->command_write_reg.all = value;
+
+                    if ( asp->command_write_reg.bits.inter_reset == 1 ) { // Reset command
+#ifdef NTVDM
+                    {
+                        extern int host_com_open(int adapter);
+
+                        host_com_open(adapter);
+                    }
+#endif
+//                      PRINTDBGNEC98( NEC98DBG_out_trace,
+//                                    ("COMMS : RESET\n") );
+                        asp->mode_set_state = ON;   // next OUT is mode
+                        /*
+                         *  STATUS is all clear
+                         */
+                        asp->read_status_reg.all = 0;
+                        /*
+                         *  STATUS tx_ready , tx_empty is ON
+                         */
+                        asp->read_status_reg.bits.tx_ready = 1;
+                        asp->read_status_reg.bits.tx_empty = 1;
+                        /*
+                         *  TXR/RXR enable flag = OFF
+                         */
+                        asp->RXR_enable_state = OFF;
+                        asp->TXR_enable_state = OFF;
+                        /*
+                         *  RS/ER clear
+                         */
+                        asp->command_write_reg.bits.RS = 0;
+                        set_rts(adapter);
+                        asp->command_write_reg.bits.ER = 0;
+                        set_dtr(adapter);
+                        /*
+                         *  Break send OFF
+                         */
+                        asp->command_write_reg.bits.send_break = 0;
+                        set_break(adapter);
+                        /*
+                         *  Timer mode clear. Next timer set is LSB.
+                         */
+                        asp->timer_mode_state = OFF;
+                        /*
+                         *  TX buffer clear
+                         */
+                        asp->tx_buffer = 0;
+                        /*
+                         * Reset adapter synchronisation
+                         */
+                        com_critical_reset(adapter);
+                        /*
+                         *
+                         */
+
+                    }
+                    else { // other command
+                        if ( asp->command_write_reg.bits.error_reset == 1 ) { // ERROR reset command
+//                          PRINTDBGNEC98( NEC98DBG_out_trace,
+//                                        ("COMMS : Line Error Reset\n") );
+                            /*
+                             * LINE ERROR flag clear
+                             */
+                            asp->read_status_reg.bits.overrun_error = 0;
+                            asp->read_status_reg.bits.parity_error = 0;
+                            asp->read_status_reg.bits.framing_error = 0;
+                        }
+
+                        /* Must be called before set_dtr */
+                        set_dtr(adapter);
+                        set_rts(adapter);
+                        set_break(adapter);
+
+                        asp->RXR_enable_state =
+                        (asp->command_write_reg.bits.rx_enable == 1) ? ON :OFF;
+                        asp->TXR_enable_state =
+                        (asp->command_write_reg.bits.tx_enable == 1) ? ON :OFF;
+                        if(org_da != asp->command_write_reg.bits.rx_enable)
+                        {
+                            host_com_da_int_change(adapter,
+                                asp->command_write_reg.bits.rx_enable,
+                                asp->read_status_reg.bits.rx_ready);
+                        }
+                    }
+                }
+                else { // mode set
+//                  PRINTDBGNEC98( NEC98DBG_out_trace,
+//                                ("COMMS : MODE SET\n") );
+                    asp->mode_set_state = OFF;  // next OUT is command
+                    set_mode_8251(adapter, value);
+                }
+                break;
+
+        case RS232_CH1_MASK:        // CH.1 SET MASK
+        case RS232_CH2_MASK:        // CH.2 SET MASK
+        case RS232_CH3_MASK:        // CH.3 SET MASK
+
+                set_mask_8251(adapter, value);
+                break;
+
+        case 0x37:                  // CH.1 SET MASK
+                switch( value >> 1)
+                {
+                case 0:
+                    value2 = asp->int_mask_reg.all & 0xfe;
+                    value2 |= value;
+                    set_mask_8251(adapter, value2);
+                    break;
+
+                case 1:
+                    value2 = asp->int_mask_reg.all & 0xfd;
+                    value2 |= ((value & 1) << 1);
+                    set_mask_8251(adapter, value2);
+                    break;
+
+                case 2:
+                    value2 = asp->int_mask_reg.all & 0xfb;
+                    value2 |= ((value & 1) << 2);
+                    set_mask_8251(adapter, value2);
+                    break;
+                }
+                break;
+
+        }
+
+    host_com_unlock(adapter);
+}
+#else // NEC_98
 void com_inb IFN2(io_addr, port, half_word *, value)
 {
 	int adapter = adapter_for_port(port);
@@ -684,7 +1228,7 @@ void com_inb IFN2(io_addr, port, half_word *, value)
 #endif /* IRET_HOOKS */
 		}
 		else
-			*value = asp->divisor_latch.byte.LSByte;
+			*value = (IU8)(asp->divisor_latch.byte.LSByte);
 #ifdef SHORT_TRACE
 		if ( io_verbose & RS232_VERBOSE )
 		{
@@ -712,7 +1256,7 @@ void com_inb IFN2(io_addr, port, half_word *, value)
 		if (asp->line_control_reg.bits.DLAB == 0)
 			*value = asp->int_enable_reg.all;
 		else
-			*value = asp->divisor_latch.byte.MSByte;
+			*value = (IU8)(asp->divisor_latch.byte.MSByte);
 #ifdef SHORT_TRACE
 		if ( io_verbose & RS232_VERBOSE )
 		{
@@ -837,7 +1381,7 @@ void com_inb IFN2(io_addr, port, half_word *, value)
 #endif
 	
 #ifdef SHORT_TRACE
-		if ((!asp->line_status_reg.bits.tx_holding_empty) || 
+		if ((!asp->line_status_reg.bits.tx_holding_empty) ||
 			(!asp->line_status_reg.bits.tx_shift_empty))
 		{
 			IDLE_comlpt();
@@ -1046,7 +1590,7 @@ void com_outb IFN2(io_addr, port, half_word, value)
 #if defined (DELAYED_INTS) || defined (NTVDM)
 				set_xmit_char_status(asp);
 #else
-					if(tx_pacing_enabled) 
+					if(tx_pacing_enabled)
 						add_q_event_t(do_wait_on_send,
 					            TX_delay[asp->com_baud_ind], adapter);
 					else
@@ -1198,7 +1742,7 @@ vel];
         }
 #else /* !(NTVDM && FIFO_ON) */
 	case RS232_IIR:
-		/* 
+		/*
 		 * Essentially a READ ONLY register
 		 */
 #ifdef SHORT_TRACE
@@ -1310,7 +1854,7 @@ vel];
 	case RS232_LSR:
 		i = asp->line_status_reg.bits.tx_shift_empty;   /* READ ONLY */
 		asp->line_status_reg.all = value;
-		asp->line_status_reg.bits.tx_shift_empty = i;
+		asp->line_status_reg.bits.tx_shift_empty = (unsigned char)i;
 #ifdef SHORT_TRACE
 		if ( io_verbose & RS232_VERBOSE )
 		{
@@ -1357,7 +1901,7 @@ vel];
 #endif
 		/* DrDOS writes to this reg after setting int on MSR change
 		 * and expects to get an interrupt back!!! So we will oblige.
-		 * Writing to this reg only seems to affect the delta bits 
+		 * Writing to this reg only seems to affect the delta bits
 		 * (bits 0-3) of the reg.
 		 */
 		if ((value & 0xf) != (asp->modem_status_reg.all & 0xf))
@@ -1387,6 +1931,7 @@ vel];
 	host_com_unlock(adapter);
 #endif
 }
+#endif // NEC_98
 
 
 #ifdef IRET_HOOKS
@@ -1512,6 +2057,63 @@ next_batch IFN1 (long, dummy)
  * =====================================================================
  */
 
+#if defined(NEC_98)
+
+void com_recv_char(int adapter)
+{
+    struct ADAPTER_STATE *asp = &adapter_state[adapter];
+
+#ifndef PROD
+    if(asp->read_status_reg.bits.rx_ready ||
+       asp->rx_ready_interrupt_state == ON)
+    {
+    printf("ntvdm : Data already in comms adapter (%s%s)\n",
+               asp->read_status_reg.bits.rx_ready ? "Data" : "Int",
+           asp->rx_ready_interrupt_state == ON ? ",Int" : "");
+
+//      host_com_state(adapter);
+    }
+#endif
+
+    recv_char((long)adapter);
+}
+
+GLOBAL void
+recv_char IFN1(long, adapt_long)
+{
+        /*
+         * Character available on input device, read char, format char
+         * checking for parity and overrun errors, raise the appropriate
+         * interrupt.
+         */
+        struct ADAPTER_STATE *asp = &adapter_state[adapt_long];
+        int error_mask = 0;
+
+        host_com_read(adapt_long, (char *)&asp->rx_buffer, &error_mask);
+
+        if (error_mask)
+        {
+                /*
+                 * Set line status register and raise line status interrupt
+                 */
+                if (error_mask & HOST_COM_OVERRUN_ERROR)
+                        asp->read_status_reg.bits.overrun_error = 1;
+
+                if (error_mask & HOST_COM_FRAMING_ERROR)
+                        asp->read_status_reg.bits.framing_error = 1;
+
+                if (error_mask & HOST_COM_PARITY_ERROR)
+                        asp->read_status_reg.bits.parity_error = 1;
+
+                if (error_mask & HOST_COM_BREAK_RECEIVED)
+                        asp->read_status_reg.bits.break_detect = 1;
+
+        }
+
+        set_recv_char_status(asp);
+}
+#else // NEC_98
+
 #ifdef  NTVDM
 // This code has been added for the MS project!!!!!!!
 
@@ -1597,7 +2199,7 @@ void com_recv_char IFN1(int, adapter)
 /*
  * BCN 2151 - recv_char must use long param to match add_event function prototype
  */
-GLOBAL void 
+GLOBAL void
 recv_char IFN1(long, adapt_long)
 {
 	int adapter = adapt_long;
@@ -1657,7 +2259,10 @@ recv_char IFN1(long, adapt_long)
 	}
 #endif
 }
+#endif // NEC_98
+
 #ifdef NTVDM
+#ifndef NEC_98
 static void lsr_change(struct ADAPTER_STATE *asp, unsigned int new_lsr)
 {
     if (new_lsr & HOST_COM_OVERRUN_ERROR)
@@ -1688,9 +2293,11 @@ static void lsr_change(struct ADAPTER_STATE *asp, unsigned int new_lsr)
 #endif
 
 }
+#endif // !NEC_98
 
 void com_lsr_change(int adapter)
 {
+#ifndef NEC_98
     int new_lsr;
     struct ADAPTER_STATE *asp = &adapter_state[adapter];
 
@@ -1698,6 +2305,7 @@ void com_lsr_change(int adapter)
     host_com_ioctl(adapter, HOST_COM_LSR, (long)&new_lsr);
     if (new_lsr !=  -1)
     lsr_change(asp, new_lsr);
+#endif  // !NEC_98
 }
 
 #endif /* NTVDM */
@@ -1710,6 +2318,25 @@ void com_modem_change IFN1(int, adapter)
 	modem_change(adapter);
 }
 
+#if defined(NEC_98)
+
+static void modem_change IFN1(int, adapter)
+{
+    /*
+     * Update the modem status register after a change to one of the
+     * modem control input lines
+     */
+    struct ADAPTER_STATE *asp = &adapter_state[adapter];
+    long modem_status = 0;
+
+    /* get current modem input state */
+    host_com_ioctl(adapter, HOST_COM_MODEM, (long)&modem_status);
+    asp->read_signal_reg.bits.CS = (modem_status & HOST_COM_MODEM_CTS)  ? 0 : 1;
+    asp->read_status_reg.bits.DR = (modem_status & HOST_COM_MODEM_DSR)  ? 1 : 0;
+    asp->read_signal_reg.bits.CD = (modem_status & HOST_COM_MODEM_RLSD) ? 0 : 1;
+    asp->read_signal_reg.bits.RI = (modem_status & HOST_COM_MODEM_RI)   ? 0 : 1;
+}
+#else // NEC_98
 static void modem_change IFN1(int, adapter)
 {
 	/*
@@ -1836,7 +2463,25 @@ static void modem_change IFN1(int, adapter)
 		}
 	}
 }
+#endif // NEC_98
 
+#if defined(NEC_98)
+static void set_recv_char_status IFN1(struct ADAPTER_STATE *, asp)
+{
+        /*
+         * Check for data overrun and set up correct interrupt
+         */
+        if ( asp->read_status_reg.bits.rx_ready == 1 )
+        {
+                asp->read_status_reg.bits.overrun_error = 1;
+        }
+        else
+        {
+                asp->read_status_reg.bits.rx_ready = 1;
+                raise_rxr_interrupt(asp);
+        }
+}
+#else // NEC_98
 static void set_recv_char_status IFN1(struct ADAPTER_STATE *, asp)
 {
 	/*
@@ -1854,28 +2499,44 @@ static void set_recv_char_status IFN1(struct ADAPTER_STATE *, asp)
 		raise_rda_interrupt(asp);
 	}
 }
+#endif // NEC_98
 
 static void set_xmit_char_status IFN1(struct ADAPTER_STATE *, asp)
 {
 	/*
 	 * Set line status register and raise interrupt
 	 */
+#if defined(NEC_98)
+        asp->read_status_reg.bits.tx_empty = 1;
+        asp->read_status_reg.bits.tx_ready = 1;
+        raise_txr_interrupt(asp);
+#else // NEC_98
 	asp->line_status_reg.bits.tx_holding_empty = 1;
 	asp->line_status_reg.bits.tx_shift_empty = 1;
 	raise_thre_interrupt(asp);
+#endif // NEC_98
 }
 
 #ifdef NTVDM
 GLOBAL void tx_shift_register_empty(int adapter)
 {
     struct ADAPTER_STATE *asp = &adapter_state[adapter];
+#if defined(NEC_98)
+    asp->read_status_reg.bits.tx_ready = 1;
+#else // NEC_98
     asp->line_status_reg.bits.tx_shift_empty = 1;
+#endif // NEC_98
 }
 GLOBAL void tx_holding_register_empty(int adapter)
 {
     struct ADAPTER_STATE *asp = &adapter_state[adapter];
+#if defined(NEC_98)
+    asp->read_status_reg.bits.tx_empty = 1;
+    raise_txr_interrupt(asp);
+#else // NEC_98
     asp->line_status_reg.bits.tx_holding_empty = 1;
     raise_thre_interrupt(asp);
+#endif // NEC_98
 }
 #endif
 
@@ -1893,8 +2554,13 @@ static void set_break IFN1(int, adapter)
 	 */
 	struct ADAPTER_STATE *asp = &adapter_state[adapter];
 	
+#if defined(NEC_98)
+        switch ( change_state((int)asp->command_write_reg.bits.send_break,
+                asp->break_state) )
+#else // NEC_98
 	switch ( change_state((int)asp->line_control_reg.bits.set_break,
 		asp->break_state) )
+#endif // NEC_98
 	{
 	case ON:
 		asp->break_state = ON;
@@ -1916,13 +2582,86 @@ static void set_break IFN1(int, adapter)
  * (except rates above 9600 which are not OFFICIALLY supported on the XT and
  * AT, but are theoretically possible) */
 
-static word valid_latches[] =
-{ 
-	1, 	2, 	3, 	6, 	12, 	16, 	24, 	32, 
-	48, 	58, 	64, 	96, 	192,	384, 	768, 	857, 
-	1047, 	1536, 	2304 
+#if defined(NEC_98)
+static word valid_latches8[] =
+{
+//     8MHz     baud
+        0,              /* 115200 baud */
+        0,              /* 57600 baud */
+        0,              /* 38400 baud */
+        0,              /* 19200 baud */
+        13,             /* 9600 baud */
+        0,              /* 7200 baud */
+        26,             /* 4800 baud */
+        0,    //39,      /* 3600 baud */
+        52,             /* 2400 baud */
+        0,              /* 2000 baud */
+        0,    //78,      /* 1800 baud */
+        104,            /* 1200 baud */
+        208,            /* 600 baud */
+        416,            /* 300 baud */
+        832,            /* 150 baud */
+        0,              /* 134 baud */
+        1135,           /* 110 baud */
+        1664,       /* 75 baud */
+        2496,       /* 50 baud */
 };
+static word valid_latches10[] =
+{
+//    10MHz     baud
+        0,              /* 115200 baud */
+        0,              /* 57600 baud */
+        4,              /* 38400 baud */
+        8,              /* 19200 baud */
+        16,             /* 9600 baud */
+        0,    //24,      /* 7200 baud */
+        32,             /* 4800 baud */
+        0,    //48,      /* 3600 baud */
+        64,             /* 2400 baud */
+        0,              /* 2000 baud */
+        0,    //96,      /* 1800 baud */
+        128,            /* 1200 baud */
+        256,            /* 600 baud */
+        512,            /* 300 baud */
+        1024,           /* 150 baud */
+        0,              /* 134 baud */
+        1396,           /* 110 baud */
+        2048,           /* 75 baud */
+        3072,           /* 50 baud */
+};
+#else // NEC_98
+static word valid_latches[] =
+{
+	1, 	2, 	3, 	6, 	12, 	16, 	24, 	32,
+	48, 	58, 	64, 	96, 	192,	384, 	768, 	857,
+	1047, 	1536, 	2304
+};
+#endif // NEC_98
 
+#if defined(NEC_98)
+static long bauds[] =
+{
+        115200, /* 115200 baud */
+        57600, /* 57600 baud */
+        38400, /* 38400 baud */
+        19200, /* 19200 baud */
+        9600, /* 9600 baud */
+        7200, /* 7200 baud */
+        4800, /* 4800 baud */
+        3600, /* 3600 baud */
+        2400, /* 2400 baud */
+        2000, /* 2000 baud */
+        1800, /* 1800 baud */
+        1200, /* 1200 baud */
+        600, /* 600 baud */
+        300, /* 300 baud */
+        150, /* 150 baud */
+        134, /* 134 baud */
+        110, /* 110 baud */
+        75, /* 75 baud */
+        50  /* 50 baud */
+};
+#else // NEC_98
 #if !defined(PROD) || defined(IRET_HOOKS)
 static IUM32 bauds[] =
 {
@@ -1947,33 +2686,90 @@ static IUM32 bauds[] =
 	50  /* 50 baud */
 };
 #endif /* !PROD or IRET_HOOKS*/
+#endif // NEC_98
 
 static word speeds[] =
-{ 
-	HOST_COM_B115200, 
-	HOST_COM_B57600, 
-	HOST_COM_B38400, 
-	HOST_COM_B19200, 
-	HOST_COM_B9600, 
-	HOST_COM_B7200, 
-	HOST_COM_B4800, 
+{
+	HOST_COM_B115200,
+	HOST_COM_B57600,
+	HOST_COM_B38400,
+	HOST_COM_B19200,
+	HOST_COM_B9600,
+	HOST_COM_B7200,
+	HOST_COM_B4800,
 	HOST_COM_B3600,
-	HOST_COM_B2400, 
-	HOST_COM_B2000, 
-	HOST_COM_B1800, 
-	HOST_COM_B1200, 
-	HOST_COM_B600, 
-	HOST_COM_B300, 
-	HOST_COM_B150, 
-	HOST_COM_B134, 
+	HOST_COM_B2400,
+	HOST_COM_B2000,
+	HOST_COM_B1800,
+	HOST_COM_B1200,
+	HOST_COM_B600,
+	HOST_COM_B300,
+	HOST_COM_B150,
+	HOST_COM_B134,
 	HOST_COM_B110,
-	HOST_COM_B75, 
-	HOST_COM_B50 
+	HOST_COM_B75,
+	HOST_COM_B50
 };
 
-static int no_valid_latches = 
+#if defined(NEC_98)
+static int no_valid_latches =
+        (int)(sizeof(valid_latches8)/sizeof(valid_latches8[0]));
+#else // NEC_98
+static int no_valid_latches =
 	(int)(sizeof(valid_latches)/sizeof(valid_latches[0]));
+#endif // NEC_98
 
+#if defined(NEC_98)
+void SetRSBaud( BaudRate )
+word BaudRate;
+{
+    struct ADAPTER_STATE *asp = &adapter_state[COM1];
+    int i;
+    com_flush_input( COM1 );
+
+    asp->divisor_latch.all = BaudRate;
+    /*
+     * Check for valid divisor latch
+     */
+    for (i = 0;
+         i < no_valid_latches;
+         i++)
+        {
+//      if (Bus_Clock == 8 )  {                  // add 93.9.14
+        if (BaudRate == valid_latches8[i])
+            break;
+//      }                                        // add 93.9.14
+//      else {                                   // add 93.9.14
+        if (BaudRate == valid_latches10[i])
+            break;
+//      }                                        // add 93.9.14
+        }
+    if (i < no_valid_latches)       /* ie map found */
+    {
+#ifndef NTVDM
+        host_com_ioctl(COM1, HOST_COM_BAUD, speeds[i]);
+#else
+        host_com_ioctl(COM1, HOST_COM_BAUD, bauds[i]);
+#endif
+            asp->com_baud_ind = i;
+            sure_note_trace3(RS232_VERBOSE,
+                    " delay for baud %d RX:%d TX:%d", bauds[i],
+                    RX_delay[i], TX_delay[i]);
+    }
+}
+#endif // NEC_98
+
+
+#if defined(NEC_98)
+static void set_baud_rate IFN1(int, adapter)
+{
+    struct ADAPTER_STATE *asp = &adapter_state[adapter];
+    int i;
+
+    if (adapter == COM1)
+        SetRSBaud( asp->divisor_latch.all );
+}
+#else // NEC_98
 static void set_baud_rate IFN1(int, adapter)
 {
 	/*
@@ -1987,7 +2783,7 @@ static void set_baud_rate IFN1(int, adapter)
 	 * For IRET hooks, we need to determine the batch size from
 	 * the line speed, and an idea of how many quick events
 	 * we can get per second. We add one to alow us to catch-up!
-	 * Hence 
+	 * Hence
 	 * batch size = line_speed (in bits per second)
 	 *	/ number of bits in a byte
 	 *	* number of quick events ticks per second (normally 1000000)
@@ -2037,7 +2833,137 @@ static void set_baud_rate IFN1(int, adapter)
         host_com_ioctl(adapter,HOST_COM_BAUD,115200/asp->divisor_latch.all);
 #endif /* NTVDM */
 }
+#endif // NEC_98
 
+#if defined(NEC_98)
+static void set_mask_8251(adapter, value)
+int adapter;
+int value;
+{
+        struct ADAPTER_STATE *asp = &adapter_state[adapter];
+        asp->int_mask_reg.all = value & 0x7;
+//      PRINTDBGNEC98( NEC98DBG_in_trace1,
+//                    ("COMMS : set_mask_8251 : INT MASK = %x \n                        Status   = %x \n",asp->int_mask_reg.all,asp->read_status_reg.all) );
+        /*
+         * Kill off any pending interrupts for those items
+         * which are set now as disabled
+         */
+        if ( asp->int_mask_reg.bits.RXR_enable == 0 )
+                asp->rx_ready_interrupt_state = OFF;
+        if ( asp->int_mask_reg.bits.TXE_enable == 0 )
+                asp->tx_empty_interrupt_state = OFF;
+        if ( asp->int_mask_reg.bits.TXR_enable == 0 )
+                asp->tx_ready_interrupt_state = OFF;
+
+        /*
+         * Check for immediately actionable interrupts
+         */
+        if ( asp->read_status_reg.bits.rx_ready == 1 )
+                raise_rxr_interrupt(asp);
+        if ( asp->read_status_reg.bits.tx_ready == 1 )
+                raise_txr_interrupt(asp);
+        if ( asp->read_status_reg.bits.tx_empty == 1 )
+                raise_txe_interrupt(asp);
+
+        /* lower int line if no outstanding interrupts */
+        clear_interrupt(asp);
+}
+
+static void read_signal_8251(adapter)
+int adapter;
+{
+        long modem_status = 0;
+        struct ADAPTER_STATE *asp = &adapter_state[adapter];
+        /* get current modem input state */
+        host_com_ioctl(adapter, HOST_COM_MODEM, (long)&modem_status);
+        asp->read_signal_reg.bits.RI =
+                        (modem_status & HOST_COM_MODEM_RI) ? 0 : 1;
+        asp->read_signal_reg.bits.CS =
+                        (modem_status & HOST_COM_MODEM_CTS) ? 0 : 1;
+        asp->read_signal_reg.bits.CD =
+                        (modem_status & HOST_COM_MODEM_RLSD) ? 0 : 1;
+        asp->read_signal_reg.bits.pad = 0;
+}
+
+static void set_mode_8251(adapter, value)
+int adapter;
+int value;
+{
+        /*
+         * Set Number of data bits
+         *     Parity bits
+         *     Number of stop bits
+         */
+        struct ADAPTER_STATE *asp = &adapter_state[adapter];
+        MODE8251 newMODE;
+        int newParity, parity;
+
+        newMODE.all = value;
+
+        /*
+         * Set up the number of data bits
+         */
+        if (asp->mode_set_reg.bits.char_length != newMODE.bits.char_length)
+                host_com_ioctl(adapter, HOST_COM_DATABITS,
+                        newMODE.bits.char_length + 5);
+
+        /*
+         * Set up the number of stop bits
+         */
+        if (asp->mode_set_reg.bits.stop_bit
+        != newMODE.bits.stop_bit)
+                host_com_ioctl(adapter, HOST_COM_STOPBITS,
+                        (newMODE.bits.stop_bit >> 1) + 1);
+
+        /* What are new settings to check for a difference */
+#ifdef NTVDM
+        if (newMODE.bits.parity_enable == PARITYENABLE_OFF)
+#else
+        if (newMODE.bits.parity_enable == PARITY_OFF)
+#endif
+        {
+                newParity = HOST_COM_PARITY_NONE;
+        }
+        else /* regular parity */
+        {
+#ifdef NTVDM
+                newParity = newMODE.bits.parity_even == EVENPARITY_ODD ?
+#else
+                newParity = newMODE.bits.parity_even == PARITY_ODD ?
+#endif
+                        HOST_COM_PARITY_ODD : HOST_COM_PARITY_EVEN;
+        }
+
+        /*
+         * Try to make sense of the current parity setting
+         */
+#ifdef NTVDM
+        if (asp->mode_set_reg.bits.parity_enable == PARITYENABLE_OFF)
+#else
+        if (asp->mode_set_reg.bits.parity_enable == PARITY_OFF)
+#endif
+        {
+                parity = HOST_COM_PARITY_NONE;
+        }
+        else /* regular parity */
+        {
+#ifdef NTVDM
+                parity = asp->mode_set_reg.bits.parity_even == EVENPARITY_ODD ?
+#else
+                parity = asp->mode_set_reg.bits.parity_even == PARITY_ODD ?
+#endif
+                        HOST_COM_PARITY_ODD : HOST_COM_PARITY_EVEN;
+        }
+
+        if (newParity != parity)
+                host_com_ioctl(adapter, HOST_COM_PARITY, newParity);
+
+        /* finally update the current line control settings */
+        asp->mode_set_reg.all = value;
+}
+#endif // NEC_98
+
+#ifndef NEC_98
 static void set_line_control IFN2(int, adapter, int, value)
 {
 	/*
@@ -2049,7 +2975,7 @@ static void set_line_control IFN2(int, adapter, int, value)
 	LINE_CONTROL_REG newLCR;
 	int newParity, parity;
 	
-	newLCR.all = value;
+	newLCR.all = (unsigned char)value;
 
 	/*
 	 * Set up the number of data bits
@@ -2136,9 +3062,39 @@ static void set_line_control IFN2(int, adapter, int, value)
 #endif
 
 	/* finally update the current line control settings */
-	asp->line_control_reg.all = value;
+	asp->line_control_reg.all = (unsigned char)value;
 }
+#endif // NEC_98
 
+#if defined(NEC_98)
+static void set_dtr IFN1(int, adapter)
+{
+        /*
+         * Process the DTR control bit, Bit 0 of the Modem Control
+         * Register.
+         */
+        struct ADAPTER_STATE *asp = &adapter_state[adapter];
+
+        switch ( change_state((int)asp->command_write_reg.bits.ER,
+                                asp->dtr_state) )
+        {
+        case ON:
+                asp->dtr_state = ON;
+                /* set the real DTR modem output */
+                host_com_ioctl(adapter, HOST_COM_SDTR, 0);
+                break;
+
+        case OFF:
+                asp->dtr_state = OFF;
+                /* clear the real DTR modem output */
+                host_com_ioctl(adapter, HOST_COM_CDTR, 0);
+                break;
+
+        case LEAVE_ALONE:
+                break;
+        }
+}
+#else // NEC_98
 static void set_dtr IFN1(int, adapter)
 {
 	/*
@@ -2198,7 +3154,37 @@ static void set_dtr IFN1(int, adapter)
 		break;
 	}
 }
+#endif // NEC_98
 
+#if defined(NEC_98)
+static void set_rts IFN1(int, adapter)
+{
+        /*
+         * Process the RTS control bit, Bit 1 of the Modem Control
+         * Register.
+         */
+        struct ADAPTER_STATE *asp = &adapter_state[adapter];
+
+        switch ( change_state((int)asp->command_write_reg.bits.RS,
+                                asp->rts_state) )
+        {
+        case ON:
+                asp->rts_state = ON;
+                /* set the real RTS modem output */
+                host_com_ioctl(adapter, HOST_COM_SRTS, 0);
+                break;
+
+        case OFF:
+                asp->rts_state = OFF;
+                /* clear the real RTS modem output */
+                host_com_ioctl(adapter, HOST_COM_CRTS, 0);
+                break;
+
+        case LEAVE_ALONE:
+                break;
+        }
+}
+#else // NEC_98
 static void set_rts IFN1(int, adapter)
 {
 	/*
@@ -2252,7 +3238,9 @@ static void set_rts IFN1(int, adapter)
 		break;
 	}
 }
+#endif // NEC_98
 
+#ifndef NEC_98
 static void set_out1 IFN1(int, adapter)
 {
 	/*
@@ -2268,7 +3256,7 @@ static void set_out1 IFN1(int, adapter)
 		asp->out1_state = ON;
 		if (asp->loopback_state == OFF)
 		{
-			/* 
+			/*
 			 * In the real adapter, this modem control output
 			 * signal is not connected; so no real modem
 			 * control change is required
@@ -2287,7 +3275,7 @@ static void set_out1 IFN1(int, adapter)
 		asp->out1_state = OFF;
 		if (asp->loopback_state == OFF)
 		{
-			/* 
+			/*
 			 * In the real adapter, this modem control output
 			 * signal is not connected; so no real modem control
 			 * change is required
@@ -2325,7 +3313,7 @@ static void set_out2 IFN1(int, adapter)
 		asp->out2_state = ON;
 		if (asp->loopback_state == OFF)
 		{
-			/* 
+			/*
 			 * In the real adapter, this modem control output
 			 * signal is used to determine whether the
 			 * communications card should send interrupts; so
@@ -2354,7 +3342,7 @@ static void set_out2 IFN1(int, adapter)
 		asp->out2_state = OFF;
 		if (asp->loopback_state == OFF)
 		{
-			/* 
+			/*
 			 * In the real adapter, this modem control output signal
 			 * is used to determine whether the communications
 			 * card should send interrupts; so no real modem
@@ -2411,6 +3399,7 @@ static void set_loopback IFN1(int, adapter)
 		break;
 	}
 }
+#endif // NEC_98
 
 #ifdef SHORT_TRACE
 
@@ -2429,7 +3418,8 @@ static void super_trace IFN1(char *, string)
 			repeat_count = 0;
 		}
 		fprintf(trace_file, "%s", string);
-		strcpy(last_buffer, string);
+		strncpy(last_buffer, string, sizeof(last_buffer));
+                last_buffer[sizeof(last_buffer)-1] = '\0';
 	}
 }
 #endif
@@ -2471,6 +3461,69 @@ void com2_flush_printer IFN0()
 #include "SOFTPC_INIT.seg"
 #endif
 
+#if defined(NEC_98)
+static void com_reset IFN1(int, adapter)
+{
+        struct ADAPTER_STATE *asp = &adapter_state[adapter];
+
+        /*
+         * Set default state of all adapter registers
+         */
+        asp->int_mask_reg.all = 0;
+
+        // Tell host side the state of the data available interrupt
+
+        /* mode default = 0x4e */
+        asp->mode_set_reg.all = 0x00;
+        set_mode_8251(adapter, 0x4e );
+
+        /*
+         * set up modem control reg so next set_dtr etc.
+         * Will produce required status
+         */
+        asp->command_write_reg.all = 0;
+        asp->command_write_reg.bits.ER = ON;
+        asp->command_write_reg.bits.RS = ON;
+        host_com_ioctl(adapter, HOST_COM_SDTR, 0);
+        host_com_ioctl(adapter, HOST_COM_SRTS, 0);
+        asp->mode_set_state = OFF;          // next OUT is command
+        asp->timer_mode_state = OFF; //Timer mode clear. Next timer set is LSB.
+
+        asp->command_write_reg.bits.rx_enable = ON;
+        host_com_da_int_change(adapter,asp->command_write_reg.bits.rx_enable,0);
+        asp->read_status_reg.all = 0;
+        asp->read_status_reg.bits.tx_ready = 1;
+        asp->read_status_reg.bits.tx_empty = 1;
+
+        asp->read_signal_reg.all = 0;
+
+        /*
+         * Set up default state of our state variables
+         */
+        asp->rx_ready_interrupt_state = OFF;
+        asp->tx_ready_interrupt_state = OFF;
+        asp->tx_empty_interrupt_state = OFF;
+        asp->break_state = OFF;
+        asp->dtr_state = ON;
+        asp->rts_state = ON;
+
+        /*
+         * Reset adapter synchronisation
+         */
+        com_critical_reset(adapter);
+
+        /*
+         * Set Unix devices to default state
+         */
+        set_baud_rate(adapter);
+        set_break(adapter);
+
+        /* Must be called before set_dtr */
+        set_dtr(adapter);
+        set_rts(adapter);
+
+}
+#else // NEC_98
 static void com_reset IFN1(int, adapter)
 {
 	struct ADAPTER_STATE *asp = &adapter_state[adapter];
@@ -2586,6 +3639,7 @@ static void com_reset IFN1(int, adapter)
 	asp->batch_size = 10;	/* sounds like a safe default ! */
 #endif /* IRET_HOOKS */
 }
+#endif // NEC_98
 
 #ifndef COM3_ADAPTOR
 #define COM3_ADAPTOR 0
@@ -2594,13 +3648,20 @@ static void com_reset IFN1(int, adapter)
 #define COM4_ADAPTOR 0
 #endif
 
-static int com_adaptor[4] = {COM1_ADAPTOR,COM2_ADAPTOR,
+#if defined(NEC_98)
+static IU8 com_adaptor[4] = {COM1_ADAPTOR,COM2_ADAPTOR,COM3_ADAPTOR,0x00};
+static io_addr port_start[4]  = {RS232_COM1_PORT_START,RS232_COM2_PORT_START,RS232_COM3_PORT_START,0x00};
+static io_addr port_end[4]    = {RS232_COM1_PORT_END,RS232_COM2_PORT_END,RS232_COM3_PORT_END,0x00};
+static int int_pri[4]     = {4,0,0,0};
+static int timeout[4]     = {0,0,0,0};
+#else // NEC_98
+static IU8 com_adaptor[4] = {COM1_ADAPTOR,COM2_ADAPTOR,
                              COM3_ADAPTOR,COM4_ADAPTOR};
-static int port_start[4] = {RS232_COM1_PORT_START,
+static io_addr port_start[4] = {RS232_COM1_PORT_START,
 				RS232_COM2_PORT_START,
 				RS232_COM3_PORT_START,
 				RS232_COM4_PORT_START};
-static int port_end[4] = {RS232_COM1_PORT_END,
+static io_addr port_end[4] = {RS232_COM1_PORT_END,
                           RS232_COM2_PORT_END,
                           RS232_COM3_PORT_END,
                           RS232_COM4_PORT_END};
@@ -2612,8 +3673,108 @@ static int timeout[4] = {RS232_COM1_TIMEOUT,
                          RS232_COM2_TIMEOUT,
                          RS232_COM3_TIMEOUT,
                          RS232_COM4_TIMEOUT};
+#endif // NEC_98
 
 
+#if defined(NEC_98)
+GLOBAL VOID com_init IFN1(int, adapter)
+{
+
+    host_com_lock(adapter);
+    host_com_disable_open(adapter,TRUE);
+        adapter_state[adapter].had_first_read = FALSE;
+
+        /* Set up the IO chip select logic for this adaptor */
+#ifdef NTVDM
+    {
+        extern BOOL VDMForWOW;
+        extern void wow_com_outb(io_addr port, half_word value);
+        extern void wow_com_inb(io_addr port, half_word *value);
+
+            io_define_inb(com_adaptor[adapter],VDMForWOW ? wow_com_inb: com_inb);
+            io_define_outb(com_adaptor[adapter],VDMForWOW ? wow_com_outb: com_outb);
+        }
+#else
+        io_define_inb(com_adaptor[adapter], com_inb);
+        io_define_outb(com_adaptor[adapter], com_outb);
+#endif
+
+
+// add 93.9.14 Bus-clock check!! -------------------------------------------
+//      if ( Bus_Clock == 0 )
+//          Bus_Clock = (int) ( ( *((unsigned char far *)(0x00000501)) & 0x80) == 0x80 ? 8 : 10 );
+// add 93.9.14 end ---------------------------------------------------------
+        switch (port_start[adapter])        // I/O trap & INT level set
+        {
+            case RS232_COM1_PORT_START:
+
+                    io_connect_port((io_addr)0x30, com_adaptor[adapter], IO_READ_WRITE);
+                    io_connect_port((io_addr)0x32, com_adaptor[adapter], IO_READ_WRITE);
+#if 0
+                    io_connect_port((io_addr)0x33, com_adaptor[adapter], IO_READ_WRITE);
+                    io_connect_port((io_addr)0x35, com_adaptor[adapter], IO_READ_WRITE);
+                    io_connect_port((io_addr)0x37, com_adaptor[adapter], IO_READ_WRITE);
+#endif
+                    adapter_state[adapter].hw_interrupt_priority = int_pri[adapter];
+//                  PRINTDBGNEC98( NEC98DBG_init_msg,
+//                                ("COMMS : COM1 Initialized.\n"));
+            break;
+
+            case RS232_COM2_PORT_START:
+                int_pri[1] = find_rs232cex() ? CPU_RS232_SEC_INT : CPU_NO_DEVICE;
+                if (int_pri[1] ==  CPU_NO_DEVICE ) {
+                    host_com_disable_open(adapter,FALSE);
+                    host_com_unlock(adapter);
+                    return;
+                }
+                else {
+
+//                  PRINTDBGNEC98( NEC98DBG_init_msg,
+//                                ("COMMS : COM2 Read IRQ value = %d\n",(int)CmdLine[40]));
+                    io_connect_port((io_addr)0xb0, com_adaptor[adapter], IO_READ_WRITE);
+                    io_connect_port((io_addr)0xb1, com_adaptor[adapter], IO_READ_WRITE);
+                    io_connect_port((io_addr)0xb3, com_adaptor[adapter], IO_READ_WRITE);
+
+                    adapter_state[adapter].hw_interrupt_priority = int_pri[1];
+//                    PRINTDBGNEC98( NEC98DBG_init_msg,
+//                                  ("COMMS : COM2 Initialized.\n"));
+
+                }
+            break;
+            case RS232_COM3_PORT_START:
+                int_pri[2] = find_rs232cex() ? CPU_RS232_THIRD_INT : CPU_NO_DEVICE;
+                if (int_pri[2] ==  CPU_NO_DEVICE ) {
+                    host_com_disable_open(adapter,FALSE);
+                    host_com_unlock(adapter);
+                    return;
+                }
+                else {
+
+//                  PRINTDBGNEC98( NEC98DBG_init_msg,
+//                                ("COMMS : COM3 Read IRQ value = %d\n",(int)CmdLine[40]));
+                    io_connect_port((io_addr)0xb2, com_adaptor[adapter], IO_READ_WRITE);
+                    io_connect_port((io_addr)0xb9, com_adaptor[adapter], IO_READ_WRITE);
+                    io_connect_port((io_addr)0xbb, com_adaptor[adapter], IO_READ_WRITE);
+
+                    adapter_state[adapter].hw_interrupt_priority = int_pri[2];
+//                  PRINTDBGNEC98( NEC98DBG_init_msg,
+//                                ("COMMS : COM3 Initialized.\n"));
+
+                }
+            break;
+        }
+
+        /* reset adapter state */
+        host_com_reset(adapter);
+
+        /* reset adapter state */
+        com_reset(adapter);
+
+        host_com_disable_open(adapter,FALSE);
+        host_com_unlock(adapter);
+        return;
+}
+#else // NEC_98
 GLOBAL VOID com_init IFN1(int, adapter)
 {
 	io_addr i;
@@ -2632,21 +3793,20 @@ GLOBAL VOID com_init IFN1(int, adapter)
         extern void wow_com_outb(io_addr port, half_word value);
         extern void wow_com_inb(io_addr port, half_word *value);
 
-            io_define_inb(com_adaptor[adapter],VDMForWOW ? wow_com_inb: com_inb)
-;
+            io_define_inb(com_adaptor[adapter],VDMForWOW ? wow_com_inb: com_inb);
             io_define_outb(com_adaptor[adapter],VDMForWOW ? wow_com_outb: com_outb);
         }
 #else
 	io_define_inb(com_adaptor[adapter], com_inb);
 	io_define_outb(com_adaptor[adapter], com_outb);
 #endif /* NTVDM */
- 
+
 	for(i = port_start[adapter]; i <= port_end[adapter]; i++)
 		io_connect_port(i, com_adaptor[adapter], IO_READ_WRITE);
-         
+
 
 	adapter_state[adapter].hw_interrupt_priority = int_pri[adapter];
- 
+
 	/* reset adapter state */
 	host_com_reset(adapter);
 
@@ -2663,6 +3823,7 @@ GLOBAL VOID com_init IFN1(int, adapter)
 
 	return;
 }
+#endif // NEC_98
 
 void com_post IFN1(int, adapter)
 {
@@ -2670,7 +3831,7 @@ void com_post IFN1(int, adapter)
 	sas_storew( BIOS_VAR_START + (2*adapter), port_start[adapter]);
 	sas_store(timeout[adapter] , (half_word)1 );
 }
- 
+
 void com_close IFN1(int, adapter)
 {
 #ifdef NTVDM
@@ -2683,7 +3844,7 @@ void com_close IFN1(int, adapter)
 	com_trace_fd = NULL;
 #endif
 	/* reset host specific communications channel */
-	config_activate(C_COM1_NAME + adapter, FALSE);
+	config_activate((UTINY)(C_COM1_NAME + adapter), FALSE);
 
 #ifdef NTVDM
 	host_com_unlock(adapter);
@@ -2695,6 +3856,40 @@ void com_close IFN1(int, adapter)
 /*********************************************************/
 /* Com extentions - DAB (MS-project) */
 
+#if defined(NEC_98)
+GLOBAL void SyncBaseLineSettings(int adapter,DIVISOR_LATCH *divisor_latch,
+                 LINE_CONTROL_REG *LCR_reg)
+{
+    register struct ADAPTER_STATE *asp = &adapter_state[adapter];
+
+    //Setup baud rate control register
+    asp->divisor_latch.all = (*divisor_latch).all;
+
+    //Setup line control settings emuration.
+    asp->mode_set_reg.bits.char_length   = (*LCR_reg).bits.word_length;
+    asp->mode_set_reg.bits.parity_enable = (*LCR_reg).bits.parity_enabled;
+    asp->mode_set_reg.bits.parity_even   = (*LCR_reg).bits.even_parity;
+    /* Stop Bit emuration */
+    //  +------+--------+-------+------+
+    //  |AT STB|Char Len|StopBit|98 STB|
+    //  +------+--------+-------+------+
+    //  |   0  |  ----  |  1 bit|  01  |
+    //  +------+--------+-------+------+
+    //  |      |  5bit  |1.5 bit|  10  |
+    //  |   1  +--------+-------+------+
+    //  |      |6,7,8bit|  2 bit|  11  |
+    //  +------+--------+-------+------+
+    if ((*LCR_reg).bits.no_of_stop_bits == 0 )  /* STOP BIT = 1 ?       */
+        asp->mode_set_reg.bits.stop_bit = 1;    /* Stop Bit = 1 SET     */
+    else                                        /* Stop Bit is not 1    */
+    {
+        if ((*LCR_reg).bits.word_length == 0)   /* Char length = 5BIT ? */
+            asp->mode_set_reg.bits.stop_bit = 2;/* Stop Bit = 1.5 SET   */
+        else
+            asp->mode_set_reg.bits.stop_bit = 3;/* Stop Bit = 2 Set     */
+    }
+}
+#else // NEC_98
 GLOBAL void SyncBaseLineSettings(int adapter,DIVISOR_LATCH *divisor_latch,
                  LINE_CONTROL_REG *LCR_reg)
 {
@@ -2711,6 +3906,7 @@ GLOBAL void SyncBaseLineSettings(int adapter,DIVISOR_LATCH *divisor_latch,
     asp->line_control_reg.bits.stick_parity = (*LCR_reg).bits.stick_parity;
     asp->line_control_reg.bits.even_parity = (*LCR_reg).bits.even_parity;
 }
+#endif // NEC_98
 
 GLOBAL void setup_RTSDTR(int adapter)
 {
@@ -2728,8 +3924,13 @@ GLOBAL int AdapterReadyForCharacter(int adapter)
 
     /*......................................... Are RX interrupts enabled */
 
+#if defined(NEC_98)
+    if(adapter_state[adapter].read_status_reg.bits.rx_ready == 0 &&
+       adapter_state[adapter].RXR_enable_state == OFF)
+#else // NEC_98
     if(adapter_state[adapter].line_status_reg.bits.data_ready == 0 &&
        adapter_state[adapter].data_available_interrupt_state == OFF)
+#endif // NEC_98
     {
         AdapterReady = TRUE;
     }
@@ -2807,10 +4008,17 @@ unsigned  char *rxtx_buff = NULL;
 int       com_debug_help ();
 void      psaved();
 
+#if defined(NEC_98)
+static char *port_debugs[] =
+{
+        "txrx","cmd","mode", "mask", "stat","sig", "tim"
+};
+#else // NEC_98
 static char *port_debugs[] =
 {
 	"txrx","ier","iir", "lcr", "mcr","lsr", "msr"
 };
+#endif // NEC_98
 
 static int do_inbs = 0; /* start with inb reporting OFF */
 
@@ -2858,12 +4066,37 @@ int com_debug_stat ()
 	return (0);
 }
 
+#if defined(NEC_98)
+int com_reg_dump ()
+{
+        /* dump com1 emulations registers */
+        struct ADAPTER_STATE *asp = &adapter_state[COM1];
+
+        printf("Data available interrupt state %s\n",
+               asp->RXR_enable_state == ON ? "ON" : "OFF");
+
+        printf ("TX %2x RX %2x CMD %2x MODE %2x MASK %2x STATUS %2x SIGNAL %2x TIMER %2x \n",
+                (asp->tx_buffer), (asp->rx_buffer), (asp->command_write_reg.all),
+                (asp->mode_set_reg.all), (asp->int_mask_reg.all),
+                (asp->read_status_reg.all), (asp->read_signal_reg.all),
+                (asp->timer_mode_set_reg.all));
+
+        printf (" break_state           %d\n dtr_state          %d\n rts_state          %d\n"
+                " RXR_enable_state        %d\n TXR_enable_state      %d\n hw_interrupt_priority      %d\n"
+                " TX_delay       %d\n Had first read     %d\n",
+                asp->break_state, asp->dtr_state, asp->rts_state,
+                asp->RXR_enable_state, asp->TXR_enable_state,
+                asp->hw_interrupt_priority, TX_delay[asp->com_baud_ind], asp->had_first_read);
+
+        return (0);
+}
+#else // NEC_98
 int com_reg_dump ()
 {
 	/* dump com1 emulations registers */
 	struct ADAPTER_STATE *asp = &adapter_state[COM1];
 
-	printf ("TX %2x RX %2x IER %2x IIR %2x LCR %2x MCR %2x LSR %2x MSR %2x \n", 
+	printf ("TX %2x RX %2x IER %2x IIR %2x LCR %2x MCR %2x LSR %2x MSR %2x \n",
 		(asp->tx_buffer), (asp->rx_buffer), (asp->int_enable_reg.all),
 		(asp->int_id_reg.all), (asp->line_control_reg.all),
 		(asp->modem_control_reg.all), (asp->line_status_reg.all),
@@ -2882,12 +4115,13 @@ int com_reg_dump ()
 	        asp->tx_holding_register_empty_interrupt_state);
 	printf(" modem_status_interrupt_state		%d\n",
 	        asp->modem_status_interrupt_state);
-	printf(" hw_interrupt_priority		%d\n", 
+	printf(" hw_interrupt_priority		%d\n",
 	        asp->hw_interrupt_priority);
 	printf(" com_baud_delay		%d\n had_first_read		%d\n",
 	        TX_delay[asp->com_baud_ind], asp->had_first_read);
 	return (0);
 }
+#endif // NEC_98
 
 int com_s_reg ()
 {
@@ -2917,14 +4151,14 @@ int com_p_reg ()
 	return (0);
 }
 
-int conv_com_reg (com_reg)
+io_addr conv_com_reg (com_reg)
 char *com_reg;
 {
-	int loop;
+	io_addr loop;
 
 	for (loop = 0; loop < 7; loop++)
 		if (!strcmp (port_debugs[loop], com_reg))
-			return (loop+RS232_COM1_PORT_START);
+			return (loop+(io_addr)RS232_COM1_PORT_START);
 	return (0);
 }
 
@@ -2942,7 +4176,7 @@ int com_do_inb ()
 		return (0);
 	}
 	com_inb (port, &val);
-	printf ("%s = %x\n", val);
+	printf ("%s = %x\n", com_reg, val);
 	return (0);
 }
 
@@ -3016,11 +4250,11 @@ int com_run_file ()
 			case 'O':
 				/* outb */
 				/* convert com_register to COM1 address com_register */
-				com_outb (port, val);
+				com_outb (port, (IU8)val);
 				printf ("outb (%s, %x)\n", com_reg, val);
 				break;
 			default:
-				/* crap */
+				
 				break;
 		}
 		line ++;
@@ -3183,7 +4417,7 @@ void com_save_txbyte IFN1(CHAR, value)
 	}
 }
 
-static struct 
+static struct
 {
 	char *name;
 	int (*fn)();

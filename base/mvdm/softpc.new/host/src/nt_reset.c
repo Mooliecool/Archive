@@ -1,14 +1,14 @@
-/*	
+/*
  * SoftPC Revision 3.0
  *
- * Title		: NT reset functions
+ * Title                : NT reset functions
  *
- * Description	: This function is called by the standard reset function to
+ * Description  : This function is called by the standard reset function to
  * set up any specific devices used by the Sun4 implementation.
  *
- * Author		: SoftPC team
+ * Author               : SoftPC team
  *
- * Notes		:
+ * Notes                :
  */
 #include <nt.h>
 #include <ntrtl.h>
@@ -53,7 +53,8 @@
 #include "nt_eoi.h"
 #include "video.h"
 #include "nt_thred.h"
-
+#include "nt_sb.h"
+#include "ckmalloc.h"
 
 VOID DeleteConfigFiles(VOID);  // from command.lib
 void ShowStartGlass (DWORD);   // private user api
@@ -80,8 +81,12 @@ GLOBAL BOOL VDMForWOW = FALSE;
 GLOBAL BOOL fSeparateWow = FALSE;  // TRUE if CREATE_SEPARATE_WOW_VDM flag
 GLOBAL HANDLE MainThread;
 GLOBAL ULONG DosSessionId = 0;
+GLOBAL ULONG WowSessionId = 0;
 GLOBAL UINT VdmExitCode = 0xFF;
 GLOBAL BOOL StreamIoSwitchOn = TRUE;
+GLOBAL PCHAR pszSystem32Path = NULL;
+GLOBAL ULONG ulSystem32PathLen = 0; // Does not include '\0'.
+LOCAL  PCWSTR pcwSystem32 = NULL;
 
 /*
  *
@@ -100,14 +105,14 @@ host_reset()
 #endif
 
     if (host_stream_io_enabled) {
-	sc.ScreenState = STREAM_IO;
-	ConsoleInitialised = TRUE;
+        sc.ScreenState = STREAM_IO;
+        ConsoleInitialised = TRUE;
     }
     else {
 
-	ConsoleInit();
-	MouseAttachMenuItem(sc.ActiveOutputBufferHandle);
-	/*::::::::::::::::::::::::::::::::::::::::::::::::: Enable idle detect */
+        ConsoleInit();
+        MouseAttachMenuItem(sc.ActiveOutputBufferHandle);
+        /*::::::::::::::::::::::::::::::::::::::::::::::::: Enable idle detect */
     }
 
 #ifdef MONITOR
@@ -116,7 +121,7 @@ host_reset()
      * be active for the DOSEM initialisation ie until keyboard.sys can
      * come along and do it properly. We must do this though as some real
      * BIOS' can hang on certain initialisation functions. eg Dec 486/50
-     * will hang on printer init as it is waiting for a responce from a 
+     * will hang on printer init as it is waiting for a responce from a
      * 'private' port.
      */
     AddTempIVTFixups();
@@ -135,31 +140,64 @@ host_reset()
 
     host_ica_unlock();
 
-#ifdef	HUNTER
-    IDLE_ctl(FALSE);	/* makes Trapper too slow */
-#else	/* ! ( HUNTER ) */
-    if (sc.ScreenState == FULLSCREEN)	// initialised in ConsoleInit()
-	IDLE_ctl(FALSE);
+#ifdef  HUNTER
+    IDLE_ctl(FALSE);    /* makes Trapper too slow */
+#else   /* ! ( HUNTER ) */
+    if (sc.ScreenState == FULLSCREEN)   // initialised in ConsoleInit()
+        IDLE_ctl(FALSE);
     else
-	IDLE_ctl(TRUE);		// can't idle detect fullscreen
+        IDLE_ctl(TRUE);         // can't idle detect fullscreen
 
-    host_idle_init();		// host sleep event creation
+    host_idle_init();           // host sleep event creation
 #endif  /* HUNTER */
-
 
 }
 
+/*++
+
+Routine Description:
+
+    This function load a known system32 library (no path searched)
+
+Arguments:
+
+    pcwsBaseNameW is something like L"KERNEL32.DLL"
+
+Return Value:
+
+    A handle to be used with UnloadSystem32Library, NULL if failure.
+
+--*/
+
+
+
+HANDLE
+LoadSystem32Library(
+    PCWSTR pcwsBaseNameW
+    )
+{
+    HANDLE          h;
+    UNICODE_STRING  UnicodeBaseName;
+
+    RtlInitUnicodeString(&UnicodeBaseName, pcwsBaseNameW);
+
+    if (NT_SUCCESS( LdrLoadDll( pcwSystem32, NULL, &UnicodeBaseName, &h))) {
+        return(h);
+    } else {
+        return(NULL);
+    }
+}
 
 /*
  * =========================================================================
  *
- * FUNCTION		: host_applInit
+ * FUNCTION             : host_applInit
  *
- * PURPOSE		: Sets up the keyboard, lpt and error panels.
+ * PURPOSE              : Sets up the keyboard, lpt and error panels.
  *
- * RETURNED STATUS	: None.
+ * RETURNED STATUS      : None.
  *
- * DESCRIPTION	: Called from main.c.  The keyboard and other GWI pointer
+ * DESCRIPTION  : Called from main.c.  The keyboard and other GWI pointer
  *                sets are initialised here. The command line arguments are
  *                parsed for those flags that need processing early (ie before
  *                config() is called).
@@ -170,34 +208,70 @@ host_reset()
 
 void  host_applInit(int argc,char *argv[])
 {
-    char	*psz;
-    int  temp_argc = argc;
-    char         **temp_argv = argv;
-    BOOL         bSwitchF = FALSE;
+    char            *psz;
+    int             temp_argc = argc;
+    char            **temp_argv = argv;
+    ULONG           SessionId = 0;
+    ULONG           ProcessInformation = 0;
+    UNICODE_STRING  us;
+    ANSI_STRING     as;
+
 
     working_video_funcs = &nt_video_funcs;
     working_keybd_funcs = &nt_keybd_funcs;
     working_mouse_funcs = &the_mouse_funcs;
 
-    // check that someone has'nt started ntvdm from the cmd prompt. In such a
-    // case we should kill ntvdm as we support it only when createprocess
-    // executes it. We are checking a this with the argc although lots of
-    // fancy things can be done. If a user is bent upon running ntvdm directly
-    // they can always fool this code. We are only checking the presence of
-    // -f switch.
+    //
+    // We used to have a check for the -f flag to prevent the user/hacker
+    // from running NTVDM at the command line. This has now been replaced
+    // by the somewhat safer following check. Note that if we are not on
+    // greater then XP, the check will fail and the default will exit.
+    //
 
+    NtQueryInformationProcess(
+        GetCurrentProcess(),
+        ProcessWx86Information,
+        &ProcessInformation,
+        sizeof(ProcessInformation),
+        NULL
+    );
+
+    if (ProcessInformation == 0) {
+        ExitProcess (0);
+    }
+
+    // Figure out the system directory size.
+    ulSystem32PathLen = GetSystemDirectory(NULL, 0);
+    if (ulSystem32PathLen == 0) {
+        host_error(EG_OWNUP, ERR_QUIT, "NTVDM:System32 fails");
+        TerminateVDM();
+    }
+
+    check_malloc(pszSystem32Path, ulSystem32PathLen+1, CHAR);
+
+    // Warning: we do need to refresh ulSystem32PathLen since kernel
+    // actually return one extra byte on the NULL, 0 call.
+    ulSystem32PathLen = GetSystemDirectory(pszSystem32Path, ulSystem32PathLen+1);
+    if (ulSystem32PathLen == 0) {
+        host_error(EG_OWNUP, ERR_QUIT, "NTVDM:System32 fails (2)");
+        TerminateVDM();
+    }
+
+    RtlInitAnsiString(&as, pszSystem32Path);
+    if (!NT_SUCCESS(RtlAnsiStringToUnicodeString(&us, &as, TRUE))) {
+        host_error(EG_OWNUP, ERR_QUIT, "NTVDM:System32 fails (3)");
+        TerminateVDM();
+    }
+
+    pcwSystem32 = us.Buffer;
 
 // Check if the VDM Is for WOW
 // Check is for new console session
     while (--temp_argc > 0) {
-	psz = *++temp_argv;
-	if (*psz == '-' || *psz == '/') {
+        psz = *++temp_argv;
+        if (*psz == '-' || *psz == '/') {
             psz++;
 
-            if (*psz == 'f') {
-                bSwitchF = TRUE;
-                continue;
-            }
 #ifndef MONITOR
             //
             // Check for windowed graphics resize
@@ -215,48 +289,54 @@ void  host_applInit(int argc,char *argv[])
             }
             else
 #endif
-            if(tolower(*psz) == 'w'){
-                VDMForWOW = TRUE;
-                if (bSwitchF)
-                  break;
-	    }
-	    else if (*psz == 'o'){
-		    StreamIoSwitchOn = FALSE;
-	    }
+            if(tolower(*psz) == 'w') {
+
+               VDMForWOW = TRUE;
+               ++psz;
+               if (tolower(*psz) == 's') { // VadimB: New code
+                  fSeparateWow = TRUE;
+               }
+            }
+            else if (*psz == 'o'){
+               StreamIoSwitchOn = FALSE;
+            }
             else if (*psz++ == 'i' && *psz) {
-               DosSessionId = strtoul(psz, NULL, 16);
-	    }
+               SessionId = strtoul(psz, NULL, 16);
+            }
 
         }
     }
 
+    // determine whether the id is for dos or for wow
 
-    if (bSwitchF == FALSE)
-        ExitProcess (0);
+    if (0 != SessionId) {
+       if (VDMForWOW && !fSeparateWow) {
+          WowSessionId = SessionId;
+       }
+       else {
+          DosSessionId = SessionId;
+       }
+    }
 
     // If VDM Is for WOW keep showing the glass
     if (VDMForWOW) {
-        if (DosSessionId) {
-            fSeparateWow = TRUE;
-            }
-
-	ShowStartGlass (HOUR_BOOST_FOR_WOW);
-	StreamIoSwitchOn = FALSE;
+       ShowStartGlass (HOUR_BOOST_FOR_WOW);
+       StreamIoSwitchOn = FALSE;
     }
     else if (StreamIoSwitchOn)
-	    enable_stream_io();
+            enable_stream_io();
 
     /*
      * Get a handle to the main thread so it can be suspended during
      * hand-shaking.
      */
     DuplicateHandle(GetCurrentProcess(),
-		    GetCurrentThread(),
-		    GetCurrentProcess(),
-		    &MainThread,
-		    (DWORD) 0,
-		    FALSE,
-		    (DWORD) DUPLICATE_SAME_ACCESS);
+                    GetCurrentThread(),
+                    GetCurrentProcess(),
+                    &MainThread,
+                    (DWORD) 0,
+                    FALSE,
+                    (DWORD) DUPLICATE_SAME_ACCESS);
 
     InitializeIcaLock();
     host_ica_lock();
@@ -269,13 +349,13 @@ void  host_applInit(int argc,char *argv[])
 /*
  * =========================================================================
  *
- * FUNCTION		: host_applClose
+ * FUNCTION             : host_applClose
  *
- * PURPOSE		: The last chance to close down.
+ * PURPOSE              : The last chance to close down.
  *
- * RETURNED STATUS	: None.
+ * RETURNED STATUS      : None.
  *
- * DESCRIPTION	: Called from main.c.
+ * DESCRIPTION  : Called from main.c.
  *
  *
  * =======================================================================
@@ -286,6 +366,7 @@ host_applClose(void)
 {
   nt_remove_event_thread();
   InitSound(FALSE);
+  SbCloseDevices();
   TerminateHeartBeat();
 
   GfxCloseDown();             // ensure video section destroyed
@@ -323,13 +404,13 @@ void host_terminate(void)
 
 #ifdef HUNTER
     if (TrapperDump != (HANDLE) -1)
-	CloseHandle(TrapperDump);
+        CloseHandle(TrapperDump);
 #endif /* HUNTER */
 
     if(VDMForWOW)
-	ExitVDM(VDMForWOW,(ULONG)-1);	  // Kill everything for WOW VDM
+        ExitVDM(VDMForWOW,(ULONG)-1);     // Kill everything for WOW VDM
     else
-	ExitVDM(FALSE,0);
+        ExitVDM(FALSE,0);
 
     ExitProcess(VdmExitCode);
 }
@@ -361,7 +442,7 @@ void
 manager_files_init()
 {
 
-	assert0(NO,"manager_files_init stubbed\n");
+        assert0(NO,"manager_files_init stubbed\n");
 }
 
 
@@ -369,13 +450,13 @@ manager_files_init()
 /*
  * =========================================================================
  *
- * FUNCTION		: host_symb_debug_init
+ * FUNCTION             : host_symb_debug_init
  *
- * PURPOSE		: Does nothing
+ * PURPOSE              : Does nothing
  *
- * RETURNED STATUS	: None.
+ * RETURNED STATUS      : None.
  *
- * DESCRIPTION	: Called from main.c.
+ * DESCRIPTION  : Called from main.c.
  *
  *
  * =======================================================================
@@ -385,7 +466,7 @@ void
 host_symb_debug_init IFN1(char *, name)
 {
 }
-#endif				/* nPROD */
+#endif                          /* nPROD */
 
 
 void

@@ -6,16 +6,16 @@
 MODULE NAME	: Bios code for accessing the cmos
 
 	THIS PROGRAM SOURCE FILE IS SUPPLIED IN CONFIDENCE TO THE
-	CUSTOMER, THE CONTENTS  OR  DETAILS  OF ITS OPERATION MAY 
+	CUSTOMER, THE CONTENTS  OR  DETAILS  OF ITS OPERATION MAY
 	ONLY BE DISCLOSED TO PERSONS EMPLOYED BY THE CUSTOMER WHO
-	REQUIRE A KNOWLEDGE OF THE  SOFTWARE  CODING TO CARRY OUT 
+	REQUIRE A KNOWLEDGE OF THE  SOFTWARE  CODING TO CARRY OUT
 	THEIR JOB. DISCLOSURE TO ANY OTHER PERSON MUST HAVE PRIOR
 	AUTHORISATION FROM THE DIRECTORS OF INSIGNIA SOLUTIONS INC.
 
 DESIGNER	: J.P.Box
 DATE		: September '88
 
-PURPOSE		: To provide routines to initialise and access the 
+PURPOSE		: To provide routines to initialise and access the
 		CMOS
 
 The Following Routines are defined:
@@ -148,14 +148,14 @@ half_word table_address;		/* cmos table address to be read	*/
 {
 	half_word	value;		/* value read from cmos			*/
 	
-	outb( CMOS_PORT, (table_address | NMI_DISABLE) );
+	outb( CMOS_PORT, (IU8)(table_address | NMI_DISABLE) );
 	
 	inb( CMOS_DATA, &value );
 	
 	/*
 	 * Set bit 7 if it was previously set  in table_address
 	 */
-	outb( CMOS_PORT, (CMOS_SHUT_DOWN | (table_address & NMI_DISABLE)) );
+	outb( CMOS_PORT, (IU8)((CMOS_SHUT_DOWN | (table_address & NMI_DISABLE))) );
 	
 	return ( value );
 }
@@ -181,14 +181,14 @@ half_word table_address,		/* cmos table address to be written	*/
 	  value;			/* value to be written			*/
 
 {
-	outb( CMOS_PORT, (table_address | NMI_DISABLE) );
+	outb( CMOS_PORT, (IU8)((table_address | NMI_DISABLE)) );
 
 	outb( CMOS_DATA, value );
 	
 	/*
 	 * Set bit 7 if it was previously set  in table_address
 	 */
-	outb( CMOS_PORT, (CMOS_SHUT_DOWN | (table_address & NMI_DISABLE)) );
+	outb( CMOS_PORT, (IU8)((CMOS_SHUT_DOWN | (table_address & NMI_DISABLE))) );
 	
 	return;
 }

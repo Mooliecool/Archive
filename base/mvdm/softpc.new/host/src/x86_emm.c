@@ -292,6 +292,8 @@ int host_deinitialise_EM()
         }
 
         return(SUCCESS);
+    } else {
+        return FAILURE;
     }
 }
 
@@ -402,7 +404,7 @@ DESCRIPTION     : Mapping achieved by mapping correct page from section into
 */
 BOOL hold_lim_page(USHORT segment)
 /*   IN
-int page	page (0-3) of LIM gap 
+int page	page (0-3) of LIM gap
 */
 
 {
@@ -867,8 +869,10 @@ USHORT  src_seg         source segment address
         if (length <= 64*1024)
             temp = sas_scratch_address(length);
         else
-            if ((temp = (unsigned char *)host_malloc(length)) == NULL)
-                return(FAILURE);
+            temp = (unsigned char *)host_malloc(length);
+
+        if (!temp)
+            return(FAILURE);
 
         pointer = temp;
 
@@ -900,8 +904,10 @@ USHORT  src_page        source page number
         if (length <= 64*1024)
             temp = sas_scratch_address(length);
         else
-            if ((temp = (unsigned char *)host_malloc(length)) == NULL)
-                return(FAILURE);
+            temp = (unsigned char *)host_malloc(length);
+       
+        if (!temp)
+            return(FAILURE);
 
         pointer = temp;
 

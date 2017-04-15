@@ -43,7 +43,7 @@ static char SccsID[]="@(#)vga_mode.c	1.35 06/01/95 Copyright Insignia Solutions 
 -------------------------------------------------------------------------
 [1.2 DATATYPES FOR [1.1] (if not basic C types)]
 
-	STRUCTURES/TYPEDEFS/ENUMS: 
+	STRUCTURES/TYPEDEFS/ENUMS:
 
 uses	enum DISPLAY_STATE which is declared in ega_graph.pi.
 
@@ -77,7 +77,7 @@ PURPOSE		  : 	To decide which memory organisation is being used by
 			(called DISPLAY_MODE), describing each sort of memory
 			organisation.
 
-PARAMETERS	  :	none 
+PARAMETERS	  :	none
 
 GLOBALS		  :	uses EGA_GRAPH struct, specially display_state to
 			decide which mode is being used.
@@ -116,17 +116,17 @@ GLOBALS		  :	uses EGA_GRAPH struct, specially display_state to
 
 /* [3.1.2 DECLARATIONS]                                                 */
 
-/* [3.2 INTERMODULE EXPORTS]						*/ 
+/* [3.2 INTERMODULE EXPORTS]						*/
 
 #include	"egamode.h"
 
-#ifdef GISP_SVGA 
+#ifdef GISP_SVGA
 #include HostHwVgaH
 #include "hwvga.h"
 #endif /* GISP_SVGA */
 
 /*
-5.MODULE INTERNALS   :   (not visible externally, global internally)]     
+5.MODULE INTERNALS   :   (not visible externally, global internally)]
 
 [5.1 LOCAL DECLARATIONS]						*/
 
@@ -150,7 +150,7 @@ PROCEDURE	  : 	set_up_screen_ptr()
 
 PURPOSE		  : 	Decide which plane the information must come from for displaying
 
-PARAMETERS	  :	none 
+PARAMETERS	  :	none
 
 GLOBALS		  :	uses EGA_GRAPH struct, plane_mask to decide which planes are enabled
 
@@ -160,6 +160,9 @@ GLOBALS		  :	uses EGA_GRAPH struct, plane_mask to decide which planes are enable
 LOCAL VOID
 set_up_screen_ptr()
 {
+#if defined(NEC_98)
+        set_screen_ptr(0x00000L);
+#else   //NEC_98
 	if( get_chain4_mode() )
 	{
 		if (all_planes_enabled())
@@ -180,6 +183,7 @@ set_up_screen_ptr()
 		}
 		else
 			set_screen_ptr(EGA_planes);
+#endif  //NEC_98
 }
 
 /* -----------------------------------------------------------------------
@@ -207,6 +211,12 @@ DISPLAY_MODE	mode;
 
 #if defined(NTVDM) && defined(MONITOR)
 	{
+#if defined(NEC_98)
+            extern void NEC98_text_update();
+            set_gfx_update_routines( NEC98_text_update, SIMPLE_MARKING, NO_SCROLL );
+            return;
+
+#else   //NEC_98
 	    extern void mon_text_update(void);
 
 	    switch (mode)
@@ -236,12 +246,14 @@ DISPLAY_MODE	mode;
 		break;
 	}
 
+#endif  //NEC_98
 	}
 
 #endif	/* MONITOR */
 /* NTVDM monitor: All text monitor cases dealt with. For frozen graphics */
 /* now fall through to do decode to correct paint routines per mode */
 
+#ifndef NEC_98
 	switch (mode) {
 		case EGA_TEXT_40_SP_WR:
 		case EGA_TEXT_80_SP_WR:
@@ -285,7 +297,7 @@ DISPLAY_MODE	mode;
 			assert0( is_it_text(), "In text memory mode, but not in alpha mode !!" );
 #if defined(NTVDM) && !defined(MONITOR)   /* Only get here for NTVDM Riscs */
 			{
-	    		    extern void jazz_text_update();
+	    		    extern void jazz_text_update(void);
 	    		    set_gfx_update_routines( jazz_text_update, SIMPLE_MARKING, TEXT_SCROLL );
 			}
 #else
@@ -445,6 +457,7 @@ DISPLAY_MODE	mode;
 #endif /* GISP_SVGA */
 			break;
 	}
+#endif  //NEC_98
 }
 
 
@@ -460,6 +473,7 @@ DISPLAY_MODE	mode;
 
 boolean	choose_vga_display_mode()
 {
+#ifndef NEC_98
 	DISPLAY_MODE	mode;
 
 	note_entrance0("choose vga display mode");
@@ -568,8 +582,163 @@ boolean	choose_vga_display_mode()
 	 */
 
 	screen_refresh_required();
+#endif  //NEC_98
 	return TRUE;
 }
 
 #endif /* EGG */
 #endif /* REAL_VGA */
+
+#if defined(NEC_98)
+
+// NEC98 GARAPHIC UPDATE LOGIC
+
+extern  void    NEC98_graph_update();
+extern  void    NEC98_text_graph_update();
+extern  void    NEC98_nothing_update();
+extern  void    NEC98_nothing_upgrap();
+extern  BOOL    compatible_font;
+BOOL    select_disp_nothing;
+BOOL    once_pal;
+
+boolean choose_NEC98_graph_mode(void)
+{
+        DISPLAY_MODE    mode;
+
+        select_disp_nothing = FALSE ;
+        once_pal = FALSE ;
+        if( NEC98GLOBS->read_bank & 1 ){
+                set_gvram_ptr ( NEC98GLOBS->gvram_p31_ptr  );
+                set_gvram_copy( NEC98GLOBS->gvram_p31_copy );
+        }else{
+                set_gvram_ptr ( NEC98GLOBS->gvram_p30_ptr  );
+                set_gvram_copy( NEC98GLOBS->gvram_p30_copy );
+        }
+        if( NEC98Display.ggdcemu.lr == 1 ){
+                set_gvram_start( (int)(NEC98Display.ggdcemu.sad1*2) );
+        }else{
+                set_gvram_start( 0x00000000 );
+        }
+        set_gvram_width( 80 );
+
+        if( get_char_height() == 20 ){
+                set_text_lines(20);
+        }else{
+                set_text_lines(25);
+        }
+
+        if( NEC98Display.modeff.dispenable  == FALSE || (NEC98Display.crt_on  == FALSE &&
+                 NEC98Display.ggdcemu.startstop  == FALSE ))
+        {
+                set_gfx_update_routines( NEC98_nothing_upgrap, SIMPLE_MARKING, NO_SCROLL );
+                select_disp_nothing = TRUE ;
+                mode = NEC98_T25L_G400 ;
+                host_set_paint_routine(mode,get_screen_height()) ;
+        }else{
+                if( NEC98Display.crt_on == TRUE && NEC98Display.ggdcemu.startstop == FALSE )
+                {
+                set_gfx_update_routines( NEC98_text_update, SIMPLE_MARKING, NO_SCROLL );
+                        if( get_char_height() == 20 ){
+                                mode = NEC98_TEXT_20L;
+                        }else{
+                                mode = NEC98_TEXT_25L;
+                        }
+                }else if( NEC98Display.crt_on  == FALSE && NEC98Display.ggdcemu.startstop == TRUE )
+                {
+                set_gfx_update_routines( NEC98_graph_update, SIMPLE_MARKING, NO_SCROLL );
+                        if( NEC98Display.ggdcemu.lr == 1 ){
+                                if(NEC98Display.modeff.graph88==TRUE){
+                                        mode = NEC98_GRAPH_200_SLT;
+                                }else{
+                                        mode = NEC98_GRAPH_200;
+                                }
+                                set_gvram_length( 0x4000 );
+                                set_gvram_height( 200 );
+                                set_line_per_char( 200 / get_text_lines());
+                        }else{
+                                mode = NEC98_GRAPH_400 ;
+                                set_gvram_length( 0x8000 );
+                                set_gvram_height( 400 );
+                                set_line_per_char( 400 / get_text_lines());
+                        }
+                }else{
+                set_gfx_update_routines( NEC98_text_graph_update, SIMPLE_MARKING, NO_SCROLL );
+                        if( NEC98Display.ggdcemu.lr==1 ){
+                                if(get_char_height()==20){
+                                        if(NEC98Display.modeff.graph88==TRUE){
+                                                mode = NEC98_T20L_G200_SLT ;
+                                        }else{
+                                                mode = NEC98_T20L_G200 ;
+                                        }
+                                        set_line_per_char(10);
+                                }else{
+                                        if(NEC98Display.modeff.graph88==TRUE){
+                                                mode = NEC98_T25L_G200_SLT ;
+                                        }else{
+                                                mode = NEC98_T25L_G200 ;
+                                        }
+                                        set_line_per_char(8);
+                                }
+                                set_gvram_length(0x4000);
+                                set_gvram_height(200)   ;
+                        }else{
+                                if(get_char_height()==20){
+                                        mode = NEC98_T20L_G400 ;
+                                        set_line_per_char(20);
+                                }else{
+                                        mode = NEC98_T25L_G400 ;
+                                        set_line_per_char(16);
+                                }
+                                set_gvram_length(0x8000);
+                                set_gvram_height(400)   ;
+                        }
+                }
+                host_set_paint_routine(mode,get_screen_height()) ;
+                set_gvram_scan((get_gvram_width()*get_gvram_height())/get_screen_height());
+                set_screen_length(get_offset_per_line()*get_screen_height()/get_char_height());
+        }
+        screen_refresh_required() ;
+        return(TRUE);
+}
+
+
+boolean choose_NEC98_display_mode(void)
+{
+        DISPLAY_MODE mode;
+
+        select_disp_nothing = FALSE ;
+        once_pal = FALSE ;
+
+        if( get_char_height() == 20 ){
+                set_text_lines(20);
+        }else{
+                set_text_lines(25);
+        }
+
+        if( NEC98Display.modeff.dispenable == FALSE ||  NEC98Display.crt_on == FALSE )
+        {
+                if( compatible_font == FALSE ) set_crt_on(FALSE);
+                set_gfx_update_routines( NEC98_nothing_update, SIMPLE_MARKING, NO_SCROLL );
+                select_disp_nothing = TRUE;
+                if( get_char_height() == 20 ){
+                        mode = NEC98_TEXT_20L;
+                }else{
+                        mode = NEC98_TEXT_25L;
+                }
+        }else{
+                if( compatible_font == FALSE ) set_crt_on(TRUE);
+            set_gfx_update_routines( NEC98_text_update, SIMPLE_MARKING, NO_SCROLL );
+                if( get_char_height() == 20 ){
+                        mode = NEC98_TEXT_20L;
+                }else{
+                        mode = NEC98_TEXT_25L;
+                }
+        }
+        if( compatible_font == FALSE )  mode = NEC98_TEXT_80;
+        set_gvram_width( 80 );
+        set_screen_length(get_offset_per_line()*get_screen_height()/get_char_height());
+        host_set_paint_routine(mode,get_screen_height());
+        screen_refresh_required();
+        return(TRUE);
+}
+#endif  //NEC_98

@@ -160,8 +160,8 @@ ERROR RECOVERY    :     errors are ignored
 
 #include "debug.h"
 #ifndef PROD
-#include "trace.h"
-#include "host_trc.h"
+    #include "trace.h"
+    #include "host_trc.h"
 #endif
 
 #include "ica.h"
@@ -177,7 +177,6 @@ ERROR RECOVERY    :     errors are ignored
 #include "nt_pif.h"
 #include "nt_eoi.h"
 #include "nt_event.h"
-
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::: INTERMODULE EXPORTS */
 
@@ -212,8 +211,8 @@ void RtcTick(struct host_timeval *time);
 //
 // Perfcounter frequency calculation constants
 //
-ULONG ulFreqHusec;
-ULONG ulFreqSec;
+LARGE_INTEGER ulFreqHusec;
+LARGE_INTEGER ulFreqSec;
 
 
 //
@@ -235,12 +234,10 @@ int    HeartBeatResumes=0;
 BOOL   bDoingTicInterrupt=FALSE;
 BOOL   bUpdateRtc;
 
-
-
-
 #if defined (MONITOR) && defined (X86GFX)
-HANDLE SuspendEventObjects[2];
+HANDLE SuspendEventObjects[3];
 #endif
+extern PVOID  CurrentMonitorTeb;   // thread that is currently executing instructions.
 
 
 
@@ -252,18 +249,18 @@ void host_timer_init(void)
 {
 
     ThreadInfo.HeartBeat.Handle = CreateThread(
-                                  NULL,
-                                  8192,
-                                  HeartBeatThread,
-                                  NULL,
-                                  CREATE_SUSPENDED,
-                                  &ThreadInfo.HeartBeat.ID
-                                  );
+                                              NULL,
+                                              8192,
+                                              HeartBeatThread,
+                                              NULL,
+                                              CREATE_SUSPENDED,
+                                              &ThreadInfo.HeartBeat.ID
+                                              );
 
-    if(!ThreadInfo.HeartBeat.Handle)  {
+    if (!ThreadInfo.HeartBeat.Handle) {
         DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
         TerminateVDM();
-        }
+    }
 
     InitSound(TRUE);
 
@@ -282,15 +279,15 @@ void host_timer_init(void)
 void TimerInit(void)
 {
 
-    if(!(hHBResumeEvent = CreateEvent(NULL, FALSE, FALSE, NULL))) {
+    if (!(hHBResumeEvent = CreateEvent(NULL, FALSE, FALSE, NULL))) {
         DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
         TerminateVDM();
-        }
+    }
 
-    if(!(hHBSuspendEvent = CreateEvent(NULL, FALSE, TRUE, NULL))) {
+    if (!(hHBSuspendEvent = CreateEvent(NULL, FALSE, TRUE, NULL))) {
         DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
         TerminateVDM();
-        }
+    }
 
     InitializeCriticalSection(&TimerTickCS);
     InitializeCriticalSection(&HBSuspendCS);
@@ -309,7 +306,9 @@ void TerminateHeartBeat(void)
     NtAlertThread(ThreadInfo.HeartBeat.Handle);
     if (ThreadInfo.HeartBeat.ID != GetCurrentThreadId())
         WaitForSingleObjectEx(ThreadInfo.HeartBeat.Handle, 10000, TRUE);
-
+    CloseHandle(ThreadInfo.HeartBeat.Handle);
+    ThreadInfo.HeartBeat.Handle = NULL;
+    ThreadInfo.HeartBeat.ID = 0;
     return;
 }
 
@@ -319,19 +318,20 @@ void TerminateHeartBeat(void)
 //
 VOID InitPerfCounter(VOID)
 {
-  LARGE_INTEGER li, liFreq;
+    LARGE_INTEGER li, liFreq;
 
 
-  NtQueryPerformanceCounter(&li, &liFreq);
-  /* we assumed the frequency never goes beyond 4Ghz(32bits)
-   * if it does someday, this assumption must be removed
-   * and code must be rewritten
-   */
-  ASSERT(liFreq.HighPart == 0);
-  ulFreqSec = liFreq.LowPart;
-  ulFreqHusec = liFreq.LowPart / 10000;
+    NtQueryPerformanceCounter(&li, &liFreq);
+
+    ulFreqSec.QuadPart = liFreq.QuadPart;
+    ulFreqHusec.QuadPart = liFreq.QuadPart / 10000;
 
 }
+
+
+
+
+
 
 //
 // returns perf counter in 100's usecs (0.1 millisec)
@@ -339,11 +339,11 @@ VOID InitPerfCounter(VOID)
 //
 ULONG GetPerfCounter(VOID)
 {
-  LARGE_INTEGER li;
+    LARGE_INTEGER li;
 
-  NtQueryPerformanceCounter(&li, NULL);
-  li = RtlExtendedLargeIntegerDivide(li, ulFreqHusec, NULL);
-  return(li.LowPart);
+    NtQueryPerformanceCounter(&li, NULL);
+    li.QuadPart /= ulFreqHusec.QuadPart;
+    return (li.LowPart);
 }
 
 
@@ -354,26 +354,27 @@ ULONG GetPerfCounter(VOID)
 //
 void GetPerfCounterUsecs(struct host_timeval *time, PLARGE_INTEGER pliTime)
 {
-  LARGE_INTEGER liSecs;
-  LARGE_INTEGER liUsecs;
+    LARGE_INTEGER liSecs;
+    LARGE_INTEGER liUsecs;
+    LARGE_INTEGER liFreq;
 
     // get time in secs and usecs
-  NtQueryPerformanceCounter(&liSecs, NULL);
-  liSecs = RtlExtendedLargeIntegerDivide(liSecs, ulFreqSec, &liUsecs.LowPart);
-  liUsecs.QuadPart = Int32x32To64(liUsecs.LowPart, 1000000);
-  liUsecs = RtlExtendedLargeIntegerDivide(liUsecs, ulFreqSec, NULL);
+    NtQueryPerformanceCounter(&liFreq, NULL);
+    liSecs.QuadPart = liFreq.QuadPart / ulFreqSec.QuadPart;
+    liUsecs.QuadPart =  liFreq.QuadPart % ulFreqSec.QuadPart;
+    liUsecs.QuadPart =  (liUsecs.QuadPart * 1000000) / ulFreqSec.QuadPart;
 
     // fill in time if specified
-  if (time) {
-      time->tv_usec = liUsecs.LowPart;
-      time->tv_sec  = liSecs.LowPart;
-      }
+    if (time) {
+        time->tv_usec = liUsecs.LowPart;
+        time->tv_sec  = liSecs.LowPart;
+    }
 
     // fill in pliTime if specified
-  if (pliTime) {
-      pliTime->QuadPart = liUsecs.QuadPart + liSecs.QuadPart * 1000000;
-      }
-  return;
+    if (pliTime) {
+        pliTime->QuadPart = liUsecs.QuadPart + liSecs.QuadPart * 1000000;
+    }
+    return;
 }
 
 
@@ -383,15 +384,10 @@ void GetPerfCounterUsecs(struct host_timeval *time, PLARGE_INTEGER pliTime)
 /*:::::::::::::::::::::::::::::::::::::::::::::::::::::::::;::::::::::::::::*/
 void host_timer_event()
 {
-
-    if (!VDMForWOW)  {
+    if (!VDMForWOW) {
         unsigned char FgBgPriority;
 
 #ifdef X86GFX
-        /*  Don't do timer tick while in fullscreen switch code. */
-        if (NoTicks)
-            return;
-
         /* Do console calls related to fullscreen switching. */
         CheckForFullscreenSwitch();
 
@@ -401,8 +397,8 @@ void host_timer_event()
 
 
 #ifndef X86GFX
-         /* Are there any screen scale events to process. */
-         GetScaleEvent();
+        /* Are there any screen scale events to process. */
+        GetScaleEvent();
 #endif
 
         IDLE_tick();                        // IDLE accounting
@@ -416,10 +412,10 @@ void host_timer_event()
         FgBgPriority  = sc.Focus ? WNTPifFgPr : WNTPifBgPr;
         if (FgBgPriority < 100)
             PrioWaitIfIdle(FgBgPriority);
-        }
+    }
 
 #ifndef MONITOR
-   quick_tick_recalibrate();
+    quick_tick_recalibrate();
 #endif
 
 
@@ -439,11 +435,10 @@ void host_timer_event()
     time_strobe();                      // time/date etc. (NOT time ticks)
 
     PlayContinuousTone();               // sound emulation
-
 }
 
 
-/* 
+/*
  * Called to set up the Bios Data area time update vars.
  * and the heart beat's counters
  */
@@ -478,13 +473,13 @@ VOID host_init_bda_timer(void)
     ReinitIdealTime(&time);
 
 
-      /*
-       * BUGBUG with sas strange errors when writing from non cpu thread
-       *
-       *     sas_storew(TIMER_LOW, BDA & 0xffff);
-       *     sas_storew(TIMER_HIGH, (BDA >> 16) & 0xffff);
-       *     sas_store(TIMER_OVFL,  0x01);
-       */
+    /*
+     * BUGBUG with sas strange errors when writing from non cpu thread
+     *
+     *     sas_storew(TIMER_LOW, BDA & 0xffff);
+     *     sas_storew(TIMER_HIGH, (BDA >> 16) & 0xffff);
+     *     sas_store(TIMER_OVFL,  0x01);
+     */
     * (word *)(Start_of_M_area + TIMER_HIGH)      = (word)(Ticks >> 16);
     * (word *)(Start_of_M_area + TIMER_LOW)       = (word)Ticks;
     * (half_word *)(Start_of_M_area + TIMER_OVFL) = (half_word)0;
@@ -515,17 +510,17 @@ void host_GetSysTime(struct host_timeval *time)
 {
     LARGE_INTEGER liTime;
 
-        // Don't call kernel unless we have to.
+    // Don't call kernel unless we have to.
     if (bDoingTicInterrupt) {
         liTime = RtlExtendedLargeIntegerDivide(
-                                        CurrHeartBeat,
-                                        1000000,
-                                        &time->tv_usec);
+                                              CurrHeartBeat,
+                                              1000000,
+                                              &time->tv_usec);
         time->tv_sec = liTime.LowPart;
-        }
+    }
     else {
         GetPerfCounterUsecs(time, NULL);
-        }
+    }
 }
 
 
@@ -539,16 +534,16 @@ void host_GetSysTime(struct host_timeval *time)
  */
 void host_TimeStamp(PLARGE_INTEGER pliTime)
 {
-   host_ica_lock();
+    host_ica_lock();
 
-   if (bDoingTicInterrupt) {
-       *pliTime = CurrHeartBeat;
-       }
-   else {
-       GetPerfCounterUsecs(NULL, pliTime);
-       }
+    if (bDoingTicInterrupt) {
+        *pliTime = CurrHeartBeat;
+    }
+    else {
+        GetPerfCounterUsecs(NULL, pliTime);
+    }
 
-   host_ica_unlock();
+    host_ica_unlock();
 }
 
 
@@ -564,59 +559,61 @@ void host_TimeStamp(PLARGE_INTEGER pliTime)
 
 DWORD HeartBeatThread(PVOID pv)
 {
-   DWORD dwRet = (DWORD)-1;
+    DWORD dwRet = (DWORD)-1;
 
-   try {
+    try {
 
 #ifdef MONITOR
-      //
-      // On x86 we have to force the creation of the critsect lock semaphore
-      // When the heartbeat thread start running the cpu thread holds the
-      // ica lock forcing contention (and creation). See ConsoleInit.
-      //
-      host_ica_lock();   // take ica lock to force creation of critsect
+        //
+        // On x86 we have to force the creation of the critsect lock semaphore
+        // When the heartbeat thread start running the cpu thread holds the
+        // ica lock forcing contention (and creation). See ConsoleInit.
+        //
+        host_ica_lock();   // take ica lock to force creation of critsect
 #endif
 
 
-       //
-       // Set our priority above normal, and wait for signal to
-       // start heartbeat pulses.
-       //
-       // For Wow we raise to time critical because wow apps can
-       // easily invoke a tight client-csr-server bound loop with
-       // boosted priority starving the heartbeat thread. Winbench 311
-       // shows this problem when doing polylines test.
-       //
-      SetThreadPriority(ThreadInfo.HeartBeat.Handle,
-                        !(dwWNTPifFlags & COMPAT_TIMERTIC)
-                           ? THREAD_PRIORITY_TIME_CRITICAL
-                           : THREAD_PRIORITY_HIGHEST
-                        );
+        //
+        // Set our priority above normal, and wait for signal to
+        // start heartbeat pulses.
+        //
+        // For Wow we raise to time critical because wow apps can
+        // easily invoke a tight client-csr-server bound loop with
+        // boosted priority starving the heartbeat thread. Winbench 311
+        // shows this problem when doing polylines test.
+        //
+        SetThreadPriority(ThreadInfo.HeartBeat.Handle,
+                          !(dwWNTPifFlags & COMPAT_TIMERTIC)
+                          ? THREAD_PRIORITY_TIME_CRITICAL
+                          : THREAD_PRIORITY_HIGHEST
+                         );
 
 #ifdef X86GFX
-      SuspendEventObjects[0] = hHBSuspendEvent;
+        SuspendEventObjects[0] = hHBSuspendEvent;
 
-      /* Get the switching event handle. */
-      if (!VDMForWOW)  {
-          SuspendEventObjects[1] = GetDetectEvent();
-          }
-      else {
-          SuspendEventObjects[1] = INVALID_HANDLE_VALUE;
-          }
+        /* Get the switching event handle. */
+        if (!VDMForWOW) {
+            SuspendEventObjects[1] = hStartHardwareEvent;
+            SuspendEventObjects[2] = hErrorHardwareEvent;
+        }
+        else {
+            SuspendEventObjects[1] = INVALID_HANDLE_VALUE;
+            SuspendEventObjects[2] = INVALID_HANDLE_VALUE;
+        }
 #endif
 
 #ifdef MONITOR
-      host_ica_unlock();
+        host_ica_unlock();
 #endif
 
-      dwRet = Win32_host_timer();
+        dwRet = Win32_host_timer();
 
-      }
-   except(VdmUnhandledExceptionFilter(GetExceptionInformation())) {
-      ;  // we shouldn't arrive here
-      }
+    }
+    except(VdmUnhandledExceptionFilter(GetExceptionInformation())) {
+        ;  // we shouldn't arrive here
+    }
 
-   return dwRet;
+    return dwRet;
 }
 
 
@@ -624,125 +621,132 @@ DWORD HeartBeatThread(PVOID pv)
 int TimerCount = 20;
 #endif /* PIG */
 
+
+#if _MSC_FULL_VER >= 13008827
+    #pragma warning(push)
+    #pragma warning(disable:4715)                   // Not all control paths return (due to infinite loop)
+#endif
+
 DWORD Win32_host_timer(void)
 {
     NTSTATUS      status;
 #ifdef PIG
-    int		  count = 0;
+    int           count = 0;
 #endif /* PIG */
     LONG          DelayPeriod;
     LARGE_INTEGER DiffTime;
     LARGE_INTEGER SystemTickIntv;
     LARGE_INTEGER SecIntv;
-    LARGE_INTEGER HalfSysIntv;
     LARGE_INTEGER CreepIntv;
-
 
     struct host_timeval time;
 
     DelayPeriod = 50000;
     SystemTickIntv.QuadPart  = SYSTEM_TICK_INTV;
-    HalfSysIntv.QuadPart  = SYSTEM_TICK_INTV/2;
     SecIntv.QuadPart  = SYSTEM_TICK_INTV*18;
     CreepIntv.QuadPart  = Int32x32To64(SYSTEM_TICK_INTV, 1200);   // >1 hr
 
 
     /* Start timing loop. */
-    while(1)  {
-       status = DelayHeartBeat(DelayPeriod);
-       if (!status) {   // reinitialize counters
-HBresume:
-           host_ica_lock();
-           host_init_bda_timer();
-           DelayPeriod = SYSTEM_TICK_INTV - 6000;
-           host_ica_unlock();
-           continue;
-           }
+    while (1) {
+        status = DelayHeartBeat(DelayPeriod);
+        if (!status) {   // reinitialize counters
+            host_ica_lock();
+            host_init_bda_timer();
+            DelayPeriod = SYSTEM_TICK_INTV - 6000;
+            host_ica_unlock();
+            continue;
+        }
 
-       host_ica_lock();
-       bDoingTicInterrupt = TRUE;
-       /*
-        *  Get the current perf counter time, We ignore wrap
-        *  since it only happens every few hundred years.
-        */
-       GetPerfCounterUsecs(&time, &CurrHeartBeat);
+        host_ica_lock();
+        bDoingTicInterrupt = TRUE;
+        /*
+         *  Get the current perf counter time, We ignore wrap
+         *  since it only happens every few hundred years.
+         */
+        GetPerfCounterUsecs(&time, &CurrHeartBeat);
+
 
         /*
          *  Increment the cumulative counter
          */
-       CumUSec.QuadPart = CumUSec.QuadPart + SYSTEM_TICK_INTV;
+        CumUSec.QuadPart = CumUSec.QuadPart + SYSTEM_TICK_INTV;
 
         /*
          * if we have passed the creep interval, Adjust the cumulative
          * counter for drift between perfcounter and tic counter.
          */
-       DiffTime.QuadPart = CurrHeartBeat.QuadPart - CreepUSec.QuadPart;
-       if (DiffTime.QuadPart > CreepIntv.QuadPart) {
-           CreepAdjust(DiffTime);
-           }
+        DiffTime.QuadPart = CurrHeartBeat.QuadPart - CreepUSec.QuadPart;
+        if (DiffTime.QuadPart > CreepIntv.QuadPart) {
+            CreepAdjust(DiffTime);
+        }
 
         /*
          *  Calculate Next Delay Period, based on how far
          *  behind we are. ie CurrTime - CumTime.
          */
-       DiffTime.QuadPart = CurrHeartBeat.QuadPart - CumUSec.QuadPart;
 
-       if (DiffTime.QuadPart > SecIntv.QuadPart)
-         {
-          DelayPeriod = 13000;
-          }
-       else if (DiffTime.QuadPart > SYSTEM_TICK_INTV)
-         {
-          DelayPeriod = SYSTEM_TICK_INTV/3;
-          }
-       else if (DiffTime.QuadPart >= HalfSysIntv.QuadPart)
-         {
-          DiffTime.QuadPart = (LONGLONG)SYSTEM_TICK_INTV - DiffTime.QuadPart;
-          DelayPeriod = DiffTime.LowPart - 6000;
-          }
-       else {
-          DelayPeriod = SYSTEM_TICK_INTV - 6000 - DiffTime.LowPart;
-          }
+        DiffTime.QuadPart = CurrHeartBeat.QuadPart - CumUSec.QuadPart;
+
+        if (DiffTime.QuadPart > SecIntv.QuadPart)
+        {
+            DelayPeriod = 13000;
+        }
+        else if (DiffTime.QuadPart >= SystemTickIntv.QuadPart)
+        {
+            DelayPeriod = SYSTEM_TICK_INTV/3;
+        }
+        else if (DiffTime.QuadPart >= Int32x32To64(SYSTEM_TICK_INTV, -1))
+        {
+            DiffTime.QuadPart = SystemTickIntv.QuadPart - DiffTime.QuadPart/2;
+            DelayPeriod = DiffTime.LowPart;
+        }
+        else {
+            DelayPeriod = SYSTEM_TICK_INTV * 2;
+        }
 
 
-
-         /*
-          * Update the VirtualTimerHardware
-          */
+        /*
+         * Update the VirtualTimerHardware
+         */
 #ifdef PIG
-       if (++count >= TimerCount)
-       {
-           time_tick();
-           count = 0;
-       }
+        if (++count >= TimerCount)
+        {
+            time_tick();
+            count = 0;
+        }
 #else
-       time_tick();
+        time_tick();
 #endif /* PIG */
 
 
-          /*
-           *  Update the Real Time Clock
-           */
-       RtcTick(&time);
+        /*
+         *  Update the Real Time Clock
+         */
+        RtcTick(&time);
 
-       bDoingTicInterrupt = FALSE;
-       host_ica_unlock();
+        bDoingTicInterrupt = FALSE;
+        host_ica_unlock();
 
 
-           /*  Timer Event should occur around 18 times per sec
-            *  The count doesn't have to be all that accurate, so we
-            *  don't try to make up for lost events, and we do this last
-            *  to give a chance for hw interrupts to get thru first.
-            */
-       if (TimerEventUSec.QuadPart <= CurrHeartBeat.QuadPart) {
-           TimerEventUSec.QuadPart = CurrHeartBeat.QuadPart + SYSTEM_TICK_INTV;
-           cpu_interrupt(CPU_TIMER_TICK, 0);
-           WOWIdle(TRUE);
-           }
-       }
+        /*  Timer Event should occur around 18 times per sec
+         *  The count doesn't have to be all that accurate, so we
+         *  don't try to make up for lost events, and we do this last
+         *  to give a chance for hw interrupts to get thru first.
+         */
+        if (TimerEventUSec.QuadPart <= CurrHeartBeat.QuadPart) {
+            TimerEventUSec.QuadPart = CurrHeartBeat.QuadPart + SYSTEM_TICK_INTV;
+            cpu_interrupt(CPU_TIMER_TICK, 0);
+            WOWIdle(TRUE);
+        }
+    }
 
-   return(1);
+    return (1);
 }
+
+#if _MSC_FULL_VER >= 13008827
+    #pragma warning(pop)
+#endif
 
 
 /*
@@ -759,62 +763,98 @@ HBresume:
 
 NTSTATUS DelayHeartBeat(LONG Delay)
 {
-     NTSTATUS status;
-     LARGE_INTEGER liDelay;
+    NTSTATUS status;
+    LARGE_INTEGER liDelay;
 
-
-     liDelay.QuadPart  = Int32x32To64(Delay, -10);
+    liDelay.QuadPart  = Int32x32To64(Delay, -10);
 
 #ifdef MONITOR
 
-RewaitSuspend:
-     status = NtWaitForMultipleObjects(VDMForWOW ? 1 : 2,
-                                       SuspendEventObjects,
-                                       WaitAny,
-                                       TRUE,
-                                       &liDelay);
+    RewaitSuspend:
+    status = NtWaitForMultipleObjects(VDMForWOW ? 1 : 3,
+                                      SuspendEventObjects,
+                                      WaitAny,
+                                      TRUE,
+                                      &liDelay);
 
-                // delay time has expired
-     if (status == STATUS_TIMEOUT) {
-         return status;
-         }
+    // delay time has expired
+    if (status == STATUS_TIMEOUT) {
+        return status;
+    }
 
-#ifdef X86GFX   // screen switch event
-     if (status == 1)  {
-         DoHandShake();
-         liDelay.QuadPart = -10;
-         goto RewaitSuspend;
-         }
-#endif
+    #ifdef X86GFX
 
-           // suspend event
-     if (!status)  {
-         SuspendEventObjects[0] = hHBResumeEvent;
-         ica_hw_interrupt_cancel(ICA_MASTER,CPU_TIMER_INT);
-         host_DelayHwInterrupt(CPU_TIMER_INT, 0, 0xFFFFFFFF);
+    //
+    // status == 2 signals a screen switch error event.
+    // It will be handled at the end of this routine. That is ErrorExit().
+    //
+    if (status == 1) {
 
-RewaitResume:
-         status = NtWaitForMultipleObjects(VDMForWOW ? 1 : 2,
-                                           SuspendEventObjects,
-                                           WaitAny,
-                                           TRUE,
-                                           NULL);
+        //
+        // hStartHardwareEvnet - screen switch event
+        //
+        DoHandShake();
+        liDelay.QuadPart = -10;
+        goto RewaitSuspend;
+    } else if (status == 2) {
 
-                    // resume event
-         if (!status) {
-             SuspendEventObjects[0] = hHBSuspendEvent;
-             return status;
-             }
+        //
+        // status == 2 signals a screen switch error event.
+        // If the main thread is in the cmdGetNextCmd state, we will ignore the
+        // error. Because the app is closed and we will register console again
+        // at nt_resume_event_thread.  Otherwise the error will be handled at
+        // the end of this routine.  It is ErrorExit();
+        //
+        if (sc.Registered == FALSE) {
+            goto RewaitSuspend;
+        }
+    }
+    #endif
+
+    // suspend event
+    if (!status) {
+        SuspendEventObjects[0] = hHBResumeEvent;
+        ica_hw_interrupt_cancel(ICA_MASTER,CPU_TIMER_INT);
+        host_DelayHwInterrupt(CPU_TIMER_INT, 0, 0xFFFFFFFF);
+
+        RewaitResume:
+        status = NtWaitForMultipleObjects(VDMForWOW ? 1 : 3,
+                                          SuspendEventObjects,
+                                          WaitAny,
+                                          TRUE,
+                                          NULL);
+
+        // resume event
+        if (!status) {
+            SuspendEventObjects[0] = hHBSuspendEvent;
+            return status;
+        }
 
 
-#ifdef X86GFX       // screen switch event
-         if (status == 1)  {
-             DoHandShake();
-             goto RewaitResume;
-             }
-#endif
-         }
+    #ifdef X86GFX
+        if (status == 1) {
 
+            //
+            // hStartHardwareEvnet - screen switch event
+            //
+            DoHandShake();
+            goto RewaitResume;
+        } else if (status == 2) {
+
+            //
+            // status == 2 signals a screen switch error event.
+            // If the main thread is in the cmdGetNextCmd state, we will ignore the
+            // error. Because the app is closed and we will register console again
+            // at nt_resume_event_thread.  Otherwise the error will be handled at
+            // the end of this routine.  It is ErrorExit();
+            //
+
+            if (sc.Registered == FALSE) {
+                goto RewaitResume;
+            }
+        }
+    #endif
+    }
 
 #else          // ndef MONITOR
 //
@@ -822,36 +862,33 @@ RewaitResume:
 // HeartBeat Resume\Suspend objects so things are much simpler
 //
 
-     status = NtWaitForSingleObject(hHBSuspendEvent,
-                                    TRUE,
-                                    &liDelay);
+    status = NtWaitForSingleObject(hHBSuspendEvent,
+                                   TRUE,
+                                   &liDelay);
 
-     if (status == STATUS_TIMEOUT) {
-         return status;
-         }
+    if (status == STATUS_TIMEOUT) {
+        return status;
+    }
 
-     if (status == STATUS_SUCCESS) {  // suspend event
-         status = NtWaitForSingleObject(hHBResumeEvent, TRUE, NULL);
-         if (status == STATUS_SUCCESS) {
-             return status;
-             }
-         }
+    if (status == STATUS_SUCCESS) {  // suspend event
+        status = NtWaitForSingleObject(hHBResumeEvent, TRUE, NULL);
+        if (status == STATUS_SUCCESS) {
+            return status;
+        }
+    }
 
 #endif
 
-         // alerted to die
-     if (status == STATUS_ALERTED)  {
-         CloseHandle(ThreadInfo.HeartBeat.Handle);
-         ThreadInfo.HeartBeat.Handle = NULL;
-         ThreadInfo.HeartBeat.ID = 0;
-         ExitThread(0);
-         }
+    // alerted to die
+    if (status == STATUS_ALERTED) {
+        ExitThread(0);
+    }
 
 
-      // Must be an error, announce it to the world
-     DisplayErrorTerm(EHS_FUNC_FAILED, status,__FILE__,__LINE__);
-     TerminateVDM();
-     return status;
+    // Must be an error, announce it to the world
+    DisplayErrorTerm(EHS_FUNC_FAILED, status,__FILE__,__LINE__);
+    TerminateVDM();
+    return status;
 }
 
 /*
@@ -862,27 +899,27 @@ RewaitResume:
  */
 void CreepAdjust(LARGE_INTEGER DiffTime)
 {
-  LARGE_INTEGER DiffTicCount;
-  ULONG         ulTicCount;
+    LARGE_INTEGER DiffTicCount;
+    ULONG         ulTicCount;
 
-   // Calculate the elapsed ticcount in usecs
-  ulTicCount = NtGetTickCount();
-  DiffTicCount.LowPart  = ulTicCount;
-  DiffTicCount.HighPart = CreepTicCount.HighPart;
-  if (DiffTicCount.LowPart < CreepTicCount.LowPart) {
-      DiffTicCount.HighPart++;
-      }
-  DiffTicCount.QuadPart = DiffTicCount.QuadPart - CreepTicCount.QuadPart;
-  DiffTicCount = RtlExtendedIntegerMultiply(DiffTicCount, 1000);
+    // Calculate the elapsed ticcount in usecs
+    ulTicCount = NtGetTickCount();
+    DiffTicCount.LowPart  = ulTicCount;
+    DiffTicCount.HighPart = CreepTicCount.HighPart;
+    if (DiffTicCount.LowPart < CreepTicCount.LowPart) {
+        DiffTicCount.HighPart++;
+    }
+    DiffTicCount.QuadPart = DiffTicCount.QuadPart - CreepTicCount.QuadPart;
+    DiffTicCount = RtlExtendedIntegerMultiply(DiffTicCount, 1000);
 
-   // Adjust the CumUsec perfcounter time by the diff
-   // between tick count and perfcounter.
-  DiffTicCount.QuadPart = DiffTicCount.QuadPart - DiffTime.QuadPart;
-  CumUSec.QuadPart = CumUSec.QuadPart - DiffTicCount.QuadPart;
+    // Adjust the CumUsec perfcounter time by the diff
+    // between tick count and perfcounter.
+    DiffTicCount.QuadPart = DiffTicCount.QuadPart - DiffTime.QuadPart;
+    CumUSec.QuadPart = CumUSec.QuadPart - DiffTicCount.QuadPart;
 
     // Reset the Creep Time stamps
-  CreepTicCount.QuadPart = ulTicCount;
-  CreepUSec     = CurrHeartBeat;
+    CreepTicCount.QuadPart = ulTicCount;
+    CreepUSec     = CurrHeartBeat;
 }
 
 
@@ -917,9 +954,9 @@ GLOBAL VOID SuspendTimerThread(VOID)
 {
     RtlEnterCriticalSection(&HBSuspendCS);
 
-    if (!--HeartBeatResumes)  {
+    if (!--HeartBeatResumes) {
         SetEvent(hHBSuspendEvent);
-        }
+    }
 
     RtlLeaveCriticalSection(&HBSuspendCS);
 }
@@ -941,7 +978,7 @@ GLOBAL VOID ResumeTimerThread(VOID)
 
     if (!HeartBeatResumes++) {
         SetEvent(hHBResumeEvent);
-        }
+    }
 
     RtlLeaveCriticalSection(&HBSuspendCS);
 }
@@ -962,21 +999,54 @@ GLOBAL VOID ResumeTimerThread(VOID)
  */
 LONG
 VdmUnhandledExceptionFilter(
-    struct _EXCEPTION_POINTERS *ExceptionInfo
-    )
+                           struct _EXCEPTION_POINTERS *ExceptionInfo
+                           )
 {
     LONG lRet;
 
     SuspendTimerThread();
+
+#ifdef X86GFX
+    if (!VDMForWOW && ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_ACCESS_VIOLATION) {
+
+        //
+        // If console unregistering ntvdm causes us GP fault.  We will finish
+        // the handshake and let timer thread to signal the handshake error.
+        // if we hit the error unrelated to FS handshake, then we still need
+        // to complete the handshake and signal the error after the handshake
+        // is completed.
+        //
+
+        if (HandshakeInProgress) {
+            if (CurrentMonitorTeb != NtCurrentTeb()) {
+                CheckScreenSwitchRequest(hConsoleSuspended);
+            } else {
+                CheckScreenSwitchRequest(hMainThreadSuspended);
+            }
+        } else {
+
+            //
+            // hErrorHardwareEvent is signaled and timer thread did not catch it
+            //
+
+            lRet = WaitForSingleObject(hErrorHardwareEvent, 0);
+            if (!lRet) {
+                SetLastError(ERROR_SERVICE_REQUEST_TIMEOUT);
+                ErrorExit();
+            }
+        }
+    }
+#endif
 
     lRet = UnhandledExceptionFilter(ExceptionInfo);
 
     if (lRet == EXCEPTION_EXECUTE_HANDLER) {
         NtTerminateProcess(NtCurrentProcess(),
                            ExceptionInfo->ExceptionRecord->ExceptionCode
-                           );
-        }
+                          );
+    }
 
     ResumeTimerThread();
     return lRet;
 }
+

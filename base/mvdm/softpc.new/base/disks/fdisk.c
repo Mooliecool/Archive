@@ -3,41 +3,41 @@
 
 /*
  * INSIGNIA (SUB)MODULE SPECIFICATION -----------------------------
- * 
- * 
+ *
+ *
  * THIS PROGRAM SOURCE FILE  IS  SUPPLIED IN CONFIDENCE TO THE CUSTOMER, THE
  * CONTENTS  OR  DETAILS  OF  ITS OPERATION MUST NOT BE DISCLOSED TO ANY
  * OTHER PARTIES  WITHOUT THE EXPRESS AUTHORISATION FROM THE DIRECTORS OF
  * INSIGNIA SOLUTIONS LTD.
- * 
- * 
+ *
+ *
  * DOCUMENT 		:
- * 
+ *
  * RELATED DOCS		: WD2010-05 datasheet WD11C00C-22 (RMAC) eng.spec
  * (Intel 82062 ... very similar to WD2010) IBM PC XT286 tech.ref
- * 
+ *
  * DESIGNER		: Jerry Kramskoy
- * 
+ *
  * REVISION HISTORY	: First version		: 14-Sep-88.
- * 
+ *
  * SUBMODULE NAME		: fdisk
- * 
+ *
  * SOURCE FILE NAME	: fdisk.c
- * 
+ *
  * PURPOSE			: emulate fixed disk controller and sector buffer
  * manager components of AT dual card.
- * 
+ *
  * SccsID = @(#)fdisk.c	1.35 08/31/93 Copyright Insignia Solutions Ltd.
- * 
- * 
+ *
+ *
  * [1.INTERMODULE INTERFACE SPECIFICATION]
- * 
+ *
  * [1.0 INCLUDE FILE NEEDED TO ACCESS THIS INTERFACE FROM OTHER SUBMODULES]
- * 
+ *
  * INCLUDE FILE : fdisk.gi
- * 
+ *
  * [1.1    INTERMODULE EXPORTS]
- * 
+ *
  * PROCEDURES() :	fdisk_inb((io_addr)port, (unsigned char *)value)
  * (uchar)fdisk_read_dir((io_addr)port, (unsigned char *)value) (void)
  * fdisk_outb((io_addr)port, (unsigned char )value)
@@ -46,66 +46,66 @@
  * (void) fdisk_reset() (int)  fdisk_physattach((int)driveno, (char
  * *)name) (void) fdisk_physdetach((int)driveno) (void) fdisk_ioattach()
  * (void) fdisk_iodetach()
- * 
+ *
  * DATA 	     :	none
- * 
+ *
  * -------------------------------------------------------------------------
  * [1.2 DATATYPES FOR [1.1] (if not basic C types)]
- * 
+ *
  * STRUCTURES/TYPEDEFS/ENUMS:
- * 
+ *
  * -------------------------------------------------------------------------
  * [1.3 INTERMODULE IMPORTS] (not o/s objects or standard libs)
- * 
+ *
  * PROCEDURES() : 	none
- * 
+ *
  * DATA 	     : 	none
- * 
+ *
  * -------------------------------------------------------------------------
- * 
+ *
  * [1.4 DESCRIPTION OF INTERMODULE INTERFACE]
- * 
+ *
  * [1.4.1 IMPORTED OBJECTS]
- * 
+ *
  * FILES ACCESSED    :	disk image file(s) for C: (and D:)
- * 
+ *
  * DEVICES ACCESSED  :	none
- * 
+ *
  * SIGNALS CAUGHT	  :	none
- * 
+ *
  * SIGNALS ISSUED	  :	none
- * 
- * 
+ *
+ *
  * [1.4.2 EXPORTED OBJECTS]
  * =========================================================================
  * PROCEDURE	  : 	fdisk_inb((io_addr)port, (unsigned char *)value)
  * fdisk_outb((io_addr)port, (unsigned char)value)
- * 
+ *
  * PURPOSE		  : 	i/o space read (write) of a taskfile register these
  * should be byte accesses.
- * 
+ *
  * fdisk_inw((io_addr)port, (unsigned short *)value) fdisk_outw((io_addr)port,
  * (unsigned short)value)
- * 
+ *
  * PURPOSE		  : 	i/o space read (write) of next index into sector
  * buffer. (for port 1f0). Not normal usage for accessing taskfile.
- * 
- * 
+ *
+ *
  * PARAMETERS
- * 
+ *
  * port	  : 	the i/o address to read. Taskfile addresses are (hex): (1f0)
  * -	data register (see fdisk_inw) 1f1	-	error register 1f2
  * -	sector count register 1f3	-	sector number register 1f4
  * -	cylinder low register 1f5	-	cylinder high register 1f6
  * -	drive/head register 1f7	-	status register
- * 
+ *
  * value	  :	(pointer to) byte (short) to receive the value contained in
  * the specified register.
- * 
+ *
  * GLOBALS		  :	none.
- * 
+ *
  * RETURNED VALUE	  : 	copy of returned value (inb, inw)
- * 
+ *
  * DESCRIPTION	  : 	this procedure returns the contents of the specified
  * register, having called any active state machine (which may update the
  * status). Each disk command has a corresponding state machine, which gets
@@ -113,42 +113,42 @@
  * command progresses. Only those commands involving data transfer between
  * the host (cpu) and the adaptor can cause multiple calls to the state
  * machine
- * 
+ *
  * ERROR INDICATIONS :	none
- * 
+ *
  * ERROR RECOVERY	  :	none
  * =========================================================================
  * PROCEDURE	  : 	(unsigned char) fdisk_read_dir((io_addr)port,
  * (unsigned char *)value)
- * 
+ *
  * PURPOSE		  : 	return the value of the 7 bits in the fixed disk
  * register pertinent to the fixed disk. (cooperates with floppy)
- * 
+ *
  * PARAMETERS	  :	as per fdisk_inb()
- * 
+ *
  * GLOBALS		  :	the taskfile
- * 
+ *
  * RETURNED VALUE	  : 	value of digital input register (at port 0x3f7)
- * 
+ *
  * DESCRIPTION	  : 	obvious
- * 
+ *
  * ERROR INDICATIONS :	none
- * 
+ *
  * ERROR RECOVERY	  :	none
- * 
+ *
  * =========================================================================
  * PROCEDURE	  : 	fdisk_ioattach() fdisk_iodetach()
- * 
+ *
  * PURPOSE		  : 	attach/detach the fixed disk components to the
  * io-subsytem. plug/unplug the configured drives to the disk controller (if
  * any). Patches drive parameter block table entries 0 and 1 in system ROM.
- * 
+ *
  * PARAMETERS	  :	none
- * 
+ *
  * GLOBALS		  :	the drive structure [fd, wiredup members]
- * 
+ *
  * RETURNED VALUE	  : 	none
- * 
+ *
  * DESCRIPTION	  : 	attaches/detaches to ios as usual. For the drive(s),
  * the drive structure is used to see whether the disk image(s) are opened or
  * non-existent. Based on existence, drive structure indicates plugged
@@ -156,58 +156,58 @@
  * 1 for drive type 1 is used for the C drive (drive 0), and entry 2 for
  * drive type 2 is used for the D drive (drive 1)) are edited to reflect the
  * #.of cylinders available.
- * 
+ *
  * ERROR INDICATIONS :	none
- * 
+ *
  * ERROR RECOVERY	  :	none
  * =========================================================================
  * PROCEDURE	  : 	fdisk_physattach(driveno, name)
  * fdisk_physdetach(driveno)
- * 
+ *
  * PURPOSE		  : 	validate and attach host resource(s) for drive(s)
  * /detach host resource(s).
- * 
+ *
  * PARAMETERS	  : driveno		-	0 (drive 0 (C:)) or	1
  * (drive 1 (D:)) name		-	pointer to string for hard disk file
  * name. If null string, then the indicated drive is taken to not exist.
- * 
+ *
  * GLOBALS		  :	the drive structure [fd, maxcyl members]
- * 
+ *
  * RETURNED VALUE	  : 	none
- * 
+ *
  * DESCRIPTION	  : 	for attaching, use host validation procedure to
  * validate and open the specified drive image (if not the null string, else
  * mark as no drive available). Use the #.of cylinders returned by the
  * validation to set the max.cylinder number (= #.cyls - 1) into the drive
  * structure for the drive.
- * 
+ *
  * ERROR INDICATIONS :	none
- * 
+ *
  * ERROR RECOVERY	  :	none
- * 
+ *
  * =========================================================================
  * PROCEDURE	  : 	fdisk_reset()
- * 
+ *
  * PURPOSE		  : 	power up the disk subsystem.
- * 
+ *
  * PARAMETERS	  :	none
- * 
+ *
  * GLOBALS		  :	the taskfile
- * 
+ *
  * RETURNED VALUE	  : 	none
- * 
+ *
  * DESCRIPTION	  : 	sets registers etc. to their powered-up, pre-POST
  * values.
- * 
+ *
  * ERROR INDICATIONS :	none
- * 
+ *
  * ERROR RECOVERY	  :	none
- * 
- * 
+ *
+ *
  * =========================================================================
  * [3.INTERMODULE INTERFACE DECLARATIONS]
  * =========================================================================
- * 
+ *
  * [3.1 INTERMODULE IMPORTS]
  */
 IMPORT	int	soft_reset;
@@ -246,7 +246,7 @@ IMPORT	int	soft_reset;
 
 /*
  * 5.MODULE INTERNALS   :   (not visible externally, global internally)]
- * 
+ *
  * [5.1 LOCAL DECLARATIONS]
  */
 
@@ -399,7 +399,7 @@ static int      buffertodisk();
 /*
  * -----------------------------------------------------------------------
  * [5.2 LOCAL DEFINITIONS]
- * 
+ *
  * [5.2.1 INTERNAL DATA DEFINITIONS
  */
 
@@ -479,7 +479,7 @@ static unsigned short sectbuffer[256];
  * PARAMS	: RETURN PARAMS   :
  * ==========================================================================
  */
-LOCAL long 
+LOCAL long
 dosearchid IFN0()
 {
 	long            head;
@@ -529,7 +529,7 @@ dosearchid IFN0()
  * RETURN PARAMS   :
  * ==========================================================================
  */
-LOCAL void 
+LOCAL void
 updateposregs IFN0()
 {
 	(taskfile[WDSCOUNT])--;
@@ -578,7 +578,7 @@ updateposregs IFN0()
  * RETURN PARAMS   :
  * ==========================================================================
  */
-LOCAL void 
+LOCAL void
 doseek IFN0()
 {
 
@@ -605,7 +605,7 @@ doseek IFN0()
  * RETURN PARAMS   :
  * ==========================================================================
  */
-LOCAL void 
+LOCAL void
 restore IFN1(int, state)
 {
 	UNUSED(state);
@@ -632,7 +632,7 @@ restore IFN1(int, state)
  * START or CONTINUE RETURN PARAMS   :
  * ==========================================================================
  */
-LOCAL void 
+LOCAL void
 seek IFN1(int, state)
 {
 	UNUSED(state);
@@ -668,14 +668,14 @@ seek IFN1(int, state)
  * ==========================================================================
  */
 
-LOCAL void 
+LOCAL void
 fdisk_pause IFN1(long, junk)
 {
 	UNUSED(junk);
 	(*activecmd) (CONTINUE);
 }
 
-LOCAL void 
+LOCAL void
 rsector IFN1(int, state)
 {
 	static int      s;
@@ -809,7 +809,7 @@ rsector IFN1(int, state)
  * state	-	START or CONTINUE or BRDY RETURN PARAMS   :
  * ==========================================================================
  */
-LOCAL void 
+LOCAL void
 wsector IFN1(int, state)
 {
 	static int      s;
@@ -948,7 +948,7 @@ wsector IFN1(int, state)
  * state	-	START or CONTINUE or BRDY RETURN PARAMS   :
  * ==========================================================================
  */
-LOCAL void 
+LOCAL void
 format IFN1(int, state)
 {
 	static int      s;
@@ -1035,7 +1035,7 @@ format IFN1(int, state)
  * RETURN PARAMS   :
  * ==========================================================================
  */
-LOCAL void 
+LOCAL void
 rverify IFN1(int, state)
 {
 
@@ -1069,7 +1069,7 @@ rverify IFN1(int, state)
  * PARAMS	:	state	-	START or CONTINUE RETURN PARAMS   :
  * ==========================================================================
  */
-LOCAL void 
+LOCAL void
 diagnose IFN1(int, state)
 {
 	UNUSED(state);
@@ -1100,7 +1100,7 @@ diagnose IFN1(int, state)
  * RETURN PARAMS   :
  * ==========================================================================
  */
-LOCAL void 
+LOCAL void
 setparams IFN1(int, state)
 {
 
@@ -1145,7 +1145,7 @@ setparams IFN1(int, state)
  * -	START or CONTINUE RETURN PARAMS   :
  * ==========================================================================
  */
-LOCAL void 
+LOCAL void
 bad IFN1(int, state)
 {
 	UNUSED(state);
@@ -1172,7 +1172,7 @@ bad IFN1(int, state)
  * if IOWRITE
  * ==========================================================================
  */
-LOCAL void 
+LOCAL void
 wd2010 IFN3(int, taskindx, half_word *, value, int, io)
 {
 
@@ -1338,7 +1338,7 @@ void disk_int_call_back IFN1(long, junk)
 	ica_hw_interrupt (1,6,1);
 }
 
-LOCAL void 
+LOCAL void
 irq IFN1(int, line)
 {
 	static int      intrq = IRQDEASSERT;
@@ -1388,7 +1388,7 @@ irq IFN1(int, line)
  * :
  * ==========================================================================
  */
-LOCAL void 
+LOCAL void
 rmac IFN2(USHORT *, value, int, sig)
 {
 
@@ -1424,10 +1424,10 @@ rmac IFN2(USHORT *, value, int, sig)
  */
 #define ONESECTOR	1
 
-LOCAL int 
+LOCAL int
 disktobuffer IFN1(long, offset)
 {
-	dt1(DHW | HWXINFO,0, 
+	dt1(DHW | HWXINFO,0,
 	    "\t\tdisk data(offset %lx(hex)) -> sector buffer\n", offset)
 		return host_fdisk_rd(pseldrv->driveid, offset, ONESECTOR, (char *) sectbuffer);
 }
@@ -1440,10 +1440,10 @@ disktobuffer IFN1(long, offset)
  * INPUT  PARAMS	:	offset	-	file offset (from 0)
  * ==========================================================================
  */
-LOCAL int 
+LOCAL int
 buffertodisk IFN1(long, offset)
 {
-	dt1(DHW | HWXINFO,0, 
+	dt1(DHW | HWXINFO,0,
 	    "\t\tsector buffer -> disk (offset %lx(hex))\n", offset)
 
 		return host_fdisk_wt(pseldrv->driveid, offset, ONESECTOR, (char *) sectbuffer);
@@ -1451,7 +1451,7 @@ buffertodisk IFN1(long, offset)
 
 /*
  * 7.INTERMODULE INTERFACE IMPLEMENTATION :
- * 
+ *
  * [7.1 INTERMODULE DATA DEFINITIONS]
  */
 /*
@@ -1571,6 +1571,7 @@ GLOBAL VOID fdisk_inw IFN2(io_addr, port, USHORT *, value)
 
 GLOBAL VOID fdisk_outb IFN2(io_addr, port, UTINY, value)
 {
+#ifndef NEC_98
 	dt0(DHW, 0, "(\n")
 		switch (port)
 	{
@@ -1623,7 +1624,7 @@ GLOBAL VOID fdisk_outb IFN2(io_addr, port, UTINY, value)
 			if (fixeddiskreg & 0x4)
 			{
 				/* Enable reset fixed disk function */
-				taskfile[WDSTAT] = WDSTATBUSY | WDSTATDC | WDSTATERROR; 
+				taskfile[WDSTAT] = WDSTATBUSY | WDSTATDC | WDSTATERROR;
 			}
 		break;
 	default:
@@ -1634,6 +1635,7 @@ GLOBAL VOID fdisk_outb IFN2(io_addr, port, UTINY, value)
 		dt0(DHW | PORTIO, 0, "\n")
 	}
 	dt0(DHW, 0, ")\n")
+#endif // !NEC_98
 }
 
 GLOBAL VOID fdisk_outw IFN2(io_addr, port, USHORT, value)
@@ -1674,6 +1676,7 @@ GLOBAL VOID fdisk_outw IFN2(io_addr, port, USHORT, value)
 
 GLOBAL VOID fdisk_ioattach IFN0()
 {
+#ifndef NEC_98
 	unsigned short  ncyls;
 	unsigned char   nheads;
 	unsigned char   nsects;
@@ -1707,9 +1710,9 @@ GLOBAL VOID fdisk_ioattach IFN0()
 		 * patch 'ROM' table for drive type 0 with appropriate number
 		 * of cylinders
 		 */
-		ncyls = drives[0].maxcyl + 1;
-		nheads = drives[0].maxhead + 1;
-		nsects = drives[0].maxsect + 1;
+		ncyls = (unsigned short)(drives[0].maxcyl + 1);
+		nheads = (unsigned char)(drives[0].maxhead + 1);
+		nsects = (unsigned char)(drives[0].maxsect + 1);
 #ifdef REAL_ROM
 		host_write_enable((DPB0 & (~0xfff)), (DPB0 & (~0xfff)) + 0x1000);
 #endif
@@ -1735,14 +1738,14 @@ GLOBAL VOID fdisk_ioattach IFN0()
 		 * patch 'ROM' table for drive type 0 with appropriate number
 		 * of cylinders
 		 */
-		ncyls = drives[1].maxcyl + 1;
-		nheads = drives[1].maxhead + 1;
-		nsects = drives[1].maxsect + 1;
+		ncyls = (unsigned short)(drives[1].maxcyl + 1);
+		nheads = (unsigned char)(drives[1].maxhead + 1);
+		nsects = (unsigned char)(drives[1].maxsect + 1);
 #ifdef REAL_ROM
 		host_write_enable((DPB1 & (~0xfff)), (DPB1 & (~0xfff)) + 0x1000);
 #endif
-		patch_rom(DPB1, ncyls & 0xff);
-		patch_rom(DPB1 + 1, (ncyls >> 8));
+		patch_rom(DPB1, (unsigned char)(ncyls & 0xff));
+		patch_rom(DPB1 + 1, (unsigned char)((ncyls >> 8)));
 		patch_rom(DPB1+2, nheads);
 		patch_rom(DPB1+0xe, nsects);
 #ifdef REAL_ROM
@@ -1751,10 +1754,12 @@ GLOBAL VOID fdisk_ioattach IFN0()
 		dt1(DHW | IOAD, 0, "drive 1 wiredup, total cyls %d\n",
 		    (unsigned) ncyls)
 	}
+#endif // !NEC_98
 }
 
 GLOBAL VOID fdisk_iodetach IFN0()
 {
+#ifndef NEC_98
 	io_addr         p;
 
 	/*
@@ -1805,6 +1810,7 @@ GLOBAL VOID fdisk_iodetach IFN0()
 #endif
 		dt0(DHW | IOAD, 0, "drive 1 unplugged\n")
 	}
+#endif // !NEC_98
 }
 
 GLOBAL VOID fdisk_physattach IFN1(int,driveno)
@@ -1817,7 +1823,7 @@ GLOBAL VOID fdisk_physattach IFN1(int,driveno)
 	drives[driveno].driveid = driveno;
 	drives[driveno].physattached = 0;
 
-	if (!*((CHAR *) config_inquire(C_HARD_DISK1_NAME + driveno, NULL)))
+	if (!*((CHAR *) config_inquire((IU8)(C_HARD_DISK1_NAME + driveno), NULL)))
 		return;
 
 	/*

@@ -215,7 +215,7 @@ LOCAL VOID cpu_interrupt IFN2(int,x,int,y)
 
 /*
  * Define value seen in <len> parameter to yoda commands that take
- * <intel-addr> argument if no <len> value is entered. 
+ * <intel-addr> argument if no <len> value is entered.
  * The value chosen is very, very big, so the chances of any poor user
  * actually choosing that value are very, very small!
  */
@@ -227,7 +227,7 @@ LOCAL VOID cpu_interrupt IFN2(int,x,int,y)
  * William Roberts 20/8/92
  *
  * Attempt to rationalise so that "s" really does step, without
- * any stupidity about luke or yint+slow
+ * any problems about luke or yint+slow
  *
  * There are 3 cases:
  * 			    A3CPU			    others
@@ -241,7 +241,7 @@ LOCAL VOID cpu_interrupt IFN2(int,x,int,y)
  * late to select slow_yoda f the environment variable is not set...
  *
  * Fast yoda is really about trace printouts etc. You have to hit ^C
- * to get into it, then start use it to examine things. 
+ * to get into it, then start use it to examine things.
  *
  * Slow Yoda is needed for stepping, breakpoints etc. It causes the CPU
  * to examine things at every instruction.
@@ -260,7 +260,7 @@ int yint = 0;
 int fast = 1;	/* start interrupt yoda as fast by default */
 
 static int chewy = 0;		/* Up the Empire! */
-static int env_check = 0;	/* Is Luke completely screwed? */
+static int env_check = 0;	/* Is Luke in trouble? */
 
 int slow_needed = 0;
 char *slow_reason = "why slow is required";
@@ -393,7 +393,7 @@ GLOBAL int yoda_confirm IFN1(char *, question)
 	fputs(question, stdout);
 	fflush(stdout);
 	
-	if (fgets (str, 80, in_stream) && 
+	if (fgets (str, 80, in_stream) &&
 		(str[0] == 'y' || str[0] == 'Y')) {
 		return TRUE;	/* to be on the safe side */
 	}
@@ -486,7 +486,7 @@ enum pla_type { pla_type_empty,
 /* ----- Assorted BIG arrays, which the Mac needs to obtain using
  * ----- malloc
  */
- 
+
 #ifndef	macintosh
 
 unsigned long 	inst_mix[INST_MIX_LENGTH];
@@ -531,8 +531,8 @@ int	pla_ptr=0;
 
 GLOBAL void set_last_address IFN2( word, cs, LIN_ADDR, ip)
 {
-    /* 
-     * Update the last address stamp 
+    /*
+     * Update the last address stamp
      */
 #ifdef	CPU_40_STYLE
     /* We need to know if the CS is "big", this is expensive to calculate
@@ -572,10 +572,10 @@ GLOBAL void set_last_address IFN2( word, cs, LIN_ADDR, ip)
 #ifdef	CPU_40_STYLE
 GLOBAL void set_last_bop_done IFN1( word, number )
 {
-    /* 
+    /*
      * Update the last address stamp with BOP marker
      */
- 
+
     last_cs[pla_ptr] = 0;
     last_ip[pla_ptr] = number;
     last_type[pla_ptr] = pla_type_bop_done;
@@ -589,10 +589,10 @@ GLOBAL void set_last_bop_done IFN1( word, number )
 #ifdef	CPU_40_STYLE
 GLOBAL void set_last_simulate IFN2(int, nesting_level, IBOOL, is_simulate)
 {
-    /* 
+    /*
      * Update the last address stamp  with (UN)SIMULATE marker
      */
- 
+
     last_cs[pla_ptr] = 0;
     last_ip[pla_ptr] = nesting_level;
     last_type[pla_ptr] = is_simulate ? pla_type_simulate: pla_type_unsimulate;
@@ -606,10 +606,10 @@ GLOBAL void set_last_simulate IFN2(int, nesting_level, IBOOL, is_simulate)
 #ifdef	CPU_40_STYLE
 GLOBAL void set_last_intack IFN1( word, line )
 {
-    /* 
+    /*
      * Update the last address stamp with INTACK line
      */
- 
+
     last_cs[pla_ptr] = 0;
     last_ip[pla_ptr] = line;
     last_type[pla_ptr] = pla_type_intack;
@@ -623,10 +623,10 @@ GLOBAL void set_last_intack IFN1( word, line )
 #ifdef	CPU_40_STYLE
 GLOBAL void set_last_pig_force IFN0()
 {
-    /* 
+    /*
      * Update the last address stamp with PIG FORCE marker
      */
- 
+
     last_cs[pla_ptr] = 0;
     last_ip[pla_ptr] = 0;
     last_type[pla_ptr] = pla_type_pig_force;
@@ -639,10 +639,10 @@ GLOBAL void set_last_pig_force IFN0()
 
 GLOBAL void set_last_nano_enter IFN0()
 {
-    /* 
+    /*
      * Update the last address stamp with Nano enter marker
      */
- 
+
     last_cs[pla_ptr] = 0;
     last_ip[pla_ptr] = 0;
     last_type[pla_ptr] = pla_type_nano_enter;
@@ -655,10 +655,10 @@ GLOBAL void set_last_nano_enter IFN0()
 
 GLOBAL void set_last_nano_leave IFN0()
 {
-    /* 
+    /*
      * Update the last address stamp with Nano leave marker
      */
- 
+
     last_cs[pla_ptr] = 0;
     last_ip[pla_ptr] = 0;
     last_type[pla_ptr] = pla_type_nano_leave;
@@ -674,7 +674,7 @@ host_addr	host_dest_addr;		/* address just written to by cpu */
 
 /* Register Break Point Support */
 typedef struct
-   {   
+   {
    int reg;
    int value;
    int stop;
@@ -1194,7 +1194,7 @@ LOCAL YODA_COMMAND(do_pmt)
 	PHY_ADDR endOfM;
 	IU8 currType = SAS_MAX_TYPE + 1;      /*cause type at addr 0 to print*/
 	IU8 newType;
-      
+
 	UNUSED(str);
 	UNUSED(com);
 	UNUSED(ip);
@@ -1203,7 +1203,7 @@ LOCAL YODA_COMMAND(do_pmt)
 
 	currPage = 0;
 	endOfM = sas_memory_size();
-      
+
 	while (currPage < endOfM) {
 		newType = sas_memory_type(currPage);
 		if (newType != currType) {
@@ -1614,7 +1614,7 @@ LOCAL YODA_COMMAND(do_par)
         fprintf(trace_file, "CS: %d DS: %d ES: %d SS: %d\n",
                              ALC_CS, ALC_DS, ALC_ES, ALC_SS);
 #endif /* CPU_30_STYLE */
-#endif /* SPC386 */							 
+#endif /* SPC386 */							
 	return(YODA_LOOP);
 }
 
@@ -1647,19 +1647,19 @@ LOCAL YODA_COMMAND(do_pseg)
 	/* Print Segment Registers */
 	cs = (getCS_AR() & 0x60) >> 5;      /*  dpl */
 	ip = (getCS_AR() & 0x1f);           /*  super */
-	fprintf(trace_file, "CS:: SELECTOR:%4x DPL:%1d TYPE:%25s BASE: %6x LIMIT:%4x\n",                   
-	        getCS_SELECTOR(), cs, segment_names[ip], getCS_BASE(), getCS_LIMIT());                     
+	fprintf(trace_file, "CS:: SELECTOR:%4x DPL:%1d TYPE:%25s BASE: %6x LIMIT:%4x\n",
+	        getCS_SELECTOR(), cs, segment_names[ip], getCS_BASE(), getCS_LIMIT());
 	cs = (getSS_AR() & 0x60) >> 5;      /*  dpl */
 	ip = (getSS_AR() & 0x1f);           /*  super */
-	fprintf(trace_file, "SS:: SELECTOR:%4x DPL:%1d TYPE:%25s BASE: %6x LIMIT:%4x\n",                   
-	        getSS_SELECTOR(), cs, segment_names[ip], getSS_BASE(), getSS_LIMIT());                     
+	fprintf(trace_file, "SS:: SELECTOR:%4x DPL:%1d TYPE:%25s BASE: %6x LIMIT:%4x\n",
+	        getSS_SELECTOR(), cs, segment_names[ip], getSS_BASE(), getSS_LIMIT());
 	cs = (getDS_AR() & 0x60) >> 5;      /*  dpl */
 	ip = (getDS_AR() & 0x1f);           /*  super */
-	fprintf(trace_file, "DS:: SELECTOR:%4x DPL:%1d TYPE:%25s BASE: %6x LIMIT:%4x\n",                   
-	        getDS_SELECTOR(), cs, segment_names[ip], getDS_BASE(), getDS_LIMIT());                     
+	fprintf(trace_file, "DS:: SELECTOR:%4x DPL:%1d TYPE:%25s BASE: %6x LIMIT:%4x\n",
+	        getDS_SELECTOR(), cs, segment_names[ip], getDS_BASE(), getDS_LIMIT());
 	cs = (getES_AR() & 0x60) >> 5;      /*  dpl */
 	ip = (getES_AR() & 0x1f);           /*  super */
-	fprintf(trace_file, "ES:: SELECTOR:%4x DPL:%1d TYPE:%25s BASE: %6x LIMIT:%4x\n",                   
+	fprintf(trace_file, "ES:: SELECTOR:%4x DPL:%1d TYPE:%25s BASE: %6x LIMIT:%4x\n",
 	        getES_SELECTOR(), cs, segment_names[ip], getES_BASE(), getES_LIMIT());
 #else
 	UNUSED(str);
@@ -2389,32 +2389,6 @@ LOCAL YODA_COMMAND(do_luke)
 	return do_fast(str, com, cs, ip, len, stop);
 }
 
-#ifndef macintosh
-LOCAL char * fff_strings[] = {
-"Hmm, looks like a hardware problem to me.",
-"Unexpected unary expression",
-"\n/tmp> rm -rf $WD/*\n\nProblem cured.",
-"It's probably the optimiser again.",
-"So how long have you thought that you had these problems?",
-"Looks like the SoftWindows team have broken the base again.",
-"I think it's another management screw-up.",
-"It's the hair - I'm sorry, but you're going to have to do something about\nthat hair.",
-"Wearing silk underwear will cure most static problems.",
-"You have an unitialised variable.",
-"You always get that sort of problem with Quick Events.",
-"Say \"William, have you seen this very interesting bug?\".",
-"Time for a coffee, I think.",
-"Your problem is that you are attempting to emulate an Intel processor.",
-"Whoever wrote this code must have been drunk at the time.",
-"It's not a bug, it's a feature",
-"Why are you always finding fault? Can't you appreciate me for what I am?",
-#ifdef SUNOS50
-"You're running Solaris, and you don't KNOW what the problem is?????",
-#endif /* SUNOS50 */
-"Sorry, there is no faul                             "
-};
-#endif /* !macintosh */
-
 LOCAL YODA_COMMAND(do_fff)
 {
   UNUSED(str);
@@ -2425,12 +2399,6 @@ LOCAL YODA_COMMAND(do_fff)
 #ifdef SFELLOW
 	printf(SfNotImp);
 #else /* SFELLOW */
-#ifdef macintosh
-	printf("Sorry, the Macintosh doesn't have faults.\n");
-#else
-	if (chewy)
-		printf("%s\n", fff_strings[(rand()/3) % (sizeof(fff_strings) / sizeof(char *))]);
-#endif /* macintosh else */
 #endif /* SFELLOW */
 }
 
@@ -2693,7 +2661,7 @@ LOCAL YODA_COMMAND(do_trace)
 		IU32 *addr;
 		int title_id;
 	}
-	 trace_flags[] = 
+	 trace_flags[] =
 	{
 	 {"general",	GENERAL_VERBOSE,	&io_verbose,		1},
 	 {"timer",	TIMER_VERBOSE,		&io_verbose,		0},
@@ -2782,7 +2750,7 @@ LOCAL YODA_COMMAND(do_trace)
 	UNUSED(cs);
 	UNUSED(ip);
         UNUSED(len);
-        UNUSED(stop); 
+        UNUSED(stop);
 
 	/*
 	 * strip off command and get first flag name
@@ -2839,7 +2807,7 @@ LOCAL YODA_COMMAND(do_trace)
 				disktraceinfo = severity
 #else /* HFX */
 				io_verbose    = sub_io_verbose =
-				disktraceinfo 
+				disktraceinfo
 #endif /* HFX */
 #endif /* SFELLOW */
 					      = negate ? ~mask : mask;
@@ -3508,10 +3476,10 @@ LOCAL YODA_COMMAND(do_cNPX)
 	UNUSED(len);
 	UNUSED(stop);
 
-	/* 
+	/*
 	** clear break/trace on 8087/80287 instructions.
 	** The Numeric Coprocesseor Extention.
-	*/ 
+	*/
 	bNPX = 0;
 	bNPX_stop = 0;
 	trace_type &= ~DUMP_NPX;
@@ -3528,10 +3496,10 @@ LOCAL YODA_COMMAND(do_tNPX)
 	UNUSED(len);
 	UNUSED(stop);
 
-	/* 
+	/*
 	** trace on 8087/80287 instructions.
 	** The Numeric Coprocesseor Extention.
-	*/ 
+	*/
 	bNPX = 1;
 	bNPX_stop = 0;
 	trace_type |= DUMP_NPX;
@@ -3548,10 +3516,10 @@ LOCAL YODA_COMMAND(do_bNPX)
 	UNUSED(len);
 	UNUSED(stop);
 
-	/* 
+	/*
 	** break on 8087/80287 instructions.
 	** The Numeric Coprocesseor Extention.
-	*/ 
+	*/
 	bNPX = 1;
 	bNPX_stop = 1;
 	trace_type |= DUMP_NPX;
@@ -4255,7 +4223,7 @@ print_pla IFN3(IU16, cs, LIN_ADDR, ip, enum pla_type, what)
 		fprintf(trace_file, "---- %16s ---- Leaving  NANO\n", "");
 		break;
 	default:
-		fprintf(trace_file, 
+		fprintf(trace_file,
 			"%04x:%08x *** Bad pla type %d\n",
 			cs, ip, what);
 		break;
@@ -4351,7 +4319,7 @@ LOCAL YODA_COMMAND(do_fast)
 
 	if (!fast) {
 	    printf("Switching to Fast YODA...\n");
-	}    
+	}
 	yint = 0; fast = 1; do_condition_checks = 0;
 	return(YODA_LOOP);
 }
@@ -4376,7 +4344,7 @@ LOCAL YODA_COMMAND(do_q)
 	UNUSED(cs);
 	UNUSED(ip);
 	UNUSED(len);
-  
+
 #ifdef SFELLOW
 	printf("Welcome to the Hotel California.\n");
 	printf("You can check out any time you like, but you can never leave...\n");
@@ -4408,7 +4376,7 @@ LOCAL YODA_COMMAND(do_bt)
 	UNUSED(ip);
 	UNUSED(len);
 	UNUSED(stop);
-  
+
 	/* back trace set up and dump */
 	do_back_trace();
 	return(YODA_LOOP);
@@ -4426,7 +4394,7 @@ LOCAL YODA_COMMAND(do_idle)
 	UNUSED(ip);
 	UNUSED(len);
 	UNUSED(stop);
-  
+
 	sscanf(str,"%s %s",tempstr1,tempstr2);
 	/* enable/disable idle detect */
 	if ((strcmp(tempstr2,"ON")==0) || (strcmp(tempstr2,"on")==0))
@@ -5127,7 +5095,7 @@ LOCAL YODA_COMMAND(do_h)
     strcat (args, yoda_command[i].args ? yoda_command[i].args : "");
     printf("%14s %-20s - %s\n", yoda_command[i].name, args,
 			yoda_command[i].comment?yoda_command[i].comment:"");
-    if (++i%20 == 0) 
+    if (++i%20 == 0)
 	if (!yoda_confirm("-- continue? -- ")) return(YODA_LOOP);
   }
 
@@ -5135,7 +5103,7 @@ LOCAL YODA_COMMAND(do_h)
 
   printf("\nAll data input is treated as hex\n");
   printf("  <type> is the type of breakpoint : 1 - stop at, 0 - trace only.\n");
-  printf("  <reg> is the symbol for a 16 bit register ie: ax, sp, etc ...\n"); 
+  printf("  <reg> is the symbol for a 16 bit register ie: ax, sp, etc ...\n");
   printf("  <intel-addr> examples: ffe, f000:45, ds:BX, si+8, BX+DI+1, es:[SI-2], etc ...\n\t& all combinations thereof.\n");
   return(YODA_LOOP);
 }
@@ -5533,7 +5501,7 @@ LOCAL IBOOL decode_iaddr_ok IFN3 (char *, iaddr, IS32 *, seg, LIN_ADDR *, offset
 				    *seg = decode_segreg[n].get_segreg_val();
 		}
 
-		/* 
+		/*
 		 * Decode the offset into segment.
 		 */
 		return(decode_offset (coffset, offset, &dummy));
@@ -5559,7 +5527,7 @@ LOCAL YODA_CMD_RETURN do_force_yoda_command IFN5(char *, str, char *, com, char 
 		if (strcmp(yoda_command[i].name, com) == 0) {
 			/*
 			 * Decode any Intel address expected by the command.
-			 * Different stuff done for commands that 
+			 * Different stuff done for commands that
 			 * understand new generic address parsing.
 			 */
 			if (yoda_command[i].decode_iaddr) {
@@ -5692,7 +5660,7 @@ void force_yoda IFN0()
 	return;
 #endif
 #ifdef 	GISP_SVGA
-	if( NoYodaThanks ) 
+	if( NoYodaThanks )
 	{
 		
 		return;
@@ -5772,7 +5740,7 @@ void force_yoda IFN0()
 	trace("", trace_type);
 	disable_bkpt = 0;
 
-	while(1) 
+	while(1)
 	{
 		if (refresh_screen)
 			do_screen_refresh();
@@ -5840,7 +5808,7 @@ void force_yoda IFN0()
 			/*
 			 * The <len> parameter was provided; this is supposed to
 			 * be numeric but we accept (SR), (LR), (TR), (WI), (SI),
-			 * (LI) and (PD) to allow NPX addresses to be cut/pasted 
+			 * (LI) and (PD) to allow NPX addresses to be cut/pasted
 			 * directly out of the dissasembler. They equate to the
 			 * size in bytes of the corresponding data item.
 			 * Useful for pasting into, for example, the "db" command.
@@ -5961,7 +5929,7 @@ LOCAL dump_descr IFN2(LIN_ADDR, address, IUM32, num)
    for ( i = 0; i < (num * 8); i+=8, address += 8, scroll++ )
       {
 	if (scroll == 20) {
-		if (!yoda_confirm("-- more descriptors? -- ")) 
+		if (!yoda_confirm("-- more descriptors? -- "))
 			break;
 		scroll = 0;
 	}
@@ -6464,7 +6432,7 @@ LOCAL	void	dump_phys_bytes IFN2(IS32, cs, IS32, len)
    for (i=0;i<y;i++)
       {
       fprintf(trace_file,"%08lx:", cs);
-      for (j=0;j<16;j++) 
+      for (j=0;j<16;j++)
 	 {
 	 fprintf(trace_file," %02x", sas_PR8((PHY_ADDR)(cs + j)));
 	 }
@@ -6475,7 +6443,7 @@ LOCAL	void	dump_phys_bytes IFN2(IS32, cs, IS32, len)
    if(x != 0)
       fprintf(trace_file,"%08lx:", cs);
 
-   for (j=0;j<x;j++) 
+   for (j=0;j<x;j++)
       {
       fprintf(trace_file," %02x", sas_PR8((PHY_ADDR)(cs + j)));
       }
@@ -6499,14 +6467,14 @@ int i, j, k, x, y;
 	k = 0;
 	for (i=0;i<y;i++) {
 		fprintf(trace_file,"%04lx:%04lx", cs, ip);
-		for (j=0;j<16;j++) 
+		for (j=0;j<16;j++)
 			fprintf(trace_file," %02x", val[k++]);
 		fprintf(trace_file,"\n");
 		ip += 16;
 	}
 	if(x != 0)
 		fprintf(trace_file,"%04lx:%04lx", cs, ip);
-	for (i=0;i<x;i++) 
+	for (i=0;i<x;i++)
 		fprintf(trace_file," %02x", val[k++]);
 	fprintf(trace_file,"\n");
 }
@@ -6975,18 +6943,18 @@ LOCAL	void	set_opcode_break IFN2(IU32, opcode, IU32, stop)
 		opcode_breaks[opcode_break_count].op = opcode;
 	} else if (opcode <= 0xffff) {
 		opcode_breaks[opcode_break_count].mask = 0xffff;
-		opcode_breaks[opcode_break_count].op = 
+		opcode_breaks[opcode_break_count].op =
 			((opcode & 0xff00) >> 8) +
 			((opcode & 0xff) << 8);
 	} else if (opcode <= 0xffffff) {
 		opcode_breaks[opcode_break_count].mask = 0xffffff;
-		opcode_breaks[opcode_break_count].op = 
+		opcode_breaks[opcode_break_count].op =
 			((opcode & 0xff0000) >> 16) +
 			((opcode & 0xff00)) +
 			((opcode & 0xff) << 16);
 	} else if (opcode <= 0xffffffff) {
 		opcode_breaks[opcode_break_count].mask = 0xffffffff;
-		opcode_breaks[opcode_break_count].op = 
+		opcode_breaks[opcode_break_count].op =
 			((opcode & 0xff000000) >> 24) +
 			((opcode & 0xff0000) >> 8) +
 			((opcode & 0xff00) << 8) +
@@ -7177,7 +7145,7 @@ LOCAL	void	print_opcode_break IFN0()
 int i;
 
 	printf("Note instruction streams are reversed\n");
-	for (i=0;i<opcode_break_count;i++) 
+	for (i=0;i<opcode_break_count;i++)
 		printf("%04lx\n", opcode_breaks[i].op);
 }
 
@@ -7187,7 +7155,7 @@ int i;
 LOCAL	void	print_int_break IFN0()
 {
 	int i;
-	for( i=0; i < int_break_count; i++ ) 
+	for( i=0; i < int_break_count; i++ )
 		printf( "int:%lx AH:%lx\n", int_breaks[i][0], int_breaks[i][1] );
 }
 
@@ -7724,7 +7692,7 @@ IU32 current_opcode;
 	** Check for opcode breakpoints: 8, 16, 24 or 32 bits.
 	*/
 	for (i = 0; i < opcode_break_count; i++) {
-    
+
 	    /*
 	    ** Check the current opcode against the set of requested break opcodes.
 	    ** When "b286-2" mode is ON we get a bit more selective.
@@ -7737,7 +7705,7 @@ IU32 current_opcode;
 	    ** Attempt to break when one of these opcodes will behave differently not just when
 	    ** they are used because there are lots and lots of shifts and rotates.
 	    */
-    
+
 	    if ((opcode32 & opcode_breaks[i].mask) == opcode_breaks[i].op){
 		    current_opcode = opcode_breaks[i].op;
 		    if( b286_2 ){
@@ -7892,7 +7860,7 @@ IU32 current_opcode;
 	return;
     }
 
-	if(step_count != -1) 
+	if(step_count != -1)
 		if(step_count <= 1) {
 			disable_bkpt = 0;
 			step_count = -1;
@@ -7910,8 +7878,8 @@ IU32 current_opcode;
 			if(ptr->stop == 1) {
 				if (ptr->temp)
 				{
-					ptr->valid == 0;
-					ptr->temp == 0;
+					ptr->valid = 0;
+					ptr->temp = 0;
 					if (ptr++ == &inst[inst_break_count])
 						inst_break_count--;
 				}
@@ -7939,12 +7907,12 @@ IU32 current_opcode;
 		dptr = &host_addresses[i];
 
 		old = (IU8 *)&dptr->old_value[0];
-		now = (IU8 *)dptr->data_addr; 
+		now = (IU8 *)dptr->data_addr;
 		if (memcmp(old, now, dptr->len) != 0)
 		{
 			for( j=0; j < dptr->len; j++ ){
 				if( old[ j ] != now[ j ] ){
-					printf( "host address change at %08p old:%2x new:%2x\n", 
+					printf( "host address change at %08p old:%2x new:%2x\n",
 					       (IU8 *)((dptr->data_addr)+j),
 					       old[ j ],
 					       now[ j ]
@@ -7974,7 +7942,7 @@ IU32 current_opcode;
 		dptr = &data_words[i];
 		for( j=0; j < dptr->len; j++ ){
 			if( dptr->old_value[ j ] != sas_w_at( dptr->data_addr + (j * 2)) ){
-				printf( "Word change at %lx old:%x new:%x\n", 
+				printf( "Word change at %lx old:%x new:%x\n",
 					(LIN_ADDR)((dptr->data_addr)+(j*2)),
  					dptr->old_value[ j ],
 					sas_w_at( (dptr->data_addr)+(j*2) )
@@ -8028,8 +7996,8 @@ BPTS *ptr;
 		return;
 	for (i=0;i<data_bytes_break_count;i++) {
 		ptr = &data_bytes[i];
-		if ((addr <= ptr->end_addr && addr >= ptr->start_addr ) || 
-		    ((addr + len) <= ptr->end_addr && (addr + len) >= ptr->start_addr ) || 
+		if ((addr <= ptr->end_addr && addr >= ptr->start_addr ) ||
+		    ((addr + len) <= ptr->end_addr && (addr + len) >= ptr->start_addr ) ||
 		    (addr < ptr->start_addr && (addr + len) > ptr->end_addr ))  {
 			printf("Mem Address : %08x+%04x b\n", addr, len);
 			if(ptr->stop == 1)
@@ -8283,7 +8251,7 @@ LOCAL	void	do_compress_npx IFN1(FILE *, fp)
 }
 #endif	/* NPX */
 
-GLOBAL void	da_block IFN3(IU16, cs, LIN_ADDR, ip, LIN_ADDR, len) 
+GLOBAL void	da_block IFN3(IU16, cs, LIN_ADDR, ip, LIN_ADDR, len)
 {
 	LIN_ADDR loop, loop1;
 	half_word ch;
@@ -9265,7 +9233,7 @@ LOCAL print_stats IFN0()
     ULONG i, j, total, sub_total, super_total, command, from, to, item;
     char *group;
     ULONG *counts_array;
-    
+
     previous_group = "";
     counts_array = &instr_counts[0];
     item = 0;
@@ -9328,7 +9296,7 @@ LOCAL print_stats IFN0()
 	    case SELMEM:
 		sub_total = 0;
 		for (i = 0; i < 192; i++)
-		    if ((i & 0x38) == to) 
+		    if ((i & 0x38) == to)
 			sub_total += counts_array[from + i];
 		break;
 
@@ -9341,21 +9309,21 @@ LOCAL print_stats IFN0()
 	    case SELREG:
 		sub_total = 0;
 		for (i = 192; i < 256; i++)
-		    if ((i & 0x38) == to) 
+		    if ((i & 0x38) == to)
 			sub_total += counts_array[from + i];
 		break;
 
 	    case SELALL:
 		sub_total = 0;
 		for (i = 0; i < 256; i++)
-		    if ((i & 0x38) == to) 
+		    if ((i & 0x38) == to)
 			sub_total += counts_array[from + i];
 		break;
 
 	    case SEL5:
 		sub_total = 0;
 		for (i = 0; i < 256; i++)
-		    if ((i & 0xF8) == to) 
+		    if ((i & 0xF8) == to)
 			sub_total += counts_array[from + i];
 		break;
 
@@ -9393,7 +9361,7 @@ LOCAL print_stats IFN0()
 
 	    case SELMEM:
 		for (i = 0; i < 192; i++)
-		    if ((i & 0x38) == to) 
+		    if ((i & 0x38) == to)
 			counts_array[from + i] = 0;
 		break;
 
@@ -9404,19 +9372,19 @@ LOCAL print_stats IFN0()
 
 	    case SELREG:
 		for (i = 192; i < 256; i++)
-		    if ((i & 0x38) == to) 
+		    if ((i & 0x38) == to)
 			counts_array[from + i] = 0;
 		break;
 
 	    case SELALL:
 		for (i = 0; i < 256; i++)
-		    if ((i & 0x38) == to) 
+		    if ((i & 0x38) == to)
 			counts_array[from + i] = 0;
 		break;
 
 	    case SEL5:
 		for (i = 0; i < 256; i++)
-		    if ((i & 0xF8) == to) 
+		    if ((i & 0xF8) == to)
 			counts_array[from + i] = 0;
 		break;
 
@@ -9447,7 +9415,7 @@ LOCAL print_stats IFN0()
 	        previous_group = group;
 	    }
 	    total += sub_total;
-	    fprintf(stats_file,"\t%d\t%-20s%d\n", commands[item].number, 
+	    fprintf(stats_file,"\t%d\t%-20s%d\n", commands[item].number,
 				     commands[item].string,
 			 	     sub_total);
 	}
@@ -9493,7 +9461,7 @@ GLOBAL print_pclabs IFN0()
 
 #endif /* PCLABS STATS */
 
-/* extra functions called in FmDebug.c which support suspension and resumption 
+/* extra functions called in FmDebug.c which support suspension and resumption
 	of a separate filter process. BCN 3406 */
 GLOBAL yoda_suspend_filter_process IFN0 ()
 {

@@ -87,7 +87,10 @@ extern HANDLE GHModule;	  /* Holds currently run processes module handle */
 /* Startup and Error reporting related strings */
 #define ED_WOWPROMPT    333     // special prompt for wow
 #define ED_WOWTITLE     334     // title message for win16 subsystem
-
+#define ED_DOSTITLE     335     // title message for dos subsystem
+#ifdef DBCS
+#define ED_UNSUPPORT_CP	345
+#endif // DBCS
 
 #define ED_BADSYSFILE   336
 #define ED_INITMEMERR   337
@@ -98,6 +101,7 @@ extern HANDLE GHModule;	  /* Holds currently run processes module handle */
 #define ED_LOADVDD      342
 #define ED_LOCKDRIVE    343
 #define ED_DRIVENUM     344
+#define ED_INITGRAPHICS 345
 
 
 /* VDM UIS related strings */
@@ -107,4 +111,12 @@ extern HANDLE GHModule;	  /* Holds currently run processes module handle */
 
 #define EXIT_NO_CLOSE      503      /* Console window title - Inactive */
 
+#ifdef DBCS	    /* this should go to US build also */
+#define IDS_PROMPT	   504	    /* command prompt for command.com title */
+#endif // DBCS
+
+#define ED_FORMATSTR0       505
+#define ED_FORMATSTR1       506
+#define ED_FORMATSTR2       507
+#define ED_FORMATSTR3       508
 /* entries from 1000+ are reserved for host errors. See host\inc\host_rrr.h */

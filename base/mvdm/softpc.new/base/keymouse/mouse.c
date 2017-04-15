@@ -81,7 +81,19 @@ static half_word data1_reg = 0,
 		 data2_reg = 0,
 		 mouse_status_reg = 0;
 
-static half_word 
+#if defined(NEC_98)
+
+static half_word NEC98_data_reg = 0,
+                 NEC98_mouse_status_reg = 0,
+                 InterruptFlag=0;
+                 InitializeFlag=0;              //930914
+
+
+static word    MouseIoBase;
+
+
+#endif    //NEC_98
+static half_word
 		 last_button_left  = 0,
 		 last_button_right = 0;
 
@@ -98,6 +110,32 @@ static int mouse_inb_toggle = 0;
 
 void mouse_inb IFN2(io_addr, port, half_word *, value)
 {
+#if defined(NEC_98)
+
+   if (port == MouseIoBase + MOUSE_PORT_0) { /* Normal:7FD9h,Hireso:0061h */
+
+       *value = NEC98_data_reg;
+   }
+
+   if (port == MouseIoBase + MOUSE_PORT_1) { /* Normal:7FDBh,Hireso:0063h */
+
+        /*
+         * Internal registers
+         */
+       //DbgPrint("NEC not Supported: SPDSW,RAMKL bit\n");
+
+   }
+
+   if (port == MouseIoBase + MOUSE_PORT_2) { /* Normal:7FDDh,Hireso:0065h */
+
+        /*
+         * Internal registers
+         */
+       *value = NEC98_mouse_status_reg;
+
+   }
+
+#else   //NEC_98
     if (port == MOUSE_PORT_1) {		/* data register */
 
 	/*
@@ -148,11 +186,99 @@ void mouse_inb IFN2(io_addr, port, half_word *, value)
 	trace(buff,DUMP_NONE);
     }
 #endif
+#endif    //NEC_98
 }
 
 
 void mouse_outb IFN2(io_addr, port, half_word, value)
 {
+#if defined(NEC_98)
+
+        NEC98_mouse_status_reg = 0xff;           //930914
+
+        if (port == MouseIoBase + MOUSE_PORT_2) { /* Write port C */
+                                                  /* Normal:7FDDh,Hireso:0065h */
+           NEC98_data_reg = 0;
+
+           switch (value & 0x60) {
+             case 0x00 :  /* X Low4bit */
+                NEC98_data_reg = delta_x & 0x0f;
+                break;
+
+             case 0x20 :  /* X High4bit */
+                NEC98_data_reg = (delta_x & 0xf0) >>4;
+                break;
+
+             case 0x40 :  /* Y Low4bit */
+                NEC98_data_reg = delta_y & 0x0f;
+                break;
+
+             case 0x60 :  /* Y High4bit */
+                NEC98_data_reg = (delta_y & 0xf0) >>4;
+                break;
+
+             default :
+                break;
+
+           }
+           if(!button_left)
+              NEC98_data_reg |= 0x80;
+           if(!button_right)
+              NEC98_data_reg |= 0x20;
+
+           if(InitializeFlag){                  //930914
+              NEC98_mouse_status_reg = value;
+           }
+        }
+        else if(port == MouseIoBase + MOUSE_PORT_3)     /* address pointer register */
+        {                                               /* Normal:7FDFh,Hireso:0067h */
+           switch (value) {
+             case 0x90 :  //
+             case 0x91 :  //
+             case 0x92 :  // for Z's STAFF Kid98
+             case 0x93 :  /* mode set */
+             case 0x94 :  //
+             case 0x95 :  //
+             case 0x96 :  //
+             case 0x97 :  //
+                InitializeFlag= 1;
+                InterruptFlag = 1;              //930914
+                if(HIRESO_MODE)  //Hireso mode
+                        ica_clear_int(NEC98_CPU_MOUSE_ADAPTER0,NEC98_CPU_MOUSE_INT2);
+                else
+                        ica_clear_int(NEC98_CPU_MOUSE_ADAPTER1,NEC98_CPU_MOUSE_INT6);
+                delta_x = 0;
+                delta_y = 0;
+                break;
+
+             case 0x08 : /* Mouse interrupt Enable */
+                InterruptFlag = 1;
+                break;
+
+             case 0x09 : /* Mouse interrupt Disable */
+                InterruptFlag = 0;
+                break;
+
+             case 0x0E : /* Clear Count(non clear)*/
+                break;
+
+             case 0x0F : /* Clear Count(clear) */
+                delta_x = 0;
+                delta_y = 0;
+                break;
+
+             default :
+                break;
+
+           }
+
+           if(InitializeFlag){                  //930914
+              NEC98_mouse_status_reg = value;
+           }
+
+        }
+
+#else    //NEC_98
 #ifndef PROD
 	if (io_verbose & MOUSE_VERBOSE) {
 		if ((port == MOUSE_PORT_0)
@@ -194,12 +320,12 @@ void mouse_outb IFN2(io_addr, port, half_word, value)
 				/* clear the interrupt */
 				ica_clear_int(AT_CPU_MOUSE_ADAPTER, AT_CPU_MOUSE_INT);
 
-				/* 
-				 * read next mouse deltas & buttons 
-				 * into the inport registers 
+				/*
+				 * read next mouse deltas & buttons
+				 * into the inport registers
 				 */
-				data1_reg = delta_x;
-				data2_reg = delta_y;
+				data1_reg = (half_word)delta_x;
+				data2_reg = (half_word)delta_y;
 				mouse_status_reg = 0;
 				mouse_status_reg = (button_left << 2) + (button_right);
 				if (delta_x!=0 || delta_y!=0) {
@@ -207,12 +333,12 @@ void mouse_outb IFN2(io_addr, port, half_word, value)
 				}
 				if (last_button_right != button_right) {
 					mouse_status_reg |= RIGHT_BUTTON_CHANGE;
-					last_button_right = button_right;
+					last_button_right = (half_word)button_right;
 				}
 
 				if (last_button_left != button_left) {
 					mouse_status_reg |= LEFT_BUTTON_CHANGE;
-					last_button_left = button_left;
+					last_button_left = (half_word)button_left;
 				}
 				delta_x = delta_y = 0;
 			}
@@ -244,10 +370,10 @@ void mouse_outb IFN2(io_addr, port, half_word, value)
 	 * In the following cases the application code is expecting to see
 	 * interrupts at the requested rate. However in practice this is only
 	 * required during initialisation(mouse_mode_reg = 0), and then a short burst
-	 * appears to be sufficient. The 15 interupts generated comes from 
+	 * appears to be sufficient. The 15 interupts generated comes from
 	 * tests with the "WINDOWS" package, which receives about 15 during
 	 * initialising, but is happy as long as it gets more than 3. The delay
-	 * is necessary otherwise the interupts are generated before the 
+	 * is necessary otherwise the interupts are generated before the
 	 * application starts looking for them.
 
 	 * Mark 2 bodge:
@@ -255,7 +381,7 @@ void mouse_outb IFN2(io_addr, port, half_word, value)
 	   but Windows 2.03 needs them not to keep happening even when it asks for them.
 	   So now there's a counter called loadsainterrupts set to 5 on resets, which is
 	   how many bursts will be allowed. This makes both Windows work.
-	 */  
+	 */
 			case 0x1: /* 30 Hz */
 			case 0x2: /* 50 Hz */
 			case 0x3: /* 100 Hz */
@@ -334,6 +460,7 @@ void mouse_outb IFN2(io_addr, port, half_word, value)
 	    else
 		address_reg = value;
 	}
+#endif    //NEC_98
 }
 
 #ifdef SEGMENTATION
@@ -350,8 +477,13 @@ int	Delta_x,Delta_y,left,right;
 {
 	if(Delta_x != 0 || Delta_y != 0 || button_left != left || button_right != right)
 	{
+#if defined(NEC_98)
+                delta_x = Delta_x;
+                delta_y = Delta_y;
+#else    //NEC_98
 		delta_x += Delta_x;
 		delta_y += Delta_y;
+#endif   //NEC_98
 
 		/***
 		Mouse inport registers can only handle one byte
@@ -368,8 +500,31 @@ int	Delta_x,Delta_y,left,right;
 
 		button_left = left;
 		button_right = right;
+#if defined(NEC_98)
+                if(InterruptFlag){
+                   if(HIRESO_MODE)      //Hireso mode
+                      ica_hw_interrupt(NEC98_CPU_MOUSE_ADAPTER0,NEC98_CPU_MOUSE_INT2,1);
+                   else
+                      ica_hw_interrupt(NEC98_CPU_MOUSE_ADAPTER1,NEC98_CPU_MOUSE_INT6,1);
+                }
+
+#else    //NEC_98
 		ica_hw_interrupt(AT_CPU_MOUSE_ADAPTER,AT_CPU_MOUSE_INT,1);
+#endif   //NEC_98
 	}
+#if defined(NEC_98)
+        else{
+             //DbgPrint("NEC Mouse bios:mouse_send not change\n");
+                delta_x = 0;
+                delta_y = 0;
+                if(InterruptFlag){
+                   if(HIRESO_MODE)      //Hireso mode
+                      ica_hw_interrupt(NEC98_CPU_MOUSE_ADAPTER0,NEC98_CPU_MOUSE_INT2,1);
+                   else
+                      ica_hw_interrupt(NEC98_CPU_MOUSE_ADAPTER1,NEC98_CPU_MOUSE_INT6,1);
+                }
+        }
+#endif    //NEC_98
 }
 
 #ifdef SEGMENTATION
@@ -384,7 +539,7 @@ int	Delta_x,Delta_y,left,right;
 
 void mouse_init IFN0()
 {
-    int p;
+    IU16 p;
 
 #ifndef PROD
     if (io_verbose & MOUSE_VERBOSE) {
@@ -398,8 +553,18 @@ void mouse_init IFN0()
     io_define_inb(MOUSE_ADAPTOR, mouse_inb);
     io_define_outb(MOUSE_ADAPTOR, mouse_outb);
 
+#if defined(NEC_98)
+    if(HIRESO_MODE)  //Hireso mode
+      MouseIoBase = HMODE_BASE;
+    else
+      MouseIoBase = NMODE_BASE;
+
+    for(p = MouseIoBase + MOUSE_PORT_START; p <= MouseIoBase + MOUSE_PORT_END; p=p+2) {
+
+#else    //NEC_98
     for(p = MOUSE_PORT_START; p <= MOUSE_PORT_END; p++) {
-	io_connect_port(p, MOUSE_ADAPTOR, IO_READ_WRITE);
+#endif   //NEC_98
+	io_connect_port(p, MOUSE_ADAPTOR, (IU8)IO_READ_WRITE);
 
 #ifdef KIPPER
 #ifdef CPU_40_STYLE
@@ -412,7 +577,7 @@ void mouse_init IFN0()
 	if (io_verbose & MOUSE_VERBOSE) {
 	    sprintf(buff, "Mouse Port connected: %x", p);
 	    trace(buff,DUMP_NONE);
-	}  
+	}
 #endif
     }
     host_deinstall_host_mouse();

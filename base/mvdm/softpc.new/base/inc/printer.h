@@ -28,6 +28,18 @@
  * ============================================================================
  */
 
+#if defined(NEC_98)
+extern  void printer_init();
+extern  void printer_post();
+extern  void printer_status_changed();
+
+#define LPT1_READ_DATA          0x40
+#define LPT1_WRITE_DATA         0x40
+#define LPT1_READ_SIGNAL1       0x42
+#define LPT1_READ_SIGNAL2       0x44
+#define LPT1_WRITE_SIGNAL2      0x44
+#define LPT1_WRITE_SIGNAL1      0x46
+#else  // !NEC_98
 #ifdef ANSI
 extern	void printer_init(int);
 extern	void printer_post(int);
@@ -59,6 +71,6 @@ extern void printer_psflush_change IPT2(IU8,hostID, IBOOL,apply);
 #if defined(NTVDM)
 extern void printer_is_being_closed(int adapter);
 #endif
-
+#endif // !NEC_98
 
 #endif

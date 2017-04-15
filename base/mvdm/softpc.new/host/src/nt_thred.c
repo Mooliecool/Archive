@@ -19,10 +19,13 @@ Author:
 Revision History:
 
 --*/
-
+#include <nt.h>
+#include <ntrtl.h>
+#include <nturtl.h>
 #include <windows.h>
 #include <excpt.h>
 #include <stdlib.h>
+#include <vdm.h>
 #include "nt_timer.h"
 #include "monregs.h"
 
@@ -31,6 +34,7 @@ typedef struct _ThreadStartUpParameters {
         LPVOID                 lpParameter;
 } THREADSTARTUPPARAMETERS, *PTHREADSTARTUPPARAMETERS;
 
+VOID cpu_createthread(HANDLE Thread, PVDM_TIB VdmTib);
 DWORD ThreadStartupRoutine(PVOID pv);
 
 
@@ -90,13 +94,16 @@ Return Value:
         );
 
     if (Thread) {
+        PVDM_TIB VdmTib;
+
+        VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
 /****************************** STF ********************************/
 #if defined(CCPU) || defined(PIG)
         ccpu386newthread();
 #endif
 /****************************** STF ********************************/
 #ifdef MONITOR
-        cpu_createthread(Thread);
+        cpu_createthread(Thread, VdmTib);
 #endif
         if (!(dwCreationFlags & CREATE_SUSPENDED))
             ResumeThread(Thread);

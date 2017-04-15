@@ -1,15 +1,15 @@
 #include "insignia.h"
 #include "host_def.h"
 /*[
-	Name:		terminate.c
-	Derived From:	Base 2.0
-	Author:		Rod MacGregor
-	Created On:	Unknown
-	Sccs ID:	@(#)terminate.c	1.23 06/15/94
-	Purpose:	We are about to die, put the kernel back the way
-			that it was.
+        Name:           terminate.c
+        Derived From:   Base 2.0
+        Author:         Rod MacGregor
+        Created On:     Unknown
+        Sccs ID:        @(#)terminate.c 1.23 06/15/94
+        Purpose:        We are about to die, put the kernel back the way
+                        that it was.
 
-	(c)Copyright Insignia Solutions Ltd., 1990. All rights reserved.
+        (c)Copyright Insignia Solutions Ltd., 1990. All rights reserved.
 
 ]*/
 
@@ -40,6 +40,7 @@
 #include "host_lic.h"
 #endif
 #include "emm.h"
+#include "sndblst.h"
 
 #ifdef SEGMENTATION
 /*
@@ -55,89 +56,91 @@ IMPORT VOID host_terminate IPT0();
 
 void terminate()
 {
-	SAVED BOOL already_called_terminate = FALSE;
-	UTINY i;
+        SAVED BOOL already_called_terminate = FALSE;
+        UTINY i;
 
-	if (already_called_terminate)
-	{
-		assert0( NO, "Error: terminate called twice - exiting" );
-		exit(0);
-	}
-	else
-		already_called_terminate = TRUE;
+        if (already_called_terminate)
+        {
+                assert0( NO, "Error: terminate called twice - exiting" );
+                exit(0);
+        }
+        else
+                already_called_terminate = TRUE;
 
 #ifdef MSWDVR
-	WinTerm();
+        WinTerm();
 #endif
 
 #ifdef SWIN_SNDBLST_NULL
-	sb_term();
+        sb_term();
+#else
+        SbTerminate();
 #endif /* SWIN_SNDBLST_NULL */
 
 #ifdef GISP_SVGA
-	/* Get back to window if we are full screen */
-	if( hostIsFullScreen( ) )
-		disableFullScreenVideo( FALSE );
+        /* Get back to window if we are full screen */
+        if( hostIsFullScreen( ) )
+                disableFullScreenVideo( FALSE );
 #endif /* GISP_SVGA */
 
-	/* terminate COM and LPT devices */
+        /* terminate COM and LPT devices */
 #ifdef  PC_CONFIG
-	/* PC_CONFIG style host_lpt_close() and
-	host_com_close() calls should be added
-	in here */
+        /* PC_CONFIG style host_lpt_close() and
+        host_com_close() calls should be added
+        in here */
 #else
-	for (i = 0 ; i < NUM_PARALLEL_PORTS; i++)
-		config_activate(C_LPT1_NAME + i, FALSE);
+        for (i = 0 ; i < NUM_PARALLEL_PORTS; i++)
+                config_activate((IU8)(C_LPT1_NAME + i), FALSE);
 
-	for (i = 0 ; i < NUM_SERIAL_PORTS; i++)
-		config_activate(C_COM1_NAME + i, FALSE);
+        for (i = 0 ; i < NUM_SERIAL_PORTS; i++)
+                config_activate((IU8)(C_COM1_NAME + i), FALSE);
 #endif
 
-	/* Update the cmos.ram file */
-	cmos_update();
+        /* Update the cmos.ram file */
+        cmos_update();
 
-	host_fdisk_term();
+        host_fdisk_term();
 
-	gvi_term();	/* close down the video adaptor */
+        gvi_term();     /* close down the video adaptor */
 
 #ifndef NTVDM
-	host_timer_shutdown(); /* Stop the timer */
+        host_timer_shutdown(); /* Stop the timer */
 #endif
 
 #ifdef LIM
-	host_deinitialise_EM(); /* free memory or file used by EM */
+        host_deinitialise_EM(); /* free memory or file used by EM */
 #endif
 
-	config_activate(C_FLOPPY_A_DEVICE, FALSE);
+        config_activate(C_FLOPPY_A_DEVICE, FALSE);
 #ifdef FLOPPY_B
-	config_activate(C_FLOPPY_B_DEVICE, FALSE);
+        config_activate(C_FLOPPY_B_DEVICE, FALSE);
 #endif /* FLOPPY_B */
 #ifdef SLAVEPC
-	config_activate(C_SLAVEPC_DEVICE, FALSE);
+        config_activate(C_SLAVEPC_DEVICE, FALSE);
 #endif /* SLAVEPC */
 
-	/*
-	 * Do any cpu-specific termination bits.
-	 */
+        /*
+         * Do any cpu-specific termination bits.
+         */
 #ifdef CPU_30_STYLE
-	cpu_terminate();
+        cpu_terminate();
 #endif
 
 #ifdef NOVELL
-	net_term();	/* Shutdown network */
+        net_term();     /* Shutdown network */
 #endif
 
 #ifdef LICENSING
-	(*license_exit)(); /* Shutdown licensing system */
+        (*license_exit)(); /* Shutdown licensing system */
 #endif
-	/*
-	 * Do any host-specific termination bits.
-	 */
-	host_applClose();
-	host_terminate();
+        /*
+         * Do any host-specific termination bits.
+         */
+        host_applClose();
+        host_terminate();
 
-	/*
-	 * Seppuku.
-	 */
-	exit(0);
+        /*
+         * Seppuku.
+         */
+        exit(0);
 }

@@ -22,40 +22,17 @@ NOTE:   Commented description of this file is in \nt\bak\bin\sources.tpl
 
 !ENDIF
 
-
-MAJORCOMP=spcbase
-MINORCOMP=dasm386
-
 TARGETNAME=dasm386
 TARGETPATH=obj
 TARGETTYPE=LIBRARY
-TARGETLIBS=
-
-NTPROFILEINPUT=yes
 
 SOFTPC_TREE=$(PROJECT_ROOT)\mvdm\softpc.new
 
-INCLUDES=                       \
-    $(BASE_INC_PATH);           \
-    $(SOFTPC_TREE)\host\inc;    \
-    $(SOFTPC_TREE)\base\inc
+INCLUDES=$(SOFTPC_TREE)\host\inc;$(SOFTPC_TREE)\base\inc
 
-!IF $(ALPHA)
-GPSIZE=0
-!ELSE
-GPSIZE=0
-!ENDIF
+ALPHA_SOURCES=dasm386.c build.c decode.c
 
-PPC_SOURCES=    \
-    dasm386.c   \
-	build.c	    \
-	decode.c
-
-ALPHA_SOURCES=$(PPC_SOURCES)
-
-MIPS_SOURCES=$(PPC_SOURCES)
-
-X86_SOURCES=
+i386_SOURCES=
 
 SOURCES=
 

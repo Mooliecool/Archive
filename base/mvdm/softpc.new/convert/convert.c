@@ -10,7 +10,7 @@ int convert(char *buffer, char *filename);
 
 /*:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: */
 
-_CRTAPI1 main(int argc, char *argv[])
+__cdecl main(int argc, char *argv[])
 {
     char *buffer = malloc(1000*1024);
     int index;

@@ -88,7 +88,11 @@ extern int soft_reset;  /* Defined in reset.c                       */
  * These should be integrated with the new EGA stuff
  */
 
+#if defined(NEC_98)
+DISPLAY_GLOBS   NEC98Display;
+#else   //NEC_98
 DISPLAY_GLOBS	PCDisplay;
+#endif  //NEC_98
 int text_blk_size;	/* In TEXT mode the size of a dirty block   */
 
 /*
@@ -163,6 +167,17 @@ void	recalc_screen_params IFN0()
 #include "SOFTPC_INIT.seg"
 #endif
 
+#if defined(NEC_98)
+void gvi_init()
+{
+    video_adapter = 1;  // '1' means NEC98.
+    NEC98_init();
+    host_clear_screen();
+}
+
+void gvi_term IFN0(){}
+
+#else   //NEC_98
 void gvi_init IFN1(half_word, v_adapter)
 {
     int screen_height;
@@ -339,3 +354,4 @@ void gvi_term IFN0()
     term_gore_update();
 #endif /* GORE */
 }
+#endif  //NEC_98

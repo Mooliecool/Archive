@@ -476,7 +476,7 @@ BOOL FastCommSetBaudRate(HANDLE FileHandle, int BaudRate)
     if (Status == STATUS_PENDING)
 	NtWaitForSingleObject(SyncEvent, FALSE, NULL);
     CloseHandle(SyncEvent);
-    return(NT_SUCCESS(IoStatusBlock.Status));
+    return(NT_SUCCESS(Status) && NT_SUCCESS(IoStatusBlock.Status));
 }
 
 /* Function to set the new line control to the given comm device
@@ -531,7 +531,7 @@ BOOL FastCommSetLineControl(HANDLE FileHandle, UCHAR StopBits, UCHAR Parity,
 	NtWaitForSingleObject(SyncEvent, FALSE, NULL);
 
     CloseHandle(SyncEvent);
-    return(NT_SUCCESS(IoStatusBlock.Status));
+    return(NT_SUCCESS(Status) && NT_SUCCESS(IoStatusBlock.Status));
 }
 
 /* Function to retrieve the given comm device current line control setting
@@ -582,7 +582,7 @@ BOOL FastCommGetLineControl(HANDLE FileHandle, UCHAR *StopBits, UCHAR *Parity,
 
     CloseHandle(SyncEvent);
 
-    if (NT_SUCCESS(IoStatusBlock.Status)) {
+    if ( NT_SUCCESS(Status) && NT_SUCCESS(IoStatusBlock.Status)) {
 	*StopBits = LocalLC.StopBits;
 	*Parity = LocalLC.Parity;
 	*DataBits = LocalLC.WordLength;

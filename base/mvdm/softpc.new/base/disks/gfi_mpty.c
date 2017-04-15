@@ -56,8 +56,8 @@ static char SccsID[]="@(#)gfi_empty.c	1.13 08/03/93 Copyright Insignia Solutions
 #include "debug.h"
 
 
-/* Routines called via vector table. These are all local now;  
-** The prototype typedefs are defined in gfi.h which is now th. only 
+/* Routines called via vector table. These are all local now;
+** The prototype typedefs are defined in gfi.h which is now th. only
 ** base floppy header file needed.        GM.
 */
 
@@ -96,7 +96,7 @@ LOCAL VOID gfi_empty_init
 ** NB: This is for SoftPC (gfi); the actual closing/opening must still be
 ** done in your floppy code! Also note that deactivating the empty floppy
 ** means activating the host one, but this is never done like that.
-**                               GM. 
+**                               GM.
 */
 
 GLOBAL SHORT
@@ -227,7 +227,7 @@ gfi_empty_command
 #endif
       }
 
-   return (ret_stat);
+   return ((SHORT)ret_stat);
    }
 
 

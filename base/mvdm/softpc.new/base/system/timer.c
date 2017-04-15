@@ -4,20 +4,20 @@
 /*
  * SoftPC version 2.0
  *
- * Title	: Time Handler
+ * Title        : Time Handler
  *
- * Description	: Emulate the 8253 3-channel timer; invoke 'BIOS
- *		  sytem timer interrupt code', cursor flash, repeat
- *	          key processing etc.
+ * Description  : Emulate the 8253 3-channel timer; invoke 'BIOS
+ *                sytem timer interrupt code', cursor flash, repeat
+ *                key processing etc.
  *
- * Author	: Jerry Kramskoy
+ * Author       : Jerry Kramskoy
  *
- * Notes	: There is only one real time timer per process, this
- *		  module counts clock ticks and distributes calls
- *		  to the appropriate functions as required.
+ * Notes        : There is only one real time timer per process, this
+ *                module counts clock ticks and distributes calls
+ *                to the appropriate functions as required.
  *
- *		  This module is host independent - see xxxx_timer.c
- *		  where xxxx is a machine type for host dependent stuff.
+ *                This module is host independent - see xxxx_timer.c
+ *                where xxxx is a machine type for host dependent stuff.
  *
  * Mods: (r3.2) : (SCR 257). Code has been added to time_tick() to spot
  *                that video has been disabled for a period. If this is
@@ -32,7 +32,7 @@
  */
 
 #ifdef SCCSID
-static char SccsID[]="@(#)timer.c	1.41 05/31/95 Copyright Insignia Solutions Ltd.";
+static char SccsID[]="@(#)timer.c       1.41 05/31/95 Copyright Insignia Solutions Ltd.";
 #endif
 
 #ifdef SEGMENTATION
@@ -83,6 +83,7 @@ static char SccsID[]="@(#)timer.c	1.41 05/31/95 Copyright Insignia Solutions Ltd
 #include "nt_eoi.h"
 #include "nt_reset.h"
 #include "nt_pif.h"
+#include "vdm.h"
 #undef LOCAL
 #define LOCAL
 #endif
@@ -119,41 +120,41 @@ static  int     ticks_blocked = 0;
 static char buf[80];  /* Used for tracing messages */
 #endif
 
-#ifdef HUNTER			/* Only needed for HUNTER */
-word timer_batch_count;		/* Batch update when PC tick occurs */
+#ifdef HUNTER                   /* Only needed for HUNTER */
+word timer_batch_count;         /* Batch update when PC tick occurs */
 #endif
-int timer_int_enabled;		/* Whether Bios timer ints are required */
+int timer_int_enabled;          /* Whether Bios timer ints are required */
 
 
 /* control word format */
 
 /* Values in D54 of control word - number of bytes to read/load into counter */
-#define LATCH			0
-#define RL_LSB			1
-#define RL_MSB			2
-#define RL_LMSB			3
+#define LATCH                   0
+#define RL_LSB                  1
+#define RL_MSB                  2
+#define RL_LMSB                 3
 
 /* Values in D321 of control word - the counter mode. */
-#define INT_ON_TERMINALCOUNT	0
-#define PROG_ONESHOT			1
-#define RATE_GEN				2
-#define SQUAREWAVE_GEN			3
-#define SW_TRIG_STROBE			4
-#define HW_TRIG_STROBE			5
+#define INT_ON_TERMINALCOUNT    0
+#define PROG_ONESHOT                    1
+#define RATE_GEN                                2
+#define SQUAREWAVE_GEN                  3
+#define SW_TRIG_STROBE                  4
+#define HW_TRIG_STROBE                  5
 /* NB. 6 = RATE_GEN, 7 = SQUAREWAVE_GEN */
 
 /* Values in D0 of control word - whether prog wants to read/write binary or BCD to counter */
-#define BINARY			0
-#define BCD				1
+#define BINARY                  0
+#define BCD                             1
 
 #define INDEFINITE              (ULONG)-1
-#define STARTLO			0
-#define STARTHI			1
-#define NOREPEAT		0
-#define REPEAT			~NOREPEAT
+#define STARTLO                 0
+#define STARTHI                 1
+#define NOREPEAT                0
+#define REPEAT                  ~NOREPEAT
 
-#define WRITE_SIGNAL 	 1
-#define GATE_SIGNAL 	 2
+#define WRITE_SIGNAL     1
+#define GATE_SIGNAL      2
 
 #define UNLOCKED 0
 #define LOCKED ~UNLOCKED
@@ -166,9 +167,9 @@ int timer_int_enabled;		/* Whether Bios timer ints are required */
 /*
  * Timer read state
  */
-#define UNREAD			0	/* Timer is in normal state */
-#define READMSB			1	/* First byte of LMSB mode read, but not second yet */
-#define READSTATUS		2	/* Status latched, will read it first */
+#define UNREAD                  0       /* Timer is in normal state */
+#define READMSB                 1       /* First byte of LMSB mode read, but not second yet */
+#define READSTATUS              2       /* Status latched, will read it first */
 
 /*
  * These two figures give a timer frequency of 1.193 MHz (which is
@@ -178,8 +179,13 @@ int timer_int_enabled;		/* Whether Bios timer ints are required */
  * timer 0. Every time timer 0 wraps, the PC is interrupted by the timer.
  */
 
-#define TIMER_CLOCK_NUMER	1000
-#define TIMER_CLOCK_DENOM	1193
+#define TIMER_CLOCK_NUMER       1000
+#if defined(NEC_98)
+#define TIMER_CLOCK_DENOM_10    2458
+#define TIMER_CLOCK_DENOM_8     1997
+#else    //NEC_98
+#define TIMER_CLOCK_DENOM       1193
+#endif   //NEC_98
 
 typedef half_word TSIGNAL;
 
@@ -187,26 +193,26 @@ typedef half_word TSIGNAL;
  * timer channel. The waveform consists of 'n' clocks at one
  * logic level, and 'm' ticks at the other logic level.
  * Which level starts the waveform is given by 'startLogicLevel'.
- *	e.g; the following waveform ...
+ *      e.g; the following waveform ...
  */
 
 typedef struct {
-	long clocksAtLoLogicLevel;
-	long clocksAtHiLogicLevel;
-	long period;
-	long startLogicLevel;
-	long repeatWaveForm;
+        long clocksAtLoLogicLevel;
+        long clocksAtHiLogicLevel;
+        long period;
+        long startLogicLevel;
+        long repeatWaveForm;
 } WAVEFORM;
 
-/*	__ __ __ __ __ __        __ __ __ __ __ __        __ __ __ __ __ __
- *			|        |	         |        |	           |
- *			|__ __ __|               |__ __ __|	           |
+/*      __ __ __ __ __ __        __ __ __ __ __ __        __ __ __ __ __ __
+ *                      |        |               |        |                |
+ *                      |__ __ __|               |__ __ __|                |
  *
  * would be described by
- *	clocksAtLoLogicLevel = 3
- *	clocksAtHiLogicLevel = 6
- *	startLogicLevel = STARTHI
- *	repeatWaveForm = TRUE;
+ *      clocksAtLoLogicLevel = 3
+ *      clocksAtHiLogicLevel = 6
+ *      startLogicLevel = STARTHI
+ *      repeatWaveForm = TRUE;
  *
  *
  * The overall state of a counter is represented by the following
@@ -217,47 +223,47 @@ typedef enum trigCond_ {LEVEL, EDGE} trigCond;
 typedef enum countload_ {AVAILABLE, USED} countload;
 
 typedef struct {
-	int			m;
-	int			bcd;
-	int			rl;
+        int                     m;
+        int                     bcd;
+        int                     rl;
 
-	STATE_FUNCTION	(*state) IPT2(int, signal, half_word, value);
-	STATE_FUNCTION	(*statePriorWt) IPT2(int, signal, half_word, value);
-	STATE_FUNCTION	(*stateOnGate) IPT2(int, signal, half_word, value);
-	UNBLOCK_FUNCTION	(*actionOnWtComplete) IPT0();
-	UNBLOCK_FUNCTION	(*actionOnGateEnabled) IPT0();
-	void		(*getTime) IPT1(struct host_timeval *, t);
+        STATE_FUNCTION  (*state) IPT2(int, signal, half_word, value);
+        STATE_FUNCTION  (*statePriorWt) IPT2(int, signal, half_word, value);
+        STATE_FUNCTION  (*stateOnGate) IPT2(int, signal, half_word, value);
+        UNBLOCK_FUNCTION        (*actionOnWtComplete) IPT0();
+        UNBLOCK_FUNCTION        (*actionOnGateEnabled) IPT0();
+        void            (*getTime) IPT1(struct host_timeval *, t);
 
-	unsigned char	outblsb;
-	unsigned char	outbmsb;
-	unsigned 	long initialCount;
-	int			readState;
-	int			countlatched;
-	unsigned char	latchvaluelsb;
-	unsigned char	latchvaluemsb;
-	unsigned char	latchstatus;
-	word		Count;
-	countload	newCount;
-	word		tickadjust;
-	struct host_timeval activationTime;
-	int		tc;
-	int		freezeCounter;
+        unsigned char   outblsb;
+        unsigned char   outbmsb;
+        unsigned        long initialCount;
+        int                     readState;
+        int                     countlatched;
+        unsigned char   latchvaluelsb;
+        unsigned char   latchvaluemsb;
+        unsigned char   latchstatus;
+        word            Count;
+        countload       newCount;
+        word            tickadjust;
+        struct host_timeval activationTime;
+        int             tc;
+        int             freezeCounter;
 
 #ifndef NTVDM
-	unsigned long lastTicks;
-	long		microtick;
-	long 		timeFrig;
-	word		saveCount;
-	int		guessesPerHostTick;	/* How often per host tick are we forced to guess? */
-	int		guessesSoFar;		/* How many times have we guessed so far? */
+        unsigned long lastTicks;
+        long            microtick;
+        long            timeFrig;
+        word            saveCount;
+        int             guessesPerHostTick;     /* How often per host tick are we forced to guess? */
+        int             guessesSoFar;           /* How many times have we guessed so far? */
 #endif
 
-	unsigned int	delay;
+        unsigned int    delay;
 
-	trigCond	trigger;
-	TSIGNAL		gate;
-	TSIGNAL		clk;
-	WAVEFORM	out;
+        trigCond        trigger;
+        TSIGNAL         gate;
+        TSIGNAL         clk;
+        WAVEFORM        out;
 } COUNTER_UNIT;
 
 /*
@@ -356,7 +362,7 @@ LOCAL void latchStatusValue IPT0();
 LOCAL void readCounter IPT0();
 LOCAL void timestamp IPT0();
 LOCAL void outputWaveForm IPT5(unsigned int, delay, unsigned long, lowclocks,
-	unsigned long, hiclocks, int, lohi, int, repeat);
+        unsigned long, hiclocks, int, lohi, int, repeat);
 LOCAL void outputHigh IPT0();
 LOCAL void outputLow IPT0();
 LOCAL void setOutputAfterMode IPT0();
@@ -368,7 +374,7 @@ LOCAL void startCounting IPT0();
 unsigned long updateCount(void);
 #else
 LOCAL void updateCount IPT3(unsigned long, ticks, unsigned long *, wrap,
-	struct host_timeval *, now);
+        struct host_timeval *, now);
 #endif
 LOCAL unsigned  short bin_to_bcd IPT1(unsigned long, val);
 LOCAL word bcd_to_bin IPT1(word, val);
@@ -402,7 +408,7 @@ LOCAL void timer_multiple_ints IPT1(long, n);
 #define MAX_BACK_SECS 15
 LOCAL IU32 max_backlog = 0;     /* max # of ints allowed to queue up */
 IBOOL active_int_event = FALSE; /* current quick_event for timer queue */
-IU32 more_timer_mult = 0;	/* additions to timer int queue */
+IU32 more_timer_mult = 0;       /* additions to timer int queue */
 IU32 timer_multiple_delay = 0;  /* us delay to next timer queue elem */
 #endif
 
@@ -410,8 +416,8 @@ IU32 timer_multiple_delay = 0;  /* us delay to next timer queue elem */
 
 void timer_generate_int(void);
 unsigned long clocksSinceCounterUpdate(struct host_timeval *pCuurTime,
-				       struct host_timeval *pLastTime,
-				       word                *pCounter);
+                                       struct host_timeval *pLastTime,
+                                       word                *pCounter);
 void ReinitIdealTime IPT1(struct host_timeval *, t);
 void host_GetSysTime(struct host_timeval *time);
 void InitPerfCounter(void);
@@ -437,43 +443,43 @@ word TimerInt1COff;
 
 #else
 
-static int timelock;		/* locks out time_tick if set */
-static int needtick;		/* causes time_tick() to be called if set */
+static int timelock;            /* locks out time_tick if set */
+static int needtick;            /* causes time_tick() to be called if set */
 
 /*
  * Data for the hack to make sure that windows in standard mode doesn't get two timer
  * ticks too close together.
  */
 
-LOCAL BOOL	hack_active=FALSE;			/* This boolean indicates that we are spacing
-							   timer interrupts out by discarding timer ticks.
-							   It is set when we see a protected mode tick */
-LOCAL BOOL	too_soon_after_previous=FALSE;		/* This boolean is set on when an interrupt is
-							   generated... a quick event is requested to
-							   clear it again after a "fixed" number of
-							   instructions */
-LOCAL BOOL	ticks_lost_this_time=FALSE;		/* This boolean is set if any interrupts were
-							   required to be generated while too_soon_after_previous
-							   was TRUE - if it's TRUE when too_soon_after_previous
-							   is being set to FALSE, we generate an immediate
-							   interrupt to get the best responsiveness */
-LOCAL ULONG	real_mode_ticks_in_a_row = 0;		/* A count of the number of real mode ticks in a row...
-							   this is used to disable the hack again when we have
-							   left protected mode for a good while */
-LOCAL ULONG	instrs_per_tick = 37000;		/* Nominal (as timed on the reference machine - a SPARC 1+) */
-LOCAL ULONG	adj_instrs_per_tick = 0;		/* The estimated number of Intel instructions being emulated
-							   each 20th of a second */
-LOCAL ULONG	n_rm_instrs_before_full_speed = 3000000;/* Nominal number of instructions to be emulated in real mode
-							   before we're convinced that we're staying back in real mode */
-LOCAL ULONG	adj_n_real_mode_ticks_before_full_speed = 0;/* The value which real_mode_ticks_in_a_row must reach
-							   before the hack is disabled */
+LOCAL BOOL      hack_active=FALSE;                      /* This boolean indicates that we are spacing
+                                                           timer interrupts out by discarding timer ticks.
+                                                           It is set when we see a protected mode tick */
+LOCAL BOOL      too_soon_after_previous=FALSE;          /* This boolean is set on when an interrupt is
+                                                           generated... a quick event is requested to
+                                                           clear it again after a "fixed" number of
+                                                           instructions */
+LOCAL BOOL      ticks_lost_this_time=FALSE;             /* This boolean is set if any interrupts were
+                                                           required to be generated while too_soon_after_previous
+                                                           was TRUE - if it's TRUE when too_soon_after_previous
+                                                           is being set to FALSE, we generate an immediate
+                                                           interrupt to get the best responsiveness */
+LOCAL ULONG     real_mode_ticks_in_a_row = 0;           /* A count of the number of real mode ticks in a row...
+                                                           this is used to disable the hack again when we have
+                                                           left protected mode for a good while */
+LOCAL ULONG     instrs_per_tick = 37000;                /* Nominal (as timed on the reference machine - a SPARC 1+) */
+LOCAL ULONG     adj_instrs_per_tick = 0;                /* The estimated number of Intel instructions being emulated
+                                                           each 20th of a second */
+LOCAL ULONG     n_rm_instrs_before_full_speed = 3000000;/* Nominal number of instructions to be emulated in real mode
+                                                           before we're convinced that we're staying back in real mode */
+LOCAL ULONG     adj_n_real_mode_ticks_before_full_speed = 0;/* The value which real_mode_ticks_in_a_row must reach
+                                                           before the hack is disabled */
 #ifndef PROD
-LOCAL ULONG	ticks_ignored = 0;			/* For information purposes only. */
+LOCAL ULONG     ticks_ignored = 0;                      /* For information purposes only. */
 #endif
 
 #endif /* NTVDM */
 
-#ifndef PROD	/* Specific Timer change tracing that isn't timer_verbose */
+#ifndef PROD    /* Specific Timer change tracing that isn't timer_verbose */
 
 
 GLOBAL int DoTimerChangeTracing = 0;
@@ -486,6 +492,12 @@ extern IBOOL HostPendingTimerInt IPT0();
 extern void HostResetTimerInts IPT0();
 
 #endif /* IRET_HOOKS && GISP_CPU */
+#endif
+
+#if defined(NTVDM)
+#ifndef MONITOR
+#define pNtVDMState ((PULONG)(Start_of_M_area + FIXED_NTVDMSTATE_LINEAR))
+#endif
 #endif
 
 /*
@@ -509,28 +521,33 @@ void (*timer_tick_func) IPT0();
  * External functions
  * ============================================================================
  */
+#if defined(NEC_98)
+extern void SetRSBaud();
+extern void SetBeepFrequency();
+unsigned short RSBaud = 0;
+#endif   //NEC_98
 
 void
 SWTMR_init_funcptrs IFN0()
 {
-	/*
-	 *  initialize access functions for SW [emulated] TIMER
-	 */
-	timer_inb_func			= SWTMR_inb;
-	timer_outb_func			= SWTMR_outb;
-	timer_gate_func			= SWTMR_gate;
-	timer_tick_func			= SWTMR_time_tick;
+        /*
+         *  initialize access functions for SW [emulated] TIMER
+         */
+        timer_inb_func                  = SWTMR_inb;
+        timer_outb_func                 = SWTMR_outb;
+        timer_gate_func                 = SWTMR_gate;
+        timer_tick_func                 = SWTMR_time_tick;
 
 #ifndef NTVDM
-	/*
-	 * initialise stuff for PM timer hack
-	 */
-	too_soon_after_previous		= FALSE;
-	if (adj_n_real_mode_ticks_before_full_speed == 0){
-		HOST_TIMER_DELAY_SIZE=25000;
-		adj_instrs_per_tick = host_speed (instrs_per_tick);
-		adj_n_real_mode_ticks_before_full_speed = n_rm_instrs_before_full_speed / adj_instrs_per_tick;
-	}
+        /*
+         * initialise stuff for PM timer hack
+         */
+        too_soon_after_previous         = FALSE;
+        if (adj_n_real_mode_ticks_before_full_speed == 0){
+                HOST_TIMER_DELAY_SIZE=25000;
+                adj_instrs_per_tick = host_speed (instrs_per_tick);
+                adj_n_real_mode_ticks_before_full_speed = n_rm_instrs_before_full_speed / adj_instrs_per_tick;
+        }
 #endif
 }
 
@@ -558,8 +575,8 @@ SWTMR_time_tick IFN0()
 
     if (timelock == LOCKED)
     {
-	needtick = ~0;
-	return;
+        needtick = ~0;
+        return;
     }
 #endif
 
@@ -581,7 +598,11 @@ SWTMR_time_tick IFN0()
      * all the time.
      */
 
+#if defined(NEC_98)
+    pcu = &timers[1];
+#else    //NEC_98
     pcu = &timers[2];
+#endif   //NEC_98
     updateCounter();
 }
 
@@ -591,9 +612,9 @@ SWTMR_time_tick IFN0()
  *
  * The Counters are used by the PC in the following ways:
  *
- *	Counter 0  -  Bios time of day function
- *	Counter 1  -  Handler memory refresh
- *	Counter 2  -  Drive Speaker Interface (plus input on PPI)
+ *      Counter 0  -  Bios time of day function
+ *      Counter 1  -  Handler memory refresh
+ *      Counter 2  -  Drive Speaker Interface (plus input on PPI)
  *
  */
 
@@ -636,38 +657,42 @@ void SWTMR_inb IFN2(io_addr, port, half_word *, value)
 #endif
 
 
+#if defined(NEC_98)
+    pcu = &timers[(port & 7) >> 1];
+#else    //NEC_98
     pcu = &timers[port & 3];
-	if (!pcu->countlatched)
-		readCounter();
-	switch (pcu->readState)
-	{
-		case UNREAD:
-			switch (pcu->rl)
-			{
-			case RL_LSB:
-				*value = pcu->latchvaluelsb;
-				pcu->countlatched = 0;	/* Unlatch the value read by inb() */
-				break;
-			case RL_LMSB:
-				*value = pcu->latchvaluelsb;
-				pcu->readState = READMSB;	/* Read LSB, next in read MSB. */
-				break;
-			case RL_MSB:
-				*value = pcu->latchvaluemsb;
-				pcu->countlatched = 0;	/* Unlatch the value read by inb() */
-				break;
-			}
-			break;
-		case READMSB:
-			*value = pcu->latchvaluemsb;
-			pcu->countlatched = 0;	/* Unlatch the value read by inb() */
-			pcu->readState = UNREAD;	/* Read MSB, back to unread state. */
-			break;
-		case READSTATUS:
-			*value = pcu->latchstatus;
-			pcu->readState = UNREAD;
-			break;
-	}
+#endif   //NEC_98
+        if (!pcu->countlatched)
+                readCounter();
+        switch (pcu->readState)
+        {
+                case UNREAD:
+                        switch (pcu->rl)
+                        {
+                        case RL_LSB:
+                                *value = pcu->latchvaluelsb;
+                                pcu->countlatched = 0;  /* Unlatch the value read by inb() */
+                                break;
+                        case RL_LMSB:
+                                *value = pcu->latchvaluelsb;
+                                pcu->readState = READMSB;       /* Read LSB, next in read MSB. */
+                                break;
+                        case RL_MSB:
+                                *value = pcu->latchvaluemsb;
+                                pcu->countlatched = 0;  /* Unlatch the value read by inb() */
+                                break;
+                        }
+                        break;
+                case READMSB:
+                        *value = pcu->latchvaluemsb;
+                        pcu->countlatched = 0;  /* Unlatch the value read by inb() */
+                        pcu->readState = UNREAD;        /* Read MSB, back to unread state. */
+                        break;
+                case READSTATUS:
+                        *value = pcu->latchstatus;
+                        pcu->readState = UNREAD;
+                        break;
+        }
 #ifndef PROD
     if (io_verbose & TIMER_VERBOSE)
     {
@@ -687,8 +712,10 @@ void SWTMR_inb IFN2(io_addr, port, half_word *, value)
 void SWTMR_outb IFN2(io_addr, port, half_word, value)
 {
 #if defined(NTVDM) || defined(GISP_SVGA)
+#ifndef NEC_98
     if (port == 0x4f)   /* dead port used by PS/2 XGA bios for DAC delays */
-	return;
+        return;
+#endif   //NEC_98
 #ifdef NTVDM
     host_ica_lock();
 #endif
@@ -696,15 +723,19 @@ void SWTMR_outb IFN2(io_addr, port, half_word, value)
     timelock = LOCKED;
 #endif
 
+#if defined(NEC_98)
+        if(port == 0x77 || port == 0x3fdf)
+#else    //NEC_98
     port = port & TIMER_BIT_MASK;
-	if(port == 0x43)
-		controlWordReg(value);
-	else
-	    emu_8253 (port, WRITE_SIGNAL, value);
+        if(port == 0x43)
+#endif   //NEC_98
+                controlWordReg(value);
+        else
+            emu_8253 (port, WRITE_SIGNAL, value);
 #ifndef PROD
     if (io_verbose & TIMER_VERBOSE)
     {
-	sprintf(buf, "timer_outb() - Value %d to port 0x%x", value, port);
+        sprintf(buf, "timer_outb() - Value %d to port 0x%x", value, port);
         trace(buf, DUMP_REG);
     }
 #endif
@@ -715,19 +746,25 @@ void SWTMR_outb IFN2(io_addr, port, half_word, value)
     checktimelock();
 #endif
 
+#if defined(NEC_98)
+    if( RSBaud ) {
+        SetRSBaud( RSBaud );
+        RSBaud = 0;
+    }
+#endif   //NEC_98
 }
 
 
 /* --------------------------------------------------------------------------- */
-/*									       */
-/* 		Return the current DOS tick value based on Timer 0	       */
-/*									       */
+/*                                                                             */
+/*              Return the current DOS tick value based on Timer 0             */
+/*                                                                             */
 /* --------------------------------------------------------------------------- */
 
 #ifndef NTVDM
 GLOBAL ULONG get_DOS_ticks IFN0()
 {
-	return( timers[0].Count );
+        return( timers[0].Count );
 }
 #endif /* NTVDM */
 
@@ -746,7 +783,7 @@ void ReinitIdealTime IFN1(struct host_timeval *, t)
    timers[2].activationTime =
    timers[1].activationTime =
    timers[0].activationTime =
-		  idealtime = *t;
+                  idealtime = *t;
    /*
     * Clear out extra pending interrupts
     */
@@ -775,44 +812,48 @@ void ReinitIdealTime IFN1(struct host_timeval *, t)
 
 LOCAL void checktimelock IFN0()
 {
-	timelock = UNLOCKED;
-	if (needtick)
-	{
-		needtick = 0;
-		time_tick();
-	}
+        timelock = UNLOCKED;
+        if (needtick)
+        {
+                needtick = 0;
+                time_tick();
+        }
 }
 #endif
 
 /*
- *	emulate the 8253 chip.
+ *      emulate the 8253 chip.
  *
- *	emu_8253(port,signal,value)
+ *      emu_8253(port,signal,value)
  *
- *	port	-	port address being accessed
- *			(port & 3) gives A0,A1 lines
+ *      port    -       port address being accessed
+ *                      (port & 3) gives A0,A1 lines
  *
- *	signal	-	WRITE_SIGNAL (outb) or
- *			GATE_SIGNAL (ppi TIM2GATESPK change)
+ *      signal  -       WRITE_SIGNAL (outb) or
+ *                      GATE_SIGNAL (ppi TIM2GATESPK change)
  *
- *	value	-
- *			for WRITE_SIGNAL, value = byte being written to chip
- *			for GATE_SIGNAL,  value = GATE_SIGNAL_LOW or
- *						  GATE_SIGNAL_RISE
+ *      value   -
+ *                      for WRITE_SIGNAL, value = byte being written to chip
+ *                      for GATE_SIGNAL,  value = GATE_SIGNAL_LOW or
+ *                                                GATE_SIGNAL_RISE
  */
 
 
 LOCAL void emu_8253 IFN3(io_addr, port, int, signal, half_word, value)
 {
 
-	int A0A1;
+        int A0A1;
 
-	/* get address lines A0 and A1 */
-	A0A1 = port & 3;
+        /* get address lines A0 and A1 */
+#if defined(NEC_98)
+        A0A1 = (port & 7) >> 1;
+#else    //NEC_98
+        A0A1 = port & 3;
+#endif   //NEC_98
 
-	/* handle the access */
-		pcu = &timers[A0A1];
-		(pcu->state)(signal,value);
+        /* handle the access */
+                pcu = &timers[A0A1];
+                (pcu->state)(signal,value);
 }
 
 
@@ -839,125 +880,125 @@ LOCAL void emu_8253 IFN3(io_addr, port, int, signal, half_word, value)
 
 LOCAL void controlWordReg IFN1(half_word, cwd)
 {
-	int rl,m,channel;
-	half_word select_bits;
+        int rl,m,channel;
+        half_word select_bits;
 
-	/* decode control word */
-	channel = (cwd & 0xc0) >> 6;
-	if(channel == READ_BACK)
-	{
-		/* decode read back command */
-		select_bits = (cwd & 0xe) >> 1;
-		/* first look for counters to latch */
-		if (!(cwd & 0x20))
-		{
-			/* count bit low so latch selected counters */
-			if (select_bits & 0x01)
-			{
-				/* counter 0 */
-				pcu = &timers[0];
-				readCounter();
-				pcu->countlatched = 1;
-			}
-			if (select_bits & 0x02)
-			{
-				/* counter 1 */
-				pcu = &timers[1];
-				readCounter();
-				pcu->countlatched = 1;
-			}
-			if (select_bits & 0x04)
-			{
-				/* counter 2 */
-				pcu = &timers[2];
-				readCounter();
-				pcu->countlatched = 1;
-			}
-		}
+        /* decode control word */
+        channel = (cwd & 0xc0) >> 6;
+        if(channel == READ_BACK)
+        {
+                /* decode read back command */
+                select_bits = (cwd & 0xe) >> 1;
+                /* first look for counters to latch */
+                if (!(cwd & 0x20))
+                {
+                        /* count bit low so latch selected counters */
+                        if (select_bits & 0x01)
+                        {
+                                /* counter 0 */
+                                pcu = &timers[0];
+                                readCounter();
+                                pcu->countlatched = 1;
+                        }
+                        if (select_bits & 0x02)
+                        {
+                                /* counter 1 */
+                                pcu = &timers[1];
+                                readCounter();
+                                pcu->countlatched = 1;
+                        }
+                        if (select_bits & 0x04)
+                        {
+                                /* counter 2 */
+                                pcu = &timers[2];
+                                readCounter();
+                                pcu->countlatched = 1;
+                        }
+                }
 
-		/* now look for the status latch */
-		if (!(cwd & 0x10))
-		{
-			/* status bit low - status to be latched */
-			if (select_bits & 0x01)
-			{
-				/* counter 0 */
-				pcu = &timers[0];
-				latchStatusValue();
-			}
-			if (select_bits & 0x02)
-			{
-				/* counter 1 */
-				pcu = &timers[1];
-				latchStatusValue();
-			}
-			if (select_bits & 0x04)
-			{
-				/* counter 2 */
-				pcu = &timers[2];
-				latchStatusValue();
-			}
-		}
-	}
-	else
-	{
-		pcu = &timers[channel];
-		rl = (cwd & 0x30) >> 4;
+                /* now look for the status latch */
+                if (!(cwd & 0x10))
+                {
+                        /* status bit low - status to be latched */
+                        if (select_bits & 0x01)
+                        {
+                                /* counter 0 */
+                                pcu = &timers[0];
+                                latchStatusValue();
+                        }
+                        if (select_bits & 0x02)
+                        {
+                                /* counter 1 */
+                                pcu = &timers[1];
+                                latchStatusValue();
+                        }
+                        if (select_bits & 0x04)
+                        {
+                                /* counter 2 */
+                                pcu = &timers[2];
+                                latchStatusValue();
+                        }
+                }
+        }
+        else
+        {
+                pcu = &timers[channel];
+                rl = (cwd & 0x30) >> 4;
 
 
-		/* are we simply latching the present count value, or are
-		 * programming up a new mode ??
-		 */
-		if (rl == LATCH)
-		{	/* latching present count value */
-			readCounter();
-			pcu->countlatched = 1;
-			return;
-		}
-		else
-		{	/* new mode */
-			if (pcu == &timers[0])
-				timer_int_enabled = FALSE;
-			pcu->countlatched = 0;
-			pcu->tc = 0;
-			pcu->tickadjust = 0;
+                /* are we simply latching the present count value, or are
+                 * programming up a new mode ??
+                 */
+                if (rl == LATCH)
+                {       /* latching present count value */
+                        readCounter();
+                        pcu->countlatched = 1;
+                        return;
+                }
+                else
+                {       /* new mode */
+                        if (pcu == &timers[0])
+                                timer_int_enabled = FALSE;
+                        pcu->countlatched = 0;
+                        pcu->tc = 0;
+                        pcu->tickadjust = 0;
 #ifndef NTVDM
-			pcu->microtick = 0;
-			pcu->saveCount = 0;
+                        pcu->microtick = 0;
+                        pcu->saveCount = 0;
 #endif
 
-			m  = (cwd & 0xe)  >> 1;
-			if(m > 5)m -= 4; /* Modes 6 and 7 don't exist - they are intepreted as modes 2 and 3 */
-			pcu->m = m;
-			setTriggerCond();
-			setOutputAfterMode();
-			pcu->bcd = cwd & 1;
-			pcu->rl = rl;
-			pcu->actionOnWtComplete = CounterBufferLoaded;
-			pcu->actionOnGateEnabled = CounterBufferLoaded;
-			pcu->statePriorWt = pcu->state;
-			pcu->state = waitingFor1stWrite;
-		}
-	}
+                        m  = (cwd & 0xe)  >> 1;
+                        if(m > 5)m -= 4; /* Modes 6 and 7 don't exist - they are intepreted as modes 2 and 3 */
+                        pcu->m = m;
+                        setTriggerCond();
+                        setOutputAfterMode();
+                        pcu->bcd = cwd & 1;
+                        pcu->rl = rl;
+                        pcu->actionOnWtComplete = CounterBufferLoaded;
+                        pcu->actionOnGateEnabled = CounterBufferLoaded;
+                        pcu->statePriorWt = pcu->state;
+                        pcu->state = waitingFor1stWrite;
+                }
+        }
 }
 
 /* latch status ready for reading */
 LOCAL void latchStatusValue IFN0()
 {
-	/*
-	*	Status byte is of format :
-	*
-	*	|OUT|Null Count|RW1|RW0|M2|M1|M0|BCD|
-	*
-	*/
+        /*
+        *       Status byte is of format :
+        *
+        *       |OUT|Null Count|RW1|RW0|M2|M1|M0|BCD|
+        *
+        */
 
-	/* NULL COUNT still only approximated. Who cares? */
-	pcu->latchstatus =
-		  (pcu->out.startLogicLevel<<7)
-		| (pcu->newCount == AVAILABLE ? (1<<6) : 0)
-		| (pcu->rl<<4)
-		| (pcu->m<<1) | (pcu->bcd);
-	pcu->readState = READSTATUS;
+        /* NULL COUNT still only approximated. Who cares? */
+        pcu->latchstatus = (unsigned char)(
+                  (pcu->out.startLogicLevel<<7)
+                | (pcu->newCount == AVAILABLE ? (1<<6) : 0)
+                | (pcu->rl<<4)
+                | (pcu->m<<1) | (pcu->bcd));
+        pcu->readState = READSTATUS;
 }
 
 /* set up flag establishing type of trigger condition for
@@ -966,19 +1007,19 @@ LOCAL void latchStatusValue IFN0()
 
 LOCAL void setTriggerCond IFN0()
 {
-	switch (pcu->m)
-	{
-	case RATE_GEN:
-	case SQUAREWAVE_GEN:
-	case SW_TRIG_STROBE:
-	case INT_ON_TERMINALCOUNT:
-		pcu->trigger = LEVEL;
-		return;
-	case PROG_ONESHOT:
-	case HW_TRIG_STROBE:
-		pcu->trigger = EDGE;
-		return;
-	}
+        switch (pcu->m)
+        {
+        case RATE_GEN:
+        case SQUAREWAVE_GEN:
+        case SW_TRIG_STROBE:
+        case INT_ON_TERMINALCOUNT:
+                pcu->trigger = LEVEL;
+                return;
+        case PROG_ONESHOT:
+        case HW_TRIG_STROBE:
+                pcu->trigger = EDGE;
+                return;
+        }
 }
 
 
@@ -991,57 +1032,57 @@ LOCAL void loadCounter IFN0()
         IU32 maxback;
 #endif
 
-	/* set counter */
-	/* get correct modulo to use for counter calculations */
-	modulo = (pcu->outbmsb << 8) | pcu->outblsb;
-	if (pcu->bcd == BCD)
-	{
-		if(modulo)
+        /* set counter */
+        /* get correct modulo to use for counter calculations */
+        modulo = (pcu->outbmsb << 8) | pcu->outblsb;
+        if (pcu->bcd == BCD)
+        {
+                if(modulo)
                         modulo = bcd_to_bin((word)modulo);
-		else
-			modulo = 10000L;
-	}
-	else
-		if(!modulo)modulo = 0x10000L;
+                else
+                        modulo = 10000L;
+        }
+        else
+                if(!modulo)modulo = 0x10000L;
 
-	/* Beware - Count and initialCount are different sizes, so don't merge the next two lines!! */
-	pcu->initialCount = modulo;
+        /* Beware - Count and initialCount are different sizes, so don't merge the next two lines!! */
+        pcu->initialCount = modulo;
         pcu->Count = (word)modulo;
 
-	/*
-	 * not at terminal count anymore, so reflect this fact by resetting
-	 * tc (which I think means "reached terminal count"
-	 */
-	pcu->tc = 0;
-	pcu->newCount = USED;
-	if(pcu == &timers[0])
-	{
-	    /* Get rid of pending interrupts - these may no longer me appropriate - eg. in Sailing */
-	    ica_hw_interrupt_cancel(ICA_MASTER,CPU_TIMER_INT);
+        /*
+         * not at terminal count anymore, so reflect this fact by resetting
+         * tc (which I think means "reached terminal count"
+         */
+        pcu->tc = 0;
+        pcu->newCount = USED;
+        if(pcu == &timers[0])
+        {
+            /* Get rid of pending interrupts - these may no longer me appropriate - eg. in Sailing */
+            ica_hw_interrupt_cancel(ICA_MASTER,CPU_TIMER_INT);
 #ifdef NTVDM
-	    RealTimeCountCounterZero = pcu->Count;
+            RealTimeCountCounterZero = pcu->Count;
 #endif
 
 #ifndef NTVDM
-		/* how many interrupts in MAX_BACK_SECS seconds? */
-		maxback = (1193180 * MAX_BACK_SECS) / modulo;
+                /* how many interrupts in MAX_BACK_SECS seconds? */
+                maxback = (1193180 * MAX_BACK_SECS) / modulo;
 
-		if (maxback > max_backlog)
-		{
+                if (maxback > max_backlog)
+                {
 #ifndef PROD
-			fprintf(trace_file, "setting max backlog to %d\n", maxback);
+                        fprintf(trace_file, "setting max backlog to %d\n", maxback);
 #endif
-			max_backlog = maxback;
+                        max_backlog = maxback;
                 }
 #endif
 
         }
 
 #if defined(NTVDM) && !defined(PROD)
-	if (NtTicTesting)  {
-	    printf("Timer %d modulo=%lu %dHz\n",
-		    pcu-timers, modulo, 1193180/modulo);
-	    }
+        if (NtTicTesting)  {
+            printf("Timer %d modulo=%lu %dHz\n",
+                    pcu-timers, modulo, 1193180/modulo);
+            }
 #endif /*NTVDM & !PROD*/
 }
 
@@ -1049,31 +1090,32 @@ LOCAL void loadCounter IFN0()
 
 LOCAL void readCounter IFN0()
 {
-	int countread;
+        int countread;
 
-	updateCounter();
+        updateCounter();
 
 #ifdef NTVDM
-	   /*
-	    *  Timer Zero is a special case, as it is maintaned
-	    *  by IdealInterval, and not RealTime. We must give
-	    *  real time granularity
-	    */
-	countread = pcu == &timers[0] ? RealTimeCountCounterZero
-				      : pcu->Count;
-	if (pcu->bcd == BCD)
-	    countread = bin_to_bcd(countread);
+           /*
+            *  Timer Zero is a special case, as it is maintaned
+            *  by IdealInterval, and not RealTime. We must give
+            *  real time granularity
+            */
+        countread = pcu == &timers[0] ? RealTimeCountCounterZero
+                                      : pcu->Count;
+
+        if (pcu->bcd == BCD)
+            countread = bin_to_bcd(countread);
 
 #else
-	if(pcu->bcd == BCD)
-		countread = bin_to_bcd(pcu->Count);
-	else
-		countread = pcu->Count;
+        if(pcu->bcd == BCD)
+                countread = bin_to_bcd(pcu->Count);
+        else
+                countread = pcu->Count;
 #endif
 
-	pcu->latchvaluemsb = countread >> 8;
-	pcu->latchvaluelsb = countread & 0xff;
-	sure_note_trace1(TIMER_VERBOSE,"reading count %d",pcu->Count);
+        pcu->latchvaluemsb = countread >> 8;
+        pcu->latchvaluelsb = countread & 0xff;
+        sure_note_trace1(TIMER_VERBOSE,"reading count %d",pcu->Count);
 }
 
 /* active counter (mode 0) lost its gate ... gate has now
@@ -1082,129 +1124,129 @@ LOCAL void readCounter IFN0()
  */
 LOCAL GATENABLED_FUNCTION resumeCounting0onGate IFN0()
 {
-	if (pcu->freezeCounter)
-	{
-		pcu->freezeCounter = 0;
-		timestamp();
-	}
-	if (pcu->newCount == AVAILABLE)
-		loadCounter();
-	if (!pcu->tc)
-	{
-		timestamp();
-		pcu->stateOnGate = Counting0;
-		runCount();
-	}
-	else
-		pcu->state = Counting0;
+        if (pcu->freezeCounter)
+        {
+                pcu->freezeCounter = 0;
+                timestamp();
+        }
+        if (pcu->newCount == AVAILABLE)
+                loadCounter();
+        if (!pcu->tc)
+        {
+                timestamp();
+                pcu->stateOnGate = Counting0;
+                runCount();
+        }
+        else
+                pcu->state = Counting0;
 }
 
 LOCAL GATENABLED_FUNCTION resumeCounting0 IFN0()
 {
-	int doadjust = 0;
-	if (pcu->freezeCounter)
-	{
-		pcu->freezeCounter = 0;
-		timestamp();
-	}
-	if (pcu->newCount == AVAILABLE)
-	{
-		doadjust = 1;
-		loadCounter();
-	}
-	if (!pcu->tc)
-	{
-		pcu->stateOnGate = Counting0;
-		runCount();
-	}
-	else
-	{
-		pcu->state = Counting0;
-		if (doadjust)
-			pcu->Count -= pcu->tickadjust;
-	}
+        int doadjust = 0;
+        if (pcu->freezeCounter)
+        {
+                pcu->freezeCounter = 0;
+                timestamp();
+        }
+        if (pcu->newCount == AVAILABLE)
+        {
+                doadjust = 1;
+                loadCounter();
+        }
+        if (!pcu->tc)
+        {
+                pcu->stateOnGate = Counting0;
+                runCount();
+        }
+        else
+        {
+                pcu->state = Counting0;
+                if (doadjust)
+                        pcu->Count -= pcu->tickadjust;
+        }
 }
 
 LOCAL GATENABLED_FUNCTION resumeCounting_2_3_4_onGate IFN0()
 {
-	/* for modes 2 and 3, ought to wait until counter
-	 * completes its current period, but we cant be as accurate
-	 * as that
-	 */
-	if (pcu->newCount == AVAILABLE)
-		loadCounter();
-	if (pcu->m == RATE_GEN || pcu->m == SQUAREWAVE_GEN)
-		pcu->stateOnGate = Counting_2_3;
-	else
-		pcu->stateOnGate = Counting_4_5;
-	timestamp();
-	runCount();
+        /* for modes 2 and 3, ought to wait until counter
+         * completes its current period, but we cant be as accurate
+         * as that
+         */
+        if (pcu->newCount == AVAILABLE)
+                loadCounter();
+        if (pcu->m == RATE_GEN || pcu->m == SQUAREWAVE_GEN)
+                pcu->stateOnGate = Counting_2_3;
+        else
+                pcu->stateOnGate = Counting_4_5;
+        timestamp();
+        runCount();
 }
 
 LOCAL GATENABLED_FUNCTION resumeCounting_2_3_4 IFN0()
 {
-	/* for modes 2 and 3, ought to wait until counter
-	 * completes its current period, but we cant be as accurate
-	 * as that
-	 */
-	if (pcu->newCount == AVAILABLE)
-	{
-		pcu->delay = pcu->Count;
-		loadCounter();
-	}
-	if (pcu->m == RATE_GEN || pcu->m == SQUAREWAVE_GEN)
-		pcu->stateOnGate = Counting_2_3;
-	else
-		pcu->stateOnGate = Counting_4_5;
-	runCount();
+        /* for modes 2 and 3, ought to wait until counter
+         * completes its current period, but we cant be as accurate
+         * as that
+         */
+        if (pcu->newCount == AVAILABLE)
+        {
+                pcu->delay = pcu->Count;
+                loadCounter();
+        }
+        if (pcu->m == RATE_GEN || pcu->m == SQUAREWAVE_GEN)
+                pcu->stateOnGate = Counting_2_3;
+        else
+                pcu->stateOnGate = Counting_4_5;
+        runCount();
 }
 
 
 LOCAL GATENABLED_FUNCTION runCount IFN0()
 {
-	unsigned long lowticks, hiticks;
-	unsigned long adjustedCount;	/* For count = 0 and BCD */
+        unsigned long lowticks, hiticks;
+        unsigned long adjustedCount;    /* For count = 0 and BCD */
 
-	adjustedCount = timer_conv(pcu->Count);
-	pcu->state = pcu->stateOnGate;
-	switch (pcu->m)
-	{
-	case INT_ON_TERMINALCOUNT:
-		outputWaveForm(pcu->delay,adjustedCount,
-			INDEFINITE,STARTLO,NOREPEAT);
-		return;
-	case PROG_ONESHOT:
-		loadCounter();
-		outputWaveForm(pcu->delay,adjustedCount,
-			INDEFINITE,STARTLO,NOREPEAT);
-		pcu->Count -= pcu->tickadjust;
-		return;
-	case RATE_GEN:
-		loadCounter();
-		outputWaveForm(pcu->delay,1,
-			adjustedCount-1,STARTHI,REPEAT);
-		pcu->Count -= pcu->tickadjust;
-		return;
-	case SQUAREWAVE_GEN:
-		loadCounter();
-		if (!(pcu->Count & 1))
-			lowticks = hiticks = adjustedCount >> 1;
-		else
-		{
-			lowticks = (adjustedCount - 1) >> 1;
-			hiticks = (adjustedCount + 1) >> 1;
-		}
-		outputWaveForm(pcu->delay,lowticks, hiticks,STARTHI,REPEAT);
-		pcu->Count -= pcu->tickadjust;
-		return;
-	case SW_TRIG_STROBE:
-		outputWaveForm(pcu->delay,1, adjustedCount,STARTHI,NOREPEAT);
-		return;
-	case HW_TRIG_STROBE:
-		loadCounter();
-		outputWaveForm(pcu->delay,1, adjustedCount,STARTHI,NOREPEAT);
-		return;
-	}
+        adjustedCount = timer_conv(pcu->Count);
+        pcu->state = pcu->stateOnGate;
+        switch (pcu->m)
+        {
+        case INT_ON_TERMINALCOUNT:
+                outputWaveForm(pcu->delay,adjustedCount,
+                        INDEFINITE,STARTLO,NOREPEAT);
+                return;
+        case PROG_ONESHOT:
+                loadCounter();
+                outputWaveForm(pcu->delay,adjustedCount,
+                        INDEFINITE,STARTLO,NOREPEAT);
+                pcu->Count -= pcu->tickadjust;
+                return;
+        case RATE_GEN:
+                loadCounter();
+                outputWaveForm(pcu->delay,1,
+                        adjustedCount-1,STARTHI,REPEAT);
+                pcu->Count -= pcu->tickadjust;
+                return;
+        case SQUAREWAVE_GEN:
+                loadCounter();
+                if (!(pcu->Count & 1))
+                        lowticks = hiticks = adjustedCount >> 1;
+                else
+                {
+                        lowticks = (adjustedCount - 1) >> 1;
+                        hiticks = (adjustedCount + 1) >> 1;
+                }
+                outputWaveForm(pcu->delay,lowticks, hiticks,STARTHI,REPEAT);
+                pcu->Count -= pcu->tickadjust;
+                return;
+        case SW_TRIG_STROBE:
+                outputWaveForm(pcu->delay,1, adjustedCount,STARTHI,NOREPEAT);
+                return;
+        case HW_TRIG_STROBE:
+                loadCounter();
+                outputWaveForm(pcu->delay,1, adjustedCount,STARTHI,NOREPEAT);
+                return;
+        }
 }
 
 
@@ -1212,9 +1254,9 @@ LOCAL GATENABLED_FUNCTION runCount IFN0()
 
 LOCAL void resumeAwaitGate IFN0()
 {
-	pcu->actionOnWtComplete = timererror;
-	pcu->state = awaitingGate;
-	awaitingGate(GATE_SIGNAL,pcu->gate);
+        pcu->actionOnWtComplete = timererror;
+        pcu->state = awaitingGate;
+        awaitingGate(GATE_SIGNAL,pcu->gate);
 }
 
 
@@ -1229,19 +1271,19 @@ LOCAL void resumeAwaitGate IFN0()
 
 LOCAL void setOutputAfterMode IFN0()
 {
-	switch (pcu->m)
-	{
-	case INT_ON_TERMINALCOUNT:
-		outputLow( /*INDEFINITE*/ );
-		return;
-	case PROG_ONESHOT:
-	case RATE_GEN:
-	case SQUAREWAVE_GEN:
-	case SW_TRIG_STROBE:
-	case HW_TRIG_STROBE:
-		outputHigh( /*INDEFINITE*/ );
-		return;
-	}
+        switch (pcu->m)
+        {
+        case INT_ON_TERMINALCOUNT:
+                outputLow( /*INDEFINITE*/ );
+                return;
+        case PROG_ONESHOT:
+        case RATE_GEN:
+        case SQUAREWAVE_GEN:
+        case SW_TRIG_STROBE:
+        case HW_TRIG_STROBE:
+                outputHigh( /*INDEFINITE*/ );
+                return;
+        }
 }
 
 
@@ -1251,7 +1293,7 @@ LOCAL void setOutputAfterMode IFN0()
 
 LOCAL void outputLow IFN0()
 {
-	outputWaveForm(0,INDEFINITE,0,STARTLO,NOREPEAT);
+        outputWaveForm(0,INDEFINITE,0,STARTLO,NOREPEAT);
 }
 
 
@@ -1261,52 +1303,56 @@ LOCAL void outputLow IFN0()
 
 LOCAL void outputHigh IFN0()
 {
-	outputWaveForm(0,0,INDEFINITE,STARTHI,NOREPEAT);
+        outputWaveForm(0,0,INDEFINITE,STARTHI,NOREPEAT);
 }
 
 
 /* when the wave form is deterministic, tell the sound emulation about it.
- *	delay	    	-	if <>0, don't start this waveform for
- *			 	this number of counter clocks.
- *	lowclocks	-	the #.counter clocks to stay low for
- *	hiclocks	-	the #.counter clocks to stay high for
- *	(either parameter may be INDEFINITE duration)
- *	lohi		-	0 ==> start at low logic level
- *	    		-     <>0 ==> start at high logic level
- *	repeat		-	0 ==> don't
- *			      <>0 ==> repeat.
+ *      delay           -       if <>0, don't start this waveform for
+ *                              this number of counter clocks.
+ *      lowclocks       -       the #.counter clocks to stay low for
+ *      hiclocks        -       the #.counter clocks to stay high for
+ *      (either parameter may be INDEFINITE duration)
+ *      lohi            -       0 ==> start at low logic level
+ *                      -     <>0 ==> start at high logic level
+ *      repeat          -       0 ==> don't
+ *                            <>0 ==> repeat.
  *
- *	(n.b; 1 counter clock period = 1.19318 usecs)
+ *      (n.b; 1 counter clock period = 1.19318 usecs)
  */
 
 LOCAL void outputWaveForm IFN5(unsigned int, delay, unsigned long, lowclocks,
-	unsigned long, hiclocks, int, lohi, int, repeat)
+        unsigned long, hiclocks, int, lohi, int, repeat)
 {
 #ifdef DOCUMENTATION
-	int ch;
+        int ch;
 #endif /* DOCUMENTATION */
-	pcu->out.startLogicLevel = lohi;
-	pcu->out.repeatWaveForm = repeat;
-	pcu->out.clocksAtLoLogicLevel = lowclocks;
-	pcu->out.clocksAtHiLogicLevel = hiclocks;
-	if (repeat == REPEAT)
-		pcu->out.period = lowclocks + hiclocks;
-	if (pcu == &timers[2])
-	{
-		host_timer2_waveform(delay,lowclocks,hiclocks,lohi,repeat);
-	}
-	pcu->delay = 0;
+        pcu->out.startLogicLevel = lohi;
+        pcu->out.repeatWaveForm = repeat;
+        pcu->out.clocksAtLoLogicLevel = lowclocks;
+        pcu->out.clocksAtHiLogicLevel = hiclocks;
+        if (repeat == REPEAT)
+                pcu->out.period = lowclocks + hiclocks;
+#if defined(NEC_98)
+        if (pcu == &timers[1])
+#else    //NEC_98
+        if (pcu == &timers[2])
+#endif   //NEC_98
+        {
+                host_timer2_waveform(delay,lowclocks,hiclocks,lohi,repeat);
+        }
+        pcu->delay = 0;
 
 #ifdef DOCUMENTATION
-	if (pcu==&timers[0])
-		ch = 0;
-	if (pcu==&timers[1])
-		ch = 1;
-	if (pcu==&timers[2])
-		ch = 2;
-	sprintf(buf,"ch.%d waveform:delay %d lo %d hi %d lohi %d repeat %d\n",
-		ch,delay,lowclocks,hiclocks,lohi,repeat);
-	trace(buf,0);
+        if (pcu==&timers[0])
+                ch = 0;
+        if (pcu==&timers[1])
+                ch = 1;
+        if (pcu==&timers[2])
+                ch = 2;
+        sprintf(buf,"ch.%d waveform:delay %d lo %d hi %d lohi %d repeat %d\n",
+                ch,delay,lowclocks,hiclocks,lohi,repeat);
+        trace(buf,0);
 #endif /* DOCUMENTATION */
 }
 
@@ -1318,20 +1364,20 @@ LOCAL void timestamp IFN0()
 #ifdef NTVDM
        /* update counter zero time stamp */
        if (pcu == &timers[0]) {
-	   host_GetSysTime(&LastTimeCounterZero);
-	   }
+           host_GetSysTime(&LastTimeCounterZero);
+           }
 #else
-	/* Initialise lastTicks before referencing it in updateCount() */
-	/* Makes Norton SYSINFO version 5.0 work on fast (HP) machines */
-	pcu->lastTicks = 0 ;
+        /* Initialise lastTicks before referencing it in updateCount() */
+        /* Makes Norton SYSINFO version 5.0 work on fast (HP) machines */
+        pcu->lastTicks = 0 ;
 #endif
-	/* Go and get the time since it was activated */
-	(*pcu->getTime)(&pcu->activationTime);
+        /* Go and get the time since it was activated */
+        (*pcu->getTime)(&pcu->activationTime);
 }
 
 LOCAL UNBLOCK_FUNCTION timererror IFN0()
 {
-	always_trace0("time error!!!!");
+        always_trace0("time error!!!!");
 }
 
 /* *************** COUNTER UPDATING FUNCTIONS FOR NON_IDLE COUNTERS **********/
@@ -1356,33 +1402,33 @@ LOCAL UNBLOCK_FUNCTION timererror IFN0()
 
 LOCAL STATE_FUNCTION uninit IFN2(int, signal, half_word, value)
 {
-	if (signal == GATE_SIGNAL)
-		pcu->gate = value;
+        if (signal == GATE_SIGNAL)
+                pcu->gate = value;
 }
 
 LOCAL STATE_FUNCTION awaitingGate IFN2(int, signal, half_word, value)
 {
-	switch (signal)
-	{
-	case GATE_SIGNAL:
-		pcu->gate = value;
-		if (value == GATE_SIGNAL_LOW)
-			return;
+        switch (signal)
+        {
+        case GATE_SIGNAL:
+                pcu->gate = value;
+                if (value == GATE_SIGNAL_LOW)
+                        return;
 
-		/* this is pathological ... should never have to
-		 * wait for gate for channel 0
-		 */
-		if (pcu == &timers[0])
-			timer_int_enabled = TRUE;
+                /* this is pathological ... should never have to
+                 * wait for gate for channel 0
+                 */
+                if (pcu == &timers[0])
+                        timer_int_enabled = TRUE;
 
-		(pcu->actionOnGateEnabled)();
-		return;
-	case WRITE_SIGNAL:
-		pcu->actionOnWtComplete = resumeAwaitGate;
-		pcu->statePriorWt = pcu->state;
-		waitingFor1stWrite(signal,value);
-		return;
-	}
+                (pcu->actionOnGateEnabled)();
+                return;
+        case WRITE_SIGNAL:
+                pcu->actionOnWtComplete = resumeAwaitGate;
+                pcu->statePriorWt = pcu->state;
+                waitingFor1stWrite(signal,value);
+                return;
+        }
 }
 
 /*
@@ -1395,35 +1441,35 @@ LOCAL STATE_FUNCTION awaitingGate IFN2(int, signal, half_word, value)
 
 LOCAL STATE_FUNCTION waitingFor1stWrite IFN2(int, signal, half_word, value)
 {
-	switch (signal)
-	{
-	case GATE_SIGNAL:
-		/* remember gate signal state */
-		pcu->gate = value;
-		return;
-	case WRITE_SIGNAL:
-		switch (pcu->rl)
-		{
-		case RL_LSB:
-			pcu->outblsb = value;
-			/* Zero the most signifcant byte. */
-			pcu->outbmsb = 0;
-			pcu->newCount = AVAILABLE;
-			WtComplete();
-			return;
-		case RL_LMSB:
-			pcu->outblsb = value;
-			pcu->state = waitingFor2ndWrite;
-			return;
-		case RL_MSB:
-			pcu->outbmsb = value;
-			/* Zero the least signifcant byte. */
-			pcu->outblsb = 0;
-			pcu->newCount = AVAILABLE;
-			WtComplete();
-			return;
-		}
-	}
+        switch (signal)
+        {
+        case GATE_SIGNAL:
+                /* remember gate signal state */
+                pcu->gate = value;
+                return;
+        case WRITE_SIGNAL:
+                switch (pcu->rl)
+                {
+                case RL_LSB:
+                        pcu->outblsb = value;
+                        /* Zero the most signifcant byte. */
+                        pcu->outbmsb = 0;
+                        pcu->newCount = AVAILABLE;
+                        WtComplete();
+                        return;
+                case RL_LMSB:
+                        pcu->outblsb = value;
+                        pcu->state = waitingFor2ndWrite;
+                        return;
+                case RL_MSB:
+                        pcu->outbmsb = value;
+                        /* Zero the least signifcant byte. */
+                        pcu->outblsb = 0;
+                        pcu->newCount = AVAILABLE;
+                        WtComplete();
+                        return;
+                }
+        }
 }
 
 /*
@@ -1432,18 +1478,18 @@ LOCAL STATE_FUNCTION waitingFor1stWrite IFN2(int, signal, half_word, value)
 
 LOCAL STATE_FUNCTION waitingFor2ndWrite IFN2(int, signal, half_word, value)
 {
-	switch (signal)
-	{
-	case GATE_SIGNAL:
-		/* remember gate signal state */
-		pcu->gate = value;
-		return;
-	case WRITE_SIGNAL:
-		pcu->newCount = AVAILABLE;
-		pcu->outbmsb = value;
-		WtComplete();
-		return;
-	}
+        switch (signal)
+        {
+        case GATE_SIGNAL:
+                /* remember gate signal state */
+                pcu->gate = value;
+                return;
+        case WRITE_SIGNAL:
+                pcu->newCount = AVAILABLE;
+                pcu->outbmsb = value;
+                WtComplete();
+                return;
+        }
 }
 
 
@@ -1456,60 +1502,60 @@ LOCAL STATE_FUNCTION waitingFor2ndWrite IFN2(int, signal, half_word, value)
 
 LOCAL void WtComplete IFN0()
 {
-	if (pcu->gate == GATE_SIGNAL_LOW && pcu->trigger == LEVEL)
-	{
-		pcu->state = awaitingGate;
-		awaitingGate(GATE_SIGNAL, pcu->gate);
-	}
-	else
-		(pcu->actionOnWtComplete)();
+        if (pcu->gate == GATE_SIGNAL_LOW && pcu->trigger == LEVEL)
+        {
+                pcu->state = awaitingGate;
+                awaitingGate(GATE_SIGNAL, pcu->gate);
+        }
+        else
+                (pcu->actionOnWtComplete)();
 }
 
 /* active counter (Interrupt on Terminal Count)
  * if the gate is lost, then
- *	set the output indefinitely high if at terminal count, or
- *	indefinitely low if still counting (i.e; extend current low
- *	level signal duration).
- *	if count reprogrammed during this time, this new count will be
- *	used on next trigger (gate).
+ *      set the output indefinitely high if at terminal count, or
+ *      indefinitely low if still counting (i.e; extend current low
+ *      level signal duration).
+ *      if count reprogrammed during this time, this new count will be
+ *      used on next trigger (gate).
  * else
- *	if new count programmed, stop counter on receiving 1st byte.
- *	start new count on second byte. (done by resumeCounting0())
+ *      if new count programmed, stop counter on receiving 1st byte.
+ *      start new count on second byte. (done by resumeCounting0())
  */
 
 LOCAL STATE_FUNCTION Counting0 IFN2(int, signal, half_word, value)
 {
-	pcu->actionOnGateEnabled = resumeCounting0onGate;
-	pcu->actionOnWtComplete = resumeCounting0;
+        pcu->actionOnGateEnabled = resumeCounting0onGate;
+        pcu->actionOnWtComplete = resumeCounting0;
 
-	switch (signal)
-	{
-	case GATE_SIGNAL:
-		if (value == GATE_SIGNAL_HIGH)
-			return;
-		/* we're about to freeze timer channel ...
-		 * get an up to date count. This might change the
-		 * state of the counter.
-		 */
-		updateCounter();
-		pcu->gate = value;
-		if (pcu->tc)
-			outputHigh();
-		else
-			outputLow();
-		pcu->state = awaitingGate;
-		return;
-	case WRITE_SIGNAL:
-		pcu->freezeCounter = 1;
-		updateCounter();
-		if (pcu->tc)
-			outputHigh();
-		else
-			outputLow();
-		pcu->statePriorWt = pcu->state;
-		waitingFor1stWrite(signal,value);
-		return;
-	}
+        switch (signal)
+        {
+        case GATE_SIGNAL:
+                if (value == GATE_SIGNAL_HIGH)
+                        return;
+                /* we're about to freeze timer channel ...
+                 * get an up to date count. This might change the
+                 * state of the counter.
+                 */
+                updateCounter();
+                pcu->gate = value;
+                if (pcu->tc)
+                        outputHigh();
+                else
+                        outputLow();
+                pcu->state = awaitingGate;
+                return;
+        case WRITE_SIGNAL:
+                pcu->freezeCounter = 1;
+                updateCounter();
+                if (pcu->tc)
+                        outputHigh();
+                else
+                        outputLow();
+                pcu->statePriorWt = pcu->state;
+                waitingFor1stWrite(signal,value);
+                return;
+        }
 }
 
 /* active counter (programmable One-Shot)
@@ -1519,110 +1565,110 @@ LOCAL STATE_FUNCTION Counting0 IFN2(int, signal, half_word, value)
 
 LOCAL STATE_FUNCTION Counting1 IFN2(int, signal, half_word, value)
 {
-	pcu->actionOnGateEnabled = startCounting;
-	pcu->actionOnWtComplete = resumeCounting_1_5;
+        pcu->actionOnGateEnabled = startCounting;
+        pcu->actionOnWtComplete = resumeCounting_1_5;
 
-	switch (signal)
-	{
-	case GATE_SIGNAL:
-		/* ignore transition to low on trigger.
-		 * any rising edge retriggers the counter.
-		 */
-		if (value == GATE_SIGNAL_LOW)
-			return;
-		pcu->gate = GATE_SIGNAL_HIGH;
-		pcu->stateOnGate = Counting1;
-		timestamp();
-		runCount();
-		return;
-	case WRITE_SIGNAL:
-		pcu->statePriorWt = pcu->state;
-		waitingFor1stWrite(signal,value);
-		return;
-	}
+        switch (signal)
+        {
+        case GATE_SIGNAL:
+                /* ignore transition to low on trigger.
+                 * any rising edge retriggers the counter.
+                 */
+                if (value == GATE_SIGNAL_LOW)
+                        return;
+                pcu->gate = GATE_SIGNAL_HIGH;
+                pcu->stateOnGate = Counting1;
+                timestamp();
+                runCount();
+                return;
+        case WRITE_SIGNAL:
+                pcu->statePriorWt = pcu->state;
+                waitingFor1stWrite(signal,value);
+                return;
+        }
 }
 
 LOCAL UNBLOCK_FUNCTION resumeCounting_1_5 IFN0()
 {
-	/* if terminal count has been reached, wait for the next
-	 * trigger ... any new count value programmed will be used
-	 * then.
-	 * Otherwise, even if new count is available, it still won't
-	 * be used until next trigger
-	 */
-	if (pcu->gate == GATE_SIGNAL_RISE)
-	{
-		pcu->state = Counting1;
-		if (pcu->m == HW_TRIG_STROBE)
-			pcu->state = Counting_4_5;
-		return;
-	}
+        /* if terminal count has been reached, wait for the next
+         * trigger ... any new count value programmed will be used
+         * then.
+         * Otherwise, even if new count is available, it still won't
+         * be used until next trigger
+         */
+        if (pcu->gate == GATE_SIGNAL_RISE)
+        {
+                pcu->state = Counting1;
+                if (pcu->m == HW_TRIG_STROBE)
+                        pcu->state = Counting_4_5;
+                return;
+        }
 
-	if (pcu->tc)
-		pcu->state = awaitingGate;
-	else
-	{
-		pcu->state = Counting1;
-		if (pcu->m == HW_TRIG_STROBE)
-			pcu->state = Counting_4_5;
-	}
+        if (pcu->tc)
+                pcu->state = awaitingGate;
+        else
+        {
+                pcu->state = Counting1;
+                if (pcu->m == HW_TRIG_STROBE)
+                        pcu->state = Counting_4_5;
+        }
 }
 
 LOCAL STATE_FUNCTION Counting_2_3 IFN2(int, signal, half_word, value)
 {
-	pcu->actionOnGateEnabled = resumeCounting_2_3_4_onGate;
-	pcu->actionOnWtComplete = resumeCounting_2_3_4;
+        pcu->actionOnGateEnabled = resumeCounting_2_3_4_onGate;
+        pcu->actionOnWtComplete = resumeCounting_2_3_4;
 
-	switch (signal)
-	{
-	case GATE_SIGNAL:
-		if (value == GATE_SIGNAL_HIGH)
-			return;
-		/* we're about to freeze timer channel ...
-		 * get an up to date count. This might change the
-		 * state of the counter.
-		 */
-		updateCounter();
-		pcu->gate = value;
-		outputHigh();
-		pcu->state = awaitingGate;
-		return;
-	case WRITE_SIGNAL:
-		pcu->statePriorWt = pcu->state;
-		waitingFor1stWrite(signal,value);
-		return;
-	}
+        switch (signal)
+        {
+        case GATE_SIGNAL:
+                if (value == GATE_SIGNAL_HIGH)
+                        return;
+                /* we're about to freeze timer channel ...
+                 * get an up to date count. This might change the
+                 * state of the counter.
+                 */
+                updateCounter();
+                pcu->gate = value;
+                outputHigh();
+                pcu->state = awaitingGate;
+                return;
+        case WRITE_SIGNAL:
+                pcu->statePriorWt = pcu->state;
+                waitingFor1stWrite(signal,value);
+                return;
+        }
 }
 
 LOCAL STATE_FUNCTION Counting_4_5 IFN2(int, signal, half_word, value)
 {
-	pcu->actionOnGateEnabled = resumeCounting_2_3_4_onGate;
-	pcu->actionOnWtComplete = resumeCounting_2_3_4;
-	if (pcu->m == HW_TRIG_STROBE)
-	{
-		pcu->actionOnGateEnabled = resumeCounting_1_5;
-		pcu->actionOnWtComplete = resumeCounting_1_5;
-	}
+        pcu->actionOnGateEnabled = resumeCounting_2_3_4_onGate;
+        pcu->actionOnWtComplete = resumeCounting_2_3_4;
+        if (pcu->m == HW_TRIG_STROBE)
+        {
+                pcu->actionOnGateEnabled = resumeCounting_1_5;
+                pcu->actionOnWtComplete = resumeCounting_1_5;
+        }
 
-	switch (signal)
-	{
-	case GATE_SIGNAL:
-		if (value == GATE_SIGNAL_HIGH)
-			return;
-		/* we're about to freeze timer channel ...
-		 * get an up to date count. This might change the
-		 * state of the counter.
-		 */
-		updateCounter();
-		pcu->gate = value;
-		outputHigh();
-		pcu->state = awaitingGate;
-		return;
-	case WRITE_SIGNAL:
-		pcu->statePriorWt = pcu->state;
-		waitingFor1stWrite(signal,value);
-		return;
-	}
+        switch (signal)
+        {
+        case GATE_SIGNAL:
+                if (value == GATE_SIGNAL_HIGH)
+                        return;
+                /* we're about to freeze timer channel ...
+                 * get an up to date count. This might change the
+                 * state of the counter.
+                 */
+                updateCounter();
+                pcu->gate = value;
+                outputHigh();
+                pcu->state = awaitingGate;
+                return;
+        case WRITE_SIGNAL:
+                pcu->statePriorWt = pcu->state;
+                waitingFor1stWrite(signal,value);
+                return;
+        }
 }
 
 /* ****************** UNBLOCK FUNCTIONS ************************************* */
@@ -1639,99 +1685,106 @@ LOCAL STATE_FUNCTION Counting_4_5 IFN2(int, signal, half_word, value)
 
 LOCAL UNBLOCK_FUNCTION CounterBufferLoaded IFN0()
 {
-	unsigned long lowticks, hiticks, adjustedCount;
-	pcu->actionOnWtComplete = timererror;
-	loadCounter();
+        unsigned long lowticks, hiticks, adjustedCount;
+        pcu->actionOnWtComplete = timererror;
+        loadCounter();
 
 #ifdef DOCUMENTATION
-	/*
-	 * Output state of timer if tracing.
-	 * Currently dumpCounter has no effect, so just leave this in
-	 * case anyone wants to implement it properly.
-	 */
+        /*
+         * Output state of timer if tracing.
+         * Currently dumpCounter has no effect, so just leave this in
+         * case anyone wants to implement it properly.
+         */
 
-	if (io_verbose & TIMER_VERBOSE)
-	{
-		dumpCounter();
-	}
+        if (io_verbose & TIMER_VERBOSE)
+        {
+                dumpCounter();
+        }
 #endif /* DOCUMENTATION */
 
-	if (pcu->gate != GATE_SIGNAL_LOW)
-	{
-		if (pcu == &timers[0])
-			timer_int_enabled = TRUE;
-		timestamp();
-		adjustedCount = timer_conv(pcu->Count);
-		switch (pcu->m)
-		{
-		case INT_ON_TERMINALCOUNT:
-			outputWaveForm(pcu->delay,adjustedCount,
-				INDEFINITE,STARTLO,NOREPEAT);
-			pcu->Count -= pcu->tickadjust;
-			pcu->state = Counting0;
-			return;
-		case PROG_ONESHOT:
-			outputWaveForm(pcu->delay,adjustedCount,
-				INDEFINITE,STARTLO,NOREPEAT);
-			pcu->Count -= pcu->tickadjust;
-			pcu->state = Counting1;
-			return;
-		case RATE_GEN:
-			outputWaveForm(pcu->delay,1,
-				adjustedCount-1,STARTHI,REPEAT);
-			pcu->Count -= pcu->tickadjust;
-			pcu->state = Counting_2_3;
-			return;
-		case SQUAREWAVE_GEN:
-			if (!(pcu->Count & 1))
-				lowticks = hiticks = adjustedCount >> 1;
-			else
-			{
-				lowticks = (adjustedCount - 1) >> 1;
-				hiticks = (adjustedCount + 1) >> 1;
-			}
-			outputWaveForm(pcu->delay,lowticks,
-				hiticks,STARTHI,REPEAT);
-			pcu->Count -= pcu->tickadjust;
-			pcu->state = Counting_2_3;
-			return;
-		case SW_TRIG_STROBE:
-		case HW_TRIG_STROBE:
-			outputWaveForm(pcu->delay,1,
-				adjustedCount,STARTHI,NOREPEAT);
-			pcu->Count -= pcu->tickadjust;
-			pcu->state = Counting_4_5;
-			return;
-		}
-	}
-	else
-		if (pcu == &timers[0])
-			timer_int_enabled = FALSE;
-		pcu->state = awaitingGate;
-		pcu->actionOnGateEnabled = startCounting;
-		switch (pcu->m)
-		{
-		case INT_ON_TERMINALCOUNT:
-			pcu->stateOnGate = Counting0;
-			return;
-		case PROG_ONESHOT:
-			pcu->stateOnGate = Counting1;
-			return;
-		case RATE_GEN:
-		case SQUAREWAVE_GEN:
-			pcu->stateOnGate = Counting_2_3;
-			return;
-		case SW_TRIG_STROBE:
-		case HW_TRIG_STROBE:
-			pcu->stateOnGate = Counting_4_5;
-			return;
-		}
+        if (pcu->gate != GATE_SIGNAL_LOW)
+        {
+#if defined(NEC_98)
+                if (pcu == &timers[2])
+//                  SetRSBaud( pcu->outblsb + (pcu->outbmsb) * 0x100 );
+                    RSBaud = pcu->outblsb + (pcu->outbmsb) * 0x100;
+                if (pcu == &timers[1])
+                    SetBeepFrequency( (DWORD)pcu->outblsb + (pcu->outbmsb) * 0x100) ;
+#endif   //NEC_98
+                if (pcu == &timers[0])
+                        timer_int_enabled = TRUE;
+                timestamp();
+                adjustedCount = timer_conv(pcu->Count);
+                switch (pcu->m)
+                {
+                case INT_ON_TERMINALCOUNT:
+                        outputWaveForm(pcu->delay,adjustedCount,
+                                INDEFINITE,STARTLO,NOREPEAT);
+                        pcu->Count -= pcu->tickadjust;
+                        pcu->state = Counting0;
+                        return;
+                case PROG_ONESHOT:
+                        outputWaveForm(pcu->delay,adjustedCount,
+                                INDEFINITE,STARTLO,NOREPEAT);
+                        pcu->Count -= pcu->tickadjust;
+                        pcu->state = Counting1;
+                        return;
+                case RATE_GEN:
+                        outputWaveForm(pcu->delay,1,
+                                adjustedCount-1,STARTHI,REPEAT);
+                        pcu->Count -= pcu->tickadjust;
+                        pcu->state = Counting_2_3;
+                        return;
+                case SQUAREWAVE_GEN:
+                        if (!(pcu->Count & 1))
+                                lowticks = hiticks = adjustedCount >> 1;
+                        else
+                        {
+                                lowticks = (adjustedCount - 1) >> 1;
+                                hiticks = (adjustedCount + 1) >> 1;
+                        }
+                        outputWaveForm(pcu->delay,lowticks,
+                                hiticks,STARTHI,REPEAT);
+                        pcu->Count -= pcu->tickadjust;
+                        pcu->state = Counting_2_3;
+                        return;
+                case SW_TRIG_STROBE:
+                case HW_TRIG_STROBE:
+                        outputWaveForm(pcu->delay,1,
+                                adjustedCount,STARTHI,NOREPEAT);
+                        pcu->Count -= pcu->tickadjust;
+                        pcu->state = Counting_4_5;
+                        return;
+                }
+        }
+        else
+                if (pcu == &timers[0])
+                        timer_int_enabled = FALSE;
+                pcu->state = awaitingGate;
+                pcu->actionOnGateEnabled = startCounting;
+                switch (pcu->m)
+                {
+                case INT_ON_TERMINALCOUNT:
+                        pcu->stateOnGate = Counting0;
+                        return;
+                case PROG_ONESHOT:
+                        pcu->stateOnGate = Counting1;
+                        return;
+                case RATE_GEN:
+                case SQUAREWAVE_GEN:
+                        pcu->stateOnGate = Counting_2_3;
+                        return;
+                case SW_TRIG_STROBE:
+                case HW_TRIG_STROBE:
+                        pcu->stateOnGate = Counting_4_5;
+                        return;
+                }
 }
 
 LOCAL void startCounting IFN0()
 {
-	timestamp();
-	runCount();
+        timestamp();
+        runCount();
 }
 
 #ifndef NTVDM
@@ -1744,6 +1797,9 @@ LOCAL unsigned long clocksSinceCounterActivated IFN1(struct host_timeval *, now)
     struct host_timeval *first;
     register unsigned long usec_val, nclocks;
     register unsigned int secs;
+#if defined(NEC_98)
+    unsigned short bios_flag;
+#endif   //NEC_98
 
     first = &pcu->activationTime;
     (*pcu->getTime)(now);
@@ -1755,27 +1811,43 @@ LOCAL unsigned long clocksSinceCounterActivated IFN1(struct host_timeval *, now)
     {
     case 0:  usec_val = now->tv_usec - first->tv_usec;
 #ifndef PROD
-	    if (io_verbose & TIMER_VERBOSE)
-		    if ( usec_val == 0 )
-	        	trace("clocksSinceCounterActivated() == 0 !", 0);
+            if (io_verbose & TIMER_VERBOSE)
+                    if ( usec_val == 0 )
+                        trace("clocksSinceCounterActivated() == 0 !", 0);
 #endif
-	     nclocks  = (usec_val * TIMER_CLOCK_DENOM) / TIMER_CLOCK_NUMER;
+#if defined(NEC_98)
+            sas_loadw(BIOS_NEC98_BIOS_FLAG,&bios_flag);
+            if(bios_flag & 0x8000)
+                nclocks = (usec_val * TIMER_CLOCK_DENOM_8) / TIMER_CLOCK_NUMER;
+            else
+                nclocks = (usec_val * TIMER_CLOCK_DENOM_10) / TIMER_CLOCK_NUMER;
+#else    //NEC_98
+             nclocks  = (usec_val * TIMER_CLOCK_DENOM) / TIMER_CLOCK_NUMER;
+#endif   //NEC_98
              break;
 
     case 1:  usec_val = 1000000L + now->tv_usec - first->tv_usec;
-	     nclocks  = (usec_val * TIMER_CLOCK_DENOM) / TIMER_CLOCK_NUMER;
+#if defined(NEC_98)
+            sas_loadw(BIOS_NEC98_BIOS_FLAG,&bios_flag);
+            if(bios_flag & 0x8000)
+                nclocks = (usec_val * TIMER_CLOCK_DENOM_8) / TIMER_CLOCK_NUMER;
+            else
+                nclocks = (usec_val * TIMER_CLOCK_DENOM_10) / TIMER_CLOCK_NUMER;
+#else    //NEC_98
+             nclocks  = (usec_val * TIMER_CLOCK_DENOM) / TIMER_CLOCK_NUMER;
+#endif   //NEC_98
              break;
 
     default:
-	     nclocks   = ((now->tv_usec - first->tv_usec) * TIMER_CLOCK_DENOM) / TIMER_CLOCK_NUMER;
-	     nclocks  += secs * (1000000L * TIMER_CLOCK_DENOM / TIMER_CLOCK_NUMER);
+             nclocks   = ((now->tv_usec - first->tv_usec) * TIMER_CLOCK_DENOM) / TIMER_CLOCK_NUMER;
+             nclocks  += secs * (1000000L * TIMER_CLOCK_DENOM / TIMER_CLOCK_NUMER);
 #ifndef PROD
-	    if (io_verbose & TIMER_VERBOSE) {
-		sprintf(buf, "timer[%d]: %d seconds have passed!", pcu-timers, secs);
-		trace(buf, DUMP_NONE);
-	    }
+            if (io_verbose & TIMER_VERBOSE) {
+                sprintf(buf, "timer[%d]: %d seconds have passed!", pcu-timers, secs);
+                trace(buf, DUMP_NONE);
+            }
 #endif
-	     break;
+             break;
     }
     return nclocks;
 }
@@ -1790,157 +1862,164 @@ LOCAL void updateCounter IFN0()
     struct host_timeval now;
 #endif /* NTVDM */
     unsigned long wrap;
+#if defined(NEC_98)
+    int         save_tc;
+#endif   //NEC_98
 
-	switch (pcu->m)
-	{
-	case INT_ON_TERMINALCOUNT:
-	case RATE_GEN:
-	case SQUAREWAVE_GEN:
-		if (pcu->gate == GATE_SIGNAL_LOW)
-			return;
+        switch (pcu->m)
+        {
+        case INT_ON_TERMINALCOUNT:
+        case RATE_GEN:
+        case SQUAREWAVE_GEN:
+                if (pcu->gate == GATE_SIGNAL_LOW)
+                        return;
 #ifdef NTVDM
-		wrap = updateCount();
+                wrap = updateCount();
 #else
-		nticks = clocksSinceCounterActivated(&now);
-		updateCount(nticks, &wrap,&now);
+                nticks = clocksSinceCounterActivated(&now);
+                updateCount(nticks, &wrap,&now);
 #endif
-		if (wrap)
-			pcu->tickadjust = pcu->Count;
-		if (pcu->m == INT_ON_TERMINALCOUNT && wrap)
-			pcu->tc = 1;
-		if (pcu == &timers[0] && wrap){
-			if (pcu->m != INT_ON_TERMINALCOUNT)
-				issueIREQ0((unsigned int)wrap);
-			else
-				issueIREQ0(1);
+                if (wrap)
+                        pcu->tickadjust = pcu->Count;
+                if (pcu->m == INT_ON_TERMINALCOUNT && wrap)
+#if defined(NEC_98)
+                        save_tc = pcu->tc;
+#else   //NEC_98
+                        pcu->tc = 1;
+#endif   //NEC_98
+                if (pcu == &timers[0] && wrap){
+                        if (pcu->m != INT_ON_TERMINALCOUNT)
+                                issueIREQ0((unsigned int)wrap);
+                        else
+                                issueIREQ0(1);
 #ifdef HUNTER
-			timer_batch_count = wrap;
+                        timer_batch_count = wrap;
 #endif
 
-		}
-		return;
-	case PROG_ONESHOT:
-	case SW_TRIG_STROBE:
-	case HW_TRIG_STROBE:
-		if (pcu->tc)
-			return;
+                }
+                return;
+        case PROG_ONESHOT:
+        case SW_TRIG_STROBE:
+        case HW_TRIG_STROBE:
+                if (pcu->tc)
+                        return;
 #ifdef NTVDM
-		wrap = updateCount();
+                wrap = updateCount();
 #else
-		nticks = clocksSinceCounterActivated(&now);
-		updateCount(nticks, &wrap,&now);
+                nticks = clocksSinceCounterActivated(&now);
+                updateCount(nticks, &wrap,&now);
 #endif
-		if (wrap)
-		{
-			pcu->Count = 0;
-			pcu->tc = 1;
+                if (wrap)
+                {
+                        pcu->Count = 0;
+                        pcu->tc = 1;
 #ifdef NTVDM
-			RealTimeCountCounterZero = 0;
+                        RealTimeCountCounterZero = 0;
 #endif
 
-		}
+                }
 #ifdef HUNTER
-		if (pcu == &timers[0]){
-			timer_batch_count = wrap;
-		}
+                if (pcu == &timers[0]){
+                        timer_batch_count = wrap;
+                }
 #endif
-		return;
-	}
+                return;
+        }
 }
 
 
 #ifndef NTVDM
 #ifndef DELAYED_INTS
 /*
- *	timer_no_longer_too_soon() - this is the function invoked by the quick event manager
- *	"HOST_TIMER_TOOLONG_DELAY" instructions after a hardware interrupt is generated. It
- *	clears the variable "too_soon_after_previous" to allow more interrupts to be
- *	generated and kicks off an immediate one if any have been suppressed this time.
+ *      timer_no_longer_too_soon() - this is the function invoked by the quick event manager
+ *      "HOST_TIMER_TOOLONG_DELAY" instructions after a hardware interrupt is generated. It
+ *      clears the variable "too_soon_after_previous" to allow more interrupts to be
+ *      generated and kicks off an immediate one if any have been suppressed this time.
  */
 LOCAL void timer_no_longer_too_soon IFN1(long, dummy)
 {
-	UNUSED(dummy);
+        UNUSED(dummy);
 
-	too_soon_after_previous = FALSE;
-	if (ticks_lost_this_time){
-		/* At least one tick was suppressed... so send another one immediately */
-		timer_generate_int (1);
-	}
+        too_soon_after_previous = FALSE;
+        if (ticks_lost_this_time){
+                /* At least one tick was suppressed... so send another one immediately */
+                timer_generate_int (1);
+        }
 }
 
 /*
- *	timer_generate_int() -The routine to generate a single timer hardware interrupt (and to
- *	schedule a quick event timer call on itself to have the remaining pending interrupts
- *	generated at a later time).
+ *      timer_generate_int() -The routine to generate a single timer hardware interrupt (and to
+ *      schedule a quick event timer call on itself to have the remaining pending interrupts
+ *      generated at a later time).
  *
  */
 LOCAL void timer_generate_int IFN1(long, n)
 {
 #if !(defined(GISP_CPU) || defined(CPU_40_STYLE))
-	if (getPE()){
-		/* Prot mode tick... */
+        if (getPE()){
+                /* Prot mode tick... */
 #ifndef PROD
-		if (!hack_active){
-			SAVED BOOL first=TRUE;
+                if (!hack_active){
+                        SAVED BOOL first=TRUE;
 
-			always_trace0 ("PM timer Hack activated.");
-			if (first){
-				always_trace1 ("Min # instrs between interrupts = %d", HOST_TIMER_TOOLONG_DELAY);
-				always_trace1 ("        Nominal instrs_per_tick = %d", instrs_per_tick);
-				always_trace1 ("       adjusted instrs_per_tick = %d", adj_instrs_per_tick);
-				always_trace1 ("  # rm instrs before full speed = %d", n_rm_instrs_before_full_speed);
-				always_trace1 ("     rm ticks before full speed = %d", adj_n_real_mode_ticks_before_full_speed);
-				first = FALSE;
-			}
-		}
+                        always_trace0 ("PM timer Hack activated.");
+                        if (first){
+                                always_trace1 ("Min # instrs between interrupts = %d", HOST_TIMER_TOOLONG_DELAY);
+                                always_trace1 ("        Nominal instrs_per_tick = %d", instrs_per_tick);
+                                always_trace1 ("       adjusted instrs_per_tick = %d", adj_instrs_per_tick);
+                                always_trace1 ("  # rm instrs before full speed = %d", n_rm_instrs_before_full_speed);
+                                always_trace1 ("     rm ticks before full speed = %d", adj_n_real_mode_ticks_before_full_speed);
+                                first = FALSE;
+                        }
+                }
 #endif
-		hack_active = TRUE;
-		real_mode_ticks_in_a_row = 0;
+                hack_active = TRUE;
+                real_mode_ticks_in_a_row = 0;
 
-	}else{
-		/* Real Mode Tick... */
-		if (hack_active){
-			real_mode_ticks_in_a_row++;
-			if (real_mode_ticks_in_a_row >= adj_n_real_mode_ticks_before_full_speed){
-				hack_active = FALSE;
-				always_trace0 ("PM timer Hack deactivated.");
-			}
-		}
-	}
-#endif	/* ! (GISP_CPU||CPU_40_STYLE) */
+        }else{
+                /* Real Mode Tick... */
+                if (hack_active){
+                        real_mode_ticks_in_a_row++;
+                        if (real_mode_ticks_in_a_row >= adj_n_real_mode_ticks_before_full_speed){
+                                hack_active = FALSE;
+                                always_trace0 ("PM timer Hack deactivated.");
+                        }
+                }
+        }
+#endif  /* ! (GISP_CPU||CPU_40_STYLE) */
 
-	if (hack_active){
-		if (!too_soon_after_previous){
-			ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, 1);
-			too_soon_after_previous = TRUE;
-			ticks_lost_this_time = FALSE;
-			add_q_event_i(timer_no_longer_too_soon,HOST_TIMER_TOOLONG_DELAY,0);
-		}else{
-			ticks_lost_this_time = TRUE;
+        if (hack_active){
+                if (!too_soon_after_previous){
+                        ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, 1);
+                        too_soon_after_previous = TRUE;
+                        ticks_lost_this_time = FALSE;
+                        add_q_event_i(timer_no_longer_too_soon,HOST_TIMER_TOOLONG_DELAY,0);
+                }else{
+                        ticks_lost_this_time = TRUE;
 #ifndef PROD
-			ticks_ignored++;
-			if (!(ticks_ignored & 0xFF)){
-				always_trace0 ("another 256 ticks lost!");
-			}
+                        ticks_ignored++;
+                        if (!(ticks_ignored & 0xFF)){
+                                always_trace0 ("another 256 ticks lost!");
+                        }
 #endif
-		}
-	}else{
-#ifndef GISP_CPU 
-		ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, 1);
-	}
+                }
+        }else{
+#ifndef GISP_CPU
+                ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, 1);
+        }
 }
 #else /* GISP_CPU */
 #if defined(IRET_HOOKS)
-		if (!HostDelayTimerInt(n))
-		{	/* no host need to delay this timer int, so generate one now. */
-			ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, 1);
-		}
+                if (!HostDelayTimerInt(n))
+                {       /* no host need to delay this timer int, so generate one now. */
+                        ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, 1);
+                }
 
-#else /* !IRET_HOOKS */ 
-		/* GISP_CPU doesn't use quick events so use ica_hw_interrupt(,,n). */
-		ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, n);
+#else /* !IRET_HOOKS */
+                /* GISP_CPU doesn't use quick events so use ica_hw_interrupt(,,n). */
+                ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, n);
 #endif /* IRET_HOOKS */
-	}
+        }
 }
 #endif /* GISP_CPU */
 
@@ -1958,21 +2037,24 @@ void TimerGenerateMultipleInterrupts(long n)
 
 
     if (!EoiPending) {
-	EoiPending += n;
-	ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, n);
-	}
+        EoiPending += n;
+        ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, n);
+        }
     else {
-	if (n > 5 && (dwWNTPifFlags & COMPAT_TIMERTIC)) {
-	    n = 5;
-	    }
+        if (n > 5 && (dwWNTPifFlags & COMPAT_TIMERTIC)) {
+            n = 5;
+            }
 
-	if (EoiIntsPending/n < 19) {   // less than a second behind ?
-	    EoiIntsPending += n;
-	    }
-	else {
-	    EoiIntsPending++;
-	    }
-	}
+        if (EoiIntsPending/n < 19) {   // less than a second behind ?
+            EoiIntsPending += n;
+            }
+        else {
+            EoiIntsPending++;
+            }
+#if defined(NEC_98)
+        ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, n);
+#endif   //NEC_98
+        }
 }
 
 
@@ -1983,6 +2065,7 @@ void TimerGenerateMultipleInterrupts(long n)
    until the CPU emulator getIF is made safe.
 */
 
+#undef getIF
 #define getIF() (GLOBAL_EFLAGS & 0x200)
 
 #endif /* !MONITOR */
@@ -2008,40 +2091,46 @@ void timer_generate_int (void)
        */
 
 
+#if defined(NEC_98)
+        ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, 1);
+#else   //NEC_98
+
     hi = * (word *)(Start_of_M_area+0x1c*4+2);
     lo = * (word *)(Start_of_M_area+0x1c*4);
     wrap = (word) *(half_word *)(Start_of_M_area + ((ULONG)hi << 4) + lo);
     if (!getIF() || ((hi != TimerInt1CSeg || lo != TimerInt1COff) && wrap != 0xcf) ||
-	*(word *)(Start_of_M_area+0x08*4+2) != TimerInt08Seg ||
-	*(word *)(Start_of_M_area+0x08*4)   != TimerInt08Off   )
+        *(word *)(Start_of_M_area+0x08*4+2) != TimerInt08Seg ||
+        *(word *)(Start_of_M_area+0x08*4)   != TimerInt08Off ||
+        (*pNtVDMState & VDM_INT_HOOK_IN_PM))
        {
-	TimerGenerateMultipleInterrupts(1);
-	}
+        TimerGenerateMultipleInterrupts(1);
+        }
     else {  /* update Bios Data Area directly */
-	++(*(double_word *)(Start_of_M_area + TIMER_LOW));
+        ++(*(double_word *)(Start_of_M_area + TIMER_LOW));
 
-	    /* Wrap at 24 hours ? */
-	if (*(double_word *)(Start_of_M_area + TIMER_LOW) == 0x1800b0)
-	   {
-	    *(word *)(Start_of_M_area + TIMER_LOW)  = 0;
-	    *(word *)(Start_of_M_area + TIMER_HIGH) = 0;
-	    *(half_word *)(Start_of_M_area+TIMER_OVFL)=1;
-	   }
+            /* Wrap at 24 hours ? */
+        if (*(double_word *)(Start_of_M_area + TIMER_LOW) == 0x1800b0)
+           {
+            *(word *)(Start_of_M_area + TIMER_LOW)  = 0;
+            *(word *)(Start_of_M_area + TIMER_HIGH) = 0;
+            *(half_word *)(Start_of_M_area+TIMER_OVFL)=1;
+           }
 
-	    /* decr motor count */
-	--(*(half_word *)(Start_of_M_area + MOTOR_COUNT));
+            /* decr motor count */
+        --(*(half_word *)(Start_of_M_area + MOTOR_COUNT));
 
-	    /*  if motor count went to zero turn off the motor */
-	if (!*(half_word *)(Start_of_M_area + MOTOR_COUNT))
-	   {
-	    *(half_word *)(Start_of_M_area + MOTOR_STATUS) &= 0xF0;
-	    fla_outb(DISKETTE_DOR_REG, 0x0C);
-	    }
+            /*  if motor count went to zero turn off the motor */
+        if (!*(half_word *)(Start_of_M_area + MOTOR_COUNT))
+           {
+            *(half_word *)(Start_of_M_area + MOTOR_STATUS) &= 0xF0;
+            fla_outb(DISKETTE_DOR_REG, 0x0C);
+            }
 
-	if (EoiDelayInUse && !(--EoiDelayInUse))  {
-	    host_DelayHwInterrupt(CPU_TIMER_INT, 0, 0xFFFFFFFF);
-	    }
-	}
+        if (EoiDelayInUse && !(--EoiDelayInUse))  {
+            host_DelayHwInterrupt(CPU_TIMER_INT, 0, 0xFFFFFFFF);
+            }
+        }
+#endif   //NEC_98
 }
 
 
@@ -2057,35 +2146,43 @@ void timer_generate_int (void)
 void TimerEoiHook(int IrqLine, int CallCount)
 {
     if (EoiPending)
-	--EoiPending;
+        --EoiPending;
 
     if (CallCount < 0) {       // interrupts were canceled
-	EoiIntsPending = 0;
-	EoiPending = 0;
-	}
+        EoiIntsPending = 0;
+        EoiPending = 0;
+        }
     else if (CallCount) {
-	EoiDelayInUse = 100;
-	host_DelayHwInterrupt(CPU_TIMER_INT,
-			      0,
+#if defined(NEC_98)
+        EoiDelayInUse = 2;
+#else    //NEC_98
+        EoiDelayInUse = 100;
+#endif   //NEC_98
+        host_DelayHwInterrupt(CPU_TIMER_INT,
+                              0,
                               timer_delay_size
-			      );
-	}
+                              );
+        }
     else if (EoiIntsPending) {
-	EoiDelayInUse = 100;
-	if (host_DelayHwInterrupt(CPU_TIMER_INT,
-				  EoiIntsPending,
+#if defined(NEC_98)
+        EoiDelayInUse = 2;
+#else    //NEC_98
+        EoiDelayInUse = 100;
+#endif   //NEC_98
+        if (host_DelayHwInterrupt(CPU_TIMER_INT,
+                                  EoiIntsPending,
                                   timer_delay_size
-				  ))
-	   {
-	    EoiPending = EoiIntsPending;
-	    }
-	EoiIntsPending = 0;
-	}
+                                  ))
+           {
+            EoiPending = EoiIntsPending;
+            }
+        EoiIntsPending = 0;
+        }
     else {
-	if (EoiDelayInUse && !(--EoiDelayInUse))  {
-	    host_DelayHwInterrupt(CPU_TIMER_INT, 0, 0xFFFFFFFF);
-	    }
-	}
+        if (EoiDelayInUse && !(--EoiDelayInUse))  {
+            host_DelayHwInterrupt(CPU_TIMER_INT, 0, 0xFFFFFFFF);
+            }
+        }
 
 }
 
@@ -2100,75 +2197,75 @@ void TimerEoiHook(int IrqLine, int CallCount)
  */
 LOCAL void timer_multiple_ints IFN1(long, num_ints)
 {
-	/* generate timer int */
-	timer_generate_int(1);
+        /* generate timer int */
+        timer_generate_int(1);
 
-	/* one less to do */
-	num_ints --;
+        /* one less to do */
+        num_ints --;
 
-	/* any more arrived whilst we were q_ expiring? */
-	num_ints += more_timer_mult;
-	more_timer_mult = 0;
+        /* any more arrived whilst we were q_ expiring? */
+        num_ints += more_timer_mult;
+        more_timer_mult = 0;
 
-	/* throw away ints that are going to take more than MAX_BACK_SECS
-	 * to clear up. (!!!!)
-	 */
-	if (num_ints > max_backlog)
-	{
-		num_ints = max_backlog;
-	}
+        /* throw away ints that are going to take more than MAX_BACK_SECS
+         * to clear up. (!!!!)
+         */
+        if (num_ints > max_backlog)
+        {
+                num_ints = max_backlog;
+        }
 
-	/* schedule next int (if required) */
-	if (num_ints == 0)
-	{
-		active_int_event = FALSE;
-		 /* 1.193180 usecs per clock */
-		max_backlog = (1193180 * MAX_BACK_SECS) / timers[0].initialCount;
-	}
-	else	/* more work to do */
-	{
-		/* set new quick_ev off - delay determined by timer wrap rate */
-		add_q_event_t(timer_multiple_ints, timer_multiple_delay, num_ints);
-	}
-	
+        /* schedule next int (if required) */
+        if (num_ints == 0)
+        {
+                active_int_event = FALSE;
+                 /* 1.193180 usecs per clock */
+                max_backlog = (1193180 * MAX_BACK_SECS) / timers[0].initialCount;
+        }
+        else    /* more work to do */
+        {
+                /* set new quick_ev off - delay determined by timer wrap rate */
+                add_q_event_t(timer_multiple_ints, timer_multiple_delay, num_ints);
+        }
+
 }
 #endif
 
 
 LOCAL void issueIREQ0 IFN1(unsigned int, n)
 {
-	IU16 int_delay;	/* delay before handling wrapped int */
+        IU16 int_delay; /* delay before handling wrapped int */
 
 #ifndef PROD
-static	pig_factor  = 0;
+static  pig_factor  = 0;
 static  time_factor = 0;
 #endif
 
 #ifdef PIG
-extern	IBOOL ccpu_pig_enabled;
+extern  IBOOL ccpu_pig_enabled;
 #endif
 
 #ifndef PROD
     if ( time_factor == 0 )
     {
-	char *env;
+        char *env;
 
- 	env = host_getenv("TIMER_FACTOR");
-       	if ( env )
-       		time_factor = atoi(env);
-       	if ( time_factor == 0 )
-       		time_factor = 1;
+        env = host_getenv("TIMER_FACTOR");
+        if ( env )
+                time_factor = atoi(env);
+        if ( time_factor == 0 )
+                time_factor = 1;
 #ifdef PIG
-	if ( pig_factor == 0 )
-	{
- 		env = host_getenv("PIG_TIMER_FACTOR");
-	       	if ( env )
-       			pig_factor = atoi(env);
-	       	if ( pig_factor == 0 )
-       			pig_factor = 10;
-	}
+        if ( pig_factor == 0 )
+        {
+                env = host_getenv("PIG_TIMER_FACTOR");
+                if ( env )
+                        pig_factor = atoi(env);
+                if ( pig_factor == 0 )
+                        pig_factor = 10;
+        }
 #else
-	pig_factor = 1;
+        pig_factor = 1;
 #endif
     }
 #endif
@@ -2177,22 +2274,28 @@ extern	IBOOL ccpu_pig_enabled;
     {
 #ifndef PROD
 #ifdef PIG
-		if ( ccpu_pig_enabled ) {
-			ticks_blocked = pig_factor-1;
-		} else
+                if ( ccpu_pig_enabled ) {
+                        ticks_blocked = pig_factor-1;
+                } else
 #endif
-			ticks_blocked = time_factor-1;
+                        ticks_blocked = time_factor-1;
 #endif
-		if (timer_int_enabled)
-		{
+                if (timer_int_enabled)
+                {
 #ifdef DELAYED_INTS
-			ica_hw_interrupt_delay(ICA_MASTER,CPU_TIMER_INT, n,
-				HOST_TIMER_INT_DELAY);
+                        ica_hw_interrupt_delay(ICA_MASTER,CPU_TIMER_INT, n,
+                                HOST_TIMER_INT_DELAY);
 #else /* !DELAYED_INTS */
 
 #ifdef NTVDM
-			if (n > 0)
-                            timer_delay_size= HOST_IDEAL_ALARM/(n+1);
+                        if (n > 0) {
+                            if (n <= 4) {
+                                timer_delay_size= (HOST_IDEAL_ALARM) / (n+1);
+                            } else {
+                                timer_delay_size= (HOST_IDEAL_ALARM - (HOST_IDEAL_ALARM >> 2)) / (n+1);
+                            }
+                        }
+
 
                         if (n == 1) {
                             timer_generate_int();
@@ -2203,40 +2306,40 @@ extern	IBOOL ccpu_pig_enabled;
 #else /* !NTVDM */
 
 
-			/* if we've got a quick event running, add to its workload */
-			if (active_int_event)
-			{
-				/* spread interrupts through system tick */
-				int_delay = SYSTEM_TICK_INTV / (n + 1);
-				if (int_delay < timer_multiple_delay)
-					timer_multiple_delay = int_delay;
-				more_timer_mult += n;
-			}
-			else
-			{
-				/* ensure multiple delay restarts at sensible speed */
-				timer_multiple_delay = SYSTEM_TICK_INTV >> 1;
-				if (n == 1)
-				{
-					timer_generate_int(1);
-				}
-				else
-				{
-					/* spread interrupts through system tick */
-					timer_generate_int(1);
-					timer_multiple_delay = SYSTEM_TICK_INTV / n;
-					active_int_event = TRUE;
-					add_q_event_t(timer_multiple_ints, timer_multiple_delay, n-1);
-				}
-			}
+                        /* if we've got a quick event running, add to its workload */
+                        if (active_int_event)
+                        {
+                                /* spread interrupts through system tick */
+                                int_delay = SYSTEM_TICK_INTV / (n + 1);
+                                if (int_delay < timer_multiple_delay)
+                                        timer_multiple_delay = int_delay;
+                                more_timer_mult += n;
+                        }
+                        else
+                        {
+                                /* ensure multiple delay restarts at sensible speed */
+                                timer_multiple_delay = SYSTEM_TICK_INTV >> 1;
+                                if (n == 1)
+                                {
+                                        timer_generate_int(1);
+                                }
+                                else
+                                {
+                                        /* spread interrupts through system tick */
+                                        timer_generate_int(1);
+                                        timer_multiple_delay = SYSTEM_TICK_INTV / n;
+                                        active_int_event = TRUE;
+                                        add_q_event_t(timer_multiple_ints, timer_multiple_delay, n-1);
+                                }
+                        }
 
 #endif /* !NTVDM */
 #endif /* !DELAYED_INTS */
-		}
+                }
     }
     else if (ticks_blocked > 0)
     {
-		ticks_blocked--;
+                ticks_blocked--;
     }
 }
 
@@ -2244,40 +2347,44 @@ extern	IBOOL ccpu_pig_enabled;
 
 #ifdef NTVDM
 unsigned long clocksSinceCounterUpdate(struct host_timeval *pCurrTime,
-				       struct host_timeval *pLastTime,
-				       word                *pCounter  )
+                                       struct host_timeval *pLastTime,
+                                       word                *pCounter  )
 {
      unsigned long clocks, wrap, usecs;
+#if defined(NEC_98)
+     unsigned long nclocks;
+     unsigned short bios_flag;
+#endif   //NEC_98
 
 
-	 /*  Calculate usecs elapsed and clocks elapsed since last update
-	  *
-	  *  For NT port timer zero's IdealInterval is exact to a modulo
-	  *  of 65536, for efficiency and accuracy we stick with the exact
-	  *  number of clocks between IdealIntervals.
-	  */
+         /*  Calculate usecs elapsed and clocks elapsed since last update
+          *
+          *  For NT port timer zero's IdealInterval is exact to a modulo
+          *  of 65536, for efficiency and accuracy we stick with the exact
+          *  number of clocks between IdealIntervals.
+          */
      if (pCounter == &timers[0].Count)  { /* update quick way for IdealTime */
-	if (pCurrTime->tv_sec  != pLastTime->tv_sec ||
-	    pCurrTime->tv_usec != pLastTime->tv_usec  )
-	   {
-	    *pLastTime = *pCurrTime;
-	    return 65536/pcu->initialCount;
-	    }
-	else {
+        if (pCurrTime->tv_sec  != pLastTime->tv_sec ||
+            pCurrTime->tv_usec != pLastTime->tv_usec  )
+           {
+            *pLastTime = *pCurrTime;
+            return 65536/pcu->initialCount;
+            }
+        else {
             usecs = clocks = 0;
-	    }
-	}
-    else {		/* calc diff in usecs and clocks elapsed */
-	usecs =  (unsigned long)(pCurrTime->tv_sec - pLastTime->tv_sec);
-	if (!usecs) {
-	    usecs = pCurrTime->tv_usec - pLastTime->tv_usec;
-	    }
-	else if (usecs == 1) {
-	    usecs = 1000000L - pLastTime->tv_usec + pCurrTime->tv_usec;
-	    }
-	else {
-	    usecs = pCurrTime->tv_usec - pLastTime->tv_usec +
-		    (pCurrTime->tv_sec - pLastTime->tv_sec) * 1000000L;
+            }
+        }
+    else {              /* calc diff in usecs and clocks elapsed */
+        usecs =  (unsigned long)(pCurrTime->tv_sec - pLastTime->tv_sec);
+        if (!usecs) {
+            usecs = pCurrTime->tv_usec - pLastTime->tv_usec;
+            }
+        else if (usecs == 1) {
+            usecs = 1000000L - pLastTime->tv_usec + pCurrTime->tv_usec;
+            }
+        else {
+            usecs = pCurrTime->tv_usec - pLastTime->tv_usec +
+                    (pCurrTime->tv_sec - pLastTime->tv_sec) * 1000000L;
             }
 
          /* ... clocks elapsed 1.193180 usecs per clock
@@ -2288,28 +2395,37 @@ unsigned long clocksSinceCounterUpdate(struct host_timeval *pCurrTime,
           * clocks = (usecs * 1193)/1000  + (usecs * 180)/1000000;
           */
 
+#if defined(NEC_98)
+        sas_loadw(BIOS_NEC98_BIOS_FLAG,&bios_flag);
+        if(bios_flag & 0x8000)
+            nclocks = TIMER_CLOCK_DENOM_8;
+        else
+            nclocks = TIMER_CLOCK_DENOM_10;
+        clocks =  (usecs * nclocks)/1000;
+#else    //NEC_98
         clocks =  (usecs * 1193)/1000;
-	}
+#endif   //NEC_98
+        }
 
-	 /* how many times did counter wrap ? */
+         /* how many times did counter wrap ? */
     wrap = clocks/pcu->initialCount;
 
-	 /* calc ticks from elapsed clocks */
+         /* calc ticks from elapsed clocks */
     clocks = clocks && pcu->initialCount ? clocks % pcu->initialCount : 0;
     *pCounter = (word) (pcu->initialCount - clocks);
 
        /* if the count wrapped reset Last Update time stamp */
     if (wrap)  {
-	*pLastTime = *pCurrTime;
+        *pLastTime = *pCurrTime;
 
         if ((ULONG)pLastTime->tv_usec < usecs)  {
-	    pLastTime->tv_sec--;
-	    pLastTime->tv_usec = 1000000L + pLastTime->tv_usec - usecs;
-	    }
-	else  {
-	    pLastTime->tv_usec -= usecs;
-	    }
-	}
+            pLastTime->tv_sec--;
+            pLastTime->tv_usec = 1000000L + pLastTime->tv_usec - usecs;
+            }
+        else  {
+            pLastTime->tv_usec -= usecs;
+            }
+        }
 
     return wrap;
 }
@@ -2321,105 +2437,127 @@ unsigned long updateCount(void)
      struct host_timeval curr;
 
 
-	 /*
-	  * For timer zero, update real time count, time stamp
-	  */
+         /*
+          * For timer zero, update real time count, time stamp
+          */
      if (pcu == &timers[0]) {
-	 host_GetSysTime(&curr);
-	 clocksSinceCounterUpdate(&curr,
-				  &LastTimeCounterZero,
-				  &RealTimeCountCounterZero);
-	 }
+         host_GetSysTime(&curr);
+         clocksSinceCounterUpdate(&curr,
+                                  &LastTimeCounterZero,
+                                  &RealTimeCountCounterZero);
+         }
 
-	  /*
-	   *  Update the pcu count, time stamps
-	   */
+          /*
+           *  Update the pcu count, time stamps
+           */
      (*pcu->getTime)(&curr);
      wrap = clocksSinceCounterUpdate(&curr,
-				     &pcu->activationTime,
-				     &pcu->Count);
+                                     &pcu->activationTime,
+                                     &pcu->Count);
 
      return wrap;
 }
 
 
+unsigned short GetLastTimer0Count(void)
+{
+    return RealTimeCountCounterZero;
+}
+
+unsigned short LatchAndGetTimer0Count(void)
+{
+    controlWordReg(0);
+    return RealTimeCountCounterZero;
+}
+
+unsigned long GetTimer0InitialCount(void)
+{
+    return timers[0].initialCount;
+}
+
+
+
 #else
 LOCAL void updateCount IFN3(unsigned long, ticks, unsigned long *, wrap,
-	struct host_timeval *, now)
+        struct host_timeval *, now)
 {
-	unsigned long modulo = pcu->initialCount;
+        unsigned long modulo = pcu->initialCount;
 
-	/*
-	 * PCLABS version 4.2 uses counter 2 (the sound channel) to
-	 * time around 45 ms on a 8MHz 286. On SoftPC we cannot
-	 * guarantee to go that fast, and so we must wind the tick
-	 * rate down to ensure that the counter does not wrap. How much
-	 * we wind down the tick rate is host dependent. The object is
-	 * to get the test finishing in less than
-	 * host_timer_2_frig_factor/18 secs.
-	 *
-	 * host_timer_2_frig_factor is now redundant. 28/4/93 niall.
-	 */
+        /*
+         * PCLABS version 4.2 uses counter 2 (the sound channel) to
+         * time around 45 ms on a 8MHz 286. On SoftPC we cannot
+         * guarantee to go that fast, and so we must wind the tick
+         * rate down to ensure that the counter does not wrap. How much
+         * we wind down the tick rate is host dependent. The object is
+         * to get the test finishing in less than
+         * host_timer_2_frig_factor/18 secs.
+         *
+         * host_timer_2_frig_factor is now redundant. 28/4/93 niall.
+         */
 
-	if (pcu == &timers[2]) {
-		/*
-		 * PMINFO uses ~counter, so one tick becomes 0.
-		 * 2 ticks is just as good. Avoid guessing (frig_factor!).
-		 */
-		if ((ticks - pcu->lastTicks) == 0)
-			ticks = 2;
-	}
+#if defined(NEC_98)
+        if (pcu == &timers[1]) {
+#else    //NEC_98
+        if (pcu == &timers[2]) {
+#endif   //NEC_98
+                /*
+                 * PMINFO uses ~counter, so one tick becomes 0.
+                 * 2 ticks is just as good. Avoid guessing (frig_factor!).
+                 */
+                if ((ticks - pcu->lastTicks) == 0)
+                        ticks = 2;
+        }
 
-	/* if the counter has been read too quickly after its last
-	 * access, then the host may not show any visible change in
-	 * host time ... in which case we just guess at a suitable
-	 * number of elapsed ticks.
-	 */
+        /* if the counter has been read too quickly after its last
+         * access, then the host may not show any visible change in
+         * host time ... in which case we just guess at a suitable
+         * number of elapsed ticks.
+         */
 
-	if ((long)(ticks - pcu->lastTicks) <= 0){
-		ticks = guess();
-	}else{
-		throwaway();
-		pcu->lastTicks = ticks;
-	}
+        if ((long)(ticks - pcu->lastTicks) <= 0){
+                ticks = guess();
+        }else{
+                throwaway();
+                pcu->lastTicks = ticks;
+        }
 
-	/* the counter holds some count down value ...
-	 * if the number of 8253 clocks elapsed exceeds this amount
-	 * then the counter must have wrapped
-	 */
+        /* the counter holds some count down value ...
+         * if the number of 8253 clocks elapsed exceeds this amount
+         * then the counter must have wrapped
+         */
 
-	if ( ticks < modulo ) {
-		*wrap = 0;
-	} else {
-		*wrap = 1;
-		ticks -= modulo;
+        if ( ticks < modulo ) {
+                *wrap = 0;
+        } else {
+                *wrap = 1;
+                ticks -= modulo;
 
-		if ( pcu->m == INT_ON_TERMINALCOUNT )
-			modulo = 0x10000L;
+                if ( pcu->m == INT_ON_TERMINALCOUNT )
+                        modulo = 0x10000L;
 
-		if ( ticks >= modulo ) {
-			*wrap += ticks/modulo;
-			ticks %= modulo;
+                if ( ticks >= modulo ) {
+                        *wrap += ticks/modulo;
+                        ticks %= modulo;
 
 #ifndef PROD
-			if (io_verbose & TIMER_VERBOSE)
-			    if ( pcu->m == INT_ON_TERMINALCOUNT ) {
-				sprintf(buf, "%lx wraps for timer[%d]", *wrap, pcu-timers);
-			        trace(buf, DUMP_NONE);
-			}
+                        if (io_verbose & TIMER_VERBOSE)
+                            if ( pcu->m == INT_ON_TERMINALCOUNT ) {
+                                sprintf(buf, "%lx wraps for timer[%d]", *wrap, pcu-timers);
+                                trace(buf, DUMP_NONE);
+                        }
 #endif
-		}
-	}
+                }
+        }
 
-	/* calculate new counter value */
-	pcu->Count = (word)(modulo-ticks);
+        /* calculate new counter value */
+        pcu->Count = (word)(modulo-ticks);
 
-	/* calculate time at which last wrap point occurred, and
- 	 * use this to stamp the counter
-	 */
+        /* calculate time at which last wrap point occurred, and
+         * use this to stamp the counter
+         */
 
-	if (*wrap)
-		setLastWrap((unsigned int)(modulo-pcu->Count),now);
+        if (*wrap)
+                setLastWrap((unsigned int)(modulo-pcu->Count),now);
 
 }
 
@@ -2431,21 +2569,32 @@ LOCAL void updateCount IFN3(unsigned long, ticks, unsigned long *, wrap,
 
 LOCAL void setLastWrap IFN2(unsigned int, nclocks, struct host_timeval *, now)
 {
-	struct host_timeval *stamp;
-	unsigned long usecs;
+        struct host_timeval *stamp;
+        unsigned long usecs;
+#if defined(NEC_98)
+        unsigned short bios_flag;
+#endif   //NEC_98
 
-	stamp  = &pcu->activationTime;
-	*stamp = *now;
-	usecs  = ((unsigned long)nclocks * TIMER_CLOCK_NUMER) / TIMER_CLOCK_DENOM;
+        stamp  = &pcu->activationTime;
+        *stamp = *now;
+#if defined(NEC_98)
+        sas_loadw(BIOS_NEC98_BIOS_FLAG,&bios_flag);
+        if(bios_flag & 0x8000)
+            usecs = ((unsigned long)nclocks * TIMER_CLOCK_NUMER) / TIMER_CLOCK_DENOM_8;
+        else
+            usecs = ((unsigned long)nclocks * TIMER_CLOCK_NUMER) / TIMER_CLOCK_DENOM_10;
+#else    //NEC_98
+        usecs  = ((unsigned long)nclocks * TIMER_CLOCK_NUMER) / TIMER_CLOCK_DENOM;
+#endif   //NEC_98
 
-	if (stamp->tv_usec < usecs)
-	{
-		stamp->tv_sec--;
-		stamp->tv_usec += 1000000L;
-	}
-	stamp->tv_usec -= usecs;
+        if (stamp->tv_usec < usecs)
+        {
+                stamp->tv_sec--;
+                stamp->tv_usec += 1000000L;
+        }
+        stamp->tv_usec -= usecs;
 
-	pcu->lastTicks = nclocks;
+        pcu->lastTicks = nclocks;
 }
 
 #endif  /* NTVDM*/
@@ -2459,13 +2608,13 @@ LOCAL void setLastWrap IFN2(unsigned int, nclocks, struct host_timeval *, now)
  * The algorithm uesd is to keep track of how often we have to guess
  * between host timer ticks, and to assume that guesses should be evenly
  * distributed between host ticks, ie. the time between two guesses should be:
- * 	Guess ticks = hosttickinterval/nguesses
+ *      Guess ticks = hosttickinterval/nguesses
  * If we find that the total guessed time is getting dangerously near to being the time
  * between two host ticks, we start reducing the guess tick interval so as to avoid
  * guessing a total time that is too large.
- * 
+ *
  * From observation, applications use the timer in both coarse and fine 'modes'.
- * The coarse mode is the hardware interrupt handler and then in between 
+ * The coarse mode is the hardware interrupt handler and then in between
  * interrupts, the timer is polled to detect time passing (hence guess below).
  * The fine mode polling does not commence until some portion of the tick time
  * has elapsed - probably as the coarse int handler will consume some of the
@@ -2478,33 +2627,33 @@ LOCAL void setLastWrap IFN2(unsigned int, nclocks, struct host_timeval *, now)
 
 LOCAL unsigned long guess IFN0()
 {
-	if (!pcu->microtick)
-	{
-		pcu->saveCount = pcu->Count;
-		pcu->timeFrig = ((ticksPerIdealInterval * 7) >> 3) / pcu->guessesPerHostTick;	   /* guesses over 7/8 of tick */
+        if (!pcu->microtick)
+        {
+                pcu->saveCount = pcu->Count;
+                pcu->timeFrig = ((ticksPerIdealInterval * 7) >> 3) / pcu->guessesPerHostTick;      /* guesses over 7/8 of tick */
 #ifndef PROD
-		if (io_verbose & TIMER_VERBOSE) {
-			sprintf(buf, "guess init timer[%d]: timeFrig = %lx", pcu-timers, pcu->timeFrig);
-		        trace(buf, DUMP_NONE);
-		}
+                if (io_verbose & TIMER_VERBOSE) {
+                        sprintf(buf, "guess init timer[%d]: timeFrig = %lx", pcu-timers, pcu->timeFrig);
+                        trace(buf, DUMP_NONE);
+                }
 #endif
-	}
-	if(pcu->guessesSoFar++ > pcu->guessesPerHostTick)
-	{
-	/*
-	 * PC Program is reading the timer more often than in the last timer tick, so need to
-	 * decay timeFrig to avoid too much 'time' passing between host ticks
-	 */
-		pcu->timeFrig = (pcu->timeFrig >> 1) + 1;
+        }
+        if(pcu->guessesSoFar++ > pcu->guessesPerHostTick)
+        {
+        /*
+         * PC Program is reading the timer more often than in the last timer tick, so need to
+         * decay timeFrig to avoid too much 'time' passing between host ticks
+         */
+                pcu->timeFrig = (pcu->timeFrig >> 1) + 1;
 #ifndef PROD
-		if (io_verbose & TIMER_VERBOSE) {
-			sprintf(buf, "guess decay: timeFrig = %lx", pcu->timeFrig);
-		        trace(buf, DUMP_NONE);
-		}
+                if (io_verbose & TIMER_VERBOSE) {
+                        sprintf(buf, "guess decay: timeFrig = %lx", pcu->timeFrig);
+                        trace(buf, DUMP_NONE);
+                }
 #endif
-	}
-	pcu->microtick += pcu->timeFrig;
-	return (pcu->microtick + pcu->lastTicks);
+        }
+        pcu->microtick += pcu->timeFrig;
+        return (pcu->microtick + pcu->lastTicks);
 }
 
 
@@ -2515,10 +2664,10 @@ LOCAL unsigned long guess IFN0()
  */
 LOCAL void throwaway IFN0()
 {
-	pcu->guessesPerHostTick = (pcu->guessesPerHostTick + pcu->guessesSoFar)>>1;
-	pcu->guessesSoFar = 2;		/* Handy to count from 2! */
-	if (!pcu->microtick)
-		return;
+        pcu->guessesPerHostTick = (pcu->guessesPerHostTick + pcu->guessesSoFar)>>1;
+        pcu->guessesSoFar = 2;          /* Handy to count from 2! */
+        if (!pcu->microtick)
+                return;
 #ifndef PROD
     if (io_verbose & TIMER_VERBOSE)
     {
@@ -2526,8 +2675,8 @@ LOCAL void throwaway IFN0()
         trace(buf, DUMP_NONE);
     }
 #endif
-	pcu->Count = pcu->saveCount;
-	pcu->microtick = 0;
+        pcu->Count = pcu->saveCount;
+        pcu->microtick = 0;
 }
 
 #endif  /* ndef NTVDM */
@@ -2540,8 +2689,8 @@ LOCAL unsigned  short bin_to_bcd IFN1(unsigned long, val)
     bcd = 0;
     for (i=0; i<4; i++)
     {
-	 bcd = bcd | ((m % 10) << (i << 2));
-	 m /= 10;
+         bcd = bcd | ((m % 10) << (i << 2));
+         m /= 10;
     }
     return(bcd);
 }
@@ -2556,9 +2705,9 @@ LOCAL word bcd_to_bin IFN1(word, val)
     mul = 1;
     for (i=0; i<4; i++)
     {
-	bin += (val & 0xf) * mul;
-	mul *= 10;
-	val = val >> 4;
+        bin += (val & 0xf) * mul;
+        mul *= 10;
+        val = val >> 4;
     }
     return (bin);
 }
@@ -2570,15 +2719,15 @@ LOCAL word bcd_to_bin IFN1(word, val)
 
 LOCAL unsigned long timer_conv IFN1(word, count)
 {
-	if (!count)
-	{
-		if (pcu->bcd == BCD)
-			return 10000L;
-		else
-			return 0x10000L;
-	}
-	else
-		return (unsigned long)count;
+        if (!count)
+        {
+                if (pcu->bcd == BCD)
+                        return 10000L;
+                else
+                        return 0x10000L;
+        }
+        else
+                return (unsigned long)count;
 }
 
 
@@ -2603,12 +2752,12 @@ LOCAL void getIdealTime IFN1(struct host_timeval *, t)
 
 LOCAL void updateIdealTime IFN0()
 {
-	idealtime.tv_usec += idealInterval;
-	if (idealtime.tv_usec > 1000000L)
-	{
-		idealtime.tv_usec -=1000000L;
-		idealtime.tv_sec++;
-	}
+        idealtime.tv_usec += idealInterval;
+        if (idealtime.tv_usec > 1000000L)
+        {
+                idealtime.tv_usec -=1000000L;
+                idealtime.tv_sec++;
+        }
 }
 
 #ifndef NTVDM
@@ -2619,30 +2768,30 @@ LOCAL void updateIdealTime IFN0()
 
 LOCAL void getHostSysTime IFN1(struct host_timeval *, t)
 {
-	struct host_timezone dummy;
- 	host_gettimeofday(t, &dummy);
+        struct host_timezone dummy;
+        host_gettimeofday(t, &dummy);
 
-	/*
-	 * check that we haven't gone back in time.
-	 */
+        /*
+         * check that we haven't gone back in time.
+         */
 
-	if (t->tv_sec < idealtime.tv_sec ||
-	 (t->tv_usec < idealtime.tv_usec && t->tv_sec == idealtime.tv_sec))
-	{
-		/*
-		 * The real time has fallen behind the ideal time.
-		 * This should never happen... If it does we must
-		 * stay at the ideal time.
-		 */
+        if (t->tv_sec < idealtime.tv_sec ||
+         (t->tv_usec < idealtime.tv_usec && t->tv_sec == idealtime.tv_sec))
+        {
+                /*
+                 * The real time has fallen behind the ideal time.
+                 * This should never happen... If it does we must
+                 * stay at the ideal time.
+                 */
 
-#ifndef	PROD
-#ifndef	PIG
-		sprintf(buf,"TIME WARP!!");
-		trace(buf,0);
+#ifndef PROD
+#ifndef PIG
+                sprintf(buf,"TIME WARP!!");
+                trace(buf,0);
 #endif
 #endif
-		*t = idealtime;
-	}
+                *t = idealtime;
+        }
 }
 #endif /* !NTVDM */
 
@@ -2652,16 +2801,16 @@ LOCAL void getHostSysTime IFN1(struct host_timeval *, t)
  * causes this to be called iff a 80287 is being used.
  */
 
-void	axe_ticks IFN1(int, ticks)
+void    axe_ticks IFN1(int, ticks)
 {
-#ifndef	PROD
-	/*
-	 * No need to axe ticks if timers are disabled by toff2 (if
-	 * ticks_blocked is negative)
-	 */
-	if (ticks_blocked >=0)
-#endif	/* PROD */
-		ticks_blocked = ticks;
+#ifndef PROD
+        /*
+         * No need to axe ticks if timers are disabled by toff2 (if
+         * ticks_blocked is negative)
+         */
+        if (ticks_blocked >=0)
+#endif  /* PROD */
+                ticks_blocked = ticks;
 }
 
 /*
@@ -2676,6 +2825,22 @@ void	axe_ticks IFN1(int, ticks)
 #include "SOFTPC_INIT.seg"
 #endif
 
+#if defined(NEC_98)
+GLOBAL void IdealTimeInit IFN0()
+{
+    unsigned short bios_flag;
+
+    idealInterval = HOST_IDEAL_ALARM;
+#ifndef NTVDM
+    getHostSysTime(&idealtime);
+    sas_loadw(BIOS_NEC98_BIOS_FLAG,&bios_flag);
+    if(bios_flag & 0x8000)
+        ticksPerIdealInterval = (idealInterval * TIMER_CLOCK_DENOM_8) / TIMER_CLOCK_NUMER;
+    else
+        ticksPerIdealInterval = (idealInterval * TIMER_CLOCK_DENOM_10) / TIMER_CLOCK_NUMER;
+#endif
+}
+#else    //NEC_98
 #ifdef SYNCH_TIMERS
 
 GLOBAL void IdealTimeInit IFN0()
@@ -2695,33 +2860,34 @@ LOCAL void IdealTimeInit IFN0()
 
 #ifndef NTVDM
     getHostSysTime(&idealtime);
-	ticksPerIdealInterval = (idealInterval * TIMER_CLOCK_DENOM) / TIMER_CLOCK_NUMER;
+        ticksPerIdealInterval = (idealInterval * TIMER_CLOCK_DENOM) / TIMER_CLOCK_NUMER;
 #endif
 }
+#endif   //NEC_98
 
 LOCAL void Timer_init IFN0()
 {
-	int i;
-	for (i=0; i<3; i++)
-		counter_init(&timers[i]);
+        int i;
+        for (i=0; i<3; i++)
+                counter_init(&timers[i]);
 #ifdef NTVDM
-	timers[0].getTime = getIdealTime;       /* Use the 'ideal' time for timer 0, ie. calls to time_tick */
-	timers[1].getTime = host_GetSysTime;    /* We don't really expect anyone to use timer 1 */
-	timers[2].getTime = host_GetSysTime;    /* Use real host time for timer 2 */
+        timers[0].getTime = getIdealTime;       /* Use the 'ideal' time for timer 0, ie. calls to time_tick */
+        timers[1].getTime = host_GetSysTime;    /* We don't really expect anyone to use timer 1 */
+        timers[2].getTime = host_GetSysTime;    /* Use real host time for timer 2 */
 #else
-	timers[0].getTime = getIdealTime;       /* Use the 'ideal' time for timer 0, ie. calls to time_tick */
-	timers[1].getTime = getHostSysTime;     /* We don't really expect anyone to use timer 1 */
-	timers[2].getTime = getHostSysTime;     /* Use real host time for timer 2 */
+        timers[0].getTime = getIdealTime;       /* Use the 'ideal' time for timer 0, ie. calls to time_tick */
+        timers[1].getTime = getHostSysTime;     /* We don't really expect anyone to use timer 1 */
+        timers[2].getTime = getHostSysTime;     /* Use real host time for timer 2 */
 #endif
 }
 
 LOCAL void counter_init IFN1(COUNTER_UNIT *, p)
 {
-	p->state = uninit;
-	p->initialCount = 0x10000L;	/* Avoid dividing by zero in updateCount()! */
+        p->state = uninit;
+        p->initialCount = 0x10000L;     /* Avoid dividing by zero in updateCount()! */
 #ifndef NTVDM
-	p->guessesPerHostTick = p->guessesSoFar = 2;		/* Handy to count from 2! */
-	p->timeFrig = ticksPerIdealInterval / p->guessesPerHostTick;
+        p->guessesPerHostTick = p->guessesSoFar = 2;            /* Handy to count from 2! */
+        p->timeFrig = ticksPerIdealInterval / p->guessesPerHostTick;
 #endif
 }
 
@@ -2732,36 +2898,36 @@ LOCAL void counter_init IFN1(COUNTER_UNIT *, p)
  * TimerHookAgain
  *
  * Purpose
- *	This is the function that we tell the ica to call when a timer
- *	interrupt service routine IRETs.
+ *      This is the function that we tell the ica to call when a timer
+ *      interrupt service routine IRETs.
  *
  * Input
- *	adapter_id	The adapter id for the line. (Note the caller doesn't
- *			know what this is, he's just returning something
- *			we gave him earlier).
+ *      adapter_id      The adapter id for the line. (Note the caller doesn't
+ *                      know what this is, he's just returning something
+ *                      we gave him earlier).
  *
  * Outputs
- *	return	TRUE if there are more interrupts to service, FALSE otherwise.
+ *      return  TRUE if there are more interrupts to service, FALSE otherwise.
  *
  * Description
- * 	Check if we have a delayed interrupt, if so then generate the timer int
- *	and return TRUE, else return FALSE
+ *      Check if we have a delayed interrupt, if so then generate the timer int
+ *      and return TRUE, else return FALSE
 )*/
 
-GLOBAL IBOOL		
+GLOBAL IBOOL
 TimerHookAgain IFN1(IUM32, adapter)
-{	char scancode;
+{       char scancode;
 
-	if (HostPendingTimerInt())
-	{	/* We have a host delayed interrupt, so generate a timer int. */
-		sure_note_trace0(TIMER_VERBOSE,"callback with delayed timer int.");
-		ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, 1);
-		return(TRUE);	/* more to do */
-	}
-	else
-	{
-		return(FALSE);
-	}
+        if (HostPendingTimerInt())
+        {       /* We have a host delayed interrupt, so generate a timer int. */
+                sure_note_trace0(TIMER_VERBOSE,"callback with delayed timer int.");
+                ica_hw_interrupt(ICA_MASTER,CPU_TIMER_INT, 1);
+                return(TRUE);   /* more to do */
+        }
+        else
+        {
+                return(FALSE);
+        }
 }
 
 #endif /* IRET_HOOKS && GISP_CPU */
@@ -2778,14 +2944,24 @@ void timer_init IFN0()
     io_define_inb(TIMER_ADAPTOR, timer_inb_func);
     io_define_outb(TIMER_ADAPTOR, timer_outb_func);
 
+#if defined(NEC_98)
+    for(i = TIMER_PORT_START; i < TIMER_PORT_END; i += 2)
+        {
+                if( (i & 7) == 7 )
+#else    //NEC_98
     for(i = TIMER_PORT_START; i < TIMER_PORT_END; i++)
-	{
-		if( (i & 3) == 3 )
-			io_connect_port(i, TIMER_ADAPTOR, IO_WRITE);		/* Control port - write only */
-		else
-        	io_connect_port(i, TIMER_ADAPTOR, IO_READ_WRITE);	/* Timer port - read/write */
-	}
+        {
+                if( (i & 3) == 3 )
+#endif   //NEC_98
+                        io_connect_port(i, TIMER_ADAPTOR, IO_WRITE);            /* Control port - write only */
+                else
+                io_connect_port(i, TIMER_ADAPTOR, IO_READ_WRITE);       /* Timer port - read/write */
+        }
 
+#if defined(NEC_98)
+    io_connect_port(0x3fdb, TIMER_ADAPTOR, IO_READ_WRITE);
+    io_connect_port(0x3fdf, TIMER_ADAPTOR, IO_WRITE);
+#endif   //NEC_98
     IdealTimeInit();
 
     Timer_init();
@@ -2798,29 +2974,29 @@ void timer_init IFN0()
 #endif
 
         /*
-	 * Start up the host alarm system
-	 */
+         * Start up the host alarm system
+         */
 
-	host_timer_init();
+        host_timer_init();
 
 #if !defined(NTVDM)
 #if defined(IRET_HOOKS) && defined(GISP_CPU)
-	/*
-	 * Remove any existing hook call-back, and re-instate it afresh.
-	 * TimerHookAgain is what gets called on a timer int iret.
-	 */
+        /*
+         * Remove any existing hook call-back, and re-instate it afresh.
+         * TimerHookAgain is what gets called on a timer int iret.
+         */
 
-	Ica_enable_hooking(CPU_TIMER_INT, NULL, ICA_MASTER);
-	Ica_enable_hooking(CPU_TIMER_INT, TimerHookAgain, ICA_MASTER);
+        Ica_enable_hooking(CPU_TIMER_INT, NULL, ICA_MASTER);
+        Ica_enable_hooking(CPU_TIMER_INT, TimerHookAgain, ICA_MASTER);
 
-	/* Host routine to reset any internal data for IRET_HOOK delayed ints. */
-	HostResetTimerInts();
+        /* Host routine to reset any internal data for IRET_HOOK delayed ints. */
+        HostResetTimerInts();
 
 #endif /* IRET_HOOKS && GISP_CPU */
 
 
-	active_int_event = FALSE; /* clear any cranked timer state */
-	more_timer_mult = 0;
+        active_int_event = FALSE; /* clear any cranked timer state */
+        more_timer_mult = 0;
 
 #if defined(CPU_40_STYLE)
         ica_iret_hook_control(ICA_MASTER, CPU_TIMER_INT, TRUE);
@@ -2828,13 +3004,35 @@ void timer_init IFN0()
 #endif /* !NTVDM */
 }
 
-void	timer_post IFN0()
+void    timer_post IFN0()
 {
+#if defined(NEC_98)
+    unsigned short bios_flag;
+#endif   //NEC_98
     /* enable gates on all timer channels */
-    timer_gate(TIMER0_REG,GATE_SIGNAL_RISE);	/* start timer 1 going... */
+    timer_gate(TIMER0_REG,GATE_SIGNAL_RISE);    /* start timer 1 going... */
     timer_gate(TIMER1_REG,GATE_SIGNAL_RISE);
     timer_gate(TIMER2_REG,GATE_SIGNAL_RISE);
 
+#if defined(NEC_98)
+    timer_outb(TIMER_MODE_REG,0x30);
+    timer_outb(TIMER0_REG,0);
+    timer_outb(TIMER0_REG,0);
+
+    timer_outb(TIMER_MODE_REG,0x76);
+    sas_loadw(BIOS_NEC98_BIOS_FLAG,&bios_flag);
+    if(bios_flag & 0x8000) {
+        timer_outb(TIMER1_REG,0xE6);
+        timer_outb(TIMER1_REG,0x03);
+    } else {
+        timer_outb(TIMER1_REG,0xcd);
+        timer_outb(TIMER1_REG,0x04);
+    }
+
+    timer_outb(TIMER_MODE_REG,0xb6);
+    timer_outb(TIMER2_REG,0x01);
+    timer_outb(TIMER2_REG,0x01);
+#else    //NEC_98
     timer_outb(TIMER_MODE_REG,0x36);
     timer_outb(TIMER0_REG,0);
     timer_outb(TIMER0_REG,0);
@@ -2845,10 +3043,11 @@ void	timer_post IFN0()
     timer_outb(TIMER_MODE_REG,0xb6);
     timer_outb(TIMER2_REG,0x68);
     timer_outb(TIMER2_REG,0x04);
+#endif   //NEC_98
 }
 
 #ifdef DOCUMENTATION
-#ifndef	PROD
+#ifndef PROD
 
 /*
  * Debugging code....
@@ -2858,24 +3057,24 @@ void	timer_post IFN0()
 
 dumpCounter IFN0()
 {
-	static char *modes[] =
-	{	"int on tc",
-		"prog one shot",
-		"rate gen",
-		"squarewave gen",
-		"sw trig strobe",
-		"hw trig strobe"
-	};
+        static char *modes[] =
+        {       "int on tc",
+                "prog one shot",
+                "rate gen",
+                "squarewave gen",
+                "sw trig strobe",
+                "hw trig strobe"
+        };
 
-	static char *as[] =
-	{	"binary",
-		"bcd"
-	};
+        static char *as[] =
+        {       "binary",
+                "bcd"
+        };
 
-	char *p, *q;
+        char *p, *q;
 
-	p = modes[pcu->m];
-	q = as[pcu->bcd];
+        p = modes[pcu->m];
+        q = as[pcu->bcd];
 }
 #endif /* nPROD */
 #endif /* DOCUMENTATION */

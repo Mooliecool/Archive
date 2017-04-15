@@ -1,14 +1,14 @@
-/* 
+/*
  *      sim32.c -       Sim32 for Microsoft NT SoftPC.
  *
- *      Ade Brownlow    
- *      Wed Jun 5 91    
+ *      Ade Brownlow
+ *      Wed Jun 5 91
  *
- *      %W% %G% (c) Insignia Solutions 1991 
+ *      %W% %G% (c) Insignia Solutions 1991
  *
  *      This module provides the Microsoft sim32 interface with the additional sas
  *      functionality and some host sas routines. We also provide cpu idling facilities.
- *      
+ *
  *      This module in effect provides (along with the cpu) what Microsoft term as the IEU -
  *      see documentation.
  */
@@ -38,6 +38,7 @@
 #ifdef CPU_40_STYLE
 #include "nt_mem.h"
 #endif /* CPU_40_STYLE */
+#include "nt_vdd.h"
 
 /********************************************************/
 /* IMPORTS & EXPORTS */
@@ -48,6 +49,7 @@ GLOBAL BOOL Sim32FreeVDMPointer (double_word, word, UTINY *, BOOL);
 GLOBAL BOOL Sim32GetVDMMemory (double_word, word, UTINY *, BOOL);
 GLOBAL BOOL Sim32SetVDMMemory (double_word, word, UTINY *, BOOL);
 GLOBAL sys_addr sim32_effective_addr (double_word, BOOL);
+GLOBAL sys_addr sim32_effective_addr_ex (word, double_word, BOOL);
 
 GLOBAL UTINY *sas_alter_size(sys_addr);
 GLOBAL UTINY *host_sas_init(sys_addr);
@@ -137,6 +139,13 @@ BOOL SetVideoMemory(ULONG iaddr)
                         return (d);\
                 }\
         }
+#define convert_addr_ex(a,b,c,d,e) \
+        { \
+                if ((a = sim32_effective_addr_ex (b,c,d)) == (sys_addr)-1)\
+                {\
+                        return (e);\
+                }\
+        }
 
 /********************************************************/
 /*      The actual sim32 interfaces, most of these routines can be more or less mapped directly
@@ -190,6 +199,120 @@ GLOBAL BOOL Sim32FlushVDMPointer IFN4(double_word, addr, word, size, UTINY *, bu
 
         sas_overwrite_memory(iaddr, (ULONG)size);
         return (TRUE);
+}
+
+
+/********************************************************/
+/*      The actual sim32 interfaces, most of these routines can be more or less mapped directly
+ *      to existing routines in sas or gmi.
+ *
+ *      WARNING: This routine returns a pointer into M, and
+ *               WILL NOT work for backward M.
+ */
+PVOID
+VdmMapFlat(
+    USHORT seg,
+    ULONG off,
+    VDM_MODE mode
+    )
+{
+    sys_addr iaddr;
+	BOOL pm = (mode == VDM_PM);
+
+    if (pm && (seg == 0) && (off == 0))
+    return(NULL);
+
+    convert_addr_ex (iaddr, seg, off, pm, NULL);
+//STF - need sas_wrap_mask with PE....iaddr &= Sas_wrap_mask;
+
+    if (IsVideoMemory(iaddr)) {
+        return GetVideoMemory(iaddr);
+        }
+
+    return (NtGetPtrToLinAddrByte(iaddr));
+}
+
+BOOL
+VdmUnmapFlat(
+    USHORT seg,
+    ULONG off,
+    PVOID buffer,
+    VDM_MODE mode
+    )
+{
+    // Just a placeholder in case we ever need it
+    return TRUE;
+}
+
+
+BOOL
+VdmFlushCache(
+    USHORT seg,
+    ULONG off,
+    ULONG size,
+    VDM_MODE mode
+    )
+{
+
+    sys_addr iaddr;
+    if (!size) {
+        DbgBreakPoint();
+        return FALSE;
+    }
+
+    convert_addr_ex (iaddr, seg, off, (mode == VDM_PM), 0);
+
+//STF - need sas_wrap_mask with PE....iaddr &= Sas_wrap_mask;
+
+#ifndef MONITOR
+    if (IsVideoMemory(iaddr) && !SetVideoMemory(iaddr)) {
+        return FALSE;
+        }
+#endif   //MONITOR
+
+
+    //
+    // Now call the emulator to inform it that memory has changed.
+    //
+    // Note that sas_overwrite_memory is PAGE GRANULAR, so using
+    // it to flush a single LDT descriptor has a horrendous impact on
+    // performance, since up to 511 other descriptors are also
+    // thrown away.
+    //
+    // So perform an optimization here by keying off the size.
+    // The dpmi code has been written to flush 1 descriptor at
+    // a time, so use the sas_store functions in this case to
+    // flush it.
+    //
+
+    if (size <= 8) {
+        UCHAR Buffer[8];
+        PUCHAR pBytes;
+        USHORT i;
+        //
+        // Small flush - avoid sas_overwrite_memory().
+        // Note that the sas_store functions optimize out calls
+        // that simply replace a byte with an identical byte. So this
+        // code copies out the bytes to a buffer, copies in zeroes,
+        // and then copies the original bytes back in.
+        //
+        pBytes = NtGetPtrToLinAddrByte(iaddr);
+        for (i=0; i<size; i++) {
+            Buffer[i] = *pBytes++;
+            sas_store(iaddr+i, 0);
+        }
+        sas_stores(iaddr, Buffer, size);
+
+    } else {
+
+        //
+        // normal path - flushes PAGE GRANULAR
+        //
+        sas_overwrite_memory(iaddr, size);
+
+    }
+
+    return (TRUE);
 }
 
 
@@ -258,6 +381,33 @@ GLOBAL sys_addr sim32_effective_addr IFN2(double_word, addr, BOOL, pm)
     }
 }
 
+/********************************************************/
+/* Support routines for sim32 above */
+GLOBAL sys_addr sim32_effective_addr_ex IFN3(word, seg, double_word, off, BOOL, pm)
+{
+    double_word descr_addr;
+    DESCR entry;
+
+    if (pm == FALSE) {
+        return ((double_word)seg << 4) + off;
+    } else {
+        if ( selector_outside_table(seg, &descr_addr) == 1 ) {
+            /*
+            This should not happen, but is a check the real effective_addr
+            includes. Return error -1.
+            */
+#ifndef PROD
+            printf("NTVDM:sim32:effective addr: Error for addr %#x:%#x)\n", seg, off);
+            HostDebugBreak();
+#endif
+            return ((sys_addr)-1);
+        } else {
+            read_descriptor(descr_addr, &entry);
+            return entry.base + off;
+        }
+    }
+}
+
 
 /********************************************************/
 /* Microsoft extensions to sas interface */
@@ -280,7 +430,7 @@ GLOBAL IMEMBLOCK *sas_mem_map ()
                         check_malloc (imap_start, 1, IMEMBLOCK);
                         imap_start->Next = NULL;
                         imap_end = imap_start;
-                        imap_end->Type = mem_type;
+                        imap_end->Type = (IU8) mem_type;
                         imap_end->StartAddress = iaddr;
                         continue;
                 }
@@ -291,7 +441,7 @@ GLOBAL IMEMBLOCK *sas_mem_map ()
                         check_malloc (imap_end->Next, 1,IMEMBLOCK);
                         imap_end = imap_end->Next;
                         imap_end->Next = NULL;
-                        imap_end->Type =mem_type;
+                        imap_end->Type = (IU8) mem_type;
                         imap_end->StartAddress = iaddr;
                 }
         }
@@ -377,7 +527,7 @@ GLOBAL UTINY *sas_alter_size IFN1(sys_addr, new)
         {
 #ifndef PROD
                 printf ("NTVDM:Sas trying to alter size before reserve setup\n");
-#endif 
+#endif
                 return (NULL);
         }
 
@@ -391,7 +541,7 @@ GLOBAL UTINY *sas_alter_size IFN1(sys_addr, new)
         {
                 /* move to end of current commited area */
                 tmp = reserve_for_sas + current_sas_size;
-                if (!VirtualAlloc ((void *)tmp, (DWORD)(new - current_sas_size), MEM_COMMIT, 
+                if (!VirtualAlloc ((void *)tmp, (DWORD)(new - current_sas_size), MEM_COMMIT,
                         PAGE_READWRITE))
                 {
                         printf ("NTVDM:Virtual Allocate for resize from %d to %d FAILED!\n",
@@ -405,14 +555,14 @@ GLOBAL UTINY *sas_alter_size IFN1(sys_addr, new)
                 tmp = reserve_for_sas + new;
 
                 /* now decommit the unneeded memory */
-                if (!VirtualFree ((void *)tmp, (DWORD)(current_sas_size - new), MEM_DECOMMIT)) 
+                if (!VirtualFree ((void *)tmp, (DWORD)(current_sas_size - new), MEM_DECOMMIT))
                 {
                         printf ("NTVDM:Virtual Allocate for resize from %d to %d FAILED!\n",
                                 current_sas_size, new);
                         return (NULL);
                 }
         }
-        Length_of_M_area = current_sas_size = new; 
+        Length_of_M_area = current_sas_size = new;
         return (reserve_for_sas);
 }
 

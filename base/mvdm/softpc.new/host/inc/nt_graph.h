@@ -108,8 +108,13 @@ typedef struct
 
 #ifdef BIGWIN
 
+#if defined(NEC_98)         
+#define SCALE(value) (value)                                    
+#define UNSCALE(value) (value)                                  
+#else  // !NEC_98
 #define SCALE(value) ((host_screen_scale * (value)) >> 1)
 #define UNSCALE(value) (((value) << 1) / host_screen_scale)
+#endif // !NEC_98
 #define MAX_SCALE(value) ((value) << 1)
 
 #else   /* BIGWIN */
@@ -238,6 +243,20 @@ extern BOOL                 FunnyPaintMode;
 
 typedef struct
 {
+#if defined(NEC_98)         
+        void (*NEC98_text)();             // Graph off(at PIF file) Text mode
+        void (*NEC98_text20_only)();      // Graph on(at PIF file) Text20 only
+        void (*NEC98_text25_only)();      // Graph on(at PIF file) Text25 only
+        void (*NEC98_graph200_only)();    // Graph on(at PIF file) Graph200 only
+        void (*NEC98_graph200slt_only)(); // Graph on(at PIF file) Graph200 only
+        void (*NEC98_graph400_only)();    // Graph on(at PIF file) Graph400 only
+        void (*NEC98_text20_graph200)();  // Graph on(at PIF file)Text20graph200
+        void (*NEC98_text20_graph200slt)();//Graph on(at PIF file)Text20graph200
+        void (*NEC98_text25_graph200)();  // Graph on(at PIF file)Text25graph200
+        void (*NEC98_text25_graph200slt)();//Graph on(at PIF file)Text25graph200
+        void (*NEC98_text20_graph400)();  // Graph on(at PIF file)Text20graph400
+        void (*NEC98_text25_graph400)();  // Graph on(at PIF file)Text25graph400
+#endif // NEC_98
         void (*cga_text)();
         void (*cga_med_graph)();
         void (*cga_hi_graph)();
@@ -255,6 +274,20 @@ typedef struct
 
 typedef struct
 {
+#if defined(NEC_98)         
+      void (*NEC98_text)();              // Graph off(at PIF file) Text
+        void (*NEC98_text20_only)();     // Graph on(at PIF file) Text 20
+        void (*NEC98_text25_only)();     // Graph on(at PIF file) Text 25
+        void (*NEC98_graph200_only)();   // Graph on(at PIF file) Graph200
+        void (*NEC98_graph200slt_only)();// Graph on(at PIF file) Graph200
+        void (*NEC98_graph400_only)();   // Graph on(at PIF file) Graph400
+        void (*NEC98_text20_graph200)(); // Graph on(at PIF file)Text20graph200
+        void (*NEC98_text20_graph200slt)();//Graph on(at PIF file)Text20graph200
+        void (*NEC98_text25_graph200)(); // Graph on(at PIF file)Text25graph200
+        void (*NEC98_text25_graph200slt)();//Graph on(at PIF file)Text25graph200
+        void (*NEC98_text20_graph400)(); // Graph on(at PIF file)Text20graph400
+        void (*NEC98_text25_graph400)(); // Graph on(at PIF file)Text25graph400
+#endif // NEC_98
         void (*cga_text)();
         void (*cga_med_graph)();
         void (*cga_hi_graph)();
@@ -388,6 +421,53 @@ extern void nt_v7vga_mono_hi_graph_big(int offset, int screen_x, int screen_y,
 extern void nt_v7vga_mono_hi_graph_huge(int offset, int screen_x, int screen_y,
                          int width, int height);
 #endif /* V7VGA */
+#if defined(NEC_98)         
+//Paint & Init routine extern declare for NEC PC-98 series
+extern void nt_init_text20_only(void);
+extern void nt_init_text25_only(void);
+extern void nt_init_graph200_only(void);
+extern void nt_init_graph200slt_only(void);
+extern void nt_init_graph400_only(void);
+extern void nt_init_text20_graph200(void);
+extern void nt_init_text20_graph200slt(void);
+extern void nt_init_text25_graph200(void);
+extern void nt_init_text25_graph200slt(void);
+extern void nt_init_text20_graph400(void);
+extern void nt_init_text25_graph400(void);
+
+extern void nt_text20_only(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_text25_only(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_graph200_only(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_graph200slt_only(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_graph400_only(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_text20_graph200(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_text20_graph200slt(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_text25_graph200(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_text25_graph200slt(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_text20_graph400(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_text25_graph400(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_cursor20_only(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_cursor25_only(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_cursor20(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void nt_cursor25(int offset, int screen_x, int screen_y,
+                         int width, int height);
+extern void dummy_cursor_paint(int offset, int screen_x, int screen_y,
+                         int width, int height);
+#endif // NEC_98
 
 #ifdef MONITOR
 void nt_cga_med_frozen_std(int offset, int screen_x, int screen_y, int len,
@@ -456,7 +536,9 @@ extern word int10_seg;
 extern word int10_caller;
 extern word useHostInt10;
 extern word changing_mode_flag;
+#ifndef NEC_98
 extern boolean host_stream_io_enabled;
+#endif // !NEC_98
 
 
 // from nt_ega.c

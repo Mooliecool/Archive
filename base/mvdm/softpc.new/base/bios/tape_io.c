@@ -1,3 +1,9 @@
+#if defined(JAPAN) && defined(i386)
+#include <nt.h>
+#include <ntrtl.h>
+#include <nturtl.h>
+#include <windows.h>
+#endif // JAPAN && i386
 #include "insignia.h"
 #include "host_def.h"
 /*
@@ -10,12 +16,6 @@
  * Notes	: None
  *
  */
-
-// BUGBUG: stephanos 04/02/2017
-//  These warnings were deliberately disabled to allow compilation.
-// ==
-#pragma warning(disable:4018)
-// ==
 
 /*
  * static char SccsID[]="@(#)tape_io.c	1.26 06/28/95 Copyright Insignia Solutions Ltd.";
@@ -36,7 +36,9 @@
  */
 #include <stdio.h>
 #include TypesH
-
+#if defined(JAPAN) && defined(i386)
+#include "stdlib.h"
+#endif // JAPAN && i386
 /*
  * SoftPC include files
  */
@@ -54,11 +56,25 @@
 #include "debug.h"
 #include "quick_ev.h"
 
+extern void xmsEnableA20Wrapping(void);
+extern void xmsDisableA20Wrapping(void);
 
 #define ONE_MEGABYTE    (1024 * 1024)
 #define SIXTY_FOUR_K    (64 * 1024)
 #define	WRAP_AREA(addr) (addr) >= ONE_MEGABYTE && (addr) < ONE_MEGABYTE + SIXTY_FOUR_K
 
+#if defined(JAPAN) && defined(i386)
+#define	PAGE_SIZE	4096
+LOCAL HANDLE	     mvdm_process_handle= NULL;
+LOCAL unsigned char *int15_ems_commit;
+LOCAL unsigned char *int15_ems_buf = NULL;
+LOCAL unsigned long  int15_ems_start = 0;
+LOCAL unsigned long  int15_ems_end = 0;
+LOCAL int	     int15_ems_init;
+
+LOCAL int init_int15_ext_mem();
+LOCAL int map_int15_ext_mem(unsigned char *start_add, unsigned long size);
+#endif // JAPAN && i386
 LOCAL q_ev_handle wait_event_handle = (q_ev_handle)0;
 
 /* Call back routine that needs to set a user's flag byte */
@@ -86,8 +102,8 @@ sys_addr  source;
 sys_addr  source_base;
 sys_addr  target;
 #if (!defined(PROD) || !defined(CPU_30_STYLE))
-word      source_limit;
-word      target_limit;
+sys_addr      source_limit;
+sys_addr      target_limit;
 #endif
 sys_addr  target_base;
 sys_addr byte_count;   /* Max size is 0x8000 * 2 = 10000 */
@@ -116,7 +132,7 @@ half_word target_AR;
         case INT15_PROGRAM_TERMINATION:
         case INT15_REQUEST_KEY:
         case INT15_DEVICE_BUSY:
-		setAH( 0 );   
+		setAH( 0 );
                 setCF( 0 );
                 break;
 
@@ -131,12 +147,104 @@ half_word target_AR;
                 inb(CMOS_DATA, &cmos_u_m_s_hi);
                 setAH(cmos_u_m_s_hi);
                 setAL(cmos_u_m_s_lo);
+#if defined(JAPAN) && defined(i386)
+		/* Save max memory for Int 15 memory function */
+		int15_ems_start=1024*1024;
+		int15_ems_end  =(unsigned long)(((cmos_u_m_s_hi*256)
+				+cmos_u_m_s_lo+1024)*1024);
+#endif // JAPAN && i386
 #else
                 setAX ( 0 );
 #endif /* PM */
 		break;
         case INT15_MOVE_BLOCK:
 #ifdef PM
+#if defined(JAPAN) && defined(i386)
+	/* Int 15 memory service for $disp.sys and other */
+	{
+		unsigned char	*index;
+		unsigned char	*src;
+		unsigned char	*dst;
+		unsigned long	tfr_size;
+		int		use_this=0;
+		int		rc;
+
+		/* Check initialized */
+		if(int15_ems_init == 0){
+			rc=init_int15_ext_mem();
+			int15_ems_init = (rc==SUCCESS) ? 1 : -1;
+		}
+
+		/* Check reserved Vertiual mamory */
+		if(int15_ems_init < 0){
+			DbgPrint("MVDM: Move block out of memory\n");
+			setCF (1);
+			setAH (0);
+			break;
+		}
+
+		/* Get Address and size */
+		tfr_size=getCX()*2;
+
+		index=(unsigned char *)((getES()<<4) + getSI());
+		src=(unsigned char *)(	 ((unsigned long)index[0x12])
+					+((unsigned long)index[0x13]<<8)
+					+((unsigned long)index[0x14]<<16));
+		dst=(unsigned char *)(	 ((unsigned long)index[0x1a])
+					+((unsigned long)index[0x1b]<<8)
+					+((unsigned long)index[0x1c]<<16));
+//		DbgPrint("MVDM: Move block %08x to %08x\n",src,dst);
+
+		/* If over 1MB, convert internal memory (src)*/
+		if((unsigned long)src > int15_ems_start){
+			use_this=1;
+			if (((unsigned long)src + tfr_size) > int15_ems_end){
+				DbgPrint("MVDM: Move block out of range (src)\n");
+				setCF(1);
+				setAH(0);
+				break;
+			}
+			src = int15_ems_buf + ((unsigned long)src - int15_ems_start);
+			rc = map_int15_ext_mem(src, tfr_size);
+			if (rc!=SUCCESS){
+				setCF(1);
+				setAH(0);
+				break;
+			}
+		}
+
+		/* If over 1MB, convert internal memory dst)*/
+		if((unsigned long)dst > int15_ems_start){
+			use_this=1;
+			if (((unsigned long)dst + tfr_size) > int15_ems_end){
+				DbgPrint("MVDM: Move block out of range (dst)\n");
+				setCF(1);
+				setAH(0);
+				break;
+			}
+			dst = int15_ems_buf + ((unsigned long)dst - int15_ems_start);
+			rc = map_int15_ext_mem(dst, tfr_size);
+			if (rc!=SUCCESS){
+				setCF(1);
+				setAH(0);
+				break;
+			}
+		}
+
+		/* Transfer! (Not so good routine) */
+		if(use_this){
+			while(tfr_size){
+				*dst = *src;
+				dst++;
+				src++;
+				tfr_size--;
+			}
+			setAH(0);
+			setCF(0);
+			break;
+		}
+	}
+#endif // JAPAN && i386
                /* Unlike the real PC we don't have to go into protected
                   mode in order to address memory above 1MB, thanks to
                   the wonders of C this function becomes much simpler
@@ -302,6 +410,21 @@ half_word target_AR;
 	 * passed through from ROM.
 	 */
 
+#ifdef JAPAN
+        case INT15_GET_BIOS_TYPE:
+            if(getAL() == 0) {
+                setCF(0);
+                setBL(0);
+                setAH(0);
+            }
+            else {
+                setCF(1);
+                setAH(INT15_INVALID);
+            }
+            break;
+        case INT15_KEYBOARD_INTERCEPT:
+        case INT15_GETSET_FONT_IMAGE:
+#endif // JAPAN
 	default:
 		/*
 		 *	All other functions invalid.
@@ -329,3 +452,101 @@ half_word target_AR;
 	}
 }
 
+#if defined(JAPAN) && defined(i386)
+/* Initialize int 15 memory */
+
+LOCAL int init_int15_ext_mem()
+{
+	NTSTATUS status;
+	unsigned char cmos_u_m_s_hi;
+	unsigned char cmos_u_m_s_lo;
+	unsigned long i;
+	unsigned long max_commit_flag;
+	unsigned long reserve_size;
+
+	/* Check already get max int15 memory */
+	if(int15_ems_start==0){
+	        outb(CMOS_PORT, CMOS_U_M_S_LO);
+	        inb(CMOS_DATA, &cmos_u_m_s_lo);
+	        outb(CMOS_PORT, CMOS_U_M_S_HI);
+	        inb(CMOS_DATA, &cmos_u_m_s_hi);
+		int15_ems_start=1024*1024;
+		int15_ems_end  =(unsigned long)(((cmos_u_m_s_hi*256)
+				+cmos_u_m_s_lo+1024)*1024);
+	}
+
+//	DbgPrint("MVDM!init_int15_ems_mem:ems start=%08x\n",int15_ems_start);
+//	DbgPrint("MVDM!init_int15_ems_mem:ems end  =%08x\n",int15_ems_end);
+
+	/* Ger process handle for get Vertiual memory */
+	if(!(mvdm_process_handle = NtCurrentProcess())){
+		DbgPrint("MVDM!init_int15_ext_mem:Can't get process handle\n");
+		return(FAILURE);
+	}
+
+	/* Reserve Viertual memory */
+	reserve_size=int15_ems_end-int15_ems_start;
+	status = NtAllocateVirtualMemory(mvdm_process_handle,
+					&int15_ems_buf,
+					0,
+					&reserve_size,
+					MEM_RESERVE,
+					PAGE_READWRITE);
+	if(!NT_SUCCESS(status)){
+		DbgPrint("MVDM!init_int15_ext_mem:Can't reserve Viretual memory (%x)\n",status);
+		return(FAILURE);
+	}
+//	DbgPrint("MVDM!init_int15_ems_mem:ems reserveed at %08x (%08xByte)\n",int15_ems_buf,reserve_size);
+
+	/* Initialize commited area table */
+	max_commit_flag=reserve_size/PAGE_SIZE;
+	int15_ems_commit=(unsigned char *)malloc(max_commit_flag);
+	if(int15_ems_commit==NULL){
+		DbgPrint("MVDM!init_int15_ext_mem:Can't get control memory\n");
+		return(FAILURE);
+	}
+
+	for(i=0;i<max_commit_flag;i++) int15_ems_commit[i]=0;
+	return(SUCCESS);
+}
+
+/* Commit vertual memory for int 15 memory function */
+LOCAL int map_int15_ext_mem(unsigned char *start_add, unsigned long size)
+{
+	NTSTATUS status;
+	unsigned long i;
+	unsigned long start;
+	unsigned long end;
+	unsigned char *commit_add;
+	unsigned long commit_size;
+
+	/* Get start/end page address */
+	start= (unsigned long)start_add;
+	end  = start+size;
+	start= start/PAGE_SIZE;
+	if (end % PAGE_SIZE)	end = (end/PAGE_SIZE)+1;
+	else			end =  end/PAGE_SIZE;
+
+	/* Commit vertual memory start to end address */
+	for(i=start;i<end;i++){
+		if(!int15_ems_commit[i]){
+			commit_add=(unsigned char *)(i*PAGE_SIZE);
+			commit_size=PAGE_SIZE;
+			status = NtAllocateVirtualMemory(mvdm_process_handle,
+							&commit_add,
+							0,
+							&commit_size,
+							MEM_COMMIT,
+							PAGE_READWRITE);
+			if(!NT_SUCCESS(status)){
+				DbgPrint("MVDM!map_int15_ext_mem:Can't commit Viretual memory %08x (%x)\n",commit_add,status);
+				return(FAILURE);
+			}
+//			DbgPrint("MVDM!map_int15_ext_mem:Commit Viretual memory %08x-%08x\n",commit_add,commit_add+PAGE_SIZE);
+			int15_ems_commit[i]=1;
+		}
+	}
+
+	return(SUCCESS);
+}
+#endif // JAPAN && i386

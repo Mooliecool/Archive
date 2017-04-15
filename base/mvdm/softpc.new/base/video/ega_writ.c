@@ -26,8 +26,8 @@ SUBMODULE NAME		: ega_write
 SOURCE FILE NAME	: ega_write.c
 
 PURPOSE			: control the way writes to EGA memory is emulated.
-			  This module looks at the state of the EGA when it is changed 
-			  via writes to the EGA registers, and works out what to do about it. 
+			  This module looks at the state of the EGA when it is changed
+			  via writes to the EGA registers, and works out what to do about it.
 		
 		
 SccsID = @(#)ega_write.c	1.40 12/15/95 Copyright Insignia Solutions Ltd.
@@ -65,10 +65,10 @@ extern WRT_POINTERS dump_writes;
 extern WRT_POINTERS mode0_gen_handlers, mode0_copy_handlers;
 extern WRT_POINTERS mode1_handlers, mode2_handlers;
 
-/* [3.2 INTERMODULE EXPORTS]						*/ 
+/* [3.2 INTERMODULE EXPORTS]						*/
 
 /*
-5.MODULE INTERNALS   :   (not visible externally, global internally)]     
+5.MODULE INTERNALS   :   (not visible externally, global internally)]
 
 [5.1 LOCAL DECLARATIONS]						*/
 #ifdef SEGMENTATION
@@ -328,15 +328,15 @@ WRT_POINTERS simple_writes;
 WRT_POINTERS dth_md3_writes;
 #endif	/* CPU_40_STYLE - EVID */
 
-IMPORT VOID ega_copy_b_write();
-IMPORT VOID ega_mode0_chn_b_write();
-IMPORT VOID ega_mode1_chn_b_write();
-IMPORT VOID ega_mode2_chn_b_write();
+IMPORT VOID ega_copy_b_write(ULONG, ULONG);
+IMPORT VOID ega_mode0_chn_b_write(ULONG, ULONG);
+IMPORT VOID ega_mode1_chn_b_write(ULONG, ULONG);
+IMPORT VOID ega_mode2_chn_b_write(ULONG, ULONG);
 
-IMPORT VOID ega_copy_w_write();
-IMPORT VOID ega_mode0_chn_w_write();
-IMPORT VOID ega_mode1_chn_w_write();
-IMPORT VOID ega_mode2_chn_w_write();
+IMPORT VOID ega_copy_w_write(ULONG, ULONG);
+IMPORT VOID ega_mode0_chn_w_write(ULONG, ULONG);
+IMPORT VOID ega_mode1_chn_w_write(ULONG, ULONG);
+IMPORT VOID ega_mode2_chn_w_write(ULONG, ULONG);
 
 /* Handy array to extract all 4 plane values in one go. */
 
@@ -438,7 +438,7 @@ Glue_set_vid_wrt_ptrs IFN1(WRT_POINTERS *, handler )
 
 #endif /* C_VID */
 #endif /* A3CPU */
-#endif /* GISP_CPU */ 
+#endif /* GISP_CPU */
 #endif 	/* CPU_40_STYLE - EVID */
 }
 #endif /* !(NTVDM && MONITOR) */
@@ -457,6 +457,7 @@ Glue_set_vid_wrt_ptrs IFN1(WRT_POINTERS *, handler )
 VOID
 ega_write_init IFN0()
 {
+#ifndef NEC_98
 	WRT_POINTERS *handler;
 
 	note_entrance0("ega_write_init");
@@ -510,11 +511,13 @@ ega_write_init IFN0()
 	ega_write_routines_update(SET_RESET);
 	ega_write_routines_update(ENABLE_SET_RESET);
 	ega_write_routines_update(FUNCTION);
+#endif  //NEC_98
 }
 
 VOID
 ega_write_term IFN0()
 {
+#ifndef NEC_98
 	/*
 	 * ensure that if you are an EGA and then change to a VGA (or vice
 	 * versa) the write mode will be changed by the new adaptor. Otherwise
@@ -527,6 +530,7 @@ ega_write_term IFN0()
 	setVideowrmode(EGA_CPU.write_mode);
 
 	ega_write_routines_update(WRITE_MODE);
+#endif  //NEC_98
 }
 
 
@@ -535,6 +539,7 @@ ega_write_term IFN0()
 VOID
 ega_write_routines_update IFN1(CHANGE_TYPE, reason )
 {
+#ifndef NEC_98
 	ULONG state;
 	ULONG mode_and_chain;
 	WRT_POINTERS *handler;
@@ -730,7 +735,7 @@ ega_write_routines_update IFN1(CHANGE_TYPE, reason )
 	mode_and_chain = (EGA_CPU.chain * 3) + EGA_CPU.write_mode;
 #endif /* VGG */
 
-	if(( EGA_CPU.saved_mode_chain != mode_and_chain ) 
+	if(( EGA_CPU.saved_mode_chain != mode_and_chain )
 		|| ( EGA_CPU.saved_state != state )
 #ifdef V7VGA
 		|| ( Last_v7_fg_bg != fg_bg_control)
@@ -854,6 +859,7 @@ ega_write_routines_update IFN1(CHANGE_TYPE, reason )
 		Last_v7_fg_bg = fg_bg_control;
 #endif
 	}
+#endif  //NEC_98
 }
 #endif /* REAL VGA */
 #endif /* EGG */

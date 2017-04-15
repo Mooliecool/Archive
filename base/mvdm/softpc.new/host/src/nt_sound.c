@@ -8,20 +8,20 @@
 /*
  * VPC-XT Revision 2.0
  *
- * Title	: sg_sound.c
+ * Title        : sg_sound.c
  *
- * Description	: This module provides functions to control sound.  The 
- *		  functions are defined:
- *		
- *		  host_ring_bell(duration)
- *		  host_alarm(duration)
- *		  host_timer2_waveform(delay,lowclocks,hiclocks,lohi,repeat)
- *		  host_enable_timer2_sound()
- *		  host_disable_timer2_sound()
+ * Description  : This module provides functions to control sound.  The
+ *                functions are defined:
  *
- * Author	: 
+ *                host_ring_bell(duration)
+ *                host_alarm(duration)
+ *                host_timer2_waveform(delay,lowclocks,hiclocks,lohi,repeat)
+ *                host_enable_timer2_sound()
+ *                host_disable_timer2_sound()
  *
- * Notes	: 
+ * Author       :
+ *
+ * Notes        :
  */
 
 #include "xt.h"
@@ -32,7 +32,20 @@
 #include "trace.h"
 #include "video.h"
 #include "debug.h"
+#if defined(NEC_98)
+#include "gvi.h"
+#include "sas.h"
+#include "ios.h"
+#include "bios.h"
+#define TIMER_CLOCK_DENOM_10    2457600
+#define TIMER_CLOCK_DENOM_8     1996800
+static DWORD frequency;
+static BOOL NEC98_beep_on=FALSE;
+#endif // NEC_98
 
+RTL_CRITICAL_SECTION SoundLock;
+#define LOCK_SOUND() RtlEnterCriticalSection(&SoundLock)
+#define UNLOCK_SOUND() RtlLeaveCriticalSection(&SoundLock)
 
 IMPORT ULONG GetPerfCounter(VOID);
 
@@ -60,21 +73,21 @@ void PulsePpi(void);
 
 /*============================================================================
 
-	host_alarm - ring bell irrespective of configuration (used on keyboard
-	buffer overflow for example).
+        host_alarm - ring bell irrespective of configuration (used on keyboard
+        buffer overflow for example).
 
 =============================================================================*/
 
 void host_alarm(duration)
 long int duration;
 {
-MessageBeep(MB_OK);
+    MessageBeep(MB_OK);
 }
 
 /*========================================================================
 
-	host_ring_bell - ring bell if configured (used by video on output
-	of ^G, for example).
+        host_ring_bell - ring bell if configured (used by video on output
+        of ^G, for example).
 
 =========================================================================*/
 
@@ -92,16 +105,20 @@ if( host_runtime_inquire(C_SOUND_ON))
 
 VOID InitSound( BOOL bInit)
 {
-    if (!bInit) {
-        host_ica_lock();
-        LazyBeep(0L, 0L);
-        if (hBeepDevice && hBeepDevice != INVALID_HANDLE_VALUE) {
-            CloseHandle(hBeepDevice);
-            hBeepDevice = 0;
-            }
-        host_ica_unlock();
-        return;
+    if (bInit) {
+        RtlInitializeCriticalSection(&SoundLock);
+    } else {
+        if( NtCurrentPeb()->SessionId == 0 ) {
+            LOCK_SOUND();
+            LazyBeep(0L, 0L);
+            if (hBeepDevice && hBeepDevice != INVALID_HANDLE_VALUE) {
+                CloseHandle(hBeepDevice);
+                hBeepDevice = 0;
+                }
+            UNLOCK_SOUND();
+            return;
         }
+    }
 }
 
 
@@ -112,6 +129,10 @@ HANDLE OpenBeepDevice(void)
     NTSTATUS Status;
     IO_STATUS_BLOCK IoStatus;
     HANDLE hBeep;
+
+    if (NtCurrentPeb()->SessionId != 0) {
+        return( INVALID_HANDLE_VALUE );
+    }
 
     RtlInitUnicodeString( &NameString, DD_BEEP_DEVICE_NAME_U );
     InitializeObjectAttributes( &ObjectAttributes,
@@ -136,10 +157,10 @@ HANDLE OpenBeepDevice(void)
 
     if (!NT_SUCCESS( Status )) {
 #ifndef PROD
-	printf("NTVDM: OpenBeepDevice Status=%lx\n",Status);
+        printf("NTVDM: OpenBeepDevice Status=%lx\n",Status);
 #endif
         hBeep = INVALID_HANDLE_VALUE;
-    }
+        }
 
 
     return hBeep;
@@ -183,28 +204,31 @@ VOID LazyBeep(ULONG Freq, ULONG Duration)
          BeepLastDuration  = Duration;
          }
 
-      if (!hBeepDevice) {
-          hBeepDevice = OpenBeepDevice();
-          }
+      if (NtCurrentPeb()->SessionId != 0) {
+          Beep( Freq, Duration );
+      } else {
+          if (!hBeepDevice) {
+              hBeepDevice = OpenBeepDevice();
+              }
 
-      if (hBeepDevice == INVALID_HANDLE_VALUE) {
-          return;
-          }
+          if (hBeepDevice == INVALID_HANDLE_VALUE) {
+              return;
+              }
 
-      NtDeviceIoControlFile( hBeepDevice,
-                             NULL,
-                             NULL,
-                             NULL,
-                             &IoStatus,
-                             IOCTL_BEEP_SET,
-                             &bps,
-                             sizeof(bps),
-                             NULL,
-                             0
-                             );
+          NtDeviceIoControlFile( hBeepDevice,
+                                 NULL,
+                                 NULL,
+                                 NULL,
+                                 &IoStatus,
+                                 IOCTL_BEEP_SET,
+                                 &bps,
+                                 sizeof(bps),
+                                 NULL,
+                                 0
+                                 );
 
-      BeepCloseCount = 1000;
-
+          BeepCloseCount = 1000;
+      }
       }
 
 
@@ -248,6 +272,7 @@ void host_timer2_waveform(int delay,
 {
     ULONG ul;
 
+    LOCK_SOUND();
     if (loclocks == INFINITE || hiclocks == INFINITE) {
         FreqT2 = 0;
         }
@@ -268,6 +293,7 @@ void host_timer2_waveform(int delay,
         }
 
     PlaySound(FALSE);
+    UNLOCK_SOUND();
 }
 
 
@@ -279,7 +305,7 @@ void HostPpiState(BYTE PortValue)
 {
    BOOL   bPpi;
 
-   host_ica_lock();
+   LOCK_SOUND();
 
    T2State = PortValue & 1 ? TRUE: FALSE;
    bPpi = PortValue & 2 ? TRUE: FALSE;
@@ -291,9 +317,9 @@ void HostPpiState(BYTE PortValue)
           }
 
        PlaySound(PpiState);
-       }
+   }
 
-    host_ica_unlock();
+   UNLOCK_SOUND();
 }
 
 
@@ -383,7 +409,7 @@ void PulsePpi(void)
 
 /*============================================================
 
-Function:	PlayContinuousTone()
+Function:       PlayContinuousTone()
 Called by:      The SoftPC timer.
 
 ==============================================================*/
@@ -392,7 +418,7 @@ void PlayContinuousTone(void)
 {
    ULONG Elapsed;
 
-   host_ica_lock();
+   LOCK_SOUND();
 
    if (PpiCounting) {
        Elapsed = GetTickCount();
@@ -407,14 +433,17 @@ void PlayContinuousTone(void)
 
    PlaySound(FALSE);
 
-   if (!BeepLastFreq && !BeepLastDuration &&
-       BeepCloseCount && !--BeepCloseCount)
-     {
-       if (hBeepDevice && hBeepDevice != INVALID_HANDLE_VALUE) {
-           CloseHandle(hBeepDevice);
-           hBeepDevice = 0;
+   if (NtCurrentPeb()->SessionId == 0) {
+       if (!BeepLastFreq && !BeepLastDuration &&
+           BeepCloseCount && !--BeepCloseCount)
+         {
+           if (hBeepDevice && hBeepDevice != INVALID_HANDLE_VALUE) {
+               CloseHandle(hBeepDevice);
+               hBeepDevice = 0;
+               }
            }
-       }
+   }
 
-    host_ica_unlock();
+   UNLOCK_SOUND();
 }
+
