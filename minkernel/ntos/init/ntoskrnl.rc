@@ -10,3 +10,7 @@
 #include "common.ver"
 
 #include "bugcodes.rc"
+
+1 BITMAP DISCARDABLE "boot.bmp"
+
+2 BITMAP DISCARDABLE "top.bmp"

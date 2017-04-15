@@ -261,8 +261,6 @@ Return Value:
 	KiSetHandlerAddressToIDT( HalpIRQLtoVector[PROFILE_LEVEL-1],
 				  HalpPerfCtrInterrupt);
 
-	HalpInitializeDisplay();
-
 	//
 	// Initialize spinlock used by HalGetBusData hardware access routines
 	//

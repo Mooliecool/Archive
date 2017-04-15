@@ -27,6 +27,7 @@ EXPORTS
     CcPrepareMdlWrite
     CcPreparePinWrite
     CcPurgeCacheSection
+    CcRemapBcb
     CcRepinBcb
     CcScheduleReadAhead
     CcSetAdditionalCacheAttributes
@@ -202,6 +203,18 @@ EXPORTS
     FsRtlDeleteTunnelCache
     HalDispatchTable CONSTANT           // Data - use pointer for access
     HalPrivateDispatchTable CONSTANT    // Data - use pointer for access
+    InbvCheckDisplayOwnership
+    InbvNotifyDisplayOwnershipLost
+    InbvAcquireDisplayOwnership
+    InbvDisplayString
+    InbvEnableBootDriver
+    InbvEnableDisplayString
+    InbvInstallDisplayStringFilter
+    InbvIsBootDriverInstalled
+    InbvResetDisplay
+    InbvSetScrollRegion
+    InbvSetTextColor
+    InbvSolidColorFill
     IoAcquireCancelSpinLock
     IoAcquireVpbSpinLock
     IoAdapterObjectType CONSTANT        // Data - use pointer for access

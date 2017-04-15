@@ -11,7 +11,7 @@ INCLUDES=..;..\..\inc;$(BASE_INC_PATH);$(MINWIN_INC_PATH)
 
 GPSIZE=32
 
-MSC_WARNING_LEVEL=/W4 /WX
+MSC_WARNING_LEVEL=/W3 /WX
 
 C_DEFINES=$(C_DEFINES) -D_NTSYSTEM_
 
@@ -20,6 +20,7 @@ SOURCES=..\DbcsName.c \
         ..\FaultTol.c \
         ..\FileLock.c \
         ..\Filter.c   \
+        ..\FiltrCtx.c \
         ..\FsRtlPc.c  \
         ..\LargeMcb.c \
         ..\Name.c     \

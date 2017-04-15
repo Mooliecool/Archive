@@ -30,6 +30,13 @@ Revision History:
 
 KQUEUE FsRtlWorkerQueues[2];
 
+//
+//  Define a tag for general pool allocations from this module
+//
+
+#undef MODULE_POOL_TAG
+#define MODULE_POOL_TAG                  ('srSF')
+
 
 //
 //  Local Support Routine
@@ -117,7 +124,7 @@ FsRtlInitializeWorkerThread (
                                              0L,
                                              NULL,
                                              FsRtlWorkerThread,
-                                             (PVOID)i))) {
+                                             ULongToPtr( i )))) {
 
             return FALSE;
         }
@@ -247,10 +254,10 @@ Return Value:
     //  the stack overflow thread
     //
 
-    StackOverflowItem = FsRtlAllocatePool( PagingFile ?
-                                           NonPagedPoolMustSucceed :
-                                           NonPagedPool,
-                                           sizeof(STACK_OVERFLOW_ITEM) );
+    StackOverflowItem = FsRtlpAllocatePool( PagingFile ?
+                                            NonPagedPoolMustSucceed :
+                                            NonPagedPool,
+                                            sizeof(STACK_OVERFLOW_ITEM) );
 
     //
     //  Fill in the fields in the new item
@@ -331,7 +338,7 @@ Return Value:
 
     ExFreePool( StackOverflowItem );
 
-    PsGetCurrentThread()->TopLevelIrp = (ULONG)NULL;
+    PsGetCurrentThread()->TopLevelIrp = (ULONG_PTR)NULL;
 }
 
 VOID
@@ -342,14 +349,14 @@ FsRtlWorkerThread(
 {
     PLIST_ENTRY Entry;
     PWORK_QUEUE_ITEM WorkItem;
-    ULONG PagingFile = (ULONG)StartContext;
+    ULONG PagingFile = (ULONG)(ULONG_PTR)StartContext;
 
     //
     //  Set our priority to low realtime, or +1 for PagingFile.
     //
 
-    (PVOID)KeSetPriorityThread( &PsGetCurrentThread()->Tcb,
-                                LOW_REALTIME_PRIORITY + PagingFile );
+    (VOID)KeSetPriorityThread( &PsGetCurrentThread()->Tcb,
+                               LOW_REALTIME_PRIORITY + PagingFile );
 
     //
     // Loop forever waiting for a work queue item, calling the processing
@@ -376,14 +383,12 @@ FsRtlWorkerThread(
         if (KeGetCurrentIrql() != 0) {
             KeBugCheckEx(
                 IRQL_NOT_LESS_OR_EQUAL,
-                (ULONG)WorkItem->WorkerRoutine,
-                (ULONG)KeGetCurrentIrql(),
-                (ULONG)WorkItem->WorkerRoutine,
-                (ULONG)WorkItem
+                (ULONG_PTR)WorkItem->WorkerRoutine,
+                (ULONG_PTR)KeGetCurrentIrql(),
+                (ULONG_PTR)WorkItem->WorkerRoutine,
+                (ULONG_PTR)WorkItem
                 );
         }
 
     } while(TRUE);
 }
-
-

@@ -202,8 +202,6 @@ Return Value:
 
         HalpRegisterAddressUsage (&HalpDefaultASTIoSpace);
 
-        HalpInitializeDisplay();
-
         //
         // Initialize spinlock used by HalGetBusData hardware access routines
         //

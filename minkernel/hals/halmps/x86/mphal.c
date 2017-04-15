@@ -408,6 +408,12 @@ extern ULONG HalpUseDbgPrint;
         HalEnableSystemInterrupt(APIC_CLOCK_VECTOR, CLOCK2_LEVEL, HalpClockMode);
 
         HalpInitializeClock();
+        
+        //
+        // Set the private dispatch routine for HalFindBusAddressTranslation.
+        //
+        
+        HALPDISPATCH->HalFindBusAddressTranslation = HalpFindBusAddressTranslation;
 
         HalpRegisterVector (
             DeviceUsage,
@@ -461,8 +467,6 @@ extern ULONG HalpUseDbgPrint;
         HalpSetInternalVector(DPC_VECTOR, HalpDispatchInterrupt);
         HalpSetInternalVector(APC_VECTOR, HalpApcInterrupt);
         HalpSetInternalVector(APIC_IPI_VECTOR, HalpIpiHandler);
-
-        HalpInitializeDisplay();
 
         //
         // Initialize spinlock used by HalGetBusData hardware access routines

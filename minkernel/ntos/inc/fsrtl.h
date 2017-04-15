@@ -99,9 +99,49 @@ typedef struct _FSRTL_COMMON_FCB_HEADER {
     LARGE_INTEGER FileSize;
     LARGE_INTEGER ValidDataLength;
 
+//  end_ntifs
+
+#ifndef BUILDING_FSKDEXT
+
+    //
+    //  FSKD needs fsrtl.h,  but FAT/CDFS/UDFS build using ntifs.h,  which doesn't 
+    //  define these fields (end_ntifs above).  So when building the FSKD 
+    //  (fat/cdfs/udfs kdext) don't define these fields.  To be fixed 5.1
+    // 
+    
+ //
+ // The following two fields are supported only if
+ // Flags2 contains FSRTL_FLAG2_SUPPORTS_FILTER_CONTEXTS
+ //
+ // FastMutex was moved here from FSRTL_ADVANCED_FCB_HEADER,
+ // but remains at the same offset in that structure.
+ // The other fields in the previous definition of the
+ // advanced FCB header were moved by this change
+ //
+
+    //
+    //  This is a pointer to a Fast Mutex which may be used to
+    //  properly synchronize access to the FsRtl header.  The
+    //  Fast Mutex must be nonpaged.
+    //
+
+    PFAST_MUTEX FastMutex;
+
+    //
+    // This is a pointer to a list of context structures belonging to
+    // filesystem filter drivers that are linked above the filesystem.
+    // Each structure is headed by FSRTL_FILTER_CONTEXT.
+    //
+
+    LIST_ENTRY FilterContexts;
+    
+#endif
+
+//  begin_ntifs
 } FSRTL_COMMON_FCB_HEADER;
 typedef FSRTL_COMMON_FCB_HEADER *PFSRTL_COMMON_FCB_HEADER;
 
+//  end_ntifs
 //
 //  This Fcb header is used for files which support caching
 //  of compressed data, and related new support.
@@ -124,14 +164,6 @@ typedef struct _FSRTL_ADVANCED_FCB_HEADER {
     FSRTL_COMMON_FCB_HEADER ;
 
 #endif  // __cplusplus
-
-    //
-    //  This is a pointer to a Fast Mutex which may be used to
-    //  properly synchronize access to the FsRtl header.  The
-    //  Fast Mutex must be nonpaged.
-    //
-
-    PFAST_MUTEX FastMutex;
 
     //
     //  This is a pointer to a list head which may be used to queue
@@ -214,6 +246,21 @@ typedef FSRTL_ADVANCED_FCB_HEADER *PFSRTL_ADVANCED_FCB_HEADER;
 //
 
 #define FSRTL_FLAG2_DO_MODIFIED_WRITE   (0x01)
+
+//
+//  If this flag is set, the additional fields FilterContexts and FastMutex
+//  are supported in FSRTL_COMMON_HEADER, and can be used to associate
+//  context for filesystem filters with streams.
+//
+
+#define FSRTL_FLAG2_SUPPORTS_FILTER_CONTEXTS  (0x02)
+
+//
+//  If this flag is set, the cache manager will flush and purge the cache map when
+//  a user first maps a file
+//
+
+#define FSRTL_FLAG2_PURGE_WHEN_MAPPED (0x04)
 
 //
 //  The following constants are used to block top level Irp processing when
@@ -1515,6 +1562,43 @@ FsRtlDeregisterUncProvider(
     IN HANDLE Handle
     );
 
+
+//
+//  Filter Driver context support
+//
+
+//
+//  Filesystem filter drivers use these APIs to associate context
+//  with open streams (for filesystems that support this).
+//
+
+//
+//  OwnerId should uniquely identify a particular filter driver
+//  (e.g. the address of the driver's device object).
+//  InstanceId can be used to distinguish distinct contexts associated
+//  by a filter driver with a single stream (e.g. the address of the
+//  fileobject).
+//  FreeCallback is used by a filesystem when tearing down
+//  an FsContext data structure to free associated FilterContexts.
+//  The callback routine cannot recursively call down into the filesystem
+//  or acquire any of their resources which they might hold when calling
+//  the filesystem outside of the callback.
+//
+
+typedef struct _FSRTL_FILTER_CONTEXT {
+    LIST_ENTRY Links;
+    PVOID OwnerId;
+    PVOID InstanceId;
+    PFREE_FUNCTION FreeCallback;
+} FSRTL_FILTER_CONTEXT, *PFSRTL_FILTER_CONTEXT;
+
+//
+//  Associate the context at Ptr with the stream specified by FileObject.
+//  Ptr->OwnerId and Ptr->InstanceId should be filled in by the caller.
+//  If the underlying filesystem does not support filter contexts,
+//  STATUS_INVALID_DEVICE_REQUEST will be returned.
+//
+    
 
 //++
 //

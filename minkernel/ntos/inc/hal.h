@@ -1452,6 +1452,22 @@ NTSTATUS
 HaliHibernateProcessor (
     VOID
     );
+    
+typedef
+BOOLEAN
+(*pHalResetDisplay) (
+    VOID
+    );
+
+typedef
+BOOLEAN
+(*pHalFindBusAddressTranslation) (
+    IN PHYSICAL_ADDRESS BusAddress,
+    IN OUT PULONG AddressSpace,
+    OUT PPHYSICAL_ADDRESS TranslatedAddress,
+    IN OUT PULONG_PTR Context,
+    IN BOOLEAN NextBus
+    );
 
 // begin_ntddk
 
@@ -1520,6 +1536,10 @@ typedef struct {
     pHalSuspendHibernateSystem          HalpSuspendHibernateSystem;
 // end _PNP_POWER_
 
+    pHalFindBusAddressTranslation       HalFindBusAddressTranslation;
+
+    pHalResetDisplay                    HalResetDisplay;
+
 } HAL_PRIVATE_DISPATCH, *PHAL_PRIVATE_DISPATCH;
 
 
@@ -1544,6 +1564,7 @@ extern  HAL_PRIVATE_DISPATCH            HalPrivateDispatchTable;
 #define HalHibernateProcessor           HALPDISPATCH->HalHibernateProcessor
 #define HalSuspendHibernateSystem       HALPDISPATCH->HalSuspendHibernateSystem
 #define HalpSuspendHibernateSystem      HALPDISPATCH->HalpSuspendHibernateSystem
+#define HalResetDisplay                 HALPDISPATCH->HalResetDisplay
 
 // begin_ntddk
 

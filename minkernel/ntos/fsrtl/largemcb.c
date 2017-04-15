@@ -55,6 +55,11 @@ Abstract:
       o  FsRtlLookupLastMcbEntry - This routine returns the mapping for
          the largest VBN stored in the structure.
 
+      o  FsRtlLookupLastMcbEntryAndIndex - This routine returns the mapping
+         for the largest VBN stored in the structure as well as its index
+         Note that calling LookupLastMcbEntry and NumberOfRunsInMcb cannot
+         be synchronized except by the caller.
+
       o  FsRtlNumberOfRunsInMcb - This routine tells the caller total
          number of discontiguous sectors runs stored in the MCB
          structure.
@@ -238,6 +243,13 @@ NextStartingLbn(
     (ULONG)(EndingVbn(MCB,I) - StartingVbn(MCB,I) + 1) \
 )
 
+//
+//  Define a tag for general pool allocations from this module
+//
+
+#undef MODULE_POOL_TAG
+#define MODULE_POOL_TAG                  ('mrSF')
+
 VOID
 FsRtlRemoveMcbEntryPrivate (
     IN PNONOPAQUE_MCB OpaqueMcb,
@@ -274,22 +286,20 @@ FsRtlRemoveLargeEntry (
 //  Some private routines to handle common allocations.
 //
 
-PVOID
-FsRtlAllocateFirstMapping (
-    );
+#define FsRtlAllocateFirstMapping() \
+    (PVOID)ExAllocateFromPagedLookasideList( &FsRtlFirstMappingLookasideList )
 
-VOID
-FsRtlFreeFirstMapping (
-    IN PVOID Mapping
-    );
+#define FsRtlFreeFirstMapping(Mapping) \
+    ExFreeToPagedLookasideList( &FsRtlFirstMappingLookasideList, (Mapping) )
 
 #define FsRtlAllocateFastMutex()      \
     (PFAST_MUTEX)ExAllocateFromNPagedLookasideList( &FsRtlFastMutexLookasideList )
 
 #define FsRtlFreeFastMutex(FastMutex) \
-    ExFreeToNPagedLookasideList( &FsRtlFastMutexLookasideList, FastMutex )
+    ExFreeToNPagedLookasideList( &FsRtlFastMutexLookasideList, (FastMutex) )
 
 #ifdef ALLOC_PRAGMA
+#pragma alloc_text(PAGE, FsRtlInitializeLargeMcbs)
 #pragma alloc_text(PAGE, FsRtlInitializeMcb)
 #pragma alloc_text(PAGE, FsRtlUninitializeMcb)
 #endif
@@ -302,17 +312,14 @@ FsRtlFreeFirstMapping (
 
 #define INITIAL_MAXIMUM_PAIR_COUNT       (15)
 
+PAGED_LOOKASIDE_LIST FsRtlFirstMappingLookasideList;
+
 //
-//  Some globals used with the first mapping allocation
+//  The following lookaside is used to keep all the Fast Mutexes we will need to
+//  boot contiguous.
 //
 
-#define FREE_FIRST_MAPPING_ARRAY_SIZE    (16)
-
-PVOID FsRtlFreeFirstMappingArray[FREE_FIRST_MAPPING_ARRAY_SIZE];
-
-ULONG FsRtlFreeFirstMappingSize = 0;
-
-ULONG FsRtlNetFirstMapping = 0;
+NPAGED_LOOKASIDE_LIST FsRtlFastMutexLookasideList;
 
 
 //
@@ -511,6 +518,57 @@ FsRtlGetNextMcbEntry (
 
 
 VOID
+FsRtlInitializeLargeMcbs (
+    VOID
+    )
+
+/*++
+
+Routine Description:
+
+    This routine initializes the global portion of the large mcb package
+    at system initialization time.
+
+Arguments:
+
+    None.
+
+Return Value:
+
+    None.
+
+--*/
+
+{
+    //
+    //  Initialize the lookaside of paged initial mapping arrays.
+    //
+
+    ExInitializePagedLookasideList( &FsRtlFirstMappingLookasideList,
+                                    NULL,
+                                    NULL,
+                                    POOL_RAISE_IF_ALLOCATION_FAILURE,
+                                    sizeof( MAPPING ) * INITIAL_MAXIMUM_PAIR_COUNT,
+                                    'miSF',
+                                    4 );
+
+    //
+    //  Initialize the Fast Mutex lookaside list.
+    //
+
+    ExInitializeNPagedLookasideList( &FsRtlFastMutexLookasideList,
+                                     NULL,
+                                     NULL,
+                                     POOL_RAISE_IF_ALLOCATION_FAILURE,
+                                     sizeof( FAST_MUTEX),
+                                     'mfSF',
+                                     32 );
+
+
+}
+
+
+VOID
 FsRtlInitializeLargeMcb (
     IN PLARGE_MCB OpaqueMcb,
     IN POOL_TYPE PoolType
@@ -577,7 +635,7 @@ Return Value:
 
         } else {
 
-            Mcb->Mapping = FsRtlAllocatePool( Mcb->PoolType, sizeof(MAPPING) * INITIAL_MAXIMUM_PAIR_COUNT );
+            Mcb->Mapping = FsRtlpAllocatePool( Mcb->PoolType, sizeof(MAPPING) * INITIAL_MAXIMUM_PAIR_COUNT );
         }
 
         //**** RtlZeroMemory( Mcb->Mapping, sizeof(MAPPING) * INITIAL_MAXIMUM_PAIR_COUNT );
@@ -588,7 +646,8 @@ Return Value:
 
         //
         //  If this is an abnormal termination then we need to deallocate
-        //  the FastMutex and/or mapping.
+        //  the FastMutex and/or mapping (but once the mapping is allocated,
+        //  we can't raise).
         //
 
         if (AbnormalTermination()) {
@@ -713,15 +772,16 @@ Return Value:
     VBN Vbn = ((ULONG)LargeVbn);
     ULONG Index;
 
-    ASSERTMSG("LargeInteger not supported yet ", ((((PLARGE_INTEGER)&LargeVbn)->HighPart == 0) ||
-                                                 ((((PLARGE_INTEGER)&LargeVbn)->HighPart == 0x7FFFFFFF) &&
-                                                  (((ULONG)LargeVbn) == 0xFFFFFFFF))));
-
     PAGED_CODE();
 
     DebugTrace(+1, Dbg, "FsRtlTruncateLargeMcb, Mcb = %08lx\n", Mcb );
 
     ExAcquireFastMutex( Mcb->FastMutex );
+
+    ASSERTMSG("LargeInteger not supported yet ", ((((PLARGE_INTEGER)&LargeVbn)->HighPart == 0) ||
+                                                  (Mcb->PairCount == 0) ||
+                                                  ((((PLARGE_INTEGER)&LargeVbn)->HighPart == 0x7FFFFFFF) &&
+                                                   (((ULONG)LargeVbn) == 0xFFFFFFFF))));
 
     try {
 
@@ -789,11 +849,30 @@ Return Value:
             //
 
             NewMax = Mcb->PairCount * 2;
-            if (NewMax < INITIAL_MAXIMUM_PAIR_COUNT) { NewMax = INITIAL_MAXIMUM_PAIR_COUNT; }
 
-            Mapping = ExAllocatePoolWithTag( Mcb->PoolType,
-                                             sizeof(MAPPING) * NewMax,
-                                             'xftN' );
+            if (NewMax < INITIAL_MAXIMUM_PAIR_COUNT) {
+                NewMax = INITIAL_MAXIMUM_PAIR_COUNT;
+            }
+
+            //
+            //  Be careful to trap failures due to resource exhaustion.
+            //
+                
+            try {
+                    
+                if (NewMax == INITIAL_MAXIMUM_PAIR_COUNT && Mcb->PoolType == PagedPool) {
+
+                    Mapping = FsRtlAllocateFirstMapping();
+
+                } else {
+            
+                    Mapping = FsRtlpAllocatePool( Mcb->PoolType, sizeof(MAPPING) * NewMax );
+                }
+
+            } except (EXCEPTION_EXECUTE_HANDLER) {
+
+                  Mapping = NULL;
+            }
 
             //
             //  Now check if we really got a new buffer
@@ -808,7 +887,8 @@ Return Value:
                 RtlCopyMemory( Mapping, Mcb->Mapping, sizeof(MAPPING) * Mcb->PairCount );
 
                 //
-                //  Deallocate the old buffer
+                //  Deallocate the old buffer.  This should never be the size of an
+                //  initial mapping ...
                 //
 
                 ExFreePool( Mcb->Mapping );
@@ -832,6 +912,62 @@ Return Value:
     //
 
     DebugTrace(-1, Dbg, "FsRtlTruncateLargeMcb -> VOID\n", 0 );
+
+    return;
+}
+
+
+NTKERNELAPI
+VOID
+FsRtlResetLargeMcb (
+    IN PLARGE_MCB OpaqueMcb,
+    IN BOOLEAN SelfSynchronized
+    )
+
+/*++
+
+Routine Description:
+
+    This routine truncates an Mcb structure to contain zero mapping
+    pairs.  It does not shrink the mapping pairs array.
+
+Arguments:
+
+    OpaqueMcb - Supplies a pointer to the Mcb structure to truncate.
+
+    SelfSynchronized - Indicates whether the caller is already synchronized
+        with respect to the Mcb.
+
+Return Value:
+
+    None.
+
+--*/
+
+{
+    PNONOPAQUE_MCB Mcb = (PNONOPAQUE_MCB)OpaqueMcb;
+
+    if (SelfSynchronized) {
+        
+        //
+        //  If we are self-synchronized, then all we do is clear out the 
+        //  current mapping pair count.
+        //
+        
+        Mcb->PairCount = 0;
+    
+    } else {
+        
+        //
+        //  Since we are not self-synchronized, we must serialize access to
+        //  the Mcb before clearing the pair count
+        //
+        
+        ExAcquireFastMutex( Mcb->FastMutex );
+        Mcb->PairCount = 0;
+        ExReleaseFastMutex( Mcb->FastMutex );
+    
+    }
 
     return;
 }
@@ -1512,14 +1648,15 @@ Return Value:
 
     ULONG LocalIndex;
 
-    ASSERTMSG("LargeInteger not supported yet ", ((((PLARGE_INTEGER)&LargeVbn)->HighPart == 0) ||
-                                                 ((((PLARGE_INTEGER)&LargeVbn)->HighPart == 0x7FFFFFFF) &&
-                                                  (((ULONG)LargeVbn) == 0xFFFFFFFF))));
-
     DebugTrace(+1, Dbg, "FsRtlLookupLargeMcbEntry, Mcb = %08lx\n", Mcb );
     DebugTrace( 0, Dbg, "  LargeVbn.LowPart = %08lx\n", LargeVbn.LowPart );
 
     ExAcquireFastMutex( Mcb->FastMutex );
+
+    ASSERTMSG("LargeInteger not supported yet ", ((((PLARGE_INTEGER)&LargeVbn)->HighPart == 0) ||
+                                                  (Mcb->PairCount == 0) ||
+                                                  ((((PLARGE_INTEGER)&LargeVbn)->HighPart == 0x7FFFFFFF) &&
+                                                   (((ULONG)LargeVbn) == 0xFFFFFFFF))));
 
     try {
 
@@ -1691,6 +1828,89 @@ Return Value:
         ExReleaseFastMutex( Mcb->FastMutex );
 
         DebugTrace(-1, Dbg, "FsRtlLookupLastLargeMcbEntry -> %08lx\n", Result );
+    }
+
+    ((PLARGE_INTEGER)LargeVbn)->HighPart = (*((PULONG)LargeVbn) == UNUSED_LBN ? UNUSED_LBN : 0);
+    ((PLARGE_INTEGER)LargeLbn)->HighPart = (*((PULONG)LargeLbn) == UNUSED_LBN ? UNUSED_LBN : 0);
+
+    return Result;
+}
+
+
+BOOLEAN
+FsRtlLookupLastLargeMcbEntryAndIndex (
+    IN PLARGE_MCB OpaqueMcb,
+    OUT PLONGLONG LargeVbn,
+    OUT PLONGLONG LargeLbn,
+    OUT PULONG Index
+    )
+
+/*++
+
+Routine Description:
+
+    This routine retrieves the last Vbn to Lbn mapping stored in the Mcb.
+    It returns the mapping for the last sector or the last run in the
+    Mcb.  The results of this function is useful when extending an existing
+    file and needing to a hint on where to try and allocate sectors on the
+    disk.
+
+Arguments:
+
+    OpaqueMcb - Supplies the Mcb being examined.
+
+    Vbn - Receives the last Vbn value mapped.
+
+    Lbn - Receives the Lbn corresponding to the Vbn.
+    
+    Index - Receives the index of the last run.
+
+Return Value:
+
+    BOOLEAN - TRUE if there is a mapping within the Mcb and FALSE otherwise
+        (i.e., the Mcb does not contain any mapping).
+
+--*/
+
+{
+    PNONOPAQUE_MCB Mcb = (PNONOPAQUE_MCB)OpaqueMcb;
+
+    BOOLEAN Result;
+
+    PAGED_CODE();
+
+    DebugTrace(+1, Dbg, "FsRtlLookupLastLargeMcbEntryAndIndex, Mcb = %08lx\n", Mcb );
+
+    ExAcquireFastMutex( Mcb->FastMutex );
+
+    try {
+
+        //
+        //  Check to make sure there is at least one run in the mcb
+        //
+
+        if (Mcb->PairCount <= 0) {
+
+            try_return (Result = FALSE);
+        }
+
+        //
+        //  Return the last mapping of the last run
+        //
+
+        *((PULONG)LargeLbn) = EndingLbn(Mcb,Mcb->PairCount-1);
+        *((PULONG)LargeVbn) = EndingVbn(Mcb,Mcb->PairCount-1);
+
+        *Index = Mcb->PairCount - 1;
+
+        Result = TRUE;
+
+    try_exit: NOTHING;
+    } finally {
+
+        ExReleaseFastMutex( Mcb->FastMutex );
+
+        DebugTrace(-1, Dbg, "FsRtlLookupLastLargeMcbEntryAndIndex -> %08lx\n", Result );
     }
 
     ((PLARGE_INTEGER)LargeVbn)->HighPart = (*((PULONG)LargeVbn) == UNUSED_LBN ? UNUSED_LBN : 0);
@@ -1914,9 +2134,6 @@ Return Value:
 
     ULONG i;
 
-    ASSERTMSG("LargeInteger not supported yet ", ((PLARGE_INTEGER)&LargeVbn)->HighPart == 0);
-    ASSERTMSG("LargeInteger not supported yet ", ((PLARGE_INTEGER)&LargeAmount)->HighPart == 0);
-
     PAGED_CODE();
 
     DebugTrace(+1, Dbg, "FsRtlSplitLargeMcb, Mcb = %08lx\n", Mcb );
@@ -1924,6 +2141,11 @@ Return Value:
     DebugTrace( 0, Dbg, " Amount = %08lx\n", Amount );
 
     ExAcquireFastMutex( Mcb->FastMutex );
+
+    ASSERTMSG("LargeInteger not supported yet ", ((((PLARGE_INTEGER)&LargeVbn)->HighPart == 0) ||
+                                                  (Mcb->PairCount == 0)));
+    ASSERTMSG("LargeInteger not supported yet ", ((((PLARGE_INTEGER)&LargeAmount)->HighPart == 0) ||
+                                                  (Mcb->PairCount == 0)));
 
     try {
 
@@ -2693,7 +2915,7 @@ Return Value:
             NewMax = Mcb->MaximumPairCount + 2048;
         }
 
-        Mapping = FsRtlAllocatePool( Mcb->PoolType, sizeof(MAPPING)*NewMax );
+        Mapping = FsRtlpAllocatePool( Mcb->PoolType, sizeof(MAPPING) * NewMax );
 
         //**** RtlZeroMemory( Mapping, sizeof(MAPPING) * NewMax );
 
@@ -2709,7 +2931,7 @@ Return Value:
 
         if ((Mcb->PoolType == PagedPool) && (Mcb->MaximumPairCount == INITIAL_MAXIMUM_PAIR_COUNT)) {
 
-            { PVOID t = Mcb->Mapping; FsRtlFreeFirstMapping( t ); }
+            FsRtlFreeFirstMapping( Mcb->Mapping );
 
         } else {
 
@@ -2732,8 +2954,8 @@ Return Value:
     if (WhereToAddIndex < Mcb->PairCount) {
 
         RtlMoveMemory( &((Mcb->Mapping)[WhereToAddIndex + AmountToAdd]),
-                      &((Mcb->Mapping)[WhereToAddIndex]),
-                      (Mcb->PairCount - WhereToAddIndex) * sizeof(MAPPING) );
+                       &((Mcb->Mapping)[WhereToAddIndex]),
+                       (Mcb->PairCount - WhereToAddIndex) * sizeof(MAPPING) );
     }
 
     //
@@ -2822,89 +3044,3 @@ Return Value:
     return;
 }
 
-
-//
-//  Private Routine
-//
-
-PVOID
-FsRtlAllocateFirstMapping(
-    )
-
-/*++
-
-Routine Description:
-
-    This routine will if possible allocate the first mapping from either
-    a zone, a recent deallocated mapping, or pool.
-
-Arguments:
-
-Return Value:
-
-    The mapping.
-
---*/
-
-{
-    KIRQL _SavedIrql;
-    PVOID Mapping;
-
-    ExAcquireSpinLock( &FsRtlStrucSupSpinLock, &_SavedIrql );
-
-    FsRtlNetFirstMapping += 1;
-
-    if (FsRtlFreeFirstMappingSize > 0) {
-        Mapping = FsRtlFreeFirstMappingArray[--FsRtlFreeFirstMappingSize];
-        ExReleaseSpinLock( &FsRtlStrucSupSpinLock, _SavedIrql );
-    } else {
-        ExReleaseSpinLock( &FsRtlStrucSupSpinLock, _SavedIrql );
-        Mapping = FsRtlAllocatePool( PagedPool, sizeof(MAPPING) * INITIAL_MAXIMUM_PAIR_COUNT );
-    }
-
-    return Mapping;
-}
-
-
-//
-//  Private Routine
-//
-
-VOID
-FsRtlFreeFirstMapping(
-    IN PVOID Mapping
-    )
-
-/*++
-
-Routine Description:
-
-    This routine will if possible allocate the first mapping from either
-    a zone, a recent deallocated mapping, or pool.
-
-Arguments:
-
-    Mapping - The mapping to either free to zone, put on the recent
-        deallocated list or free to pool.
-
-Return Value:
-
-    The mapping.
-
---*/
-
-{
-    KIRQL _SavedIrql;
-
-    ExAcquireSpinLock( &FsRtlStrucSupSpinLock, &_SavedIrql );
-
-    FsRtlNetFirstMapping -= 1;
-
-    if (FsRtlFreeFirstMappingSize < FREE_FIRST_MAPPING_ARRAY_SIZE) {
-        FsRtlFreeFirstMappingArray[FsRtlFreeFirstMappingSize++] = Mapping;
-        ExReleaseSpinLock( &FsRtlStrucSupSpinLock, _SavedIrql );
-    } else {
-        ExReleaseSpinLock( &FsRtlStrucSupSpinLock, _SavedIrql );
-        ExFreePool( Mapping );
-    }
-}

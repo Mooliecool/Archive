@@ -4244,6 +4244,83 @@ Return Value:
 }
 
 
+PVOID
+CcRemapBcb (
+    IN PVOID Bcb
+    )
+
+/*++
+
+Routine Description:
+
+    This routine may be called by a file system to map a Bcb an additional
+    time in order to preserve it through several calls that perform additional
+    maps and unpins.
+
+
+Arguments:
+
+    Bcb - Supplies a pointer to a previously returned Bcb.
+
+Return Value:
+
+    Bcb with read-only indicator.
+
+--*/
+
+{
+    KIRQL OldIrql;
+    PVACB Vacb;
+
+    //
+    //  Remove read-only bit
+    //
+
+    Bcb = (PVOID) ((ULONG_PTR)Bcb & ~1);
+
+    if (((PBCB)Bcb)->NodeTypeCode == CACHE_NTC_OBCB) {
+
+        //
+        //  If this is an overlapped BCB, use the first Vacb in the
+        //  array
+        //
+
+        Vacb = ((POBCB)Bcb)->Bcbs[0]->Vacb;
+
+    } else if (((PBCB)Bcb)->NodeTypeCode == CACHE_NTC_BCB) {
+
+        //
+        //  If this is a BCB, extract the Vcb from it
+        //
+
+        Vacb = ((PBCB)Bcb)->Vacb;
+
+    } else {
+
+        //
+        //  Otherwise, there is no signature to match. Assume
+        //  it is a Vacb.
+        //
+
+        Vacb = (PVACB) Bcb;
+    }
+
+    ASSERT((Vacb >= CcVacbs) && (Vacb < CcBeyondVacbs));
+
+    //
+    //  Safely bump the active count
+    //
+
+    ExAcquireFastLock( &CcMasterSpinLock, &OldIrql );
+
+    Vacb->Overlay.ActiveCount += 1;
+
+    ExReleaseFastLock( &CcMasterSpinLock, OldIrql );
+
+    return (PVOID) ((ULONG_PTR)Vacb | 1);
+}
+
+
 VOID
 CcRepinBcb (
     IN PVOID Bcb

@@ -26,6 +26,8 @@ Revision History:
 #include "hal.h"
 #include "halnls.h"
 
+#include <inbv.h>
+
 #ifndef _HALI_
 #include "..\inc\hali.h"
 #endif
@@ -245,12 +247,7 @@ VOID
 HalpInitializeClock(
     VOID
     );
-
-VOID
-HalpInitializeDisplay(
-    VOID
-    );
-
+    
 VOID
 HalpInitializeStallExecution(
     IN CCHAR ProcessorNumber
@@ -304,12 +301,6 @@ HalpBiosDisplayReset(
 HAL_DISPLAY_BIOS_INFORMATION
 HalpGetDisplayBiosInformation (
     VOID
-    );
-
-VOID
-HalpDisplayDebugStatus(
-    IN PUCHAR   Status,
-    IN ULONG    Length
     );
 
 VOID
@@ -387,6 +378,14 @@ HalpReportResourceUsage (
     IN INTERFACE_TYPE   DeviceInterfaceToUse
     );
 
+BOOLEAN
+HalpFindBusAddressTranslation (
+    IN PHYSICAL_ADDRESS BusAddress,
+    IN OUT PULONG AddressSpace,
+    OUT PPHYSICAL_ADDRESS TranslatedAddress,
+    IN OUT PULONG_PTR Context,
+    IN BOOLEAN NextBus
+    );    
 
 //
 // Defines for HalpFeatureBits

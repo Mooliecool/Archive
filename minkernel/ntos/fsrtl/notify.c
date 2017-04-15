@@ -192,6 +192,17 @@ typedef struct _NOTIFY_CHANGE {
     ULONG LastEntry;
 
     //
+    //  Reference count which keeps the notify structure around.  Such references include
+    // 
+    //      - Lifetime reference.  Count set to one initially and removed on cleanup
+    //      - Cancel reference.  Reference the notify struct when storing the cancel routine
+    //          in the Irp.  The routine which actually clears the routine will decrement
+    //          this value.
+    //
+
+    ULONG ReferenceCount;
+
+    //
     //  This is the process on whose behalf the structure was allocated.  We
     //  charge any quota to this process.
     //
@@ -206,17 +217,6 @@ typedef struct _NOTIFY_CHANGE {
 #define NOTIFY_DEFER_NOTIFY             (0x0008)
 #define NOTIFY_DIR_IS_ROOT              (0x0010)
 #define NOTIFY_STREAM_IS_DELETED        (0x0020)
-
-//
-//  ULONG
-//  LongAlign (
-//      IN ULONG Pointer
-//      );
-//
-
-#define LongAlign(P) (                \
-    ((((ULONG)(P)) + 3) & 0xfffffffc) \
-)
 
 //
 //      CAST
@@ -235,7 +235,7 @@ typedef struct _NOTIFY_CHANGE {
 
 #define Add2Ptr(PTR,INC,CAST) ((CAST)((PUCHAR)(PTR) + (INC)))
 
-#define PtrOffset(BASE,OFFSET) ((ULONG)((ULONG)(OFFSET) - (ULONG)(BASE)))
+#define PtrOffset(BASE,OFFSET) ((ULONG)((PCHAR)(OFFSET) - (PCHAR)(BASE)))
 
 //
 //      VOID
@@ -289,6 +289,13 @@ typedef struct _NOTIFY_CHANGE {
     }                                                                       \
 }
 
+//
+//  Define a tag for general pool allocations from this module
+//
+
+#undef MODULE_POOL_TAG
+#define MODULE_POOL_TAG                  ('NrSF')
+
 
 //
 //  Local support routines
@@ -305,13 +312,14 @@ FsRtlNotifyCompleteIrp (
     IN PIRP NotifyIrp,
     IN PNOTIFY_CHANGE Notify,
     IN ULONG DataLength,
-    IN NTSTATUS Status
+    IN NTSTATUS Status,
+    IN ULONG CheckCancel
     );
 
-VOID
+BOOLEAN
 FsRtlNotifySetCancelRoutine (
     IN PIRP NotifyIrp,
-    IN BOOLEAN NotifyComplete
+    IN PNOTIFY_CHANGE Notify OPTIONAL
     );
 
 BOOLEAN
@@ -334,7 +342,7 @@ FsRtlNotifyCompleteIrpList (
 VOID
 FsRtlCancelNotify (
     IN PDEVICE_OBJECT DeviceObject,
-    IN PIRP Irp
+    IN PIRP ThisIrp
     );
 
 VOID
@@ -395,8 +403,8 @@ Return Value:
 
     *NotifySync = NULL;
 
-    RealSync = (PREAL_NOTIFY_SYNC) FsRtlAllocatePool( NonPagedPool,
-                                                      sizeof( REAL_NOTIFY_SYNC ));
+    RealSync = (PREAL_NOTIFY_SYNC) FsRtlpAllocatePool( NonPagedPool,
+                                                       sizeof( REAL_NOTIFY_SYNC ));
 
     //
     //  Initialize the structure.
@@ -687,7 +695,7 @@ Return Value:
             //  Allocate and initialize the structure.
             //
 
-            Notify = FsRtlAllocatePool( PagedPool, sizeof( NOTIFY_CHANGE ));
+            Notify = FsRtlpAllocatePool( PagedPool, sizeof( NOTIFY_CHANGE ));
             RtlZeroMemory( Notify, sizeof( NOTIFY_CHANGE ));
 
             Notify->NotifySync = (PREAL_NOTIFY_SYNC) NotifySync;
@@ -707,24 +715,36 @@ Return Value:
                 SetFlag( Notify->Flags, NOTIFY_WATCH_TREE );
             }
 
-            //
-            //  We look at the directory name to decide if we have a unicode
-            //  name.
-            //
+            if (FullDirectoryName == NULL) {
 
-            if (FullDirectoryName->Length >= 2
-                && FullDirectoryName->Buffer[1] == '\0') {
+                //
+                //  In the view index we aren't using this buffer to hold a
+                //  unicode string.
+                //
 
-                Notify->CharacterSize = sizeof( WCHAR );
+                Notify->CharacterSize = sizeof( CHAR );
 
             } else {
 
-                Notify->CharacterSize = sizeof( CHAR );
-            }
+                //
+                //  We look at the directory name to decide if we have a unicode
+                //  name.
+                //
 
-            if (FullDirectoryName->Length == Notify->CharacterSize) {
+                if (FullDirectoryName->Length >= 2
+                    && FullDirectoryName->Buffer[1] == '\0') {
 
-                SetFlag( Notify->Flags, NOTIFY_DIR_IS_ROOT );
+                    Notify->CharacterSize = sizeof( WCHAR );
+
+                } else {
+
+                    Notify->CharacterSize = sizeof( CHAR );
+                }
+
+                if (FullDirectoryName->Length == Notify->CharacterSize) {
+
+                    SetFlag( Notify->Flags, NOTIFY_DIR_IS_ROOT );
+                }
             }
 
             Notify->CompletionFilter = CompletionFilter;
@@ -741,6 +761,8 @@ Return Value:
 
             Notify->OwningProcess = THREAD_TO_PROCESS( NotifyIrp->Tail.Overlay.Thread );
             InsertTailList( NotifyList, &Notify->NotifyList );
+
+            Notify->ReferenceCount = 1;
 
         //
         //  If we have already been called with cleanup then complete
@@ -815,7 +837,8 @@ Return Value:
             FsRtlNotifyCompleteIrp( NotifyIrp,
                                     Notify,
                                     ThisDataLength,
-                                    STATUS_SUCCESS );
+                                    STATUS_SUCCESS,
+                                    FALSE );
 
             try_return( NOTHING );
         }
@@ -824,15 +847,21 @@ Return Value:
         //  Add the Irp to the tail of the notify queue.
         //
 
-        NotifyIrp->IoStatus.Information = (ULONG) Notify;
+        NotifyIrp->IoStatus.Information = (ULONG_PTR) Notify;
         IoMarkIrpPending( NotifyIrp );
         InsertTailList( &Notify->NotifyIrps, &NotifyIrp->Tail.Overlay.ListEntry );
+
+        //
+        //  Increment the reference count to indicate that Irp might go through cancel.
+        //
+
+        InterlockedIncrement( &Notify->ReferenceCount );
 
         //
         //  Call the routine to set the cancel routine.
         //
 
-        FsRtlNotifySetCancelRoutine( NotifyIrp, FALSE );
+        FsRtlNotifySetCancelRoutine( NotifyIrp, NULL );
 
     try_exit:  NOTHING;
     } finally {
@@ -845,10 +874,13 @@ Return Value:
 
         //
         //  If there is still a subject context then release it and deallocate
-        //  the structure.
+        //  the structure.  Remember that if FullDirectoryName is null, it means
+        //  this is a view index, not a directory index, and the SubjectContext
+        //  is really a piece of file system context information.
         //
 
-        if (SubjectContext != NULL) {
+        if ((SubjectContext != NULL) &&
+            (Notify->FullDirectoryName != NULL)) {
 
             SeReleaseSubjectContext( SubjectContext );
             ExFreePool( SubjectContext );
@@ -1016,10 +1048,12 @@ Return Value:
     PIRP NotifyIrp;
 
     BOOLEAN NotifyIsParent;
+    BOOLEAN ViewIndex = FALSE;
     UCHAR ComponentCount;
     ULONG SizeOfEntry;
     ULONG CurrentOffset;
     ULONG NextEntryOffset;
+    ULONG ExceptionCode;
 
     PAGED_CODE();
 
@@ -1029,7 +1063,7 @@ Return Value:
     //  If this is a change to the root directory then return immediately.
     //
 
-    if (TargetNameOffset == 0) {
+    if ((TargetNameOffset == 0) && (FullTargetName != NULL)) {
 
         DebugTrace( -1, Dbg, "FsRtlNotifyFullReportChange:  Exit\n", 0 );
         return;
@@ -1065,130 +1099,162 @@ Return Value:
             Notify = CONTAINING_RECORD( NotifyLinks, NOTIFY_CHANGE, NotifyList );
 
             //
-            //  If the length of the name in the notify block is currently zero then
-            //  someone is doing a rename and we can skip this block.
+            //  The rules for deciding whether this notification applies are
+            //  different for view indices versus file name indices (directories).
             //
 
-            if (Notify->FullDirectoryName->Length == 0) {
+            if (FullTargetName == NULL) {
 
-                continue;
-            }
+                ASSERTMSG( "Directory notify handle in view index notify list!", Notify->FullDirectoryName == NULL);
 
-            //
-            //  If this filter match is not part of the completion filter then continue.
-            //
+                //
+                //  Make sure this is the Fcb being watched.
+                //
 
-            if (!(FilterMatch & Notify->CompletionFilter)) {
+                if (TargetContext != Notify->SubjectContext) {
 
-                continue;
-            }
-
-            //
-            //  If there is no normalized name then set its value from the full
-            //  file name.
-            //
-
-            if (!ARGUMENT_PRESENT( NormalizedParentName )) {
-                NormalizedParent.Buffer = FullTargetName->Buffer;
-                NormalizedParent.Length = TargetNameOffset;
-
-                if (NormalizedParent.Length != Notify->CharacterSize) {
-
-                    NormalizedParent.Length -= Notify->CharacterSize;
+                    continue;
                 }
 
-                NormalizedParent.MaximumLength = NormalizedParent.Length;
+                TargetParent.Buffer = NULL;
+                TargetParent.Length = 0;
 
-                NormalizedParentName = &NormalizedParent;
-            }
-
-            //
-            //  If the length of the directory being watched is longer than the
-            //  parent of the modified file then it can't be an ancestor of the
-            //  modified file.
-            //
-
-            if (Notify->FullDirectoryName->Length > NormalizedParentName->Length) {
-
-                continue;
-            }
+                ViewIndex = TRUE;
 
             //
-            //  If the lengths match exactly then this can only be the parent of
-            //  the modified file.
-            //
-
-            if (NormalizedParentName->Length == Notify->FullDirectoryName->Length) {
-
-                NotifyIsParent = TRUE;
-
-            //
-            //  If we are not watching the subtree of this directory then continue.
-            //
-
-            } else if (!FlagOn( Notify->Flags, NOTIFY_WATCH_TREE )) {
-
-                continue;
-
-            //
-            //  The watched directory can only be an ancestor of the modified
-            //  file.  Make sure that there is legal pathname separator immediately
-            //  after the end of the watched directory name within the normalized name.
-            //  If the watched directory is the root then we know this condition is TRUE.
+            //  Handle the directory case.
             //
 
             } else {
 
-                if (!FlagOn( Notify->Flags, NOTIFY_DIR_IS_ROOT )) {
+                ASSERTMSG( "View index notify handle in directory notify list!", Notify->FullDirectoryName != NULL);
 
-                    //
-                    //  Check for the character size.
-                    //
+                //
+                //  If the length of the name in the notify block is currently zero then
+                //  someone is doing a rename and we can skip this block.
+                //
 
-                    if (Notify->CharacterSize == sizeof( CHAR )) {
+                if (Notify->FullDirectoryName->Length == 0) {
 
-                        if (*(Add2Ptr( NormalizedParentName->Buffer,
-                                       Notify->FullDirectoryName->Length,
-                                       PCHAR )) != '\\') {
+                    continue;
+                }
+
+                //
+                //  If this filter match is not part of the completion filter then continue.
+                //
+
+                if (!(FilterMatch & Notify->CompletionFilter)) {
+
+                    continue;
+                }
+
+                //
+                //  If there is no normalized name then set its value from the full
+                //  file name.
+                //
+
+                if (!ARGUMENT_PRESENT( NormalizedParentName )) {
+                    NormalizedParent.Buffer = FullTargetName->Buffer;
+                    NormalizedParent.Length = TargetNameOffset;
+
+                    if (NormalizedParent.Length != Notify->CharacterSize) {
+
+                        NormalizedParent.Length -= Notify->CharacterSize;
+                    }
+
+                    NormalizedParent.MaximumLength = NormalizedParent.Length;
+
+                    NormalizedParentName = &NormalizedParent;
+                }
+
+                //
+                //  If the length of the directory being watched is longer than the
+                //  parent of the modified file then it can't be an ancestor of the
+                //  modified file.
+                //
+
+                if (Notify->FullDirectoryName->Length > NormalizedParentName->Length) {
+
+                    continue;
+                }
+
+                //
+                //  If the lengths match exactly then this can only be the parent of
+                //  the modified file.
+                //
+
+                if (NormalizedParentName->Length == Notify->FullDirectoryName->Length) {
+
+                    NotifyIsParent = TRUE;
+
+                //
+                //  If we are not watching the subtree of this directory then continue.
+                //
+
+                } else if (!FlagOn( Notify->Flags, NOTIFY_WATCH_TREE )) {
+
+                    continue;
+
+                //
+                //  The watched directory can only be an ancestor of the modified
+                //  file.  Make sure that there is legal pathname separator immediately
+                //  after the end of the watched directory name within the normalized name.
+                //  If the watched directory is the root then we know this condition is TRUE.
+                //
+
+                } else {
+
+                    if (!FlagOn( Notify->Flags, NOTIFY_DIR_IS_ROOT )) {
+
+                        //
+                        //  Check for the character size.
+                        //
+
+                        if (Notify->CharacterSize == sizeof( CHAR )) {
+
+                            if (*(Add2Ptr( NormalizedParentName->Buffer,
+                                           Notify->FullDirectoryName->Length,
+                                           PCHAR )) != '\\') {
+
+                                continue;
+                            }
+
+                        } else if (*(Add2Ptr( NormalizedParentName->Buffer,
+                                              Notify->FullDirectoryName->Length,
+                                              PWCHAR )) != L'\\') {
 
                             continue;
                         }
-
-                    } else if (*(Add2Ptr( NormalizedParentName->Buffer,
-                                          Notify->FullDirectoryName->Length,
-                                          PWCHAR )) != L'\\') {
-
-                        continue;
                     }
+
+                    NotifyIsParent = FALSE;
                 }
 
-                NotifyIsParent = FALSE;
-            }
+                //
+                //  We now have a correct match of the name lengths.  Now verify that the
+                //  characters match exactly.
+                //
 
-            //
-            //  We now have a correct match of the name lengths.  Now verify that the
-            //  characters match exactly.
-            //
+                if (!RtlEqualMemory( Notify->FullDirectoryName->Buffer,
+                                     NormalizedParentName->Buffer,
+                                     Notify->FullDirectoryName->Length )) {
 
-            if (!RtlEqualMemory( Notify->FullDirectoryName->Buffer,
-                                 NormalizedParentName->Buffer,
-                                 Notify->FullDirectoryName->Length )) {
+                    continue;
+                }
 
-                continue;
-            }
+                //
+                //  The characters are correct.  Now check in the case of a non-parent
+                //  notify that we have traverse callback.
+                //
 
-            //
-            //  The characters are correct.  Now check in the case of a non-parent
-            //  notify that we have traverse callback.
-            //
+                if (!NotifyIsParent &&
+                    Notify->TraverseCallback != NULL &&
+                    !Notify->TraverseCallback( Notify->FsContext,
+                                               TargetContext,
+                                               Notify->SubjectContext )) {
 
-            if (!NotifyIsParent &&
-                Notify->TraverseCallback != NULL &&
-                !Notify->TraverseCallback( Notify->FsContext,
-                                           TargetContext,
-                                           Notify->SubjectContext )) {
-
-                continue;
+                    continue;
+                }
             }
 
             //
@@ -1263,164 +1329,167 @@ Return Value:
                     //  final components.
                     //
 
-                    //
-                    //  If the watched directory is the root then we just use the full
-                    //  parent name.
-                    //
-
-                    if (FlagOn( Notify->Flags, NOTIFY_DIR_IS_ROOT ) ||
-                        NormalizedParentName->Buffer != FullTargetName->Buffer) {
+                    if (!ViewIndex) {
 
                         //
-                        //  If we don't have a string for the parent then construct
-                        //  it now.
+                        //  If the watched directory is the root then we just use the full
+                        //  parent name.
                         //
 
-                        if (ParentName.Buffer == NULL) {
+                        if (FlagOn( Notify->Flags, NOTIFY_DIR_IS_ROOT ) ||
+                            NormalizedParentName->Buffer != FullTargetName->Buffer) {
 
-                            ParentName.Buffer = FullTargetName->Buffer;
-                            ParentName.Length = TargetNameOffset;
+                            //
+                            //  If we don't have a string for the parent then construct
+                            //  it now.
+                            //
 
-                            if (ParentName.Length != Notify->CharacterSize) {
+                            if (ParentName.Buffer == NULL) {
 
-                                ParentName.Length -= Notify->CharacterSize;
+                                ParentName.Buffer = FullTargetName->Buffer;
+                                ParentName.Length = TargetNameOffset;
+
+                                if (ParentName.Length != Notify->CharacterSize) {
+
+                                    ParentName.Length -= Notify->CharacterSize;
+                                }
+
+                                ParentName.MaximumLength = ParentName.Length;
                             }
 
-                            ParentName.MaximumLength = ParentName.Length;
-                        }
+                            //
+                            //  Count through the components of the parent until we have
+                            //  swallowed the same number of name components as in the
+                            //  watched directory name.  We have the unicode version and
+                            //  the Ansi version to watch for.
+                            //
 
-                        //
-                        //  Count through the components of the parent until we have
-                        //  swallowed the same number of name components as in the
-                        //  watched directory name.  We have the unicode version and
-                        //  the Ansi version to watch for.
-                        //
+                            ComponentCount = 0;
+                            CurrentOffset = 0;
 
-                        ComponentCount = 0;
-                        CurrentOffset = 0;
+                            //
+                            //  If this is the root then there is no more to do.
+                            //
 
-                        //
-                        //  If this is the root then there is no more to do.
-                        //
+                            if (FlagOn( Notify->Flags, NOTIFY_DIR_IS_ROOT )) {
 
-                        if (FlagOn( Notify->Flags, NOTIFY_DIR_IS_ROOT )) {
-
-                            NOTHING;
-
-                        } else {
-
-                            ULONG ParentComponentCount;
-                            ULONG ParentOffset;
-
-                            ParentComponentCount = 1;
-                            ParentOffset = 0;
-
-                            if (Notify->CharacterSize == sizeof( CHAR )) {
-
-                                //
-                                //  Find the number of components in the parent.  We
-                                //  have to do this for each one because this name and
-                                //  the number of components could have changed.
-                                //
-
-                                while (ParentOffset < Notify->FullDirectoryName->Length) {
-
-                                    if (*((PCHAR) Notify->FullDirectoryName->Buffer + ParentOffset) == '\\') {
-
-                                        ParentComponentCount += 1;
-                                    }
-
-                                    ParentOffset += 1;
-                                }
-
-                                while (TRUE) {
-
-                                    if (*((PCHAR) ParentName.Buffer + CurrentOffset) == '\\') {
-
-                                        ComponentCount += 1;
-
-                                        if (ComponentCount == ParentComponentCount) {
-
-                                            break;
-                                        }
-
-                                    }
-
-                                    CurrentOffset += 1;
-                                }
+                                NOTHING;
 
                             } else {
 
-                                //
-                                //  Find the number of components in the parent.  We
-                                //  have to do this for each one because this name and
-                                //  the number of components could have changed.
-                                //
+                                ULONG ParentComponentCount;
+                                ULONG ParentOffset;
 
-                                while (ParentOffset < Notify->FullDirectoryName->Length / sizeof( WCHAR )) {
+                                ParentComponentCount = 1;
+                                ParentOffset = 0;
 
-                                    if (*((PWCHAR) Notify->FullDirectoryName->Buffer + ParentOffset) == '\\') {
+                                if (Notify->CharacterSize == sizeof( CHAR )) {
 
-                                        ParentComponentCount += 1;
-                                    }
+                                    //
+                                    //  Find the number of components in the parent.  We
+                                    //  have to do this for each one because this name and
+                                    //  the number of components could have changed.
+                                    //
 
-                                    ParentOffset += 1;
-                                }
+                                    while (ParentOffset < Notify->FullDirectoryName->Length) {
 
-                                while (TRUE) {
+                                        if (*((PCHAR) Notify->FullDirectoryName->Buffer + ParentOffset) == '\\') {
 
-                                    if (*((PWCHAR) ParentName.Buffer + CurrentOffset) == L'\\') {
-
-                                        ComponentCount += 1;
-
-                                        if (ComponentCount == ParentComponentCount) {
-
-                                            break;
+                                            ParentComponentCount += 1;
                                         }
+
+                                        ParentOffset += 1;
                                     }
 
-                                    CurrentOffset += 1;
+                                    while (TRUE) {
+
+                                        if (*((PCHAR) ParentName.Buffer + CurrentOffset) == '\\') {
+
+                                            ComponentCount += 1;
+
+                                            if (ComponentCount == ParentComponentCount) {
+
+                                                break;
+                                            }
+
+                                        }
+
+                                        CurrentOffset += 1;
+                                    }
+
+                                } else {
+
+                                    //
+                                    //  Find the number of components in the parent.  We
+                                    //  have to do this for each one because this name and
+                                    //  the number of components could have changed.
+                                    //
+
+                                    while (ParentOffset < Notify->FullDirectoryName->Length / sizeof( WCHAR )) {
+
+                                        if (*((PWCHAR) Notify->FullDirectoryName->Buffer + ParentOffset) == '\\') {
+
+                                            ParentComponentCount += 1;
+                                        }
+
+                                        ParentOffset += 1;
+                                    }
+
+                                    while (TRUE) {
+
+                                        if (*((PWCHAR) ParentName.Buffer + CurrentOffset) == L'\\') {
+
+                                            ComponentCount += 1;
+
+                                            if (ComponentCount == ParentComponentCount) {
+
+                                                break;
+                                            }
+                                        }
+
+                                        CurrentOffset += 1;
+                                    }
+
+                                    //
+                                    //  Convert characters to bytes.
+                                    //
+
+                                    CurrentOffset *= Notify->CharacterSize;
                                 }
-
-                                //
-                                //  Convert characters to bytes.
-                                //
-
-                                CurrentOffset *= Notify->CharacterSize;
                             }
+
+                            //
+                            //  We now know the offset into the parent name of the separator
+                            //  immediately preceding the relative parent name.  Construct the
+                            //  target parent name for the buffer.
+                            //
+
+                            CurrentOffset += Notify->CharacterSize;
+
+                            TargetParent.Buffer = Add2Ptr( ParentName.Buffer,
+                                                           CurrentOffset,
+                                                           PCHAR );
+                            TargetParent.MaximumLength =
+                            TargetParent.Length = ParentName.Length - (USHORT) CurrentOffset;
+
+                        //
+                        //  If the normalized is the same as the parent name use the portion
+                        //  after the match with the watched directory.
+                        //
+
+                        } else {
+
+                            TargetParent.Buffer = Add2Ptr( NormalizedParentName->Buffer,
+                                                           (Notify->FullDirectoryName->Length +
+                                                            Notify->CharacterSize),
+                                                           PCHAR );
+
+                            TargetParent.MaximumLength =
+                            TargetParent.Length = NormalizedParentName->Length -
+                                                  Notify->FullDirectoryName->Length -
+                                                  Notify->CharacterSize;
+
                         }
-
-                        //
-                        //  We now know the offset into the parent name of the separator
-                        //  immediately preceding the relative parent name.  Construct the
-                        //  target parent name for the buffer.
-                        //
-
-                        CurrentOffset += Notify->CharacterSize;
-
-                        TargetParent.Buffer = Add2Ptr( ParentName.Buffer,
-                                                       CurrentOffset,
-                                                       PCHAR );
-                        TargetParent.MaximumLength =
-                        TargetParent.Length = ParentName.Length - (USHORT) CurrentOffset;
-
-                    //
-                    //  If the normalized is the same as the parent name use the portion
-                    //  after the match with the watched directory.
-                    //
-
-                    } else {
-
-                        TargetParent.Buffer = Add2Ptr( NormalizedParentName->Buffer,
-                                                       (Notify->FullDirectoryName->Length +
-                                                        Notify->CharacterSize),
-                                                       PCHAR );
-
-                        TargetParent.MaximumLength =
-                        TargetParent.Length = NormalizedParentName->Length -
-                                              Notify->FullDirectoryName->Length -
-                                              Notify->CharacterSize;
-
                     }
 
                 } else {
@@ -1438,68 +1507,83 @@ Return Value:
 
                 SizeOfEntry = FIELD_OFFSET( FILE_NOTIFY_INFORMATION, FileName );
 
-                //
-                //  If there is a parent to report, find the size and include a separator
-                //  character.
-                //
-
-                if (!NotifyIsParent) {
-
-                    if (Notify->CharacterSize == sizeof( CHAR )) {
-
-                       SizeOfEntry += RtlOemStringToCountedUnicodeSize( &TargetParent );
-
-                    } else {
-
-                        SizeOfEntry += TargetParent.Length;
-                    }
+                if (ViewIndex) {
 
                     //
-                    //  Include the separator.  This is always a unicode character.
+                    //  In the view index case, the information to copy to the
+                    //  buffer comes to us in the stream name, and that is all
+                    //  the room we need to worry about having.
                     //
 
-                    SizeOfEntry += sizeof( WCHAR );
-                }
+                    ASSERT(ARGUMENT_PRESENT( StreamName ));
 
-                //
-                //  If we don't have the string for the target then construct it now.
-                //
-
-                if (TargetName.Buffer == NULL) {
-
-                    TargetName.Buffer = Add2Ptr( FullTargetName->Buffer, TargetNameOffset, PCHAR );
-                    TargetName.MaximumLength =
-                    TargetName.Length = FullTargetName->Length - TargetNameOffset;
-                }
-
-                if (Notify->CharacterSize == sizeof( CHAR )) {
-
-                    SizeOfEntry += RtlOemStringToCountedUnicodeSize( &TargetName );
+                    SizeOfEntry += StreamName->Length;
 
                 } else {
 
-                    SizeOfEntry += TargetName.Length;
-                }
-
-                //
-                //  If there is a stream name then add the bytes needed
-                //  for that.
-                //
-
-                if (ARGUMENT_PRESENT( StreamName )) {
-
                     //
-                    //  Add the space needed for the ':' separator.
+                    //  If there is a parent to report, find the size and include a separator
+                    //  character.
                     //
 
-                    if (Notify->CharacterSize == sizeof( WCHAR )) {
+                    if (!NotifyIsParent) {
 
-                        SizeOfEntry += (StreamName->Length + sizeof( WCHAR ));
+                        if (Notify->CharacterSize == sizeof( CHAR )) {
+
+                            SizeOfEntry += RtlOemStringToCountedUnicodeSize( &TargetParent );
+
+                        } else {
+
+                            SizeOfEntry += TargetParent.Length;
+                        }
+
+                        //
+                        //  Include the separator.  This is always a unicode character.
+                        //
+
+                        SizeOfEntry += sizeof( WCHAR );
+                    }
+
+                    //
+                    //  If we don't have the string for the target then construct it now.
+                    //
+
+                    if (TargetName.Buffer == NULL) {
+
+                        TargetName.Buffer = Add2Ptr( FullTargetName->Buffer, TargetNameOffset, PCHAR );
+                        TargetName.MaximumLength =
+                        TargetName.Length = FullTargetName->Length - TargetNameOffset;
+                    }
+
+                    if (Notify->CharacterSize == sizeof( CHAR )) {
+
+                        SizeOfEntry += RtlOemStringToCountedUnicodeSize( &TargetName );
 
                     } else {
 
-                        SizeOfEntry += (RtlOemStringToCountedUnicodeSize( StreamName )
-                                        + sizeof( CHAR ));
+                        SizeOfEntry += TargetName.Length;
+                    }
+
+                    //
+                    //  If there is a stream name then add the bytes needed
+                    //  for that.
+                    //
+
+                    if (ARGUMENT_PRESENT( StreamName )) {
+
+                        //
+                        //  Add the space needed for the ':' separator.
+                        //
+
+                        if (Notify->CharacterSize == sizeof( WCHAR )) {
+
+                            SizeOfEntry += (StreamName->Length + sizeof( WCHAR ));
+
+                        } else {
+
+                            SizeOfEntry += (RtlOemStringToCountedUnicodeSize( StreamName )
+                                            + sizeof( CHAR ));
+                        }
                     }
                 }
 
@@ -1507,7 +1591,7 @@ Return Value:
                 //  Remember if this report would overflow the buffer.
                 //
 
-                NextEntryOffset = LongAlign( Notify->DataLength );
+                NextEntryOffset = (ULONG)LongAlign( Notify->DataLength );
 
                 if (SizeOfEntry <= AllocationLength
                     && (NextEntryOffset + SizeOfEntry) <= AllocationLength) {
@@ -1574,16 +1658,20 @@ Return Value:
                             ChargedQuota = TRUE;
 
                             Notify->AllocatedBuffer =
-                            Notify->Buffer = FsRtlAllocatePool( PagedPool,
-                                                                AllocationLength );
+                            Notify->Buffer = FsRtlpAllocatePool( PagedPool,
+                                                                 AllocationLength );
 
                             Notify->ThisBufferLength = AllocationLength;
 
                             NotifyInfo = Notify->Buffer;
 
-                        } except( (GetExceptionCode() == STATUS_QUOTA_EXCEEDED)
+                        } except(( ExceptionCode = GetExceptionCode(), FsRtlIsNtstatusExpected(ExceptionCode))
                                   ? EXCEPTION_EXECUTE_HANDLER
                                   : EXCEPTION_CONTINUE_SEARCH ) {
+
+                            
+                            ASSERT( (ExceptionCode == STATUS_INSUFFICIENT_RESOURCES) ||
+                                    (ExceptionCode == STATUS_QUOTA_EXCEEDED) );
 
                             //
                             //  Return quota if we allocated the buffer.
@@ -1785,18 +1873,26 @@ Return Value:
 
             RemoveEntryList( &Notify->NotifyList );
 
-            if (Notify->AllocatedBuffer != NULL) {
+            InterlockedDecrement( &Notify->ReferenceCount );
 
-                PsReturnPoolQuota( Notify->OwningProcess,
-                                   PagedPool,
-                                   Notify->ThisBufferLength );
+            if (Notify->ReferenceCount == 0) {
+                
+                if (Notify->AllocatedBuffer != NULL) {
 
-                ExFreePool( Notify->AllocatedBuffer );
+                    PsReturnPoolQuota( Notify->OwningProcess,
+                                       PagedPool,
+                                       Notify->ThisBufferLength );
+
+                    ExFreePool( Notify->AllocatedBuffer );
+                }
+
+                if (Notify->FullDirectoryName != NULL) {
+
+                    SubjectContext = Notify->SubjectContext;
+                }
+
+                ExFreePool( Notify );
             }
-
-            SubjectContext = Notify->SubjectContext;
-
-            ExFreePool( Notify );
         }
 
     } finally {
@@ -1905,7 +2001,8 @@ FsRtlNotifyCompleteIrp (
     IN PIRP NotifyIrp,
     IN PNOTIFY_CHANGE Notify,
     IN ULONG DataLength,
-    IN NTSTATUS Status
+    IN NTSTATUS Status,
+    IN ULONG CheckCancel
     )
 
 /*++
@@ -1927,6 +2024,9 @@ Arguments:
 
     Status  -  Indicates the status to complete the Irp with.
 
+    CheckCancel - Indicates if we should only complete the irp if we clear the cancel routine
+        ourselves.
+
 Return Value:
 
     None.
@@ -1941,142 +2041,145 @@ Return Value:
     DebugTrace( +1, Dbg, "FsRtlIsNotifyCompleteIrp:  Entered\n", 0 );
 
     //
-    //  Clear the Iosb in the Irp.
+    //  Attempt to clear the cancel routine.  If this routine owns the cancel
+    //  routine then it can complete the irp.  Otherwise there is a cancel underway
+    //  on this.
     //
 
-    FsRtlNotifySetCancelRoutine( NotifyIrp, TRUE );
-
-    //
-    //  We only process the buffer if the status is STATUS_SUCCESS.
-    //
-
-    if (Status == STATUS_SUCCESS) {
+    if (FsRtlNotifySetCancelRoutine( NotifyIrp, Notify ) || !CheckCancel) {
 
         //
-        //  Get the current Stack location
+        //  We only process the buffer if the status is STATUS_SUCCESS.
         //
 
-        IrpSp = IoGetCurrentIrpStackLocation( NotifyIrp );
+        if (Status == STATUS_SUCCESS) {
 
-        //
-        //  If the data won't fit in the user's buffer or there was already a
-        //  buffer overflow then return the alternate status code.  If the data
-        //  was already stored in the Irp buffer then we know that we won't
-        //  take this path.  Otherwise we wouldn't be cleaning up the Irp
-        //  correctly.
-        //
+            //
+            //  Get the current Stack location
+            //
 
-        if (DataLength == 0
-            || IrpSp->Parameters.NotifyDirectory.Length < DataLength) {
+            IrpSp = IoGetCurrentIrpStackLocation( NotifyIrp );
 
-            Status = STATUS_NOTIFY_ENUM_DIR;
+            //
+            //  If the data won't fit in the user's buffer or there was already a
+            //  buffer overflow then return the alternate status code.  If the data
+            //  was already stored in the Irp buffer then we know that we won't
+            //  take this path.  Otherwise we wouldn't be cleaning up the Irp
+            //  correctly.
+            //
 
-        //
-        //  We have to carefully return the buffer to the user and handle all
-        //  of the different buffer cases.  If there is no allocated buffer
-        //  in the notify structure it means that we have already used the
-        //  caller's buffer.
-        //
-        //  1 - If the system allocated an associated system buffer we
-        //      can simply fill that in.
-        //
-        //  2 - If there is an Mdl then we get a system address for the Mdl
-        //      and copy the data into it.
-        //
-        //  3 - If there is only a user's buffer and pending has not been
-        //      returned, we can fill the user's buffer in directly.
-        //
-        //  4 - If there is only a user's buffer and pending has been returned
-        //      then we are not in the user's address space.  We dress up
-        //      the Irp with our system buffer and let the Io system
-        //      copy the data in.
-        //
+            if (DataLength == 0
+                || IrpSp->Parameters.NotifyDirectory.Length < DataLength) {
 
-        } else {
+                Status = STATUS_NOTIFY_ENUM_DIR;
 
-            if (Notify->AllocatedBuffer != NULL) {
+            //
+            //  We have to carefully return the buffer to the user and handle all
+            //  of the different buffer cases.  If there is no allocated buffer
+            //  in the notify structure it means that we have already used the
+            //  caller's buffer.
+            //
+            //  1 - If the system allocated an associated system buffer we
+            //      can simply fill that in.
+            //
+            //  2 - If there is an Mdl then we get a system address for the Mdl
+            //      and copy the data into it.
+            //
+            //  3 - If there is only a user's buffer and pending has not been
+            //      returned, we can fill the user's buffer in directly.
+            //
+            //  4 - If there is only a user's buffer and pending has been returned
+            //      then we are not in the user's address space.  We dress up
+            //      the Irp with our system buffer and let the Io system
+            //      copy the data in.
+            //
 
-                //
-                //  Protect the copy with a try-except and ignore the buffer
-                //  if we have some error in copying it to the buffer.
-                //
+            } else {
 
-                try {
+                if (Notify->AllocatedBuffer != NULL) {
 
-                    if (NotifyIrp->AssociatedIrp.SystemBuffer != NULL) {
+                    //
+                    //  Protect the copy with a try-except and ignore the buffer
+                    //  if we have some error in copying it to the buffer.
+                    //
 
-                        RtlCopyMemory( NotifyIrp->AssociatedIrp.SystemBuffer,
-                                       Notify->AllocatedBuffer,
-                                       DataLength );
+                    try {
 
-                    } else if (NotifyIrp->MdlAddress != NULL) {
+                        if (NotifyIrp->AssociatedIrp.SystemBuffer != NULL) {
 
-                        RtlCopyMemory( MmGetSystemAddressForMdl( NotifyIrp->MdlAddress ),
-                                       Notify->AllocatedBuffer,
-                                       DataLength );
+                            RtlCopyMemory( NotifyIrp->AssociatedIrp.SystemBuffer,
+                                           Notify->AllocatedBuffer,
+                                           DataLength );
 
-                    } else if (!FlagOn( IrpSp->Control, SL_PENDING_RETURNED )) {
+                        } else if (NotifyIrp->MdlAddress != NULL) {
 
-                        RtlCopyMemory( NotifyIrp->UserBuffer,
-                                       Notify->AllocatedBuffer,
-                                       DataLength );
+                            RtlCopyMemory( MmGetSystemAddressForMdl( NotifyIrp->MdlAddress ),
+                                           Notify->AllocatedBuffer,
+                                           DataLength );
 
-                    } else {
+                        } else if (!FlagOn( IrpSp->Control, SL_PENDING_RETURNED )) {
 
-                        NotifyIrp->Flags |= (IRP_BUFFERED_IO | IRP_INPUT_OPERATION | IRP_DEALLOCATE_BUFFER);
-                        NotifyIrp->AssociatedIrp.SystemBuffer = Notify->AllocatedBuffer;
+                            RtlCopyMemory( NotifyIrp->UserBuffer,
+                                           Notify->AllocatedBuffer,
+                                           DataLength );
 
+                        } else {
+
+                            NotifyIrp->Flags |= (IRP_BUFFERED_IO | IRP_INPUT_OPERATION | IRP_DEALLOCATE_BUFFER);
+                            NotifyIrp->AssociatedIrp.SystemBuffer = Notify->AllocatedBuffer;
+
+                        }
+
+                    } except( EXCEPTION_EXECUTE_HANDLER ) {
+
+                        Status = STATUS_NOTIFY_ENUM_DIR;
+                        DataLength = 0;
                     }
 
-                } except( EXCEPTION_EXECUTE_HANDLER ) {
+                    //
+                    //  Return the quota and deallocate the buffer if we didn't pass it
+                    //  back via the irp.
+                    //
 
-                    Status = STATUS_NOTIFY_ENUM_DIR;
-                    DataLength = 0;
+                    PsReturnPoolQuota( Notify->OwningProcess, PagedPool, Notify->ThisBufferLength );
+
+                    if (Notify->AllocatedBuffer != NotifyIrp->AssociatedIrp.SystemBuffer
+                        && Notify->AllocatedBuffer != NULL) {
+
+                        ExFreePool( Notify->AllocatedBuffer );
+                    }
+
+                    Notify->AllocatedBuffer = NULL;
+                    Notify->ThisBufferLength = 0;
                 }
 
                 //
-                //  Return the quota and deallocate the buffer if we didn't pass it
-                //  back via the irp.
+                //  Update the data length in the Irp.
                 //
 
-                PsReturnPoolQuota( Notify->OwningProcess, PagedPool, Notify->ThisBufferLength );
+                NotifyIrp->IoStatus.Information = DataLength;
 
-                if (Notify->AllocatedBuffer != NotifyIrp->AssociatedIrp.SystemBuffer
-                    && Notify->AllocatedBuffer != NULL) {
+                //
+                //  Show that there is no buffer in the notify package
+                //  anymore.
+                //
 
-                    ExFreePool( Notify->AllocatedBuffer );
-                }
-
-                Notify->AllocatedBuffer = NULL;
-                Notify->ThisBufferLength = 0;
+                Notify->Buffer = NULL;
             }
-
-            //
-            //  Update the data length in the Irp.
-            //
-
-            NotifyIrp->IoStatus.Information = DataLength;
-
-            //
-            //  Show that there is no buffer in the notify package
-            //  anymore.
-            //
-
-            Notify->Buffer = NULL;
         }
+
+        //
+        //  Make sure the Irp is marked as pending returned.
+        //
+
+        IoMarkIrpPending( NotifyIrp );
+
+        //
+        //  Now complete the request.
+        //
+
+        FsRtlCompleteRequest( NotifyIrp, Status );
     }
-
-    //
-    //  Make sure the Irp is marked as pending returned.
-    //
-
-    IoMarkIrpPending( NotifyIrp );
-
-    //
-    //  Now complete the request.
-    //
-
-    FsRtlCompleteRequest( NotifyIrp, Status );
 
     DebugTrace( -1, Dbg, "FsRtlIsNotifyCompleteIrp:  Exit\n", 0 );
 
@@ -2088,10 +2191,10 @@ Return Value:
 //  Local support routine
 //
 
-VOID
+BOOLEAN
 FsRtlNotifySetCancelRoutine (
     IN PIRP NotifyIrp,
-    IN BOOLEAN NotifyComplete
+    IN PNOTIFY_CHANGE Notify OPTIONAL
     )
 
 /*++
@@ -2104,17 +2207,22 @@ Arguments:
 
     NotifyIrp  -  Set the cancel routine in this Irp.
 
-    NotifyComplete - Set to TRUE if we are in the process of completing an
-        Irp normally.  If so then we simply need to clear the necessary Irp
-        fields while holding the spinlock.
+    Notify - If NULL then we are setting the cancel routine.  If not-NULL then we
+        are clearing the cancel routine.  If the cancel routine is not-null then
+        we need to decrement the reference count on this Notify structure
 
 Return Value:
 
-    None.
+    BOOLEAN - Only meaningfull if Notify is specified.  It indicates if this
+        routine cleared the cancel routine.  FALSE indicates that the cancel
+        routine is processing the Irp.
 
 --*/
 
 {
+    BOOLEAN ClearedCancel = FALSE;
+    PDRIVER_CANCEL CurrentCancel;
+
     //
     //  Grab the cancel spinlock and set our cancel routine in the Irp.
     //
@@ -2126,12 +2234,23 @@ Return Value:
     //  the information field.
     //
 
-    if (NotifyComplete) {
+    if (ARGUMENT_PRESENT( Notify )) {
 
-        IoSetCancelRoutine( NotifyIrp, NULL );
+        CurrentCancel = IoSetCancelRoutine( NotifyIrp, NULL );
         NotifyIrp->IoStatus.Information = 0;
 
         IoReleaseCancelSpinLock( NotifyIrp->CancelIrql );
+
+        //
+        //  If the current cancel routine is non-NULL then decrement the reference count
+        //  in the Notify.
+        //
+
+        if (CurrentCancel != NULL) {
+
+            InterlockedDecrement( &Notify->ReferenceCount );
+            ClearedCancel = TRUE;
+        }
 
     //
     //  If the cancel flag is set, we complete the Irp with cancelled
@@ -2140,9 +2259,9 @@ Return Value:
 
     } else if (NotifyIrp->Cancel) {
 
-        DebugTrace( 0, Dbg, "Irp has been cancelled\n", 0 );
+            DebugTrace( 0, Dbg, "Irp has been cancelled\n", 0 );
 
-        FsRtlCancelNotify( NULL, NotifyIrp );
+            FsRtlCancelNotify( NULL, NotifyIrp );
 
     } else {
 
@@ -2155,7 +2274,7 @@ Return Value:
         IoReleaseCancelSpinLock( NotifyIrp->CancelIrql );
     }
 
-    return;
+    return ClearedCancel;
 }
 
 
@@ -2286,27 +2405,44 @@ Return Value:
                 BufferOffset = BufferLength + sizeof( WCHAR );
             }
 
-            RtlOemToUnicodeN( Add2Ptr( NotifyInfo->FileName,
-                                       BufferOffset,
-                                       PWCHAR ),
-                              NotifyInfo->FileNameLength,
-                              &BufferLength,
-                              TargetName->Buffer,
-                              TargetName->Length );
+            //
+            //  For view indices, we do not have a parent name.
+            //
 
-            if (ARGUMENT_PRESENT( StreamName )) {
+            if (ParentName->Length == 0) {
 
-                BufferOffset += BufferLength;
+                ASSERT(ARGUMENT_PRESENT( StreamName ));
 
-                *(Add2Ptr( NotifyInfo->FileName, BufferOffset, PWCHAR )) = L':';
+                RtlCopyMemory( Add2Ptr( NotifyInfo->FileName,
+                                           BufferOffset,
+                                           PCHAR ),
+                               StreamName->Buffer,
+                               StreamName->Length );
+
+            } else {
 
                 RtlOemToUnicodeN( Add2Ptr( NotifyInfo->FileName,
-                                           BufferOffset + sizeof( WCHAR ),
+                                           BufferOffset,
                                            PWCHAR ),
                                   NotifyInfo->FileNameLength,
                                   &BufferLength,
-                                  StreamName->Buffer,
-                                  StreamName->Length );
+                                  TargetName->Buffer,
+                                  TargetName->Length );
+
+                if (ARGUMENT_PRESENT( StreamName )) {
+
+                    BufferOffset += BufferLength;
+
+                    *(Add2Ptr( NotifyInfo->FileName, BufferOffset, PWCHAR )) = L':';
+
+                    RtlOemToUnicodeN( Add2Ptr( NotifyInfo->FileName,
+                                               BufferOffset + sizeof( WCHAR ),
+                                               PWCHAR ),
+                                      NotifyInfo->FileNameLength,
+                                      &BufferLength,
+                                      StreamName->Buffer,
+                                      StreamName->Length );
+                }
             }
         }
 
@@ -2382,15 +2518,6 @@ Return Value:
 
         Irp = CONTAINING_RECORD( Notify->NotifyIrps.Flink, IRP, Tail.Overlay.ListEntry );
 
-        //
-        //  We grab the cancel spinlock and clear the
-        //  cancel routine.
-        //
-
-        IoAcquireCancelSpinLock( &Irp->CancelIrql );
-        IoSetCancelRoutine( Irp, NULL );
-        IoReleaseCancelSpinLock( Irp->CancelIrql );
-
         RemoveHeadList( &Notify->NotifyIrps );
 
         //
@@ -2400,7 +2527,8 @@ Return Value:
         FsRtlNotifyCompleteIrp( Irp,
                                 Notify,
                                 DataLength,
-                                Status );
+                                Status,
+                                TRUE );
 
         //
         //  If we were only to complete one Irp then break now.
@@ -2426,7 +2554,7 @@ Return Value:
 VOID
 FsRtlCancelNotify (
     IN PDEVICE_OBJECT DeviceObject,
-    IN PIRP Irp
+    IN PIRP ThisIrp
     )
 
 /*++
@@ -2443,7 +2571,7 @@ Arguments:
 
     DeviceObject - Ignored.
 
-    Irp  -  This is the Irp to cancel.
+    ThisIrp  -  This is the Irp to cancel.
 
 Return Value:
 
@@ -2452,25 +2580,30 @@ Return Value:
 --*/
 
 {
-    PLIST_ENTRY Links;
+    PSECURITY_SUBJECT_CONTEXT SubjectContext = NULL;
 
-    PIRP ThisIrp;
     PNOTIFY_CHANGE Notify;
+    PNOTIFY_SYNC NotifySync;
+    LONG ExceptionCode;
 
     UNREFERENCED_PARAMETER( DeviceObject );
 
     DebugTrace( +1, Dbg, "FsRtlCancelNotify:  Entered\n", 0 );
     DebugTrace(  0, Dbg, "Irp   -> %08lx\n", Irp );
 
-    Notify = (PNOTIFY_CHANGE) Irp->IoStatus.Information;
+    //
+    //  Capture the notify structure.
+    //
+
+    Notify = (PNOTIFY_CHANGE) ThisIrp->IoStatus.Information;
 
     //
     //  Void the cancel routine and release the cancel spinlock.
     //
 
-    IoSetCancelRoutine( Irp, NULL );
-    Irp->IoStatus.Information = 0;
-    IoReleaseCancelSpinLock( Irp->CancelIrql );
+    IoSetCancelRoutine( ThisIrp, NULL );
+    ThisIrp->IoStatus.Information = 0;
+    IoReleaseCancelSpinLock( ThisIrp->CancelIrql );
 
     FsRtlEnterFileSystem();
 
@@ -2478,7 +2611,8 @@ Return Value:
     //  Grab the mutex for this structure.
     //
 
-    AcquireNotifySync( Notify->NotifySync );
+    NotifySync = Notify->NotifySync;
+    AcquireNotifySync( NotifySync );
 
     //
     //  Use a try finally to faciltate cleanup.
@@ -2486,238 +2620,226 @@ Return Value:
 
     try {
 
-        Links = Notify->NotifyIrps.Flink;
-
         //
-        //  Look at all the Irps for this structure.
+        //  Remove the Irp from the queue.
         //
 
-        while (Links != &Notify->NotifyIrps) {
+        RemoveEntryList( &ThisIrp->Tail.Overlay.ListEntry );
 
-            ThisIrp = CONTAINING_RECORD( Links, IRP, Tail.Overlay.ListEntry );
+        IoMarkIrpPending( ThisIrp );
+
+        //
+        //  We now have the Irp.  Check to see if there is data stored
+        //  in the buffer for this Irp.
+        //
+
+        if (Notify->Buffer != NULL
+            && Notify->AllocatedBuffer == NULL
+
+            && ((ThisIrp->MdlAddress != NULL
+                 && MmGetSystemAddressForMdl( ThisIrp->MdlAddress ) == Notify->Buffer)
+
+                || (Notify->Buffer == ThisIrp->AssociatedIrp.SystemBuffer))) {
+
+            PIRP NextIrp;
+            PVOID NewBuffer;
+            ULONG NewBufferLength;
+            PIO_STACK_LOCATION  IrpSp;
 
             //
-            //  Check if this Irp has been cancelled.
+            //  Initialize the above values.
             //
 
-            if (ThisIrp->Cancel) {
+            NewBuffer = NULL;
+            NewBufferLength = 0;
+
+            //
+            //  Remember the next Irp on the list.  Find the length of any
+            //  buffer it might have.  Also keep a pointer to the buffer
+            //  if present.
+            //
+
+            if (!IsListEmpty( &Notify->NotifyIrps )) {
+
+                NextIrp = CONTAINING_RECORD( Notify->NotifyIrps.Flink,
+                                             IRP,
+                                             Tail.Overlay.ListEntry );
+
+                IrpSp = IoGetCurrentIrpStackLocation( NextIrp );
 
                 //
-                //  Now we need to remove this waiter and call the
-                //  completion routine.  But we must not mess up our link
-                //  iteration so we need to back up link one step and
-                //  then the next iteration will go to our current flink.
+                //  If the buffer here is large enough to hold the data we
+                //  can use that buffer.
                 //
 
-                Links = Links->Blink;
-
-                //
-                //  Remove the Irp from the queue.
-                //
-
-                RemoveEntryList( Links->Flink );
-
-                IoMarkIrpPending( ThisIrp );
-
-                //
-                //  We now have the Irp.  Check to see if there is data stored
-                //  in the buffer for this Irp.
-                //
-
-                if (Notify->Buffer != NULL
-                    && Notify->AllocatedBuffer == NULL
-
-                    && ((ThisIrp->MdlAddress != NULL
-                         && MmGetSystemAddressForMdl( ThisIrp->MdlAddress ) == Notify->Buffer)
-
-                        || (Notify->Buffer == ThisIrp->AssociatedIrp.SystemBuffer))) {
-
-                    PIRP NextIrp;
-                    PVOID NewBuffer;
-                    ULONG NewBufferLength;
-                    PIO_STACK_LOCATION  IrpSp;
+                if (IrpSp->Parameters.NotifyDirectory.Length >= Notify->DataLength) {
 
                     //
-                    //  Initialize the above values.
+                    //  If there is a system buffer or Mdl then get a new
+                    //  buffer there.
                     //
 
-                    NewBuffer = NULL;
-                    NewBufferLength = 0;
+                    if (NextIrp->AssociatedIrp.SystemBuffer != NULL) {
 
-                    //
-                    //  Remember the next Irp on the list.  Find the length of any
-                    //  buffer it might have.  Also keep a pointer to the buffer
-                    //  if present.
-                    //
+                        NewBuffer = NextIrp->AssociatedIrp.SystemBuffer;
 
-                    if (!IsListEmpty( &Notify->NotifyIrps )) {
+                    } else if (NextIrp->MdlAddress != NULL) {
 
-                        NextIrp = CONTAINING_RECORD( Notify->NotifyIrps.Flink,
-                                                     IRP,
-                                                     Tail.Overlay.ListEntry );
+                        NewBuffer = MmGetSystemAddressForMdl( NextIrp->MdlAddress );
+                    }
 
-                        IrpSp = IoGetCurrentIrpStackLocation( NextIrp );
+                    NewBufferLength = IrpSp->Parameters.NotifyDirectory.Length;
 
-                        //
-                        //  If the buffer here is large enough to hold the data we
-                        //  can use that buffer.
-                        //
-
-                        if (IrpSp->Parameters.NotifyDirectory.Length >= Notify->DataLength) {
-
-                            //
-                            //  If there is a system buffer or Mdl then get a new
-                            //  buffer there.
-                            //
-
-                            if (NextIrp->AssociatedIrp.SystemBuffer != NULL) {
-
-                                NewBuffer = NextIrp->AssociatedIrp.SystemBuffer;
-
-                            } else if (NextIrp->MdlAddress != NULL) {
-
-                                NewBuffer = MmGetSystemAddressForMdl( NextIrp->MdlAddress );
-                            }
-
-                            NewBufferLength = IrpSp->Parameters.NotifyDirectory.Length;
-
-                            if (NewBufferLength > Notify->BufferLength) {
-
-                                NewBufferLength = Notify->BufferLength;
-                            }
-                        }
-
-                    //
-                    //  Otherwise check if the user's original buffer is larger than
-                    //  the current buffer.
-                    //
-
-                    } else if (Notify->BufferLength >= Notify->DataLength) {
+                    if (NewBufferLength > Notify->BufferLength) {
 
                         NewBufferLength = Notify->BufferLength;
                     }
-
-                    //
-                    //  If we have a new buffer length then we either have a new
-                    //  buffer or need to allocate one.  We will do this under
-                    //  the protection of a try-except in order to continue in the
-                    //  event of a failure.
-                    //
-
-                    if (NewBufferLength != 0) {
-
-                        BOOLEAN ChargedQuota;
-
-                        try {
-
-                            ChargedQuota = FALSE;
-
-                            if (NewBuffer == NULL) {
-
-                                PsChargePoolQuota( Notify->OwningProcess,
-                                                   PagedPool,
-                                                   NewBufferLength );
-
-                                ChargedQuota = TRUE;
-
-                                //
-                                //  If we didn't get an error then attempt to
-                                //  allocate the pool.  If there is an error
-                                //  don't forget to release the quota.
-                                //
-
-                                NewBuffer = FsRtlAllocatePool( PagedPool,
-                                                               NewBufferLength );
-
-                                Notify->AllocatedBuffer = NewBuffer;
-                            }
-
-                            //
-                            //  Now copy the data over to the new buffer.
-                            //
-
-                            RtlCopyMemory( NewBuffer,
-                                           Notify->Buffer,
-                                           Notify->DataLength );
-
-                            //
-                            //  It is possible that the buffer size changed.
-                            //
-
-                            Notify->ThisBufferLength = NewBufferLength;
-                            Notify->Buffer = NewBuffer;
-
-                        } except( (GetExceptionCode() == STATUS_QUOTA_EXCEEDED)
-                                  ? EXCEPTION_EXECUTE_HANDLER
-                                  : EXCEPTION_CONTINUE_SEARCH ) {
-
-                            //
-                            //  Return quota if we allocated the buffer.
-                            //
-
-                            if (ChargedQuota) {
-
-                                PsReturnPoolQuota( Notify->OwningProcess,
-                                                   PagedPool,
-                                                   NewBufferLength );
-                            }
-
-                            //
-                            //  Forget any current buffer and resort to immediate
-                            //  notify.
-                            //
-
-                            SetFlag( Notify->Flags, NOTIFY_IMMEDIATE_NOTIFY );
-                        }
-
-                    //
-                    //  Otherwise set the immediate notify flag.
-                    //
-
-                    } else {
-
-                        SetFlag( Notify->Flags, NOTIFY_IMMEDIATE_NOTIFY );
-                    }
-
-                    //
-                    //  If the immediate notify flag is set then clear the other
-                    //  values in the notify structures.
-                    //
-
-                    if (FlagOn( Notify->Flags, NOTIFY_IMMEDIATE_NOTIFY )) {
-
-                        //
-                        //  Forget any current buffer and resort to immediate
-                        //  notify.
-                        //
-
-                        Notify->AllocatedBuffer = Notify->Buffer = NULL;
-
-                        Notify->ThisBufferLength =
-                        Notify->DataLength = Notify->LastEntry = 0;
-                    }
                 }
 
-                //
-                //  If this is not the Irp we were passed then we need
-                //  to carefully clear the cancel information.  Otherwise
-                //  a real cancel on this Irp may come in and we might
-                //  look at stale values in the .Information field.
-                //
+            //
+            //  Otherwise check if the user's original buffer is larger than
+            //  the current buffer.
+            //
 
-                if (ThisIrp != Irp) {
+            } else if (Notify->BufferLength >= Notify->DataLength) {
 
-                    FsRtlNotifySetCancelRoutine( ThisIrp, TRUE );
-                }
-
-                //
-                //  Complete the Irp with status cancelled.
-                //
-
-                FsRtlCompleteRequest( ThisIrp, STATUS_CANCELLED );
+                NewBufferLength = Notify->BufferLength;
             }
 
-            Links = Links->Flink;
+            //
+            //  If we have a new buffer length then we either have a new
+            //  buffer or need to allocate one.  We will do this under
+            //  the protection of a try-except in order to continue in the
+            //  event of a failure.
+            //
+
+            if (NewBufferLength != 0) {
+
+                BOOLEAN ChargedQuota;
+
+                try {
+
+                    ChargedQuota = FALSE;
+
+                    if (NewBuffer == NULL) {
+
+                        PsChargePoolQuota( Notify->OwningProcess,
+                                           PagedPool,
+                                           NewBufferLength );
+
+                        ChargedQuota = TRUE;
+
+                        //
+                        //  If we didn't get an error then attempt to
+                        //  allocate the pool.  If there is an error
+                        //  don't forget to release the quota.
+                        //
+
+                        NewBuffer = FsRtlpAllocatePool( PagedPool,
+                                                        NewBufferLength );
+
+                        Notify->AllocatedBuffer = NewBuffer;
+                    }
+
+                    //
+                    //  Now copy the data over to the new buffer.
+                    //
+
+                    RtlCopyMemory( NewBuffer,
+                                   Notify->Buffer,
+                                   Notify->DataLength );
+
+                    //
+                    //  It is possible that the buffer size changed.
+                    //
+
+                    Notify->ThisBufferLength = NewBufferLength;
+                    Notify->Buffer = NewBuffer;
+
+                } except( FsRtlIsNtstatusExpected( ExceptionCode = GetExceptionCode()) ?
+                          EXCEPTION_EXECUTE_HANDLER :
+                          EXCEPTION_CONTINUE_SEARCH ) {
+
+                    ASSERT( (ExceptionCode == STATUS_INSUFFICIENT_RESOURCES) ||
+                            (ExceptionCode == STATUS_QUOTA_EXCEEDED) );
+                    
+                    //
+                    //  Return quota if we allocated the buffer.
+                    //
+
+                    if (ChargedQuota) {
+
+                        PsReturnPoolQuota( Notify->OwningProcess,
+                                           PagedPool,
+                                           NewBufferLength );
+                    }
+
+                    //
+                    //  Forget any current buffer and resort to immediate
+                    //  notify.
+                    //
+
+                    SetFlag( Notify->Flags, NOTIFY_IMMEDIATE_NOTIFY );
+                }
+
+            //
+            //  Otherwise set the immediate notify flag.
+            //
+
+            } else {
+
+                SetFlag( Notify->Flags, NOTIFY_IMMEDIATE_NOTIFY );
+            }
+
+            //
+            //  If the immediate notify flag is set then clear the other
+            //  values in the notify structures.
+            //
+
+            if (FlagOn( Notify->Flags, NOTIFY_IMMEDIATE_NOTIFY )) {
+
+                //
+                //  Forget any current buffer and resort to immediate
+                //  notify.
+                //
+
+                Notify->AllocatedBuffer = Notify->Buffer = NULL;
+
+                Notify->ThisBufferLength =
+                Notify->DataLength = Notify->LastEntry = 0;
+            }
+        }
+
+        //
+        //  Complete the Irp with status cancelled.
+        //
+
+        FsRtlCompleteRequest( ThisIrp, STATUS_CANCELLED );
+
+        //
+        //  Decrement the count of Irps that might go through the cancel path.
+        //
+
+        InterlockedDecrement( &Notify->ReferenceCount );
+
+        if (Notify->ReferenceCount == 0) {
+
+            if (Notify->AllocatedBuffer != NULL) {
+
+                PsReturnPoolQuota( Notify->OwningProcess,
+                                   PagedPool,
+                                   Notify->ThisBufferLength );
+
+                ExFreePool( Notify->AllocatedBuffer );
+            }
+
+            if (Notify->FullDirectoryName != NULL) {
+
+                SubjectContext = Notify->SubjectContext;
+            }
+
+            ExFreePool( Notify );
+            Notify = NULL;
         }
 
     } finally {
@@ -2726,7 +2848,13 @@ Return Value:
         //  No matter how we exit, we release the mutex.
         //
 
-        ReleaseNotifySync( Notify->NotifySync );
+        ReleaseNotifySync( NotifySync );
+
+        if (SubjectContext != NULL) {
+
+            SeReleaseSubjectContext( SubjectContext );
+            ExFreePool( SubjectContext );
+        }
 
         FsRtlExitFileSystem();
 
