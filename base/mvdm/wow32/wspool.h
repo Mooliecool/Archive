@@ -21,6 +21,14 @@ ULONG FASTCALL   WG32EndSpoolPage (PVDMFRAME pFrame);
 ULONG FASTCALL   WG32CloseJob (PVDMFRAME pFrame);
 ULONG FASTCALL   WG32WriteSpool (PVDMFRAME pFrame);
 ULONG FASTCALL   WG32DeleteJob (PVDMFRAME pFrame);
+ULONG FASTCALL   WG32SpoolFile (PVDMFRAME pFrame);
+
+typedef struct _tagWOWSpool {
+    HANDLE hFile;
+    HANDLE hPrinter;
+    BOOL   fOK;
+    WORD   prn16;
+} WOWSPOOL;
 
 typedef struct _DLLENTRYPOINTS {
     char    *name;
@@ -52,12 +60,8 @@ WORD    GetPrn16(HANDLE h32);
 HANDLE  Prn32(WORD h16);
 VOID    FreePrn (WORD h16);
 
-BOOL    GetDriverName (char *psz, char *szDriver);
+BOOL    GetDriverName (char *psz, char *szDriver, int cbDriver);
 
-BOOL    LoadLibraryAndGetProcAddresses(char *name, DLLENTRYPOINTS *p, int i);
+BOOL    LoadLibraryAndGetProcAddresses(WCHAR *name, DLLENTRYPOINTS *p, int i);
 
-#ifdef i386
-HINSTANCE SafeLoadLibrary(char *name);
-#else
-#define SafeLoadLibrary(name) LoadLibrary(name)
-#endif
+HINSTANCE SafeLoadLibrary(WCHAR *name);

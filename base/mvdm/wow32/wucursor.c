@@ -49,8 +49,8 @@ ULONG FASTCALL WU32ClipCursor(PVDMFRAME pFrame)
     p1 = GETRECT16(parg16->f1, &t1);
 
     ClipCursor(
-    p1
-    );
+        p1
+        );
 
     FREEARGPTR(parg16);
     RETURN(0);
@@ -339,7 +339,6 @@ ULONG FASTCALL WU32LoadCursor(PVDMFRAME pFrame)
     ULONG ul = 0;
     PSZ psz2;
     LPBYTE pResData = NULL;
-    WCHAR pszModName[MAX_PATH];
     register PLOADCURSOR16 parg16;
     BOOL fIsCursor;
     HAND16 hInst16;
@@ -354,7 +353,6 @@ ULONG FASTCALL WU32LoadCursor(PVDMFRAME pFrame)
     fIsCursor = ((WORD)parg16->f7  == (WORD)RT_CURSOR);
     hInst16 = FETCHWORD(parg16->f1);
     hRes16 = parg16->f5;
-    wsprintfW(pszModName, L"\001%8lx", HINSTRES32(hInst16));
 
     if (HIWORD(psz2) != (WORD) NULL) {
         if (!(MBToWCS(psz2, -1, &lpUniName_CursorIcon, -1, TRUE))) {
@@ -369,7 +367,7 @@ ULONG FASTCALL WU32LoadCursor(PVDMFRAME pFrame)
     }
 
     ul = (ULONG) (pfnOut.pfnServerLoadCreateCursorIcon)(HINSTRES32(hInst16),
-                                    (LPTSTR) pszModName,
+                                    (LPTSTR) NULL,  // pszModName unused by user32
                                     parg16->f6,
                                     (LPCTSTR) lpUniName_CursorIcon,
                                     parg16->f4,

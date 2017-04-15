@@ -204,8 +204,9 @@ ULONG FASTCALL WU32CallWindowProc(PVDMFRAME pFrame)
         if (hwnd = ThunkMsg16(&mpex)) {
 
             // Note: ThunkMsg16 may have caused 16-bit memory movement
-            FREEARGPTR(pFrame);
-            FREEARGPTR(parg16);
+            // But: we haven't refreshed them since freeing after IsThunkWindowProc above.
+            // FREEARGPTR(pFrame);
+            // FREEARGPTR(parg16);
 
             uMsgNew = mpex.uMsg;
             uParamNew = mpex.uParam;
@@ -336,8 +337,6 @@ ULONG FASTCALL WU32DefDlgProc(PVDMFRAME pFrame)
         FREEARGPTR(pFrame);
         FREEARGPTR(parg16);
 
-        SetFakeDialogClass(hdlg);
-
         BlockWOWIdle(TRUE);
         mpex.lReturn = DefDlgProc(hdlg, mpex.uMsg, mpex.uParam, mpex.lParam);
         BlockWOWIdle(FALSE);
@@ -427,7 +426,7 @@ ULONG FASTCALL WU32DefDlgProc(PVDMFRAME pFrame)
 ULONG FASTCALL WU32DefFrameProc(PVDMFRAME pFrame)
 {
     HWND hwnd, hwnd2;
-    
+
     MSGPARAMEX mpex;
     register PDEFFRAMEPROC16 parg16;
 
@@ -584,7 +583,7 @@ ULONG FASTCALL WU32DefMDIChildProc(PVDMFRAME pFrame)
     if (hwnd = ThunkMsg16(&mpex)) {
 
         // Note: ThunkMsg16 may have caused 16-bit memory movement
-        FREEARGPTR(pFrame);    
+        FREEARGPTR(pFrame);
         FREEARGPTR(parg16);
 
         BlockWOWIdle(TRUE);
@@ -830,15 +829,13 @@ get_next_dde_message:
     vpMsg = parg16->vpMsg;
 
 
-
     ul = GETBOOL16(GetMessage(&t1,
                               HWND32(parg16->hwnd),
                               WORD32(parg16->wMin),
                               WORD32(parg16->wMax)));
 
-
     // There Could have been a Task Switch Before GetMessage Returned so
-    // Don't Trust any 32 bit flat pointers we have, memory could've been 
+    // Don't Trust any 32 bit flat pointers we have, memory could've been
     // compacted or moved.
     FREEARGPTR(parg16);
     FREEVDMPTR(pFrame);
@@ -1161,7 +1158,7 @@ get_next_dde_message:
         ulReturn = putmsg16(vpf1, &t1);
 
         // There Could've been a Task Switch Before putmsg16 Returned so Don't
-        // Trust any 32 bit flat pointers we have, memory could have been 
+        // Trust any 32 bit flat pointers we have, memory could have been
         // compacted or moved.
         FREEARGPTR(parg16);
         FREEVDMPTR(pFrame);
@@ -1319,7 +1316,7 @@ ULONG FASTCALL WU32PostAppMessage(PVDMFRAME pFrame)
     ThunkMsg16(&mpex);
 
     // Note: ThunkMsg16 may have caused 16-bit memory movement
-    FREEARGPTR(pFrame);    
+    FREEARGPTR(pFrame);
     FREEARGPTR(parg16);
 
     mpex.lReturn = PostThreadMessage(f1, mpex.uMsg, mpex.uParam, mpex.lParam);
@@ -1424,6 +1421,7 @@ ULONG FASTCALL WU32PostMessage(PVDMFRAME pFrame)
     // Used by 16->32 DDE thunkers.
     //
 
+    WOW32ASSERT(fWhoCalled == FALSE);
     fWhoCalled = WOWDDE_POSTMESSAGE;
 
     f2 = (UINT)WORD32(parg16->f2);
@@ -1432,13 +1430,13 @@ ULONG FASTCALL WU32PostMessage(PVDMFRAME pFrame)
 
     mpex.lReturn = 0;
     mpex.Parm16.WndProc.hwnd   = parg16->f1;
-    mpex.Parm16.WndProc.wMsg   = f2;
-    mpex.Parm16.WndProc.wParam = f3;
+    mpex.Parm16.WndProc.wMsg   = (WORD)f2;
+    mpex.Parm16.WndProc.wParam = (WORD)f3;
     mpex.Parm16.WndProc.lParam = f4;
     mpex.iMsgThunkClass = 0;
 
-    // The Reader.exe shipped with Lotus 123MM version has a message 
-    // synchronization problem.  Force proper synchronization by 
+    // The Reader.exe shipped with Lotus 123MM version has a message
+    // synchronization problem.  Force proper synchronization by
     // converting this PostMessage call to a SendMessage().
     if ((f2 == WM_VSCROLL) &&
          ((f3 == SB_THUMBTRACK) || (f3 == SB_THUMBPOSITION)) &&
@@ -1455,6 +1453,7 @@ ULONG FASTCALL WU32PostMessage(PVDMFRAME pFrame)
     FREEARGPTR(pFrame);
     FREEARGPTR(parg16);
 
+    WOW32ASSERT(fWhoCalled == WOWDDE_POSTMESSAGE);
     fWhoCalled = FALSE;
     if (hwnd) {
 
@@ -1477,10 +1476,20 @@ ULONG FASTCALL WU32PostMessage(PVDMFRAME pFrame)
         // and destination are in the WOW address space.
 
         if (err == ERROR_INVALID_PARAMETER) {
-            PWW pww;
-            pww = FindPWW(hwnd, WOWCLASS_UNKNOWN);
+            PWW   pww;
+            DWORD dwpid;
 
-            if (pww != NULL && pww->iClass != WOWCLASS_UNKNOWN) {
+            pww = FindPWW(hwnd);
+
+            // was added for WM_DRAWITEM messages which are probably intended
+            // for owner drawn std-type classes.  see bug #2047 NTBUG4
+            if (pww != NULL && GETICLASS(pww, hwnd) != WOWCLASS_WIN16) {
+
+                // make sure we're in the same vdm process
+                if (!(GetWindowThreadProcessId(hwnd, &dwpid) &&
+                      (dwpid == GetCurrentProcessId()))) {
+                          return 0;
+                }
 
                 mpex.lReturn = PostMessage(hwnd, f2 | WOWPRIVATEMSG, f3, f4);
             }
@@ -1686,7 +1695,7 @@ ULONG FASTCALL WU32ReplyMessage(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32SendDlgItemMessage(PVDMFRAME pFrame)
 {
-    HWND hdlg, hwndItem;
+    HWND hdlg, hwndItem, hwnd;
     register PSENDDLGITEMMESSAGE16 parg16;
     MSGPARAMEX mpex;
 
@@ -1739,7 +1748,7 @@ static DWORD dwCachedItem = 0L ;
         mpex.Parm16.WndProc.lParam = LONG32(parg16->f5);
         mpex.iMsgThunkClass = 0;
 
-        if (ThunkMsg16(&mpex)) {
+        if (hwnd = ThunkMsg16(&mpex)) {
 
             // Note: ThunkMsg16 may have caused memory movement
             FREEARGPTR(pFrame);
@@ -1751,6 +1760,9 @@ static DWORD dwCachedItem = 0L ;
             */
             mpex.lReturn = SendMessage(hwndItem, mpex.uMsg, mpex.uParam,
                                                                 mpex.lParam);
+            // to keep common dialog structs in sync (see wcommdlg.c)
+            Check_ComDlg_pszptr(CURRENTPTD()->CommDlgTd,
+                                (VPVOID)mpex.Parm16.WndProc.lParam);
 
             if (MSG16NEEDSTHUNKING(&mpex)) {
                 (mpex.lpfnUnThunk16)(&mpex);
@@ -1811,6 +1823,10 @@ ULONG FASTCALL WU32SendMessage(PVDMFRAME pFrame)
     UINT uMsgOld;
     UINT uParamOld;
     LONG lParamOld;
+#ifdef DBCS
+    HMEM16 hMem16;
+    LPSZ lpBuf16,lpBuf32;
+#endif // DBCS
 
     GETARGPTR(pFrame, sizeof(SENDMESSAGE16), parg16);
 
@@ -1839,13 +1855,32 @@ ULONG FASTCALL WU32SendMessage(PVDMFRAME pFrame)
     // This is for the apps that use DDE protocol wrongly, like AmiPro.
     //
 
+    WOW32ASSERT(fWhoCalled == FALSE);
     fWhoCalled = WOWDDE_POSTMESSAGE;
 
     mpex.lReturn = 0;
     mpex.Parm16.WndProc.hwnd   = hwndOld;
-    mpex.Parm16.WndProc.wMsg   = uMsgOld;
-    mpex.Parm16.WndProc.wParam = uParamOld;
+    mpex.Parm16.WndProc.wMsg   = (WORD)uMsgOld;
+#ifdef DBCS
+    //
+    // For WIN3.1J's BUG ?
+    // SendMessage( hwnd, WM_GETTEXT, 2, lpBuffer )
+    // if string is DBCS, return is DBCS-leadbyte.
+    // KKSUZUKA:#1731
+    // 1994.8.8 add by V-HIDEKK
+    //
+    if( uMsgOld == WM_GETTEXT && uParamOld == 2 ){
+        mpex.Parm16.WndProc.wParam = (WORD)(uParamOld + 1);
+        mpex.Parm16.WndProc.lParam = GlobalAllocLock16( GMEM_SHARE | GMEM_MOVEABLE, uParamOld +1, &hMem16 );
+    }
+    else {
+        mpex.Parm16.WndProc.wParam = (WORD)uParamOld;
+        mpex.Parm16.WndProc.lParam = lParamOld;
+    }
+#else // !DBCS
+    mpex.Parm16.WndProc.wParam = (WORD)uParamOld;
     mpex.Parm16.WndProc.lParam = lParamOld;
+#endif // !DBCS
     mpex.iMsgThunkClass = 0;
 
     hwnd = ThunkMsg16(&mpex);
@@ -1854,72 +1889,62 @@ ULONG FASTCALL WU32SendMessage(PVDMFRAME pFrame)
     FREEARGPTR(pFrame);
     FREEARGPTR(parg16);
 
+    WOW32ASSERT(fWhoCalled == WOWDDE_POSTMESSAGE);
     fWhoCalled = FALSE;
 
     if (hwnd) {
-        BlockWOWIdle(TRUE);
-        mpex.lReturn = SendMessage(hwnd, mpex.uMsg, mpex.uParam, mpex.lParam);
-        BlockWOWIdle(FALSE);
 
+        BlockWOWIdle(TRUE);
+
+#ifdef DEBUG
+        if ( WM_DDE_EXECUTE == mpex.uMsg ) {
+             // comes handy when debugging shell shortcut problems
+             LOGDEBUG(1,("dest %x, src%x, msg %s\n",hwnd,mpex.uParam,mpex.lParam));
+        }             
+#endif
+        mpex.lReturn = SendMessage(hwnd, mpex.uMsg, mpex.uParam, mpex.lParam);
+
+        BlockWOWIdle(FALSE);
+#ifdef DBCS
+    //
+    // For WIN3.1J's BUG ?
+    // SendMessage( hwnd, WM_GETTEXT, 2, lpBuffer )
+    // if string is DBCS, return is DBCSLeadbyte.
+    // KKSUZUKA:#1731
+    // 1994.8.8 add by V-HIDEKK
+    //
+        if( uMsgOld == WM_GETTEXT && uParamOld == 2 ){
+
+            GETVDMPTR(mpex.Parm16.WndProc.lParam,mpex.Parm16.WndProc.wParam,lpBuf32);
+            GETVDMPTR(lParamOld,uParamOld,lpBuf16);
+            lpBuf16[0] = lpBuf32[0];
+            if( mpex.lReturn == 2 ){
+                lpBuf16[1] = 0;
+                mpex.lReturn = 1;
+            }
+            else {
+                lpBuf16[1] = lpBuf32[1];
+            }
+            FREEVDMPTR(lpBuf16);
+            FREEVDMPTR(lpBuf32);
+            GlobalUnlockFree16( mpex.Parm16.WndProc.lParam );
+            mpex.Parm16.WndProc.wParam = (WORD)uParamOld;
+            mpex.Parm16.WndProc.lParam = lParamOld;
+        }
+#endif // DBCS
+
+
+        WOW32ASSERT(fWhoCalled == FALSE);
         fWhoCalled = WOWDDE_POSTMESSAGE;
         if (MSG16NEEDSTHUNKING(&mpex)) {
             (mpex.lpfnUnThunk16)(&mpex);
         }
+        WOW32ASSERT(fWhoCalled == WOWDDE_POSTMESSAGE);
         fWhoCalled = FALSE;
     }
 
     FREEARGPTR(parg16);
     RETURN((ULONG)mpex.lReturn);
-}
-
-
-
-
-
-
-
-/*++
-    BOOL SetMessageQueue(<cMsg>)
-    int <cMsg>;
-
-    The %SetMessageQueue% function creates a new message queue. It is
-    particularly useful in applications that require a queue that contains more
-    than eight messages (the maximum size of the default queue). The <cMsg>
-    parameter specifies the size of the new queue; the function must be called
-    from an application's WinMain function before any windows are created and
-    before any messages are sent. The %SetMessageQueue% function destroys the
-    old queue, along with messages it might contain.
-
-    <cMsg>
-        Specifies the maximum number of messages that the new queue may
-        contain.
-
-    The return value specifies whether a new message queue is created. It is
-    TRUE if the function creates a new queue. Otherwise, it is FALSE.
-
-    If the return value is FALSE, the application has no queue because the
-    %SetMessageQueue% function deletes the original queue before attempting to
-    create a new one. The application must continue calling %SetMessageQueue%
-    with a smaller queue size until the function returns TRUE.
---*/
-
-ULONG FASTCALL WU32SetMessageQueue(PVDMFRAME pFrame)
-{
-#ifdef ONLY_API16
-    ULONG ul;
-    register PSETMESSAGEQUEUE16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETMESSAGEQUEUE16), parg16);
-
-    ul = GETBOOL16(SetMessageQueue(INT32(parg16->f1)));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-#else
-    UNREFERENCED_PARAMETER(pFrame);
-
-    return TRUE;    // WIN32 doesn't have sizeable message queues
-#endif
 }
 
 
@@ -2007,7 +2032,7 @@ ULONG FASTCALL WU32TranslateAccelerator(PVDMFRAME pFrame)
     GETARGPTR(pFrame, sizeof(TRANSLATEACCELERATOR16), parg16);
 
     W32CopyMsgStruct(parg16->f3, &t3, TRUE);
-    ul = GETINT16(TranslateAccelerator(HWND32(parg16->f1), 
+    ul = GETINT16(TranslateAccelerator(HWND32(parg16->f1),
                                        HACCEL32(parg16->f2), &t3 ));
 
     FREEARGPTR(parg16);
@@ -2159,67 +2184,4 @@ ULONG FASTCALL WU32WaitMessage(PVDMFRAME pFrame)
     BlockWOWIdle(FALSE);
 
     RETURN(0);
-}
-
-
-
-
-
-
-
-//----------------------------------------------------------------------------
-// SetFakeDialogClass
-//  - mimics USER32 behaviour. If an app calls  DefDlgProc, or EndDialog,
-//    or MapDialogRect with an hwnd that is not a 'dialog' mark it as a
-//    dialog window.
-//
-//    This is needed for handling the DWL_DLGPROC constants for GetWindowLong
-//    and SetWindowLong.
-//
-//    Specifically to support the WINCIM.
-//
-//----------------------------------------------------------------------------
-
-VOID SetFakeDialogClass(HWND hwnd)
-{
-    PWW pww;
-    ULONG ul;
-
-    if (pww = FindPWW(hwnd, WOWCLASS_UNKNOWN)) {
-        if (pww->iClass == WOWCLASS_DIALOG ||
-                                  pww->flState & WWSTATE_FAKEDIALOGCLASS) {
-            return;
-        }
-        else {
-
-            // mark this hwnd as a dialog
-
-            SETWL(hwnd, GWL_WOWiClassAndflState,
-                    MAKECLASSANDSTATE(pww->iClass, pww->flState | WWSTATE_FAKEDIALOGCLASS));
-
-            LOGDEBUG(0, ("WOW:SetFakeDialogClass: fake dialog hwnd = %08lx\n",
-                                                                 (ULONG)hwnd));
-
-            ul = GetWindowLong(hwnd, DWL_DLGPROC);
-            if (ul) {
-
-                // current DWL_DLGPROC is non-zero, so assume that the value
-                // is a 16:16 wndproc
-
-                SETWL(hwnd, GWL_WOWvpfnDlgProc, ul);
-                ul = SetWindowLong(hwnd, DWL_DLGPROC, (LONG)W32DialogFunc);
-            }
-            else {
-
-                //  current DWL_DLGPROC is NULL, nothing to do
-
-                WOW32ASSERT(pww->vpfnDlgProc == (VPWNDPROC)NULL);
-            }
-
-
-        }
-    }
-
-    return;
-
 }

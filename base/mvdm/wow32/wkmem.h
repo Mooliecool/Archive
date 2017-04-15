@@ -11,10 +11,10 @@
  *  Created 3-Dec-1992 by Matthew Felton (mattfe)
 --*/
 
-LPVOID FASTCALL WK32VirtualAlloc(PVDMFRAME pFrame);
-BOOL FASTCALL   WK32VirtualFree(PVDMFRAME pFrame);
+ULONG FASTCALL WK32VirtualAlloc(PVDMFRAME pFrame);
+ULONG FASTCALL WK32VirtualFree(PVDMFRAME pFrame);
 #if 0
-BOOL FASTCALL   WK32VirtualLock(PVDMFRAME pFrame);
-BOOL FASTCALL   WK32VirtualUnLock(PVDMFRAME pFrame);
+ULONG FASTCALL WK32VirtualLock(PVDMFRAME pFrame);
+ULONG FASTCALL WK32VirtualUnLock(PVDMFRAME pFrame);
 #endif
-VOID FASTCALL   WK32GlobalMemoryStatus(PVDMFRAME pFrame);
+ULONG FASTCALL WK32GlobalMemoryStatus(PVDMFRAME pFrame);

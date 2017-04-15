@@ -234,25 +234,6 @@ ULONG FASTCALL WU32DestroyIcon(PVDMFRAME pFrame)
 }
 
 
-ULONG FASTCALL WU32DragObject(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PDRAGOBJECT16 parg16;
-
-    GETARGPTR(pFrame, sizeof(DRAGOBJECT16), parg16);
-
-    ul = (ULONG) DragObject(HWND32(parg16->f1),
-                            HWND32(parg16->f2),
-                            UINT32(parg16->f3),
-                            DWORD32(parg16->f4),
-                            HCURSOR32(parg16->f5)
-    );
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
 ULONG FASTCALL WU32DragDetect(PVDMFRAME pFrame)
 {
     ULONG ul;
@@ -313,59 +294,6 @@ ULONG FASTCALL WU32DrawFocusRect(PVDMFRAME pFrame)
 
     FREEARGPTR(parg16);
     RETURN(0);
-}
-
-
-/*++
-    BOOL DrawIcon(<hDC>, <X>, <Y>, <hIcon>)
-    HDC <hDC>;
-    int <X>;
-    int <Y>;
-    HICON <hIcon>;
-
-    The %DrawIcon% function draws an icon on the specified device. The
-    %DrawIcon% function places the icon's upper-left corner at the location
-    specified by the <X> and <Y> parameters. The location is subject to the
-    current mapping mode of the device context.
-
-    <hDC>
-        Identifies the device context for a window.
-
-    <X>
-        Specifies the logical <x>-coordinate of the upper-left corner of
-        the icon.
-
-    <Y>
-        Specifies the logical <y>-coordinate of the upper-left corner of
-        the icon.
-
-    <hIcon>
-        Identifies the icon to be drawn.
-
-    The return value specifies the outcome of the function. It is TRUE if the
-    function is successful. Otherwise, it is FALSE.
-
-    The icon resource must have been previously loaded by using the %LoadIcon%
-    function. The MM_TEXT mapping mode must be selected prior to using this
-    function.
---*/
-
-ULONG FASTCALL WU32DrawIcon(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PDRAWICON16 parg16;
-
-    GETARGPTR(pFrame, sizeof(DRAWICON16), parg16);
-
-    ul = GETBOOL16(DrawIcon(
-    HDC32(parg16->f1),
-    INT32(parg16->f2),
-    INT32(parg16->f3),
-    HICON32(parg16->f4)
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
 }
 
 
@@ -493,59 +421,18 @@ ULONG FASTCALL WU32DrawText(PVDMFRAME pFrame)
     WOW32VERIFY(GETRECT16(parg16->vpRect, &t4));
 
     ul = GETINT16(DrawText(
-    HDC32(parg16->hdc),
-    pstr2,
-    INT32(parg16->nCount),
-    &t4,
-    WORD32(parg16->wFormat)
-    ));
+                      HDC32(parg16->hdc),
+                      pstr2,
+                      INT32(parg16->nCount),
+                      &t4,
+                      WORD32(parg16->wFormat)
+                      ));
 
     PUTRECT16(parg16->vpRect, &t4);
 
     FREESTRPTR(pstr2);
     FREEARGPTR(parg16);
     RETURN(ul);
-}
-
-
-/*++
-    BOOL EnableHardwareInput(<bEnableInput>)
-    BOOL <bEnableInput>;
-
-    The %EnableHardwareInput% function disables mouse and keyboard input. The
-    input is saved if the <bEnableInput> parameter is TRUE and discarded if it
-    is FALSE.
-
-    <bEnableInput>
-        Specifies that the function should save input if the bEnableInput
-        parameter is set to a nonzero value; specifies that the function should
-        discard input if the bEnableInput parameter is set to zero.
-
-    The return value specifies whether mouse and keyboard input is disabled. It
-    is TRUE if input was previously enabled. Otherwise, it is FALSE. The
-    default return value is TRUE.
---*/
-
-ULONG FASTCALL WU32EnableHardwareInput(PVDMFRAME pFrame)
-{
-#ifdef ONLY_API16
-    ULONG ul;
-    register PENABLEHARDWAREINPUT16 parg16;
-
-    GETARGPTR(pFrame, sizeof(ENABLEHARDWAREINPUT16), parg16);
-
-    ul = GETBOOL16(EnableHardwareInput(
-    BOOL32(parg16->f1)
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-#else
-    UNREFERENCED_PARAMETER(pFrame);
-
-    return TRUE;
-#endif
-
 }
 
 
@@ -573,16 +460,19 @@ ULONG FASTCALL WU32EnableHardwareInput(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32EndPaint(PVDMFRAME pFrame)
 {
+    HAND16 hdc16;
     PAINTSTRUCT t2;
     register PENDPAINT16 parg16;
 
     GETARGPTR(pFrame, sizeof(ENDPAINT16), parg16);
-    getpaintstruct16(parg16->vpPaint, &t2);
+    hdc16 = getpaintstruct16(parg16->vpPaint, &t2);
 
     EndPaint(
-    HWND32(parg16->hwnd),
-    &t2
-    );
+        HWND32(parg16->hwnd),
+        &t2
+        );
+
+    DeleteWOWGdiHandle(t2.hdc, hdc16);
 
     FREEARGPTR(parg16);
     RETURN(0);
@@ -768,45 +658,6 @@ ULONG FASTCALL WU32EnumProps(PVDMFRAME pFrame)
 
 
 /*++
-    int ExcludeUpdateRgn(<hDC>, <hwnd>)
-    HANDLE <hDC>;
-    HWND <hwnd>;
-
-    The %ExcludeUpdateRgn% function prevents drawing within invalid areas of a
-    window by excluding an updated region in the window from a clipping region.
-
-    <hDC>
-        Identifies the device context associated with the clipping region.
-
-    <hwnd>
-        Identifies the window being updated.
-
-    The return value is the type of excluded region. It can be any one of the
-    following values:
-
-    COMPLEXREGION   The region has overlapping borders.
-    ERROR           No region was created.
-    NULLREGION      The region is empty.
-    SIMPLEREGION    The region has no overlapping borders.
---*/
-
-ULONG FASTCALL WU32ExcludeUpdateRgn(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PEXCLUDEUPDATERGN16 parg16;
-
-    GETARGPTR(pFrame, sizeof(EXCLUDEUPDATERGN16), parg16);
-
-    ul = GETINT16(ExcludeUpdateRgn(
-    HDC32(parg16->f1),
-    HWND32(parg16->f2)
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-/*++
     int FillWindow(<hWndParent>, <hWnd>, <hDC>, <hBrush>)
     HWND <hWndParent>;
     HWND  <hWnd>;
@@ -837,11 +688,11 @@ ULONG FASTCALL WU32FillWindow(PVDMFRAME pFrame)
     GETARGPTR(pFrame, sizeof(FILLWINDOW16), parg16);
 
     (pfnOut.pfnFillWindow)(
-    HWND32(parg16->f1),
-    HWND32(parg16->f2),
-    HDC32(parg16->f3),
-    HBRUSH32(parg16->f4)
-    );
+        HWND32(parg16->f1),
+        HWND32(parg16->f2),
+        HDC32(parg16->f3),
+        HBRUSH32(parg16->f4)
+        );
 
     FREEARGPTR(parg16);
     RETURN(0);
@@ -897,10 +748,10 @@ ULONG FASTCALL WU32FillRect(PVDMFRAME pFrame)
     WOW32VERIFY(GETRECT16(parg16->f2, &t2));
 
     ul = GETINT16(FillRect(
-    HDC32(parg16->f1),
-    &t2,
-    HBRUSH32(parg16->f3)
-    ));
+                      HDC32(parg16->f1),
+                      &t2,
+                      HBRUSH32(parg16->f3)
+                      ));
 
     FREEARGPTR(parg16);
     RETURN(ul);
@@ -950,77 +801,12 @@ ULONG FASTCALL WU32FrameRect(PVDMFRAME pFrame)
     WOW32VERIFY(GETRECT16(parg16->f2, &t2));
 
     ul = GETINT16(FrameRect(
-    HDC32(parg16->f1),
-    &t2,
-    HBRUSH32(parg16->f3)
-    ));
+                      HDC32(parg16->f1),
+                      &t2,
+                      HBRUSH32(parg16->f3)
+                      ));
 
     FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    int GetAsyncKeyState(<vKey>)
-    int <vKey>;
-
-    The %GetAsyncKeyState% function determines whether a key is up or down at
-    the time the function is called, and whether the key was pressed after a
-    previous call to the %GetAsyncKeyState% function. If the most significant
-    bit of the return value is set, the key is currently down; if the least
-    significant bit is set, the key was pressed after a previous call to the
-    function.
-
-    <vKey>
-        Specifies one of 256 possible virtual-key code values.
-
-    The return value specifies whether the key was pressed since the last call
-    to %GetAsyncKeyState% and whether the key is currently up or down. If the
-    most significant bit is set, the key is down, and if the least significant
-    bit is set, the key was pressed after a preceding %GetAsyncKeyState% call.
---*/
-
-ULONG FASTCALL WU32GetAsyncKeyState(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETASYNCKEYSTATE16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETASYNCKEYSTATE16), parg16);
-
-    ul = GETINT16(GetAsyncKeyState(
-    INT32(parg16->f1)
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    HWND GetCapture(VOID)
-
-    The %GetCapture% function retrieves a handle that identifies the window that
-    has the mouse capture. Only one window has the mouse capture at any given
-    time; this window receives mouse input whether or not the cursor is within
-    its borders.
-
-    This function has no parameters.
-
-    The return value identifies the window that has the mouse capture; it is
-    NULL if no window has the mouse capture.
-
-    A window receives the mouse capture when its handle is passed as the <hwnd>
-    parameter of the %SetCapture% function.
---*/
-
-ULONG FASTCALL WU32GetCapture(PVDMFRAME pFrame)
-{
-    ULONG ul;
-
-    UNREFERENCED_PARAMETER(pFrame);
-
-    ul = GETHWND16(GetCapture());
-
     RETURN(ul);
 }
 
@@ -1067,8 +853,8 @@ ULONG FASTCALL WU32GetDC(PVDMFRAME pFrame)
     CURRENTPTD()->ulLastDesktophDC = 0;
     
     ul = GETHDC16(GetDC(
-    HWND32(parg16->f1)
-    ));
+                      HWND32(parg16->f1)
+                      ));
 
     if (ul) {
 // Some apps such as MSWORKS and MS PUBLISHER use some wizard code that accepts
@@ -1084,7 +870,7 @@ ULONG FASTCALL WU32GetDC(PVDMFRAME pFrame)
         if (CURRENTPTD()->dwWOWCompatFlags & WOWCF_UNIQUEHDCHWND) {
             ul = ul | 1;
         } else if ((CURRENTPTD()->dwWOWCompatFlagsEx & WOWCFEX_FIXDCFONT4MENUSIZE) &&
-	          (parg16->f1 == 0)) {
+                   (parg16->f1 == 0)) {
 // WP tutorial assumes that the font selected in the hDC for desktop window
 // (ie, result of GetDC(NULL)) is the same font as the font selected for 
 // drawing the menu. Unfortunetly in SUR this is not true as the user can
@@ -1095,222 +881,11 @@ ULONG FASTCALL WU32GetDC(PVDMFRAME pFrame)
 // GetDC(0).
             CURRENTPTD()->ulLastDesktophDC = ul;
         }
-	
-	
-	
+
+
+
         StoreDC(htask16, parg16->f1, (HAND16)ul);
     }
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    WORD GetDoubleClickTime(VOID)
-
-    The %GetDoubleClickTime% function retrieves the current double-click time
-    for the mouse. A double-click is a series of two clicks of the mouse button,
-    the second occurring within a specified time after the first. The
-    double-click time is the maximum number of milliseconds that may occur
-    between the first and second click of a double-click.
-
-    This function has no parameters.
-
-    The return value specifies the current double-click time (in milliseconds).
---*/
-
-ULONG FASTCALL WU32GetDoubleClickTime(PVDMFRAME pFrame)
-{
-    ULONG ul;
-
-    UNREFERENCED_PARAMETER(pFrame);
-
-    ul = GETWORD16(GetDoubleClickTime());
-
-    RETURN(ul);
-}
-
-
-/*++
-    HWND GetFocus(VOID)
-
-    The %GetFocus% function retrieves the handle of the window that currently
-    owns the input focus.
-
-    This function has no parameters.
-
-    The return value identifies the window that currently owns the focus if the
-    function is successful. Otherwise, it is NULL.
---*/
-
-ULONG FASTCALL WU32GetFocus(PVDMFRAME pFrame)
-{
-    ULONG ul;
-
-    UNREFERENCED_PARAMETER(pFrame);
-
-    ul = GETHWND16(GetFocus());
-
-    RETURN(ul);
-}
-
-
-/*++
-    BOOL GetInputState(VOID)
-
-    The %GetInputState% function determines whether there are mouse, keyboard,
-    or timer events in the system queue that require processing. An event is a
-    record that describes interrupt-level input. Mouse events occur when a user
-    moves the mouse or clicks a mouse button. Keyboard events occur when a user
-    presses one or more keys. Timer events occur after a specified number of
-    clock ticks. The system queue is the location in which Windows stores mouse,
-    keyboard, and timer events.
-
-    This function has no parameters.
-
-    The return value specifies whether mouse, keyboard or timer input occurs. It
-    is TRUE if input is detected. Otherwise, it is FALSE.
---*/
-
-ULONG FASTCALL WU32GetInputState(PVDMFRAME pFrame)
-{
-    ULONG ul;
-
-    UNREFERENCED_PARAMETER(pFrame);
-
-    ul = GETBOOL16(GetInputState());
-
-    RETURN(ul);
-}
-
-
-/*++
-    HWND GetLastActivePopup(<hwndOwner>)
-    HWND <hwndOwner>;
-
-    The %GetLastActivePopup% function determines which pop-up window owned by
-    the window identified by the <hwndOwner> parameter was most recently active.
-
-    <hwndOwner>
-        Identifies the owner window.
-
-    The return value identifies the most-recently active pop-up window. The
-    return value will be <hwndOwner> if any of the following conditions are
-    met:
-
-    o   The window identified by <hwndOwner> itself was most recently active.
-
-    o   The window identified by <hwndOwner> does not own any pop-up windows.
-
-    o   The window identified by <hwndOwner> is not a top-level window or is
-        owned by another window.
---*/
-
-ULONG FASTCALL WU32GetLastActivePopup(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETLASTACTIVEPOPUP16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETLASTACTIVEPOPUP16), parg16);
-
-    ul = GETHWND16(GetLastActivePopup(HWND32(parg16->f1)));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    HANDLE GetProp(<hwnd>, <lpString>)
-    HWND <hwnd>;
-    LPSTR <lpString>;
-
-    The %GetProp% function retrieves a data handle from the property list of the
-    specified window. The character string pointed to by the <lpString>
-    parameter identifies the handle to be retrieved. The string and handle are
-    assumed to have been added to the property list by using the %SetProp%
-    function.
-
-    <hwnd>
-        Identifies the window whose property list is to be searched.
-
-    <lpString>
-        Points to a null-terminated string or an atom that identifies a string.
-        If an atom is given, it must have been created previously by using the
-        %AddAtom% function. The atom, a 16-bit value, must be placed in the
-        low-order word of the <lpString> parameter; the high-order word must be
-        set to zero.
-
-    The return value identifies the associated data handle if the property list
-    contains the given string. Otherwise, it is NULL.
-
-    The value retrieved by the %GetProp% function can be any 16-bit value useful
-    to the application.
---*/
-
-ULONG FASTCALL WU32GetProp(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    PSZ psz2;
-    register PGETPROP16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETPROP16), parg16);
-    GETPSZIDPTR(parg16->f2, psz2);
-
-    ul = (HAND16)GetProp(
-    HWND32(parg16->f1),
-    psz2
-    );
-
-    FREEPSZPTR(psz2);
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    int GetScrollPos(<hwnd>, <nBar>)
-    HWND <hwnd>;
-    int <nBar>;
-
-    The %GetScrollPos% function retrieves the current position of a scroll-bar
-    thumb. The current position is a relative value that depends on the current
-    scrolling range. For example, if the scrolling range is 0 to 100 and the
-    thumb is in the middle of the bar, the current position is 50.
-
-    <hwnd>
-        Identifies a window that has standard scroll bars or a scroll-bar
-        control, depending on the value of the nBar parameter.
-
-    <nBar>
-        Specifies the scroll bar to examine. It can be one of the
-        following values:
-
-    SB_CTL
-        Retrieves the position of a scroll-bar control. In this case, the hwnd
-        parameter must be the window handle of a scroll-bar control.
-
-    SB_HORZ
-        Retrieves the position of a window's horizontal scroll bar.
-
-    SB_VERT
-        Retrieves the position of a window's vertical scroll bar.
-
-    The return value specifies the current position of the scroll-bar thumb.
---*/
-
-ULONG FASTCALL WU32GetScrollPos(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETSCROLLPOS16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETSCROLLPOS16), parg16);
-
-    ul = GETINT16(GetScrollPos(
-    HWND32(parg16->f1),
-    INT32(parg16->f2)
-    ));
 
     FREEARGPTR(parg16);
     RETURN(ul);
@@ -1371,11 +946,11 @@ ULONG FASTCALL WU32GetScrollRange(PVDMFRAME pFrame)
     GETARGPTR(pFrame, sizeof(GETSCROLLRANGE16), parg16);
 
     GetScrollRange(
-    HWND32(parg16->f1),
-    INT32(parg16->f2),
-    &t3,
-    &t4
-    );
+        HWND32(parg16->f1),
+        INT32(parg16->f2),
+        &t3,
+        &t4
+        );
 
     PUTINT16(parg16->f3, t3);
     PUTINT16(parg16->f4, t4);
@@ -1458,65 +1033,13 @@ ULONG FASTCALL WU32GetUpdateRect(PVDMFRAME pFrame)
     GETARGPTR(pFrame, sizeof(GETUPDATERECT16), parg16);
 
     ul = GETBOOL16(GetUpdateRect(
-    HWND32(parg16->f1),
-    &t2,
-    BOOL32(parg16->f3)
-    ));
+                       HWND32(parg16->f1),
+                       &t2,
+                       BOOL32(parg16->f3)
+                       ));
 
 
     PUTRECT16(parg16->f2, &t2);
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    int GetUpdateRgn(<hwnd>, <hRgn>, <fErase>)
-    HWND <hwnd>;
-    HRGN <hRgn>;
-    BOOL <fErase>;
-
-    The %GetUpdateRgn% function copies a window's update region into a region
-    identified by the <hRgn> parameter. The coordinates of this region are
-    relative to the upper-left corner of the window (client coordinates).
-
-    <hwnd>
-        Identifies the window that contains the region to be updated.
-
-    <hRgn>
-        Identifies the update region.
-
-    <fErase>
-        Specifies whether or not the window background should be erased
-        and nonclient areas of child windows should be drawn. If it is zero, no
-        drawing is done.
-
-    The return value specifies a short-integer flag that indicates the type of
-    resulting region. It can be any one of the following values:
-
-    COMPLEXREGION   The region has overlapping borders.
-    ERROR           No region was created.
-    NULLREGION      The region is empty.
-    SIMPLEREGION    The region has no overlapping borders.
-
-    %BeginPaint% automatically validates the update region, so any call to
-    %GetUpdateRgn% made immediately after the %BeginPaint% call retrieves an
-    empty update region.
---*/
-
-ULONG FASTCALL WU32GetUpdateRgn(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETUPDATERGN16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETUPDATERGN16), parg16);
-
-    ul = GETINT16(GetUpdateRgn(
-    HWND32(parg16->f1),
-    HRGN32(parg16->f2),
-    BOOL32(parg16->f3)
-    ));
-
     FREEARGPTR(parg16);
     RETURN(ul);
 }
@@ -1591,7 +1114,7 @@ ULONG FASTCALL WU32GlobalDeleteAtom(PVDMFRAME pFrame)
         if (!fFoundEnvoyAtom && GlobalGetAtomName (ATOM32(parg16->f1),
                                envoyString,
                                32) &&
-                !_stricmp (envoyString, "SomeEnvoyViewerIsRunning")) {
+                !WOW32_stricmp (envoyString, "SomeEnvoyViewerIsRunning")) {
             envoyHandle16 = parg16->f1;
         }
 
@@ -1618,28 +1141,9 @@ ULONG FASTCALL WU32GlobalDeleteAtom(PVDMFRAME pFrame)
 }
 
 
-ULONG FASTCALL WU32GlobalFindAtom(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    PSZ psz1;
-    register PGLOBALFINDATOM16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GLOBALFINDATOM16), parg16);
-    GETPSZPTR(parg16->f1, psz1);
-
-    ul = GETATOM16(GlobalFindAtom(
-    psz1
-    ));
-
-    FREEPSZPTR(psz1);
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
 ULONG FASTCALL WU32GlobalGetAtomName(PVDMFRAME pFrame)
 {
-    ULONG ul;
+    ULONG ul = 0;
     PSZ psz2;
     register PGLOBALGETATOMNAME16 parg16;
 
@@ -1896,10 +1400,6 @@ ULONG FASTCALL WU32GrayString(PVDMFRAME pFrame)
                                   wid,
                                   hgt));
 
-        if( Gray.hdc ) {
-            FREEHOBJ16(Gray.hdc);
-        }
-
     } else {
 
        GETPSZPTR(vpstr, psz2);
@@ -1984,10 +1484,10 @@ ULONG FASTCALL WU32InvalidateRect(PVDMFRAME pFrame)
     p2 = GETRECT16(parg16->f2, &t2);
 
     InvalidateRect(
-    HWND32(parg16->f1),
-    p2,
-    BOOL32(parg16->f3)
-    );
+        HWND32(parg16->f1),
+        p2,
+        BOOL32(parg16->f3)
+        );
 
     FREEARGPTR(parg16);
     RETURN(1);    // Win 3.x always returned 1 as a side-effect of jmping to
@@ -2045,10 +1545,10 @@ ULONG FASTCALL WU32InvalidateRgn(PVDMFRAME pFrame)
     GETARGPTR(pFrame, sizeof(INVALIDATERGN16), parg16);
 
     InvalidateRgn(
-    HWND32(parg16->f1),
-    HRGN32(parg16->f2),
-    BOOL32(parg16->f3)
-    );
+        HWND32(parg16->f1),
+        HRGN32(parg16->f2),
+        BOOL32(parg16->f3)
+        );
 
     FREEARGPTR(parg16);
     RETURN(1);    // Win 3.x always returned 1 as a side-effect of jmping to
@@ -2092,9 +1592,9 @@ ULONG FASTCALL WU32InvertRect(PVDMFRAME pFrame)
     WOW32VERIFY(GETRECT16(parg16->f2, &t2));
 
     InvertRect(
-    HDC32(parg16->f1),
-    &t2
-    );
+        HDC32(parg16->f1),
+        &t2
+        );
 
     FREEARGPTR(parg16);
     RETURN(0);
@@ -2121,107 +1621,6 @@ ULONG FASTCALL WU32LoadBitmap(PVDMFRAME pFrame)
     FREEPSZIDPTR(psz2);
     FREEARGPTR(parg16);
     RETURN(ul);
-}
-
-
-ULONG FASTCALL WU32WOWGetIdFromDirectory(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    LPBYTE pResData = NULL;
-    register PWOWGETIDFROMDIRECTORY16 parg16;
-
-    GETARGPTR(pFrame, sizeof(WOWGETIDFROMDIRECTORY16), parg16);
-    GETMISCPTR (parg16->f1, pResData);
-
-    ul = (ULONG) MAKEINTRESOURCE((pfnOut.pfnWOWGetIdFromDirectory)(pResData,
-                parg16->f2));     // RT_ICON or CURSOR
-
-
-    FREEMISCPTR(pResData);
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-
-/*++
-    void MessageBeep(<wType>)
-    WORD <wType>;
-
-    The %MessageBeep% function generates a beep at the system speaker.
-
-    <wType>
-        Is not used. It should be set to zero.
-
-    This function does not return a value.
---*/
-
-ULONG FASTCALL WU32MessageBeep(PVDMFRAME pFrame)
-{
-    register PMESSAGEBEEP16 parg16;
-
-    GETARGPTR(pFrame, sizeof(MESSAGEBEEP16), parg16);
-
-    MessageBeep(
-    WORD32(parg16->f1)
-    );
-
-    FREEARGPTR(parg16);
-    RETURN(0);
-}
-
-
-/*++
-    BOOL OpenIcon(<hwnd>)
-    HWND <hwnd>;
-
-    The %OpenIcon% function activates and displays an iconic (minimized)
-    window. Windows restores it to its original size and position.
-
-    <hwnd>
-        Identifies the window.
-
-    The return value specifies the outcome of the function. It is TRUE if the
-    function is successful. Otherwise, it is FALSE.
---*/
-
-ULONG FASTCALL WU32OpenIcon(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register POPENICON16 parg16;
-
-    GETARGPTR(pFrame, sizeof(OPENICON16), parg16);
-
-    ul = GETBOOL16(OpenIcon(
-    HWND32(parg16->f1)
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    void ReleaseCapture(VOID)
-
-    The %ReleaseCapture% function releases the mouse capture and restores normal
-    input processing. A window with the mouse capture receives all mouse input
-    regardless of the position of the cursor.
-
-    This function has no parameters.
-
-    This function does not return a value.
-
-    An application calls this function after calling the %SetCapture% function.
---*/
-
-ULONG FASTCALL WU32ReleaseCapture(PVDMFRAME pFrame)
-{
-    UNREFERENCED_PARAMETER(pFrame);
-
-    ReleaseCapture();
-
-    RETURN(0);
 }
 
 
@@ -2259,59 +1658,11 @@ ULONG FASTCALL WU32ReleaseDC(PVDMFRAME pFrame)
 
     CURRENTPTD()->ulLastDesktophDC = 0;
 
+    // Note:  The GDI 16-32 mapping table gets updated for ReleaseDC in wreldc.c
+
     CacheReleasedDC(htask16, parg16->f1, parg16->f2);
     ul = TRUE;
 
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    HANDLE RemoveProp(<hwnd>, <lpString>)
-    HWND <hwnd>;
-    LPSTR <lpString>;
-
-    The %RemoveProp% function removes an entry from the property list of the
-    specified window. The character string specified by the <lpString> parameter
-    identifies the entry to be removed.
-
-    The %RemoveProp% function returns the data handle associated with the string
-    so that the application can free the data associated with the handle.
-
-    <hwnd>
-        Identifies the window whose property list is to be changed.
-
-    <lpString>
-        Points to a null-terminated string or to an atom that identifies a
-        string. If an atom is given, it must have been previously created by
-        means of the %AddAtom% function. The atom, a 16-bit value, must be
-        placed in the low-order word of <lpString>; the high-order word must be
-        zero.
-
-    The return value identifies the given string. It is NULL if the string
-    cannot be found in the given property list.
-
-    An application must free the data handles associated with entries removed
-    from a property list. The application should only remove those properties
-    which it added to the property list.
---*/
-
-ULONG FASTCALL WU32RemoveProp(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    PSZ psz2;
-    register PREMOVEPROP16 parg16;
-
-    GETARGPTR(pFrame, sizeof(REMOVEPROP16), parg16);
-    GETPSZIDPTR(parg16->f2, psz2);
-
-    ul = (HAND16)RemoveProp(
-    HWND32(parg16->f1),
-    psz2
-    );
-
-    FREEPSZPTR(psz2);
     FREEARGPTR(parg16);
     RETURN(ul);
 }
@@ -2435,6 +1786,9 @@ ULONG FASTCALL WU32SetCapture(PVDMFRAME pFrame)
 
     if (CURRENTPTD()->dwWOWCompatFlagsEx & WOWCFEX_SETCAPSTACK) {
         // wCallID has already been used for dispatch so we can overwrite it.
+        // Note: This will cause the logging on checked builds show ISCHILD()
+        //       as the return API instead of SetCapture().
+        //       For folks grepping for this:  SetCapture() : IsChild()
         pFrame->wCallID = 0x100;
     }
 
@@ -2445,49 +1799,16 @@ ULONG FASTCALL WU32SetCapture(PVDMFRAME pFrame)
 }
 
 
-/*++
-    void SetDoubleClickTime(<wCount>)
-    WORD <wCount>;
-
-    The %SetDoubleClickTime% function sets the double-click time for the
-    mouse. A double-click is a series of two clicks of the mouse button, the
-    second occurring within a specified time after the first. The double-click
-    time is the maximum number of milliseconds that may occur between the first
-    and second clicks of a double-click.
-
-    <wCount>
-        Specifies the number of milliseconds that can occur between
-        double-clicks.
-
-    This function does not return a value.
-
-    If the <wCount> parameter is set to zero, Windows will use the default
-    double-click time of 500 milliseconds.
-
-    The %SetDoubleClickTime% function alters the double-click time for all
-    windows in the system.
---*/
-
-ULONG FASTCALL WU32SetDoubleClickTime(PVDMFRAME pFrame)
-{
-    register PSETDOUBLECLICKTIME16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETDOUBLECLICKTIME16), parg16);
-
-    SetDoubleClickTime(
-    WORD32(parg16->f1)
-    );
-
-    FREEARGPTR(parg16);
-    RETURN(0);
-}
-
 ULONG FASTCALL WU32SetEventHook(PVDMFRAME pFrame)
 {
     PTD     ptd;
     PTDB    pTDB;
     DWORD   dwButtonPushed;
+#ifdef FE_SB
+    CHAR    szErrorMessage[256];
+#else // !FE_SB
     CHAR    szErrorMessage[200];
+#endif // !FE_SB
     char    szModName[9];
     char    szTitle[100];
     register PSETEVENTHOOK16 parg16;
@@ -2503,8 +1824,8 @@ ULONG FASTCALL WU32SetEventHook(PVDMFRAME pFrame)
 
     pTDB = (PVOID)SEGPTR(ptd->htask16,0);
 
-    RtlZeroMemory(szModName, sizeof(szModName));
     RtlCopyMemory(szModName, pTDB->TDB_ModName, sizeof(szModName)-1);
+    szModName[sizeof(szModName)-1] = 0;
 
     if (!LoadString(hmodWOW32, iszEventHook,
                     szErrorMessage, sizeof(szErrorMessage)/sizeof(CHAR)))
@@ -2516,7 +1837,9 @@ ULONG FASTCALL WU32SetEventHook(PVDMFRAME pFrame)
     {
         szTitle[0] = 0;
     }
-    strcat(szTitle, szModName);
+    if((strlen(szTitle) + strlen(szModName)) < sizeof(szTitle)) {
+        strcat(szTitle, szModName);
+    }
 
     dwButtonPushed = WOWSysErrorBox(
             szTitle,
@@ -2541,47 +1864,6 @@ ULONG FASTCALL WU32SetEventHook(PVDMFRAME pFrame)
 SetEventHookExit:
     FREEARGPTR(parg16);
     RETURN(0);
-}
-
-
-/*++
-    HWND SetFocus(<hwnd>)
-    HWND <hwnd>;
-
-    The %SetFocus% function assigns the input focus to the window specified by
-    the <hwnd> parameter. The input focus directs all subsequent keyboard input
-    to the given window. The window, if any, that previously had the input focus
-    loses it. If <hwnd> is NULL, key strokes are ignored.
-
-    The %SetFocus% function sends a WM_KILLFOCUS message to the window that
-    loses the input focus and a WM_SETFOCUS message to the window that receives
-    the input focus. It also activates either the window that receives the focus
-    or the parent of the window that receives the focus.
-
-    <hwnd>
-        Identifies the window to receive the keyboard input.
-
-    The return value identifies the window that previously had the input focus.
-    It is NULL if there is no such window.
-
-    If a window is active but doesn't have the focus (that is, no window has the
-    focus), any key pressed will produce the WM_SYSCHAR, WM_SYSKEYDOWN, or
-    WM_SYSKEYUP message. If the VK_MENU key is also pressed, the <lParam>
-    parameter of the message will have bit 30 set. Otherwise, the messages that
-    are produced do <not> have this bit set.
---*/
-
-ULONG FASTCALL WU32SetFocus(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PSETFOCUS16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETFOCUS16), parg16);
-
-    ul = GETHWND16(SetFocus(HWND32(parg16->f1)));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
 }
 
 
@@ -2622,201 +1904,6 @@ ULONG FASTCALL WU32SetKeyboardState(PVDMFRAME pFrame)
     );
 
     FREEVDMPTR(p1);
-    FREEARGPTR(parg16);
-    RETURN(0);
-}
-
-
-/*++
-    BOOL SetProp(<hwnd>, <lpString>, <hData>)
-    HWND <hwnd>;
-    LPSTR <lpString>;
-    HANDLE <hData>;
-
-    The %SetProp% function adds a new entry or changes an existing entry in the
-    property list of the specified window. The %SetProp% function adds a new
-    entry to the list if the character string specified by the <lpString>
-    parameter does not already exist in the list. The new entry contains the
-    string and the handle. Otherwise, the function replaces the string's current
-    handle with the one specified by the <hData> parameter.
-
-    The <hData> parameter can contain any 16-bit value useful to the
-    application.
-
-    <hwnd>
-        Identifies the window whose property list is to receive the new entry.
-
-    <lpString>
-        Points to a null-terminated string or an atom that identifies a string.
-        If an atom is given, it must have been previously created by using the
-        %AddAtom% function. The atom, a 16-bit value, must be placed in the
-        low-order word of <lpString>; the high-order word must be zero.
-
-    <hData>
-        Identifies a data handle to be copied to the property list.
-
-    The return value specifies the outcome of the function. It is TRUE if the
-    data handle and string are added to the property list. Otherwise, it is
-    FALSE.
-
-    The application is responsible for removing all entries it has added to the
-    property list before destroying the window (that is, before the application
-    processes the WM_DESTROY message). The %RemoveProp% function must be used to
-    remove entries from a property list.
---*/
-
-ULONG FASTCALL WU32SetProp(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    PSZ psz2;
-    register PSETPROP16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETPROP16), parg16);
-    GETPSZIDPTR(parg16->f2, psz2);
-
-    // don't do any aliasing of the data handle, it can be anything.
-
-    ul = GETBOOL16(SetProp(
-    HWND32(parg16->f1),
-    psz2,
-    (HAND32)parg16->f3
-    ));
-
-    FREEPSZPTR(psz2);
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    int SetScrollPos(<hwnd>, <nBar>, <nPos>, <bRedraw>)
-    HWND <hwnd>;
-    int <nBar>;
-    int <nPos>;
-    BOOL <bRedraw>;
-
-    The %SetScrollPos% function sets the current position of a scroll-bar thumb
-    to that specified by the <nPos> parameter and, if specified, redraws the
-    scroll bar to reflect the new position.
-
-    <hwnd>
-        Identifies the window whose scroll bar is to be set.
-
-    <nBar>
-        Specifies the scroll bar to be set. It can be one of the following
-        values:
-
-    SB_CTL
-        Sets the position of a scroll-bar control. In this case, the hwnd
-        parameter must be the handle of a scroll-bar control.
-
-    SB_HORZ
-        Sets a window's horizontal scroll-bar position.
-
-    SB_VERT
-        Sets a window's vertical scroll-bar position.
-
-    <nPos>
-        Specifies the new position. It must be within the scrolling range.
-
-    <bRedraw>
-        Specifies whether the scroll bar should be redrawn to reflect the
-        new position. If the <bRedraw> parameter is TRUE, the scroll bar is
-        redrawn. If it is FALSE, it is not redrawn.
-
-    The return value specifies the previous position of the scroll-bar thumb.
-
-    Setting the <bRedraw> parameter to zero is useful whenever the scroll bar
-    will be redrawn by a subsequent call to another function.
---*/
-
-ULONG FASTCALL WU32SetScrollPos(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PSETSCROLLPOS16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETSCROLLPOS16), parg16);
-
-    ul = GETINT16(SetScrollPos(
-    HWND32(parg16->f1),
-    INT32(parg16->f2),
-    INT32(parg16->f3),
-    BOOL32(parg16->f4)
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    void SetScrollRange(<hwnd>, <nBar>, <nMinPos>, <nMaxPos>, <bRedraw>)
-    HWND <hwnd>;
-    int <nBar>;
-    int <nMinPos>;
-    int <nMaxPos>;
-    BOOL <bRedraw>;
-
-    The %SetScrollRange% function sets minimum and maximum position values for
-    the given scroll bar. It can also be used to hide or show standard scroll
-    bars by setting the <nMinPos> and <nMaxPos> parameters to zero.
-
-    <hwnd>
-        Identifies a window or a scroll-bar control, depending on the value of
-        the nBar parameter.
-
-    <nBar>
-        the scroll bar to be set. It can be one of the following
-        values:
-
-    SB_CTL
-        Sets the range of a scroll-bar control. In this case, the hwnd parameter
-        must be the handle of a scroll-bar control.
-
-    SB_HORZ
-        Sets a window's horizontal scroll-bar range.
-
-    SB_VERT
-        Sets a window's vertical scroll-bar range.
-
-    <nMinPos>
-        Specifies the minimum scrolling position.
-
-    <nMaxPos>
-        Specifies the maximum scrolling position.
-
-    <bRedraw>
-        Specifies whether or not the scroll bar should be redrawn to
-        reflect the change. If the <bRedraw> parameter is TRUE, the scroll
-        bar is redrawn. If it is FALSE, it is not redrawn.
-
-    This function does not return a value.
-
-    An application should not call this function to hide a scroll bar while
-    processing a scroll-bar notification message.
-
-    If %SetScrollRange% immediately follows the %SetScrollPos% function, the
-    <bRedraw> parameter in %SetScrollPos% should be set to zero to prevent the
-    scroll bar from being drawn twice.
-
-    The difference between the values specified by the <nMinPos> and <nMaxPos>
-    parameters must not be greater than 32,767.
---*/
-
-ULONG FASTCALL WU32SetScrollRange(PVDMFRAME pFrame)
-{
-    register PSETSCROLLRANGE16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETSCROLLRANGE16), parg16);
-
-    SetScrollRange(
-    HWND32(parg16->f1),
-    INT32(parg16->f2),
-    INT32(parg16->f3),
-    INT32(parg16->f4),
-    BOOL32(parg16->f5)
-    );
-
     FREEARGPTR(parg16);
     RETURN(0);
 }
@@ -2971,110 +2058,6 @@ ULONG FASTCALL WU32SetSysColors(PVDMFRAME pFrame)
     RETURN(0);
 }
 
-#ifdef NEVER
-// this is implemented locally now
-
-/*++
-    HWND SetSysModalWindow(<hwnd>)
-    HWND <hwnd>;
-
-    The %SetSysModalWindow% function makes the specified window a system-modal
-    window.
-
-    <hwnd>
-        Identifies the window to be made system modal.
-
-    The return value identifies the window that was previously the system-modal
-    window.
-
-    If another window is made the active window (for example, the system-modal
-    window creates a dialog box that becomes the active window), the active
-    window becomes the system-modal window. When the original window becomes
-    active again, it is system modal. To end the system-modal state, destroy the
-    system-modal window.
---*/
-
-ULONG FASTCALL WU32SetSysModalWindow(PVDMFRAME pFrame)
-{
-    RETURN(0);
-}
-
-#endif // NEVER
-
-/*++
-    void ShowOwnedPopups(<hwnd>, <fShow>)
-
-    The %ShowOwnedPopups% function shows or hides all pop-up windows that are
-    associated with the <hwnd> parameter. If the <fShow> parameter is TRUE,
-    all hidden pop-up windows are shown; if <fShow> is FALSE, all visible pop-up
-    windows are hidden.
-
-    <hwnd>
-        Identifies the window that owns the pop-up windows that are to be shown
-        or hidden.
-
-    <fShow>
-        Specifies whether or not pop-up windows are hidden. It is TRUE if all
-        hidden pop-up windows should be shown; it is FALSE if all visible pop-up
-        windows should be hidden.
-
-    This function does not return a value.
---*/
-
-ULONG FASTCALL WU32ShowOwnedPopups(PVDMFRAME pFrame)
-{
-    register PSHOWOWNEDPOPUPS16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SHOWOWNEDPOPUPS16), parg16);
-
-    ShowOwnedPopups(
-    HWND32(parg16->f1),
-    BOOL32(parg16->f2)
-    );
-
-    FREEARGPTR(parg16);
-    RETURN(0);
-}
-
-
-/*++
-    BOOL SwapMouseButton(<bSwap>)
-
-    The %SwapMouseButton% function reverses the meaning of left and right mouse
-    buttons. If the <bSwap> parameter is TRUE, the left button generates
-    right-button mouse messages and the right button generates left-button
-    messages. If <bSwap> is FALSE, the buttons are restored to their original
-    meaning.
-
-    <bSwap>
-        Specifies whether the button meanings are reversed or restored.
-
-    The return value specifies the outcome of the function. It is TRUE if the
-    fuction reversed the meaning of the mouse buttons. Otherwise, it is FALSE.
-
-    Button swapping is provided as a convenience to people who use the mouse
-    with their left hands. The %SwapMouseButton% function is usually called by
-    the control panel only. Although applications are free to call the function,
-    the mouse is a shared resource and reversing the meaning of the mouse button
-    affects all applications.
---*/
-
-ULONG FASTCALL WU32SwapMouseButton(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PSWAPMOUSEBUTTON16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SWAPMOUSEBUTTON16), parg16);
-
-    ul = GETBOOL16(SwapMouseButton(
-    BOOL32(parg16->f1)
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
 /*++
     void InvalidateRect(<hwnd>, <lpRect>, <bErase>)
     HWND <hwnd>;
@@ -3125,9 +2108,9 @@ ULONG FASTCALL WU32ValidateRect(PVDMFRAME pFrame)
     p2 = GETRECT16(parg16->f2, &t2);
 
     ValidateRect(
-    HWND32(parg16->f1),
-    p2
-    );
+        HWND32(parg16->f1),
+        p2
+        );
 
     FREEARGPTR(parg16);
     RETURN(1);    // Win 3.x always returned 1 as a side-effect of jmping to
@@ -3185,9 +2168,9 @@ ULONG FASTCALL WU32ValidateRgn(PVDMFRAME pFrame)
     GETARGPTR(pFrame, sizeof(VALIDATERGN16), parg16);
 
     ValidateRgn(
-    HWND32(parg16->f1),
-    HRGN32(parg16->f2)
-    );
+        HWND32(parg16->f1),
+        HRGN32(parg16->f2)
+        );
 
     FREEARGPTR(parg16);
     RETURN(1);    // Win 3.x always returned 1 as a side-effect of jmping to
@@ -3269,22 +2252,38 @@ ULONG FASTCALL WU32ValidateRgn(PVDMFRAME pFrame)
     called %WinHelp% with <wCommand> set to HELP_QUIT.
 --*/
 
-#if 0
-// this function no longer thunked
+/*++ 
+    RAID bug # 394455
+    05/19/2001  alexsm
+        
+    Some applications were having problems finding and displaying their helpfiles 
+    via the 16 bit winhelp. These issues can be fixed by redirecting the calls to
+    winhlp32. 
+    
+    This redirection is activitated by the WOWCFEX_USEWINHELP32 compat flag. The flag
+    is checked in the IWinHelp() function in user.exe. It redirects the call, along with 
+    its parameters, to this 32 bit thunk. 
+
+--*/
+
+
 ULONG FASTCALL WU32WinHelp(PVDMFRAME pFrame)
 {
     ULONG ul;
     PSZ psz2;
-    register PWINHELP16 parg16;
+    register PWIN32WINHELP16 parg16;
     DWORD dwCommand;
     DWORD dwData;
-    UINT  cb;
+    UINT  cb, len;
     MULTIKEYHELP *lpmkey;
     PMULTIKEYHELP16 pmkey16;
     HELPWININFO     hwinfo;
     PHELPWININFO16  phwinfo16;
+    
+    UpdateDosCurrentDirectory(DIR_DOS_TO_NT);
 
-    GETARGPTR(pFrame, sizeof(WINHELP16), parg16);
+    GETARGPTR(pFrame, sizeof(WIN32WINHELP16), parg16);
+
     GETPSZPTR(parg16->f2, psz2);
     dwCommand = WORD32(parg16->f3);
 
@@ -3294,6 +2293,16 @@ ULONG FASTCALL WU32WinHelp(PVDMFRAME pFrame)
         case HELP_PARTIALKEY:
             GETPSZPTR(parg16->f4, (PSZ)dwData);
             break;
+
+        case HELP_HELPONHELP:
+             //
+             // some apps (eg multimedia raid#) pass along a help file name which confuses winhlp32.exe
+             // by definition the help gfile name parameter is meaningless.
+             //
+             psz2 = NULL;
+             dwData = 0;
+             break;
+
 
         case HELP_MULTIKEY:
             GETVDMPTR(parg16->f4, sizeof(MULTIKEYHELP16), pmkey16);
@@ -3307,14 +2316,22 @@ ULONG FASTCALL WU32WinHelp(PVDMFRAME pFrame)
             //
 
             cb += sizeof(MULTIKEYHELP) - sizeof(MULTIKEYHELP16);
+            // the *real* size of this MULTIKEYHELP32 struct
+            len = strlen(pmkey16->szKeyphrase) + 1;
+            if(cb < (len + sizeof(DWORD) + sizeof(TCHAR))) {
+                cb = len + sizeof(DWORD) + sizeof(TCHAR);
+            }
+            
             lpmkey = (MULTIKEYHELP *)malloc_w(cb);
             if (lpmkey) {
                 lpmkey->mkSize = cb;
                 lpmkey->mkKeylist = pmkey16->mkKeylist;
-                strcpy(lpmkey->szKeyphrase, pmkey16->szKeyphrase);
+                strncpy(lpmkey->szKeyphrase, pmkey16->szKeyphrase, len);
+                lpmkey->szKeyphrase[len-1] = '\0';
             }
             FREEVDMPTR(pmkey16);
             dwData = (DWORD)lpmkey;
+ 
             break;
 
         case HELP_SETWINPOS:
@@ -3338,7 +2355,10 @@ ULONG FASTCALL WU32WinHelp(PVDMFRAME pFrame)
             dwData = DWORD32(parg16->f4);
             break;
     }
-
+    
+    LOGDEBUG(LOG_WARNING, 
+            ("WU32Winhelp: Paramaters passed to WinHelp():/nHwnd=%x psz2=%x dwCommand=%x dwData=%x",
+             parg16->f1, psz2, dwCommand, dwData));
     ul = GETBOOL16(WinHelp(HWND32(parg16->f1), psz2, dwCommand, dwData));
 
     switch (dwCommand) {
@@ -3365,7 +2385,7 @@ ULONG FASTCALL WU32WinHelp(PVDMFRAME pFrame)
     FREEARGPTR(parg16);
     RETURN(ul);
 }
-#endif
+
 
 
 #pragma pack(1)
@@ -3411,6 +2431,10 @@ typedef NEMODULE UNALIGNED *PNEMODULE;
 
 #pragma pack()
 
+#ifdef FE_IME
+VOID WN32WINNLSSImeNotifyTaskExit();      // wnman.c
+#endif // FE_IME
+
 //
 //   Performs Module cleanup (win31:tmdstroy.c\ModuleUnload())
 //
@@ -3429,29 +2453,49 @@ ModuleUnload(
 
    if (fTaskExit) {
        ptd->dwFlags |= TDF_TASKCLEANUPDONE;
-       (pfnOut.pfnWOWCleanup)(HINSTRES32(ptd->hInst16), (DWORD) ptd->htask16, NULL, 0);
+       (pfnOut.pfnWOWCleanup)(HINSTRES32(ptd->hInst16), (DWORD) ptd->htask16);
    }
 
    if (pNeModule->ne_usage > 1) {
        return;
        }
 
+#ifdef FE_IME
+   /*
+    * We need to notify IMM that this WOW task is quiting before
+    * calling WowCleanup or IME windows can not receive WM_DESTROY
+    * and will fail to clean up their 32bit resource.
+    */
+   if ( fTaskExit ) {
+       WN32WINNLSSImeNotifyTaskExit();
+   }
+#endif // FE_IME
+
 
     /*   WowCleanup, UserSrv private api
      *   It cleans up any USER objects created by this hModule, most notably
      *   classes, and subclassed windows.
      */
-   (pfnOut.pfnWOWCleanup)((HANDLE)hModule16,
-                          0,
-                          (PNEMODULESEG)((ULONG)pNeModule + pNeModule->ne_segtab),
-                          pNeModule->ne_cseg
-                          );
+   (pfnOut.pfnWOWModuleUnload)((HANDLE)hModule16);
 
    RemoveHmodFromCache(hModule16);
 
 }
 
 
+WORD
+FASTCALL
+WOWGetProcModule16(
+    DWORD vpfn
+    )
+{
+    WOW32ASSERTMSG(gpfn16GetProcModule, "WOWGetProcModule16 called before gpfn16GetProcModule initialized.\n");
+
+    return (WORD) WOWCallback16(
+                      gpfn16GetProcModule,
+                      vpfn
+                      );
+}
 
 
 /*++
@@ -3488,7 +2532,8 @@ ULONG FASTCALL WU32SignalProc(PVDMFRAME pFrame)
         case SG_GP_FAULT:
             lparam    = FETCHDWORD(parg16->f4);
             ptd = CURRENTPTD();
-            ptd->dwFlags |= TDF_INITCALLBACKSTACK | TDF_IGNOREINPUT;
+            ptd->dwFlags |= TDF_IGNOREINPUT;
+            ptd->cStackAlloc16 = 0;
             ModuleUnload(GetExePtr16((HAND16)HIWORD(lparam)), TRUE);
             FreeCursorIconAlias(ptd->htask16, CIALIAS_HTASK);
             break;

@@ -17,212 +17,6 @@ MODNAME(wsubcls.c);
 
 VPVOID vptwpFirst = (VPVOID)NULL;
 
-#ifdef OLD_SUBCLASS_STUFF
-
-THUNKWNDPROC  vaStdClassThunkWindowProc[] = { {0, 0}, {0, 0}, {0, 0}, {0, 0},
-                                              {0, 0}, {0, 0}, {0, 0}, {0, 0},
-                                              {0, 0}, {0, 0}, {0, 0}, {0, 0},
-                                              {0, 0}, {0, 0}, {0, 0}, {0, 0}
-                                            };
-
-
-
-//*****************************************************************************
-// GetStdClassThunkWindowProc -
-//
-//     Returns the 16-bit thunk proc for all standard (predefined) window
-//     classes. Each standard class has a separate unique 16bit thunk. We need
-//     to callback to "getprocaddress" of the thunkproc.
-//
-//     The classes are subclassed whenever any of the 'several' apis which
-//     return a 'window proc' is called. ie. GetClassInfo, GetClassLong,
-//     GetWindowLong, SetWindowLong...
-//
-//     We will pass this address to a 16bit app, whenever it subclasses a
-//     standard window. Since the thunk proc is a real 16bit callable function
-//     the app can call this function directly.
-//
-//     .i.e the apps that do the following sequence will work
-//
-//              pfn = SetWindowLong(hwnd, GWL_WNDPROC, myproc);
-//                         ...
-//              (*pfn)(hwnd, message, wParam, lParam);
-//
-//     Needlesss to say, the following will definitely work.
-//
-//              pfn = SetWindowLong(hwnd, GWL_WNDPROC, myproc);
-//                         ...
-//              CallWindowProc(pfn, hwnd, message, wParam, lParam);
-//
-//
-//     Infact the 16bit thunkproc, calls CallWindowProc with
-//     pfn=its own address. How very logical!!!
-//
-//     WU32CallWindowProc checks if the passed in 'pfn' is a 16bit thunk proc
-//     of a standard calss. If so, special processing is done.
-//
-//*****************************************************************************
-
-DWORD GetStdClassThunkWindowProc(LPSTR lpstrClass, PWW pww, HANDLE h32)
-{
-    PARM16 Parm16;
-    WNDCLASS wndclass;
-    INT  iClass;
-
-
-    // the input is either lpstrClass or pww. One of them is always NULL.
-
-    if (lpstrClass != NULL) {
-        iClass = GetStdClassNumber(lpstrClass);
-    }
-    else {
-        iClass = pww->iClass;
-    }
-
-    if (iClass == 0) {
-        LOGDEBUG(LOG_ALWAYS, ("WOW:GetStdClassThunkWindowProc: class unknown\n"));
-        return 0;
-    }
-
-    WOW32ASSERT(sizeof(vaStdClassThunkWindowProc) >
-                               iClass * sizeof(vaStdClassThunkWindowProc[0]));
-
-
-    if (vaStdClassThunkWindowProc[iClass].Proc16 == (DWORD)NULL) {
-        switch (iClass) {
-            case WOWCLASS_BUTTON:
-               Parm16.SubClassProc.iOrdinal = FUN_BUTTONWNDPROC;
-               break;
-
-            case WOWCLASS_COMBOBOX:
-               Parm16.SubClassProc.iOrdinal = FUN_COMBOBOXCTLWNDPROC;
-               break;
-
-            case WOWCLASS_EDIT:
-               Parm16.SubClassProc.iOrdinal = FUN_EDITWNDPROC;
-               break;
-
-            case WOWCLASS_LISTBOX:
-               Parm16.SubClassProc.iOrdinal = FUN_LBOXCTLWNDPROC;
-               break;
-
-            case WOWCLASS_MDICLIENT:
-               Parm16.SubClassProc.iOrdinal = FUN_MDICLIENTWNDPROC;
-               break;
-
-            case WOWCLASS_SCROLLBAR:
-               Parm16.SubClassProc.iOrdinal = FUN_SBWNDPROC;
-               break;
-
-            case WOWCLASS_STATIC:
-               Parm16.SubClassProc.iOrdinal = FUN_STATICWNDPROC;
-               break;
-
-            case WOWCLASS_DESKTOP:
-               Parm16.SubClassProc.iOrdinal = FUN_DESKTOPWNDPROC;
-               break;
-
-            case WOWCLASS_DIALOG:
-               Parm16.SubClassProc.iOrdinal = FUN_DEFDLGPROC;
-               break;
-
-            case WOWCLASS_ICONTITLE:
-               Parm16.SubClassProc.iOrdinal = FUN_TITLEWNDPROC;
-               break;
-
-            case WOWCLASS_MENU:
-               Parm16.SubClassProc.iOrdinal = FUN_MENUWNDPROC;
-               break;
-
-            default:
-                Parm16.SubClassProc.iOrdinal = 0;
-                WOW32ASSERT(FALSE);
-        }
-
-        if (!CallBack16(RET_SUBCLASSPROC, &Parm16, (VPPROC)NULL,
-                          (PVPVOID)&vaStdClassThunkWindowProc[iClass].Proc16)) {
-            WOW32ASSERT(FALSE);
-        }
-
-        if (lpstrClass == NULL) {
-
-             // Note: we avoid calling GetWindowLong(..GWL_WNDPROC)..
-             //       Instead we call GetClassLong(..GCL_WNDPROC).. This way
-             //       we don't need to check for possible recursion.
-             //
-
-             vaStdClassThunkWindowProc[iClass].Proc32 =
-                                             GetClassLong(h32, GCL_WNDPROC);
-        }
-        else {
-            GetClassInfo(NULL, lpstrClass, &wndclass);
-            vaStdClassThunkWindowProc[iClass].Proc32 =
-                                                   (DWORD)wndclass.lpfnWndProc;
-
-        }
-
-
-
-
-    }
-
-    if (vaStdClassThunkWindowProc[iClass].Proc32 == (DWORD)NULL)
-        vaStdClassThunkWindowProc[iClass].Proc16 = (DWORD)NULL;
-
-    return    vaStdClassThunkWindowProc[iClass].Proc16;
-}
-
-
-
-//*****************************************************************************
-// IsStdClassThunkWindowProc -
-//
-//     Returns 'the corresponding 32bit proc' if the passed in 'Proc16' is
-//              a 16bit standard class thunk proc.
-//
-//     else NULL
-//
-//*****************************************************************************
-
-// DESCRIPTION OF THIS HACK CAN BE FOUND IN \wow16\user\wclass.asm
-
-DWORD IsStdClassThunkWindowProc(DWORD Proc16, PINT piClass) {
-    INT i;
-
-    for (i = 0; i < NUMEL(vaStdClassThunkWindowProc); i++) {
-        if (Proc16 == vaStdClassThunkWindowProc[i].Proc16) {
-            *piClass = i;
-            return vaStdClassThunkWindowProc[i].Proc32;
-        }
-    }
-
-    return (DWORD)NULL;
-}
-
-
-
-
-//*****************************************************************************
-// GetStdClass32WindowProc -
-//
-//     Returns the 32bit WndProc given the class number.
-//
-//     else NULL
-//
-//*****************************************************************************
-
-DWORD GetStdClass32WindowProc( INT iClass )
-{
-    if( iClass >=  0 && iClass < NUMEL(vaStdClassThunkWindowProc) ) {
-        WOW32ASSERT( vaStdClassThunkWindowProc[iClass].Proc32 != (DWORD)0 );
-        return vaStdClassThunkWindowProc[iClass].Proc32;
-    }
-    else {
-        return (DWORD)NULL;
-    }
-}
-#endif
-
 BOOL ConstructThunkWindowProc(
     LPTWPLIST   lptwp,
     VPVOID      vptwp
@@ -341,26 +135,32 @@ DWORD GetThunkWindowProc(
     VPVOID      vpAvail = (VPVOID)NULL;
     INT         iClass;
 
+    // Dont try to thunk a NULL 32-bit proc.
+    if (!lpfn32) {
+        LOGDEBUG(2, ("WOW:GetThunkWindowProc: attempt to thunk NULL proc\n"));
+        return 0;
+    }
+
     // the input is either lpstrClass or pww. One of them is always NULL.
 
     if (lpszClass != NULL) {
         iClass = GetStdClassNumber(lpszClass);
     }
     else {
-        iClass = pww->iClass;
+        iClass = GETICLASS(pww, hwnd32);
     }
 
-    if ( iClass == 0 ) {
+    if ( iClass == WOWCLASS_WIN16 ) {
         DWORD dwpid;
-        LOGDEBUG(LOG_ALWAYS, ("WOW:GetThunkWindowProc: class unknown\n"));
 
-        // iClass == 0 implies that hwnd could either be a 32bit window
-        // belonging to a WOW process (like Ole windows) or a window of a
-        // different process. If it is the former return a stub proc
+        // iClass == WOWCLASS_WIN16 implies that hwnd could either be a 32bit 
+        // window belonging to a WOW process (like Ole windows) or a window of
+        // a different process. If it is the former return a stub proc
         // else return 0;
 
         if (!(GetWindowThreadProcessId(hwnd32,&dwpid) &&
               (dwpid == GetCurrentProcessId()))){
+            LOGDEBUG(LOG_ALWAYS, ("WOW:GetThunkWindowProc: class unknown\n"));
             return 0;
         }
     } else {
@@ -568,10 +368,9 @@ DWORD IsThunkWindowProc(
 
     if ( *lpdw != SUBCLASS_MAGIC ) {
         dwResult = 0;           // Zero it if it wasn't valid
-        iClass = WOWCLASS_UNKNOWN;
+        iClass = WOWCLASS_WIN16;
     } else {
         if ( dwResult == 0 ) {
-            WOW32ASSERT( iClass != WOWCLASS_UNKNOWN );
             // They cheated and looked up the export from USER.EXE
             dwResult = (DWORD) GetStdClassWndProc( iClass );
         }

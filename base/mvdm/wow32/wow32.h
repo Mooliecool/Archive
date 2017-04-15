@@ -38,10 +38,25 @@
 #include <nt.h>
 #include <ntrtl.h>
 #include <nturtl.h>
-
+#include <vdm.h>
 #include <windows.h>
 #include <winuserp.h>
 #include <shellapi.h>
+//#include <tsappcmp.h>
+
+/***** ifdef( DEBUG || WOWPROFILE ) *****/
+#ifdef DEBUG
+#ifndef WOWPROFILE
+#define WOWPROFILE   // DEBUG => WOWPROFILE
+#endif // !WOWPROFILE
+#endif // DEBUG
+
+#ifdef WOWPROFILE
+#ifndef DEBUG_OR_WOWPROFILE
+#define DEBUG_OR_WOWPROFILE
+#endif
+#endif // WOWPROFILE
+
 
 #include <wow.h>
 
@@ -91,38 +106,6 @@
 
 #define WOWVDM          TRUE
 
-/***** ifdef( DEBUG || WOWPROFILE ) *****/
-#ifdef DEBUG
-#ifndef WOWPROFILE
-#define WOWPROFILE   // DEBUG => WOWPROFILE
-#endif // !WOWPROFILE
-#endif // DEBUG
-
-#ifdef WOWPROFILE
-#ifndef DEBUG_OR_WOWPROFILE
-#define DEBUG_OR_WOWPROFILE
-#endif
-#endif // WOWPROFILE
-
-
-/* Types
- */
-typedef ULONG   (FASTCALL *LPFNW32)(PVDMFRAME);
-
-
-/* Dispatch table entry   DO NOT CHANGE THE SIZES OF THESE TABLES WITHOUT
-**                        CHANGING I386\FASTWOW.ASM!
- */
-typedef struct _W32 {   /* w32 */
-    LPFNW32 lpfnW32;    // function address
-#ifdef DEBUG_OR_WOWPROFILE
-    LPSZ    lpszW32;    // function name (DEBUG version only)
-    INT     cbArgs;     // # of bytes of arguments (DEBUG version only)
-    DWORD   cCalls;     // # of times this API called
-    DWORD   cTics;      // sum total # of tics ellapsed for all invocations
-#endif // DEBUG_OR_WOWPROFILE
-} W32, *PW32;
-
 
 /*                        DO NOT CHANGE THE SIZES OF THESE TABLES WITHOUT
 **                        CHANGING I386\FASTWOW.ASM!
@@ -167,26 +150,25 @@ typedef struct _PA32 {
 
 #define WOWCD_ISCHOOSEFONT 1
 #define WOWCD_ISOPENFILE   2
+#define WOWCD_NOSSYNC      4
 
 //
 // Used for COMMDLG thunk support
 //
 
 typedef struct _COMMDLGTD {
-    HWND16  hdlg;
-    VPVOID  vpfnHook;
-    VPVOID  vpData;
-    ULONG   ExtendedErr;
+    HWND16  hdlg;              // hwnd of dialog & hwndOwner for Find/Replace
+    VPVOID  vpData;            // vp to 16-bit struct passed to ComDlg API
+    PVOID   pData32;           // ptr to 32-bit ANSI version of above struct
+    VPVOID  vpfnHook;          // vp to 16-bit hook proc specified by app
     union {
-        VPVOID  vpfnSetupHook;
-        PVOID   pRes;
+        VPVOID  vpfnSetupHook; // vp to 16-bit hook proc (print setup only)
+        PVOID   pRes;          // ptr to 16-bit template resource
     };
-    HWND16  SetupHwnd;
-    struct  _COMMDLGTD *Previous;
-    PVOID   pData32;
+    HWND16  SetupHwnd;            // for Print Setup Dialogs only
+    struct  _COMMDLGTD *Previous; // for Find/Replace & nested dlg situations
     ULONG   Flags;
 } COMMDLGTD, *PCOMMDLGTD;
-
 
 //
 // WOAINST
@@ -201,35 +183,85 @@ typedef struct _WOAINST {
 } WOAINST, *PWOAINST;
 
 
+
+//
+// Structure to reflect WOW environment values
+//
+
+typedef struct tagWOWENVDATA {
+
+    PSZ   pszCompatLayer;       // fully-formed compat layer variable
+    PSZ   pszCompatLayerVal;    // pointer to the value part
+
+    PSZ   pszProcessHistory;    // fully-formed process history variable
+    PSZ   pszProcessHistoryVal; // pointer to the value part
+
+    PSZ   pszShimFileLog;       // file log variable
+    PSZ   pszShimFileLogVal;
+
+    //
+    // buffer that we use for the accomulated process history,
+    // this buffer contains just the values from cumulative use of process history
+    // in wow chain
+    //
+    PSZ   pszCurrentProcessHistory;
+
+} WOWENVDATA, *PWOWENVDATA;
+
+
 //
 // TD.dwFlags bit definitions
 //
 
-#define TDF_INITCALLBACKSTACK  0x00000001
+// #define TDF_INITCALLBACKSTACK  0x00000001  // no longer needed
+#define TDF_EATDEVMODEMSG      0x00000001
 #define TDF_IGNOREINPUT        0x00000002
 #define TDF_FORCETASKEXIT      0x00000004
 #define TDF_TASKCLEANUPDONE    0x00000008
-#define TDF_SETUPAPPLICATION   0x00000010
 
-typedef struct _TD {           /* td */
-    VPVOID      vpStack;           // 16-bit stack  MUST BE FIRST!!!
-    VPVOID      vpCBStack;         // 16-bit callback frame
-    DWORD       FastWowEsp;        // offset must match mvdm\inc\vdmtb.inc
-    struct _TD *ptdNext;           // Pointer to Next PTD
-    DWORD       dwFlags;           // TDF_ values above
-    INT         VDMInfoiTaskID;    // SCS Task ID != 0 if task Exec'd form 32 bit program
-    PCOMMDLGTD  CommDlgTd;         // COMMDLG support - jvert 5-Jan-1993
-    DWORD       dwWOWCompatFlags;  // WOW Compatibility flags
-    DWORD       dwWOWCompatFlagsEx;// Extended WOW Compatibility flags
-    DWORD       dwThreadID;        // ID of the thread
-    HANDLE      hThread;           // Thread Handle
-    HHOOK       hIdleHook;         // Hook handle for USER idle notification
-    HRGN        hrgnClip;          // used by GetClipRgn()
-    ULONG       ulLastDesktophDC;  // remembers last desktop DC for GetDC(0)
-    PWOAINST    pWOAList;          // One per active winoldap child
-    HAND16      htask16;           // 16-bit kernel task handle - unique across VDMs
-    HAND16      hInst16;           // 16-bit instance handle for this task
-    HAND16      hMod16;            // 16-bit module handle for this task
+// NOTE:  vpCBStack must not be referenced outside of CallBack16(),
+//        stackalloc16(), & stackfree16()!!!!
+//        See NOTES in walloc16.c\stackalloc16()
+typedef struct _TD {                  /* td */
+    VPVOID      vpStack;              // 16-bit stack  MUST BE FIRST!!!
+    VPVOID      vpCBStack;            // 16-bit callback frame (see NOTE above)
+    DWORD       FastWowEsp;           // offset must match private\inc\vdmtib.inc
+    PCOMMDLGTD  CommDlgTd;            // Ptr to the TD that owns the common dlg
+    struct _TD *ptdNext;              // Pointer to Next PTD
+    DWORD       dwFlags;              // TDF_ values above
+    INT         VDMInfoiTaskID;       // SCS Task ID != 0 if task Exec'd form 32 bit program
+    DWORD       dwWOWCompatFlags;     // WOW Compatibility flags
+    DWORD       dwWOWCompatFlagsEx;   // Extended WOW Compatibility flags
+    DWORD       dwUserWOWCompatFlags; // Extra User specific WOW Compatibility flags
+    DWORD       dwWOWCompatFlags2;    // Extra WOW Compatibility flags
+#ifdef FE_SB
+    DWORD       dwWOWCompatFlagsFE;   // Extended WOW Compatibility flags2
+#endif // FE_SB
+    PVOID       pWOWCompatFlagsEx_Info; // Compat flag parameters  if any
+    PVOID       pWOWCompatFlags2_Info;  //
+    DWORD       dwThreadID;           // ID of the thread
+    HANDLE      hThread;              // Thread Handle
+    HHOOK       hIdleHook;            // Hook handle for USER idle notification
+    HRGN        hrgnClip;             // used by GetClipRgn()
+    ULONG       ulLastDesktophDC;     // remembers last desktop DC for GetDC(0)
+    INT         cStackAlloc16;        // for tracking stackalloc16() memory alloc's
+    PWOAINST    pWOAList;             // One per active winoldap child
+    HAND16      htask16;              // 16-bit kernel task handle - unique across VDMs
+    HAND16      hInst16;              // 16-bit instance handle for this task
+    HAND16      hMod16;               // 16-bit module handle for this task
+
+    //
+    // these "interesting" variables are set for the current task
+    //
+    PWOWENVDATA pWowEnvData;          // pointer to wow environment data
+
+    //
+    // Variable is used to pass information from parent task (during pass_environment)
+    // to the child (in W32Thread) - normally should be NULL after init phase
+    //
+    PWOWENVDATA pWowEnvDataChild;
+
+    CRITICAL_SECTION csTD;            // protects this particular TD, esp. WOA list
 } TD, *PTD;
 
 
@@ -259,6 +291,12 @@ typedef struct _TD {           /* td */
 #define FILTER_WINSOCK  0x00000080
 #define FILTER_VERBOSE  0x00000100
 #define FILTER_COMMDLG  0x00000200
+#ifdef FE_IME
+#define FILTER_WINNLS   0x00000400
+#endif
+#ifdef FE_SB
+#define FILTER_WIFEMAN  0x00000800
+#endif
 
 /* Global data
  */
@@ -277,9 +315,6 @@ extern HANDLE hHostInstance;
 extern INT    fLogFilter;   // Filter Catagories of Functions
 extern WORD   fLogTaskFilter;   // Filter Specific TaskID only
 #endif
-#ifdef i386
-extern PX86CONTEXT pIntelRegisters; // x86 Only - Pointer to Intel Register Block
-#endif
 
 #ifdef DEBUG
 extern INT    iReqLogLevel;         // Current Output LogLevel
@@ -296,7 +331,6 @@ extern UINT   iW32ExecTaskId;   // Base Task ID of Task Being Exec'd
 extern UINT   nWOWTasks;    // # of WOW tasks running
 extern BOOL   fBoot;        // TRUE During Boot Process
 extern HANDLE  ghevWaitCreatorThread; // Used to Syncronize creation of a new thread
-extern WORD   iWOWTaskCur;  // ID of current task running
 extern BOOL   fWowMode;     // see comment in wow32.c
 extern HANDLE hWOWHeap;
 extern DECLSPEC_IMPORT BOOL fSeparateWow;   // imported from ntvdm, FALSE if shared WOW VDM.
@@ -304,8 +338,14 @@ extern HANDLE ghProcess;       // WOW Process Handle
 extern PFNWOWHANDLERSOUT pfnOut; // USER secret API pointers
 extern DECLSPEC_IMPORT DWORD FlatAddress[];    // Base address of each selector in LDT
 extern DECLSPEC_IMPORT LPDWORD SelectorLimit;  // Limit of each selector in LDT (x86 only)
+extern DECLSPEC_IMPORT PBYTE Dos_Flag_Addr;    // ntdos.sys DOS_FLAG address
 extern PTD *  pptdWOA;
 extern PTD    gptdShell;
+extern char szWINFAX[];
+extern char szINSTALL[];
+extern char szModem[];
+extern char szWINFAXCOMx[];
+extern BOOL gbWinFaxHack;
 extern char szEmbedding[];
 extern char szServerKey[];
 extern char szPicture[];
@@ -325,9 +365,18 @@ extern char szExplorerDotExe[];
 extern PSTR pszWinIniFullPath;
 extern PSTR pszWindowsDirectory;
 extern PSTR pszSystemDirectory;
+extern PWSTR pszSystemDirectoryW;
 extern BOOL gfIgnoreInputAssertGiven;
-
-
+extern DWORD cbWinIniFullPathLen;
+extern DWORD cbWindowsDirLen;
+extern DWORD cbSystemDirLen;
+extern DWORD cbSystemDirLenW;
+#ifdef FE_SB
+extern char szSystemMincho[];
+extern char szMsMincho[];
+#endif
+extern DWORD dwSharedWowTimeout;
+extern DWORD gpfn16GetProcModule;
 
 #ifndef _X86_
 extern PUCHAR IntelMemoryBase;  // Start of emulated CPU's memory
@@ -415,10 +464,8 @@ int DoAssert(PSZ szAssert, PSZ szModule, UINT line, UINT loglevel);
 }
 
 #else
-#ifndef i386
 #undef  MODNAME
-#define MODNAME(module)     static DWORD no_extra_semicolon_on_mipsfree
-#endif  // MIPS
+#define MODNAME(module)
 #define WOW32ASSERT(exp)
 #define WOW32VERIFY(exp) (exp)
 #define WOW32ASSERTMSG(exp,msg)
@@ -505,8 +552,8 @@ int DoAssert(PSZ szAssert, PSZ szModule, UINT line, UINT loglevel);
 #define VDMSTACK()      (((ULONG)getSS()<<16)|getSP())
 #define SETVDMSTACK(vp)     {setSS(HIW(vp)); setSP(LOW(vp));}
 #else          // X86
-#define VDMSTACK()      ((USHORT)pIntelRegisters->SegSs << 16 | (USHORT)pIntelRegisters->Esp)
-#define SETVDMSTACK(vp)      pIntelRegisters->SegSs = HIW(vp); pIntelRegisters->Esp = LOW(vp);
+#define VDMSTACK()      ((USHORT)((PVDM_TIB)(NtCurrentTeb()->Vdm))->VdmContext.SegSs << 16 | (USHORT)((PVDM_TIB)(NtCurrentTeb()->Vdm))->VdmContext.Esp)
+#define SETVDMSTACK(vp)      ((PVDM_TIB)(NtCurrentTeb()->Vdm))->VdmContext.SegSs = HIW(vp); ((PVDM_TIB)(NtCurrentTeb()->Vdm))->VdmContext.Esp = LOW(vp);
 #endif
 
 // Use FlatAddress array exported by ntvdm instead of Sim32GetVDMPointer.
@@ -618,6 +665,44 @@ static CHAR *pszLogNull = "<null>";
 #define RETURN(ul)      return ul
 
 
+#ifdef DBCS // MUST fix for FE NT
+#define FIX_318197_NOW
+#endif
+
+
+#ifdef FIX_318197_NOW
+
+#define WOW32_strupr(psz)             CharUpperA(psz)
+#define WOW32_strlwr(psz)             CharLowerA(psz)
+#define WOW32_strcmp(psz1, psz2)      lstrcmpA(psz1, psz2)
+#define WOW32_stricmp(psz1, psz2)     lstrcmpiA(psz1, psz2)
+#define WOW32_strncpy(psz1, psz2, n)  lstrcpyn(psz1, psz2, n)
+
+char* WOW32_strchr(const char* psz, int c);
+char* WOW32_strrchr(const char* psz, int c);
+char* WOW32_strstr(const char* str1, const char* str2);
+int   WOW32_strncmp(const char* str1, const char* str2, size_t n);
+int   WOW32_strnicmp(const char* str1, const char* str2, size_t n);
+
+#else
+
+#define WOW32_strupr(psz)             _strupr(psz)
+#define WOW32_strlwr(psz)             _strlwr(psz)
+#define WOW32_strcmp(psz1, psz2)      strcmp(psz1, psz2)
+#define WOW32_stricmp(psz1, psz2)     _stricmp(psz1, psz2)
+#define WOW32_strncpy(psz1, psz2, n)  strncpy(psz1, psz2, n)
+
+#define WOW32_strchr(psz,c)           strchr(psz,c)
+#define WOW32_strrchr(psz,c)          strrchr(psz,c)
+#define WOW32_strstr(psz1, psz2)      strstr(psz1, psz2)
+#define WOW32_strncmp(psz1, psz2, n)  strncmp(psz1, psz2, n)
+#define WOW32_strnicmp(psz1, psz2, n) _strnicmp(psz1, psz2, n)
+
+#endif
+
+
+
+
 /* Function prototypes
  */
 BOOL    W32Init(VOID);
@@ -626,14 +711,15 @@ INT     W32Exception(DWORD dwException, PEXCEPTION_POINTERS pexi);
 BOOLEAN W32DllInitialize(PVOID DllHandle,ULONG Reason,PCONTEXT Context);
 BOOL IsDebuggerAttached(VOID);
 
-ULONG FASTCALL   W32GetFastAddress( PVDMFRAME pFrame );
-ULONG FASTCALL   W32GetFastCbRetAddress( PVDMFRAME pFrame );
-ULONG FASTCALL   W32GetTableOffsets( PVDMFRAME pFrame );
-ULONG FASTCALL   W32GetFlatAddressArray( PVDMFRAME pFrame );
+ULONG FASTCALL   WK32WOWGetFastAddress( PVDMFRAME pFrame );
+ULONG FASTCALL   WK32WOWGetFastCbRetAddress( PVDMFRAME pFrame );
+ULONG FASTCALL   WK32WOWGetTableOffsets( PVDMFRAME pFrame );
+ULONG FASTCALL   WK32WOWGetFlatAddressArray( PVDMFRAME pFrame );
 PTD     ThreadProcID32toPTD(DWORD ThreadID, DWORD dwProcessID);
 PTD     Htask16toPTD( HAND16 );
 HTASK16 ThreadID32toHtask16(DWORD ThreadID32);
 PVOID   WOWStartupFailed(VOID);
+LPSTR  ThunkStr16toStr32(LPSTR pdst32, VPVOID vpsrc16, int cChars, BOOL bMulti);
 
 #ifdef DEBUG
 VOID    logprintf(PSZ psz, ...);
@@ -643,8 +729,8 @@ BOOL    checkloging(register PVDMFRAME pFrame);
 #endif
 
 #ifdef DEBUG_OR_WOWPROFILE
-DWORD   GetWOWTicDiff(DWORD dwPrevCount);
-INT     GetFuncId(DWORD iFun);
+LONGLONG GetWOWTicDiff(LONGLONG dwPrevCount);
+INT      GetFuncId(DWORD iFun);
 #endif
 
 BOOL    IsDebuggerAttached(VOID);
@@ -654,6 +740,51 @@ BOOL    IsDebuggerAttached(VOID);
 //
 
 ULONG FASTCALL   WOW32UnimplementedAPI(PVDMFRAME pFrame);
+ULONG FASTCALL   WOW32Unimplemented95API(PVDMFRAME pFrame);
+
+// for tracking memory leaks
+#ifdef DEBUG
+#define DEBUG_MEMLEAK 1
+#else  // non-DEBUG
+#ifdef MEMLEAK
+#define DEBUG_MEMLEAK 1
+#endif // MEMLEAK
+#endif // DEBUG
+
+#ifdef DEBUG_MEMLEAK
+VOID  WOW32DebugMemLeak(PVOID lp, ULONG size, DWORD fHow);
+VOID  WOW32DebugReMemLeak(PVOID lpNew, PVOID lpOrig, ULONG size, DWORD fHow);
+VOID  WOW32DebugFreeMem(PVOID lp);
+VOID  WOW32DebugCorruptionCheck(PVOID lp, DWORD size);
+DWORD WOW32DebugGetMemSize(PVOID lp);
+HGLOBAL WOW32DebugGlobalAlloc(UINT flags, DWORD dwSize);
+HGLOBAL WOW32DebugGlobalReAlloc(HGLOBAL h32, DWORD dwSize, UINT flags);
+HGLOBAL WOW32DebugGlobalFree(HGLOBAL h32);
+#define WOWGLOBALALLOC(f,s)        WOW32DebugGlobalAlloc(f,(s))
+#define WOWGLOBALREALLOC(h,s,f)    WOW32DebugGlobalReAlloc(h,(s),f)
+#define WOWGLOBALFREE(h)           WOW32DebugGlobalFree(h)
+#define ML_MALLOC_W      0x00000001
+#define ML_MALLOC_W_ZERO 0x00000002
+#define ML_REALLOC_W     0x00000004
+#define ML_MALLOC_WTYPE  (ML_MALLOC_W | ML_MALLOC_W_ZERO | ML_REALLOC_W)
+#define ML_GLOBALALLOC   0x00000010
+#define ML_GLOBALREALLOC 0x00000020
+#define ML_GLOBALTYPE    (ML_GLOBALREALLOC | ML_GLOBALALLOC)
+#define TAILCHECK        (4 * sizeof(CHAR))  // for heap tail corruption check
+typedef struct _tagMEMLEAK {
+    struct _tagMEMLEAK *lpmlNext;
+    PVOID               lp;
+    DWORD               size;
+    UINT                fHow;
+    ULONG               Count;
+    PVOID               CallersAddress;
+} MEMLEAK, *LPMEMLEAK;
+#else  // non-DEBUG_MEMLEAK
+#define TAILCHECK                  0
+#define WOWGLOBALALLOC(f,s)        GlobalAlloc(f,(s))
+#define WOWGLOBALREALLOC(h,f,s)    GlobalReAlloc(h, f,(s))
+#define WOWGLOBALFREE(h)           GlobalFree(h)
+#endif // DEBUG_MEMLEAK
 
 #ifdef DEBUG
     ULONG FASTCALL   WOW32NopAPI(PVDMFRAME pFrame);
@@ -663,13 +794,22 @@ ULONG FASTCALL   WOW32UnimplementedAPI(PVDMFRAME pFrame);
     #define LOCALAPI              WOW32LocalAPI
     #define NOPAPI                WOW32NopAPI
     #define UNIMPLEMENTEDAPI      WOW32UnimplementedAPI
+    #define UNIMPLEMENTED95API    WOW32Unimplemented95API
     #define WK32WOWPARTYBYNUMBER  WK32WowPartyByNumber
 #else
     #define LOCALAPI              WOW32UnimplementedAPI
     #define NOPAPI                WOW32UnimplementedAPI
     #define UNIMPLEMENTEDAPI      WOW32UnimplementedAPI
+    #define UNIMPLEMENTED95API    WOW32UnimplementedAPI
     #define WK32WOWPARTYBYNUMBER  UNIMPLEMENTEDAPI
 #endif
+
+//Terminal Server
+//PTERMSRVCORINIFILE gpfnTermsrvCORIniFile;
+
+
+#define REGISTRY_BUFFER_SIZE 512
+
 
 
 #endif // ifndef _DEF_WOW32_  THIS SHOULD BE THE LAST LINE IN THIS FILE

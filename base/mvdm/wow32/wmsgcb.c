@@ -103,8 +103,8 @@ BOOL FASTCALL ThunkCBMsg16(LPMSGPARAMEX lpmpex)
                 if (!(pww = lpmpex->pww))
                     return FALSE;
         
-                if (!(pww->dwStyle & (CBS_OWNERDRAWFIXED|CBS_OWNERDRAWVARIABLE)) ||
-                       (pww->dwStyle & (CBS_HASSTRINGS))) {
+                if (!(pww->style & (CBS_OWNERDRAWFIXED|CBS_OWNERDRAWVARIABLE)) ||
+                       (pww->style & (CBS_HASSTRINGS))) {
                     GETPSZPTR(lpmpex->Parm16.WndProc.lParam, (LPSZ)lpmpex->lParam);
                 }
                 break;
@@ -117,8 +117,8 @@ BOOL FASTCALL ThunkCBMsg16(LPMSGPARAMEX lpmpex)
 	                //  see comments in the file wmsglb.c 
                     //
 
-	                pthkdword->fDWORD = (pww->dwStyle & (CBS_OWNERDRAWFIXED|CBS_OWNERDRAWVARIABLE)) &&
-	                                    !(pww->dwStyle & (CBS_HASSTRINGS));
+                        pthkdword->fDWORD = (pww->style & (CBS_OWNERDRAWFIXED|CBS_OWNERDRAWVARIABLE)) &&
+                                            !(pww->style & (CBS_HASSTRINGS));
 	
 	                if (pthkdword->fDWORD) {
 	                    lpmpex->lParam = (LPARAM)(LPVOID)&pthkdword->dwDataItem;
@@ -158,7 +158,7 @@ VOID FASTCALL UnThunkCBMsg16(LPMSGPARAMEX lpmpex)
 	        {
 	           register PTHUNKTEXTDWORD pthkdword = (PTHUNKTEXTDWORD)lpmpex->MsgBuffer;
 	
-	           if (pthkdword->fDWORD) { 
+	           if ((pthkdword->fDWORD) && (lpmpex->lReturn != CB_ERR)) { 
 	                // this is a dword, not a string
 	                // assign the dword as unaligned
 	                UNALIGNED DWORD *lpdwDataItem;

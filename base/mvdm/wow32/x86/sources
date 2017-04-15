@@ -1,3 +1,0 @@
-X86_SOURCES=         \
-    x86\fastwow.asm  \
-    x86\callpr32.asm

@@ -1,7 +1,7 @@
 //*****************************************************************************
 //
 // LoadAccelerator - compatibility support.
-//     So much code for such a silly thing.
+//     So much code for such a thing.
 //
 // 23-Jul-92  NanduriR   Created.
 //*****************************************************************************
@@ -92,9 +92,9 @@ LPACCELALIAS SetupAccelAlias(
         lpT->hTask16 = CURRENTPTD()->htask16;
         lpT->h16     = hAccel16;
         lpT->h32     = hAccel32;
-        lpT->f16     = f16;
+        lpT->f16     = (WORD)f16;
 
-        // mark this so we can remove it from the alias list when 
+        // mark this so we can remove it from the alias list when
         // FreeResource() (in user.exe) calls GlobalFree() (in krnl386)
         SetCursorIconFlag(hAccel16, TRUE);
     }
@@ -390,7 +390,7 @@ void FreeAccelAliasEntry(LPACCELALIAS lpT) {
 
     if (lpT == lpAccelAlias)
         lpAccelAlias = lpT->lpNext;
-    
+
     if (lpT->lpPrev)
         lpT->lpPrev->lpNext = lpT->lpNext;
 

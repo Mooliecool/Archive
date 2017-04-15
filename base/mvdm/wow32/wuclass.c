@@ -123,28 +123,19 @@ ULONG FASTCALL WU32GetClassInfo(PVDMFRAME pFrame)
 
         GETVDMPTR(parg16->f3, sizeof(WNDCLASS16), pwc16);
         STOREWORD(pwc16->style,          t3.style);
-        if (!_stricmp(pszClass, "edit")) {
+        if (!WOW32_stricmp(pszClass, "edit")) {
             STOREWORD(pwc16->style, (FETCHWORD(pwc16->style) & ~CS_GLOBALCLASS));
         }
 
         STOREDWORD(pwc16->vpfnWndProc,  0);
 
         // if this class was registered by WOW
-        if ( (DWORD)t3.lpfnWndProc & WNDPROC_WOW ) {
-            pwc16->vpfnWndProc = (VPWNDPROC)((DWORD)t3.lpfnWndProc & WNDPROC_MASK);
+        if (IsWOWProc (t3.lpfnWndProc)) {
 
-            //
-            // if the actual selector had the high bit on then we turned off
-            // bit 2 of the selector (the LDT bit, which will always be on)
-            //
+            //Unmark the proc and restore the high bits from rpl field
+            UnMarkWOWProc (t3.lpfnWndProc,pwc16->vpfnWndProc);
 
-            if (!((DWORD)pwc16->vpfnWndProc & WOWCLASS_VIRTUAL_NOT_BIT31)) {
-                pwc16->vpfnWndProc |= (WNDPROC_WOW | WOWCLASS_VIRTUAL_NOT_BIT31);
-            }
-
-            // we need to subtract out our WOW DWORDS for WOW classes
-            // (see GCW_CBCLSEXTRA notes in RegisterClass())
-            STORESHORT(pwc16->cbClsExtra, t3.cbClsExtra - (2 * sizeof(DWORD)));
+            STORESHORT(pwc16->cbClsExtra, t3.cbClsExtra );
 
         } else {
             pwc16->vpfnWndProc = GetThunkWindowProc((DWORD)t3.lpfnWndProc, pszClass, NULL, NULL);
@@ -240,7 +231,7 @@ ULONG FASTCALL WU32GetClassInfo(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32GetClassLong(PVDMFRAME pFrame)
 {
-    ULONG ul, flag;
+    ULONG ul;
     INT iOffset;
     HWND hwnd;
     register PWW pww;
@@ -271,14 +262,14 @@ ULONG FASTCALL WU32GetClassLong(PVDMFRAME pFrame)
 
                 dwProc32 = GetClassLong(hwnd, iOffset);
 
-                if ( dwProc32 & WNDPROC_WOW ) {
+                if ( IsWOWProc (dwProc32)) {
                     if ( HIWORD(dwProc32) == WNDPROC_HANDLE ) {
                         //
                         // Class has a window proc which is really a handle
                         // to a proc.  This happens when there is some
                         // unicode to ansi transition or vice versa.
                         //
-                        pww = FindPWW( hwnd, WOWCLASS_UNKNOWN);
+                        pww = FindPWW( hwnd);
                         if ( pww == NULL ) {
                             ul = 0;
                         } else {
@@ -288,21 +279,14 @@ ULONG FASTCALL WU32GetClassLong(PVDMFRAME pFrame)
                         //
                         // Class already has a 16:16 address
                         //
-                        ul = dwProc32 & WNDPROC_MASK;
-
-                        //
-                        // if the actual selector had the high bit on then we turned off
-                        // bit 2 of the selector (the LDT bit, which will always be on)
-                        //
-                        if (!(ul & WOWCLASS_VIRTUAL_NOT_BIT31)) {
-                            ul |= (WNDPROC_WOW | WOWCLASS_VIRTUAL_NOT_BIT31);
-                        }
+                        //Unmark the proc and restore the high bits from rpl field
+                        UnMarkWOWProc (dwProc32,ul);
                     }
                 } else {
                     //
                     // Class has a 32-bit proc, return an allocated thunk
                     //
-                    pww = FindPWW(hwnd, WOWCLASS_UNKNOWN);
+                    pww = FindPWW(hwnd);
                     if ( pww == NULL ) {
                         ul = 0;
                     } else {
@@ -313,9 +297,7 @@ ULONG FASTCALL WU32GetClassLong(PVDMFRAME pFrame)
             break;
 
         case GCL_MENUNAME:
-            if ((pww = FindPWW(hwnd, WOWCLASS_UNKNOWN)) &&
-                (WOWCLASS_WIN16 == pww->iClass) &&
-                (pwc = FindPWC(hwnd))) {
+            if (pwc = FindPWC(hwnd)) {
                 ul = pwc->vpszMenu;
             } else {
                 ul = 0;
@@ -324,25 +306,6 @@ ULONG FASTCALL WU32GetClassLong(PVDMFRAME pFrame)
 
         case GCL_CBCLSEXTRA:
             ul = GetClassLong(hwnd, GCL_CBCLSEXTRA);
-
-            // verify that this class was registered by WOW
-            // (see GCW_CBCLSEXTRA notes in thunk for RegisterClass())
-            if(GetClassLong(hwnd, GCL_WNDPROC) & WNDPROC_WOW) { 
-
-                // get the bozo flag
-                iOffset = ul - sizeof(DWORD);
-                flag    = GetClassLong(hwnd, iOffset);
-
-                // if bozo app flag is set, get the value the app saved
-                // otherwise good little apps get cbClsExtra
-                if(flag) {
-                    iOffset -= sizeof(DWORD);
-                    ul = GetClassLong(hwnd, iOffset);
-                }
-                else {
-                    ul -= (2 * sizeof(DWORD)); // account for our WOW DWORDs
-                }
-            }
             break;
 
         default:
@@ -407,7 +370,7 @@ ULONG FASTCALL WU32GetClassLong(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32GetClassWord(PVDMFRAME pFrame)
 {
-    ULONG  ul, flag;
+    ULONG  ul;
     HWND   hwnd;
     INT    iOffset;
     register PGETCLASSWORD16 parg16;
@@ -463,24 +426,6 @@ ULONG FASTCALL WU32GetClassWord(PVDMFRAME pFrame)
         case GCL_CBCLSEXTRA:
             ul = GetClassLong(hwnd, GCL_CBCLSEXTRA);
 
-            // verify that this class was registered by WOW
-            // (see GCW_CBCLSEXTRA notes in thunk for RegisterClass())
-            if(GetClassLong(hwnd, GCL_WNDPROC) & WNDPROC_WOW) { 
-
-                // get the bozo flag
-                iOffset = ul - sizeof(DWORD);
-                flag    = GetClassLong(hwnd, iOffset);
-
-                // if bozo app flag is set, get the value the app saved
-                // otherwise good little apps get cbClsExtra
-                if(flag) {
-                    iOffset -= sizeof(DWORD);
-                    ul = GetClassWord(hwnd, iOffset);
-                }
-                else {
-                    ul -= (2 * sizeof(DWORD)); // account for our WOW DWORDs
-                }
-            }
             break;
 
 
@@ -560,18 +505,6 @@ ULONG FASTCALL WU32RegisterClass(PVDMFRAME pFrame)
     // Some items have been expanded from a WORD to a DWORD bug 22014
 //    t1.cbWndExtra = (t1.cbWndExtra + 3) & ~3;
 
-    // Some apps call SetClassWord()and SetClassLong() with the GCW_CBCLSEXTRA
-    // offset specified and clobber the cbClsExtra in the class structure on 
-    // Win3.1 and retreive the value later (Wall Street Analyst, PC Anywhere are
-    // known culprits).  Win'95 allows this for apps whose WinVer is less than
-    // 4.0.  NT can't allow it without exposing the kernel to problems.  What 
-    // we do is add 2 extra DWORDs of class extra bytes to any classes that are
-    // created by WOW. We use the 1st DWORD to save the value the app passed to
-    // us and the 2nd DWORD as a flag that specifies that the bozo app did this.
-    // When an app calls GetClassXXXX(GWC_CBCLSEXTRA) we test the flag and 
-    // return the appropriate value -- either cbClsExtra or the bozo value.
-    t1.cbClsExtra += (2 * sizeof(DWORD));
-
     vpszMenu = (VPSZ)t1.lpszMenuName;
     if (HIWORD(t1.lpszMenuName) != 0) {
         GETPSZPTR(t1.lpszMenuName, pszMenu);
@@ -590,22 +523,11 @@ ULONG FASTCALL WU32RegisterClass(PVDMFRAME pFrame)
     ul = 0;
 
     wc.vpszMenu = vpszMenu;
-    wc.vpfnWndProc = (VPWNDPROC)t1.lpfnWndProc;
+    wc.iClsExtra = 0;
+    wc.hMod16 = WOWGetProcModule16((DWORD)t1.lpfnWndProc);
 
-    t1.lpfnWndProc = (WNDPROC)((DWORD)t1.lpfnWndProc | WNDPROC_WOW);
-
-    //
-    // FEATURE-O-RAMA
-    //
-    // if the selector already has the high bit on then turn off bit 2
-    // of the selector (the LDT bit, which should always be on).  we
-    // need a way to not blindly strip off the high bit in our wndproc.
-    //
-
-    if ((DWORD)wc.vpfnWndProc & WNDPROC_WOW) {
-        WOW32ASSERT((DWORD)t1.lpfnWndProc & WOWCLASS_VIRTUAL_NOT_BIT31);
-        (DWORD)t1.lpfnWndProc &= ~WOWCLASS_VIRTUAL_NOT_BIT31;
-    }
+    // mark the proc as WOW proc and save the high bits in the RPL
+    MarkWOWProc(t1.lpfnWndProc,t1.lpfnWndProc);
 
     // Validate hbrBackground, because apps can pass an invalid handle.
     // The GetGDI32 returns a non-null value even if h16 is invalid.
@@ -687,7 +609,7 @@ ULONG FASTCALL WU32RegisterClass(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32SetClassLong(PVDMFRAME pFrame)
 {
-    ULONG ul, flag;
+    ULONG ul;
     INT iOffset;
     PSZ pszMenu;
     register PWC pwc;
@@ -728,7 +650,6 @@ ULONG FASTCALL WU32SetClassLong(PVDMFRAME pFrame)
                     // routine.  We can just set it back to the 32-bit routine.
                     //
                     dwWndProc32Old = SetClassLong(HWND32(parg16->f1), GCL_WNDPROC, (LONG)dwWndProc32New);
-                    SETWC(HWND32(parg16->f1), GCL_WOWvpfnWndProc, 0);
                 } else {
                     //
                     // They are attempting to set it to a real 16:16 proc.
@@ -737,29 +658,18 @@ ULONG FASTCALL WU32SetClassLong(PVDMFRAME pFrame)
 
                     l = LONG32(parg16->f3);
 
-                    //
-                    // FEATURE-O-RAMA
-                    //
-                    // if the selector already has the high bit on then turn off bit 2
-                    // of the selector (the LDT bit, which should always be on).  we
-                    // need a way to not blindly strip off the high bit in our wndproc.
-                    //
+                    // mark the proc as WOW proc and save the high bits in the RPL
+                    MarkWOWProc (l,l);
 
-                    if (l & WNDPROC_WOW) {
-                        WOW32ASSERT(l & WOWCLASS_VIRTUAL_NOT_BIT31);
-                        l &= ~WOWCLASS_VIRTUAL_NOT_BIT31;
-                    }
-
-                    dwWndProc32Old = SetClassLong(HWND32(parg16->f1), GCL_WNDPROC, l | WNDPROC_WOW );
-                    SETWC(HWND32(parg16->f1), GCL_WOWvpfnWndProc, LONG32(parg16->f3));
+                    dwWndProc32Old = SetClassLong(HWND32(parg16->f1), GCL_WNDPROC, l);
                 }
 
-                if ( dwWndProc32Old & WNDPROC_WOW ) {
+                if ( IsWOWProc (dwWndProc32Old)) {
                     if ( HIWORD(dwWndProc32Old) == WNDPROC_HANDLE ) {
                         //
                         // If the return value is a handle, then just thunk it.
                         //
-                        pww = FindPWW(HWND32(parg16->f1), WOWCLASS_UNKNOWN);
+                        pww = FindPWW(HWND32(parg16->f1));
                         if ( pww == NULL ) {
                             ul = 0;
                         } else {
@@ -768,22 +678,15 @@ ULONG FASTCALL WU32SetClassLong(PVDMFRAME pFrame)
                     } else {
                         //
                         // Previous proc was a 16:16 proc
-                        //
-                        ul = dwWndProc32Old & WNDPROC_MASK;
+                        // Unmark the proc and restore the high bits from rpl field
 
-                        //
-                        // if the actual selector had the high bit on then we turned off
-                        // bit 2 of the selector (the LDT bit, which will always be on)
-                        //
-                        if (!(ul & WOWCLASS_VIRTUAL_NOT_BIT31)) {
-                            ul |= (WNDPROC_WOW | WOWCLASS_VIRTUAL_NOT_BIT31);
-                        }
+                        UnMarkWOWProc (dwWndProc32Old,ul);
                     }
                 } else {
                     //
                     // Previous proc was a 32-bit proc, use an allocated thunk
                     //
-                    pww = FindPWW(HWND32(parg16->f1), WOWCLASS_UNKNOWN);
+                    pww = FindPWW(HWND32(parg16->f1));
                     if ( pww == NULL ) {
                         ul = 0;
                     } else {
@@ -798,7 +701,7 @@ ULONG FASTCALL WU32SetClassLong(PVDMFRAME pFrame)
             if (pwc = FindPWC(HWND32(parg16->f1))) {
                 ul = pwc->vpszMenu;
                 GETPSZPTR(parg16->f3, pszMenu);
-                SETWC(HWND32(parg16->f1), GCL_WOWvpszMenu, parg16->f3);
+                SETWC(HWND32(parg16->f1), GCL_WOWMENUNAME, parg16->f3);
                 SetClassLong(HWND32(parg16->f1), GCL_MENUNAME, (LONG)pszMenu);
                 FREEPSZPTR(pszMenu);
             }
@@ -811,24 +714,14 @@ ULONG FASTCALL WU32SetClassLong(PVDMFRAME pFrame)
             WOW32WARNMSG(0, ("WOW:SetClassLong(): app changing cbClsExtra!"));
 
             // only allow this to be set by classes registered via WOW
-            if(GetClassLong(HWND32(parg16->f1), GCL_WNDPROC) & WNDPROC_WOW) { 
+            if(IsWOWProc (GetClassLong(HWND32(parg16->f1), GCL_WNDPROC))) {
 
-                ul = WORD32(parg16->f3);
+                /*
+                 * The hard stuff is now done in User.  FritzS
+                 */
 
-                // set the bozo flag & save the value the app passed us
-                iOffset =  GetClassLong(HWND32(parg16->f1), GCL_CBCLSEXTRA);
-                iOffset -= sizeof(DWORD);
-                flag    =  SetClassLong(HWND32(parg16->f1), iOffset, 1);
-                iOffset -= sizeof(DWORD);
-                ul      =  SetClassLong(HWND32(parg16->f1), iOffset, ul);
-
-                // SetClassLong() returns the "previous" value.
-                // if this is the first time the app pulls this stunt it will
-                // get back the original cbClsExtra, otherwise it will get back
-                // the value it stored here on the previous call.
-                if(!flag) {
-                    ul = iOffset; // the WOW DWORDs have already been subtracted
-                }
+                ul = SetClassLong(HWND32(parg16->f1), iOffset, WORD32(parg16->f3));
+                break;
             }
             else {
                 ul = 0;  // no can do for non-WOW classes
@@ -898,7 +791,7 @@ ULONG FASTCALL WU32SetClassLong(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32SetClassWord(PVDMFRAME pFrame)
 {
-    ULONG  ul, flag;
+    ULONG  ul;
     HWND   hwnd;
     INT    iOffset;
     register PSETCLASSWORD16 parg16;
@@ -960,24 +853,12 @@ ULONG FASTCALL WU32SetClassWord(PVDMFRAME pFrame)
             WOW32WARNMSG(0, ("WOW:SetClassWord(): app changing cbClsExtra!"));
 
             // only allow this to be set by classes registered via WOW
-            if(GetClassLong(hwnd, GCL_WNDPROC) & WNDPROC_WOW) { 
+            if(IsWOWProc (GetClassLong(hwnd, GCL_WNDPROC))) {
 
-                // set the bozo flag 
-                iOffset = GetClassLong(hwnd, GCL_CBCLSEXTRA);
-                iOffset -= sizeof(DWORD);
-                flag = SetClassLong(hwnd, iOffset, 1);
-
-                // save the value the app passed 
-                iOffset -= sizeof(DWORD);
-                ul      = (WORD)SetClassWord(hwnd, iOffset, LOWORD(ul));
-
-                // SetClassWord() returns the "previous" value.
-                // if this is the first time the app pulls this stunt it will
-                // get back the original cbClsExtra, otherwise it will get back
-                // the value it stored here on the previous call.
-                if(!flag) {
-                    ul = iOffset; // the WOW DWORDs have already been subtracted
-                }
+                ul = SetClassLong(hwnd, GCL_CBCLSEXTRA, (LONG)ul);
+                /*
+                 * The hard work is now done in User.  FritzS
+                 */
             }
             else {
                 ul = 0;  // no can do for non-WOW classes
@@ -1019,34 +900,23 @@ ULONG FASTCALL WU32SetClassWord(PVDMFRAME pFrame)
     class.
 --*/
 
+#if 0 // intthunk
 ULONG FASTCALL WU32UnregisterClass(PVDMFRAME pFrame)
 {
     ULONG ul;
-    PSZ psz1, pszClass;
+    PSZ pszClass;
     register PUNREGISTERCLASS16 parg16;
-    CHAR    szAtomName[WOWCLASS_ATOM_NAME];
 
     GETARGPTR(pFrame, sizeof(UNREGISTERCLASS16), parg16);
-    GETPSZIDPTR(parg16->vpszClass, psz1);
-
-    if ( HIWORD(psz1) == 0 ) {
-        pszClass = szAtomName;
-        GetAtomName( (ATOM)psz1, pszClass, WOWCLASS_ATOM_NAME );
-    } else {
-        pszClass = psz1;
-    }
-
-#ifdef WOWEDIT
-    if (!_stricmp(pszClass, "Edit"))
-    pszClass = "WOWEdit";
-#endif
+    GETPSZIDPTR(parg16->vpszClass, pszClass);
 
     ul = GETBOOL16(UnregisterClass(
                     pszClass,
                     HMODINST32(parg16->hInstance)
                   ));
 
-    FREEPSZPTR(psz1);
+    FREEPSZIDPTR(pszClass);
     FREEARGPTR(parg16);
     RETURN(ul);
 }
+#endif

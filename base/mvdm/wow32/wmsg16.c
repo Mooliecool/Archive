@@ -15,6 +15,10 @@
 #include "precomp.h"
 #pragma hdrstop
 #include "wmtbl32.h"
+#ifdef FE_IME
+#include "wownls.h"
+#include "ime.h"
+#endif // FE_IME
 
 MODNAME(wmsg16.c);
 
@@ -112,7 +116,7 @@ PSZ GetWMMsgName(UINT uMsg)
 
 
 // WARNING: This function may cause 16-bit memory movement, invalidating
-//	    flat pointers.
+//          flat pointers.
 HWND FASTCALL ThunkMsg16(LPMSGPARAMEX lpmpex)
 {
     BOOL f;
@@ -131,10 +135,13 @@ HWND FASTCALL ThunkMsg16(LPMSGPARAMEX lpmpex)
                                          WOWCLASS_NOTHUNK :  WOWCLASS_WIN16;
     }
     else {
-        pww = FindPWW(lpmpex->hwnd, WOWCLASS_UNKNOWN);
+        pww = FindPWW(lpmpex->hwnd);
         if (pww) {
-            iClass =  (lpmpex->iMsgThunkClass) ?
-                                      lpmpex->iMsgThunkClass :  pww->iClass;
+            if (lpmpex->iMsgThunkClass) {
+                iClass = lpmpex->iMsgThunkClass;
+            } else {
+                iClass = GETICLASS(pww, lpmpex->hwnd);
+            }
         }
         else {
             iClass = 0;
@@ -209,6 +216,10 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
 
     case WM_SETFONT:
         lpmpex->uParam = (LONG) HFONT32(wParam);
+        break;
+
+    case WM_SYSTIMER:
+        lpmpex->uParam = UINT32(wParam);  // un-sign extend the timer ID
         break;
 
     case WM_SETTEXT:    // 00Ch, <SLPre,SLPost   >
@@ -326,6 +337,13 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
         }
         break;
 
+    case WM_SIZING: // 0214h, <SLPre,SLPost,LS>,RECT
+        if (lParam) {
+            *plParamNew = (LONG)lpmpex->MsgBuffer;
+            getrect16((VPRECT16)lParam, (LPRECT)*plParamNew);
+        }
+        break;
+
     case WM_NCCALCSIZE: // 083h, <SLPre,SLPost,LS>,RECT
         if (lParam) {
             *plParamNew = (LONG)lpmpex->MsgBuffer;
@@ -360,6 +378,7 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
             HIW(lpmpex->uParam) = LOWORD(lParam);
         }
         else if (wParam > SB_ENDSCROLL) {
+//        adding this '}' to balance the opening brace above.
 #else
 
         //
@@ -454,7 +473,7 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
 
         vp = GlobalLock16(hMem16, NULL);
         if (vp) {
-            hMem32 = GlobalAlloc (GMEM_DDESHARE,  (wMsg == WM_SIZECLIPBOARD) ?
+            hMem32 = WOWGLOBALALLOC(GMEM_DDESHARE, (wMsg == WM_SIZECLIPBOARD) ?
                                          sizeof(RECT) : sizeof(PAINTSTRUCT));
             if (hMem32) {
                 if (lpMem32 = GlobalLock(hMem32)) {
@@ -467,7 +486,7 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
                     GlobalUnlock((HANDLE) hMem32);
                 }
                 else {
-                    GlobalFree(hMem32);
+                    WOWGLOBALFREE(hMem32);
                     hMem32 = NULL;
                     LOGDEBUG (0, ("WOW::WMSG16: WM_SIZE/PAINTCLIPBOARD : Couldn't lock 32 bit handle !\n"));
                     WOW32ASSERT (FALSE);
@@ -514,9 +533,12 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
 
                 hwnd32 = HWND32(lpmpex->Parm16.WndProc.hwnd);
                 if (pww = (PWW)GetWindowLong(hwnd32, GWL_WOWWORDS)) {
-                    if ((pww->iClass == WOWCLASS_WIN16 ||
-                            pww->iClass == WOWCLASS_DIALOG)
-                            && (!(pww->dwExStyle & WS_EX_MDICHILD))) {
+                    INT wClass;
+                    wClass = GETICLASS(pww, hwnd32);
+
+                    if ((wClass == WOWCLASS_WIN16 ||
+                            wClass == WOWCLASS_DIALOG)
+                            && (!(pww->ExStyle & WS_EX_MDICHILD))) {
                         lpmpex->uMsg = WM_MDIACTIVATE | WOWPRIVATEMSG;
                         break;
                     }
@@ -530,7 +552,7 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
             //
 
             if (lParam) {
-                
+
                 //
                 // Corel Chart doesn't set lParam to zero.
                 // Instead HIWORD(lParam) = 0 and LOWORD(lParam) = wParam
@@ -538,7 +560,7 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
                 // change, because the wrong window handle will be in the
                 // wParam for the 32 bit message.  This would not be a problem,
                 // except that win32 swapped the positions of the activate and
-                // deactivate handles for the WM_MDIACTIVATE messages sent 
+                // deactivate handles for the WM_MDIACTIVATE messages sent
                 // to the child window.  Under win31, the non-zero lParam is
                 // ignored.
                 //
@@ -667,7 +689,7 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
 
             hwnd32 = HWND32(lpmpex->Parm16.WndProc.hwnd);
             pww = (PWW)GetWindowLong(hwnd32, GWL_WOWWORDS);
-            if (lpCreateStruct->lpCreateParams && pww && (pww->dwExStyle & WS_EX_MDICHILD)) {
+            if (lpCreateStruct->lpCreateParams && pww && (pww->ExStyle & WS_EX_MDICHILD)) {
                 FinishThunkingWMCreateMDIChild16(*plParamNew,
                                         (LPMDICREATESTRUCT)(lpCreateStruct+1));
             }
@@ -771,11 +793,11 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
         if (fWhoCalled == WOWDDE_POSTMESSAGE) {
             if (h32 = DDEFindPair32(hwnd16, wParam, (HAND16) LOWORD(lParam))) {
                 DDEDeletehandle(LOWORD(lParam), h32);
-                GlobalFree(h32);
+                WOWGLOBALFREE(h32);
             }
             DdeInfo.Msg = wMsg;
-	    h32 = DDECopyhData32(hwnd16, wParam, (HAND16) LOWORD(lParam), &DdeInfo);
-	    // WARNING: 16-bit memory may have moved
+            h32 = DDECopyhData32(hwnd16, wParam, (HAND16) LOWORD(lParam), &DdeInfo);
+            // WARNING: 16-bit memory may have moved
             DdeInfo.Flags = DDE_PACKET;
             DdeInfo.h16 = 0;
             DDEAddhandle(hwnd16, wParam, (HAND16)LOWORD(lParam), h32, &DdeInfo);
@@ -813,13 +835,17 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
         if (fWhoCalled == WOWDDE_POSTMESSAGE) {
             if (h32 = DDEFindPair32(hwnd16, wParam, (HAND16) LOWORD(lParam))) {
                 DDEDeletehandle(LOWORD(lParam), h32);
-                GlobalFree(h32);
+                WOWGLOBALFREE(h32);
             }
-            h32 = GlobalAlloc(GMEM_DDESHARE, sizeof(DDEADVISE));
+            h32 = WOWGLOBALALLOC(GMEM_DDESHARE, sizeof(DDEADVISE));
             if (h32 == NULL) {
                 return 0;
             }
             lpMem32 = GlobalLock(h32);
+            if(lpMem32 == NULL) {
+                WOWGLOBALFREE(h32);
+                return(0);
+            }
             vp = GlobalLock16(LOWORD(lParam), &cb);
             GETMISCPTR(vp, lpMem16);
             RtlCopyMemory(lpMem32, lpMem16, sizeof(DDEADVISE));
@@ -859,7 +885,7 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
         if (fWhoCalled == WOWDDE_POSTMESSAGE) {
             if (h32 = DDEFindPair32(hwnd16, wParam, (HAND16) LOWORD(lParam))) {
                 DDEDeletehandle(LOWORD(lParam), h32);
-                GlobalFree(h32);
+                WOWGLOBALFREE(h32);
             }
 
             if (!LOWORD(lParam)) {
@@ -868,7 +894,7 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
             else {
                 DdeInfo.Msg = wMsg;
                 h32 = DDECopyhData32(hwnd16, wParam, (HAND16) LOWORD(lParam), &DdeInfo);
-		// WARNING: 16-bit memory may have moved
+                // WARNING: 16-bit memory may have moved
                 DdeInfo.Flags = DDE_PACKET;
                 DdeInfo.h16 = 0;
                 DDEAddhandle(hwnd16, wParam, (HAND16)LOWORD(lParam), h32, &DdeInfo);
@@ -914,9 +940,12 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
             vp = GlobalLock16(HIWORD(lParam), &cb);
 
             GETMISCPTR(vp, lpMem16);
-            h32 = GlobalAlloc(GMEM_DDESHARE, cb);
+            h32 = WOWGLOBALALLOC(GMEM_DDESHARE, cb);
             if (h32) {
                 lpMem32 = GlobalLock(h32);
+                if(lpMem32 == NULL) {
+                    goto mem1;
+                }
                 RtlCopyMemory(lpMem32, lpMem16, cb);
                 GlobalUnlock(h32);
                 FREEMISCPTR(lpMem16);
@@ -961,6 +990,7 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
                 }
             }
             else {
+mem1:
                 GlobalUnlock16(HIWORD(lParam));
             }
             GlobalUnlock16(HIWORD(lParam));
@@ -1013,7 +1043,9 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
         }
         else {
             pTemp = CopyDataFindData32 (hwnd16, wParam, lParam);
-            lpCDS32 = (PCOPYDATASTRUCT) pTemp->Mem32;
+            if (pTemp) {
+                lpCDS32 = (PCOPYDATASTRUCT) pTemp->Mem32;
+            }
             WOW32ASSERTMSGF(lpCDS32, ("WOW::WM_COPYDATA:Can't locate lpCDS32\n"));
         }
 
@@ -1100,8 +1132,283 @@ BOOL FASTCALL ThunkWMMsg16(LPMSGPARAMEX lpmpex)
 
         }
         break;
+#ifdef FE_IME
+    case WM_IME_REPORT:
+        {
+        INT     cb;
+        INT     i;
+        INT     len;
+        VPVOID  vp;
+        HANDLE  hMem32 = 0;
+        LPBYTE  lpMem32 = 0;
+        LPBYTE  lpMem16 = 0;
 
-    }
+        if ( !lParam )
+            break;
+
+        if (wParam == IR_STRING) {
+        /*********************** IR_STRING **********************************/
+            vp = GlobalLock16(FETCHWORD(lParam), &cb);
+            GETMISCPTR(vp, lpMem16);
+            if (!(hMem32 = GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE | GMEM_ZEROINIT, cb)))
+                goto Err;
+            lpMem32 = GlobalLock(hMem32);
+            if(lpMem32 == NULL)
+                goto Err;
+            RtlCopyMemory(lpMem32, lpMem16, cb);
+            GlobalUnlock( hMem32 );
+            GlobalUnlock16( FETCHWORD(lParam) );
+
+            *plParamNew = (LONG)hMem32;
+        }
+        /*********************** IR_STRINGEX ********************************/
+        else if ( wParam == IR_STRINGEX ) {
+            LPSTRINGEXSTRUCT    pss32;
+            PSTRINGEXSTRUCT16  pss16;
+            INT                 uDetermineDelim = 0;
+            INT                 uYomiDelim = 0;
+
+            vp = GlobalLock16( FETCHWORD(lParam), &cb );
+            GETMISCPTR(vp, lpMem16);
+            pss16 = (PSTRINGEXSTRUCT16)lpMem16;
+
+            cb = sizeof(STRINGEXSTRUCT);
+
+            /* Get exactry size */
+            if ( lpMem16[ pss16->uDeterminePos ] ) {
+                len = lstrlen( &lpMem16[ pss16->uDeterminePos ] );
+                cb += len + 1;
+                cb += sizeof(INT) - (cb % sizeof(INT)); // #2259 kksuzuka
+                // DetermineDelim[0] is everytime NULL
+                // BAD CODE
+//                for ( i = 0; i < len && INTOF( lpMem16[ pss16->uDetermineDelimPos ], i ); i++ )
+                // #7253 kksuzuka
+                for ( i = 1; (i <= len) && WORDOF( lpMem16[ pss16->uDetermineDelimPos ], i ); i++ )
+//                    if ( INTOF( lpMem16[ pss16->uDetermineDelimPos ], i ) >= len )
+                    // #7253 kksuzuka
+                    if ( WORDOF( lpMem16[ pss16->uDetermineDelimPos ], i ) >= len )
+                        break;
+                if ( i <= len )
+                    // #7253 kksuzuka
+                    cb += (i + 1) * sizeof(INT);
+//                    cb += i * sizeof(INT);
+                uDetermineDelim = i;
+            }
+            if ( lpMem16[ pss16->uYomiPos ] ) {
+                len = lstrlen( &lpMem16[ pss16->uYomiPos ] );
+                cb += len + 1;
+                cb += sizeof(INT) - (cb % sizeof(INT)); // #2259 kksuzuka
+                // YomiDelim[0] is everytime NULL
+                // BAD CODE
+//                for ( i = 0; i < len && INTOF( lpMem16[ pss16->uYomiDelimPos ], i ); i++ )
+                // #7253 kksuzuka
+                for ( i = 1; (i <= len) && WORDOF( lpMem16[ pss16->uYomiDelimPos ], i ); i++ )
+//                    if ( INTOF( lpMem16[ pss16->uYomiDelimPos ], i ) >= len )
+                    // #7253 kksuzuka
+                    if ( WORDOF( lpMem16[ pss16->uYomiDelimPos ], i ) >= len )
+                        break;
+                if ( i <= len )
+                    // #7253 kksuzuka
+                    cb += (i + 1) * sizeof(UINT);
+//                    cb += i * sizeof(UINT);
+                uYomiDelim = i;
+            }
+            if (!(hMem32 = GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE | GMEM_ZEROINIT, cb)))
+                goto Err;
+            lpMem32 = GlobalLock( hMem32 );
+            if(lpMem32 == NULL)
+                goto Err;
+            pss32 = (LPSTRINGEXSTRUCT)lpMem32;
+
+            pss32->dwSize = cb;
+            i = sizeof( STRINGEXSTRUCT );
+            if ( pss16->uDeterminePos ) {
+                pss32->uDeterminePos = i;
+                lstrcpy( &lpMem32[ i ], &lpMem16[ pss16->uDeterminePos ] );
+                i += lstrlen( &lpMem16[ pss16->uDeterminePos ] ) + 1;
+                i += sizeof(INT) - (i % sizeof(INT)); // kksuzuka #2259
+            }
+            if ( pss16->uDetermineDelimPos ) {
+                pss32->uDetermineDelimPos = i;
+//                i += uDetermineDelim * sizeof(UINT);
+                // #7253 kksuzuka
+                i += (uDetermineDelim + 1)* sizeof(UINT);
+                for( ; uDetermineDelim ; uDetermineDelim-- ) {
+                    INTOF( lpMem32[ pss32->uDetermineDelimPos ], uDetermineDelim ) =
+                    WORDOF( lpMem16[ pss16->uDetermineDelimPos ], uDetermineDelim );
+                }
+            }
+            if ( pss16->uYomiPos ) {
+                pss32->uYomiPos = i;
+                lstrcpy( &lpMem32[ i ], &lpMem16[ pss16->uYomiPos ] );
+                i += lstrlen( &lpMem16[ pss16->uYomiPos ] ) + 1;
+                i += sizeof(INT) - (i % sizeof(INT)); // kksuzuka #2259
+            }
+            if ( pss16->uYomiDelimPos ) {
+                pss32->uYomiDelimPos = i;
+                i += uYomiDelim * sizeof(UINT);
+                for( ; uYomiDelim ; uYomiDelim-- ) {
+                    INTOF( lpMem32[ pss32->uYomiDelimPos ], uYomiDelim ) =
+                    WORDOF( lpMem16[ pss16->uYomiDelimPos ], uYomiDelim );
+                }
+            }
+
+            *plParamNew = (LONG)hMem32;
+            GlobalUnlock16(FETCHWORD(lParam));
+            GlobalUnlock( hMem32 );
+        }
+
+
+        else if (wParam == IR_UNDETERMINE) {
+        /********************** IR_UNDETERMINE ******************************/
+            PUNDETERMINESTRUCT16  pus16;
+            LPUNDETERMINESTRUCT  pus32;
+
+            vp = GlobalLock16( FETCHWORD(lParam), &cb );
+            GETMISCPTR(vp, lpMem16);
+            pus16 = (PUNDETERMINESTRUCT16)lpMem16;
+
+            cb = sizeof(UNDETERMINESTRUCT);
+            cb += pus16->uDefIMESize;
+            cb += (pus16->uUndetTextLen + 1);
+            cb += (pus16->uDetermineTextLen + 1);
+            cb += (pus16->uYomiTextLen + 1);
+
+            if ( pus16->uUndetAttrPos )
+                cb += pus16->uUndetTextLen;
+            if ( pus16->uDetermineDelimPos )
+                cb += pus16->uDetermineTextLen * sizeof(UINT);
+            if ( pus16->uYomiDelimPos )
+                cb += pus16->uYomiTextLen * sizeof(UINT);
+
+
+            if (!(hMem32 = GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE | GMEM_ZEROINIT, cb)))
+                goto Err;
+            lpMem32 = GlobalLock(hMem32);
+            if(lpMem32 == NULL)
+                goto Err;
+            pus32 = (LPUNDETERMINESTRUCT)lpMem32;
+
+            i = sizeof(UNDETERMINESTRUCT);
+            if ( pus16->uUndetTextLen ) {
+                RtlCopyMemory( &lpMem32[ i ], &lpMem16[ pus16->uUndetTextPos ], pus16->uUndetTextLen + 1 );
+                pus32->uUndetTextPos = i;
+                i += pus16->uUndetTextLen + 1;
+                pus32->uUndetTextLen = pus16->uUndetTextLen;
+            }
+            if ( pus16->uUndetAttrPos ) {
+                RtlCopyMemory( &lpMem32[ i ], &lpMem16[ pus16->uUndetAttrPos ], pus16->uUndetTextLen );
+                pus32->uUndetAttrPos = i;
+                i += pus16->uUndetTextLen;
+            }
+            if ( pus16->uDetermineTextLen ) {
+                RtlCopyMemory( &lpMem32[ i ], &lpMem16[ pus16->uDetermineTextPos ], pus16->uDetermineTextLen + 1 );
+                pus32->uDetermineTextPos = i;
+                i += pus16->uDetermineTextLen + 1;
+                pus32->uDetermineTextLen = pus16->uDetermineTextLen;
+            }
+            if ( pus16->uDetermineDelimPos ) {
+                INT j;
+
+                pus32->uDetermineDelimPos = i;
+                for ( j = 0; j < pus16->uDetermineTextLen; j++ ) {
+                    if ( WORDOF16( lpMem16[ pus16->uDetermineTextLen ], j ) || pus16->uDetermineTextLen > WORDOF16( lpMem16[ pus16->uDetermineTextLen ], j )) {
+                        INTOF( lpMem32[ i ], 0 ) = WORDOF16( lpMem16[ pus16->uDetermineTextLen ], j );
+                        i += sizeof(UINT);
+                    }
+                    else
+                        break;
+                }
+            }
+            if ( pus16->uYomiTextLen ) {
+                RtlCopyMemory( &lpMem32[ i ], &lpMem16[ pus16->uYomiTextPos ], pus16->uYomiTextLen + 1 );
+                pus32->uYomiTextPos = i;
+                pus32->uYomiTextLen = pus16->uYomiTextLen;
+                i += pus16->uYomiTextLen + 1;
+            }
+            if ( pus16->uYomiDelimPos ) {
+                INT j;
+                pus32->uYomiDelimPos = i;
+                for ( j = 0; j < pus16->uYomiTextLen; j++ ) {
+                    if ( WORDOF16(lpMem16[ pus16->uYomiDelimPos ], j ) || pus16->uYomiTextLen > WORDOF16(lpMem16[ pus16->uYomiDelimPos ], j )) {
+                        INTOF( lpMem32[ i ], 0 ) = WORDOF16( lpMem16[ pus16->uYomiDelimPos ], j );
+                        i += sizeof(UINT);
+                    }
+                    else
+                        break;
+                }
+            }
+            if ( pus16->uDefIMESize ) {
+                RtlCopyMemory( &lpMem32[ i ], &lpMem16[ pus16->uDefIMEPos ], pus16->uDefIMESize );
+                pus32->uDefIMEPos = i;
+            }
+
+
+            *plParamNew = (LONG)hMem32;
+            GlobalUnlock16( FETCHWORD(lParam));
+            GlobalUnlock( hMem32 );
+
+        }
+        break;
+
+      Err:
+        if ( lpMem16 && FETCHWORD(lParam ))
+             GlobalUnlock16( FETCHWORD(lParam) );
+        if (hMem32) {
+            GlobalFree(hMem32);
+        }
+        return FALSE;
+
+        }
+        break;
+    // MSKK support WM_IMEKEYDOWN message
+    // MSKK support WM_IMEKEYUP message
+    // MSKK16bit IME support
+    // WM_IMEKEYDOWN & WM_IMEKEYUP  16 -> 32
+    // 32bit:wParam  HIWORD charactor code, LOWORD virtual key
+    // 16bit:wParam  HIBYTE charactor code, LOBYTE virtual key
+    // kksuzuka:#4281 1994.11.19 MSKK V-HIDEKK
+    case WM_IMEKEYDOWN:
+    case WM_IMEKEYUP:
+#ifdef DEBUG
+        LOGDEBUG( 5, ("ThunkWMMsg16:WM_IMEKEY debug\n"));
+#endif
+        lpmpex->uParam = MAKELONG( LOBYTE(wParam), HIBYTE(wParam) );
+        break;
+#endif // FE_IME
+
+    case WM_PRINT:
+    case WM_PRINTCLIENT:
+        lpmpex->uParam = (WPARAM)HDC32(wParam);
+        break;
+    case WM_NOTIFY:         // 0x4e
+        // wparam is control ID, lparam points to NMHDR or larger struct.
+        {
+            LONG lParamMap;
+
+            GETVDMPTR(lParam, sizeof(NMHDR), (PSZ)lParamMap);
+            *plParamNew = (LONG)AddParamMap(lParamMap, lParam);
+            if (lParamMap != *plParamNew) {
+                FREEVDMPTR((PSZ)lParamMap);
+            }
+
+        }
+        break;
+
+     case WM_CHANGEUISTATE:   // 0x127
+     case WM_UPDATEUISTATE:   // 0x128
+     case WM_QUERYUISTATE:    // 0x129
+        // We should only see this message originate from the 32-bit side
+        // It will come with both words of uParam used and lPram unused.
+        // We 32->16 thunk it (WM32xxxUIState() - wmdisp32.c) by copying
+        // uParam32 to lParam16.  Now we are just reversing the process.
+        lpmpex->uParam = (UINT)lParam;
+        *plParamNew = 0;
+
+        break;
+
+
+    }  // end switch
     return TRUE;
 }
 
@@ -1220,6 +1527,12 @@ VOID FASTCALL UnThunkWMMsg16(LPMSGPARAMEX lpmpex)
         }
         break;
 
+    case WM_SIZING:     // 214h, <SLPre,SLPost,LS>,RECT
+        if (lpmpex->lParam) {
+            putrect16((VPRECT16)lpmpex->Parm16.WndProc.lParam, (LPRECT)lpmpex->lParam);
+        }
+        break;
+
     case WM_NCCALCSIZE:     // 083h, <SLPre,SLPost,LS>,RECT
         if (lpmpex->lParam) {
             putrect16((VPRECT16)lpmpex->Parm16.WndProc.lParam, (LPRECT)lpmpex->lParam);
@@ -1283,7 +1596,7 @@ VOID FASTCALL UnThunkWMMsg16(LPMSGPARAMEX lpmpex)
     case WM_PAINTCLIPBOARD:
     case WM_SIZECLIPBOARD:
         if (lpmpex->lParam) {
-            GlobalFree((HANDLE)lpmpex->lParam);
+            WOWGLOBALFREE((HANDLE)lpmpex->lParam);
         }
         break;
 
@@ -1344,7 +1657,53 @@ VOID FASTCALL UnThunkWMMsg16(LPMSGPARAMEX lpmpex)
             lpmpex->lReturn = (LONG)GETHCURSOR16(lpmpex->lReturn);
         }
         break;
-    }
+
+    case WM_NOTIFY:    // 0x4e
+        {
+            BOOL fFreePtr;
+            DeleteParamMap(lpmpex->lParam, PARAM_32, &fFreePtr);
+            if (fFreePtr) {
+                FREEVDMPTR((PSZ)lpmpex->lParam);
+            }
+        }
+        break;
+
+    case WM_CHANGEUISTATE:   // 0x127
+    case WM_UPDATEUISTATE:   // 0x128
+    case WM_QUERYUISTATE:    // 0x129
+        {
+        // See thunking notes for this message in ThunkWMMsg16() above.
+        lpmpex->Parm16.WndProc.lParam = (LONG)lpmpex->uParam;
+        lpmpex->Parm16.WndProc.wParam = 0;
+        }
+
+        break;
+
+
+#ifdef FE_IME
+    case WM_IME_REPORT:
+        switch( lpmpex->Parm16.WndProc.wParam ) {
+        case IR_STRING:
+        case IR_STRINGEX:
+        case IR_UNDETERMINE:
+            if ( lpmpex->lParam ) {
+                GlobalFree((HANDLE)lpmpex->lParam);
+            }
+            break;
+        }
+        break;
+    // MSKK support WM_IMEKEYDOWN message
+    // MSKK support WM_IMEKEYUP message
+    // MSKK16bit IME support
+    case WM_IMEKEYDOWN:
+    case WM_IMEKEYUP:
+#ifdef DEBUG
+        LOGDEBUG( 5,("UnThunkWMMsg16:WM_IMEKEY debug\n"));
+#endif
+        break;
+#endif // FE_IME
+
+    } // end switch
 }
 
 
@@ -1504,7 +1863,7 @@ BOOL FASTCALL ThunkMNMsg16(LPMSGPARAMEX lpmpex)
     case WIN30_MN_GETHMENU:
         lpmpex->uMsg = MN_GETHMENU;
         break;
-	    
+
     case WIN30_MN_FINDMENUWINDOWFROMPOINT:
         lpmpex->uMsg = MN_FINDMENUWINDOWFROMPOINT;
         lpmpex->uParam = (UINT)lpmpex->MsgBuffer; // enough room for UINT
@@ -1523,7 +1882,7 @@ VOID FASTCALL UnThunkMNMsg16(LPMSGPARAMEX lpmpex)
     LOGDEBUG(9,("    UnThunking 16-bit MN_ window message %s(%04x)\n", (LPSZ)GetWMMsgName(wMsg), wMsg));
 
     switch(wMsg) {
-	    
+
     case WIN30_MN_FINDMENUWINDOWFROMPOINT:
         if (lpmpex->uParam) {
             lpmpex->lReturn = MAKELONG((HWND16)lpmpex->lReturn,

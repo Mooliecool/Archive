@@ -51,7 +51,10 @@ MODNAME(wole.c);
 typedef struct tagHTASKALIAS {
     DWORD       dwThreadID32;
     DWORD       dwProcessID32;
-    FILETIME    ftCreationTime;
+    union {
+        FILETIME    ftCreationTime;
+        ULONGLONG   ullCreationTime;
+    };
 } HTASKALIAS;
 
 #define MAX_HTASKALIAS_SIZE  32     // 32 should be plenty
@@ -127,7 +130,7 @@ HTASK16 AddHtaskAlias(
     UINT        iSlot;
     UINT        iUsable;
     HTASKALIAS  ha;
-    FILETIME    ftOldest;
+    ULONGLONG   ullOldest;
 
     if ( !GetThreadIDHTASKALIAS( ThreadID32, &ha ) ) {
         return( 0 );
@@ -153,8 +156,7 @@ HTASK16 AddHtaskAlias(
     //
     iSlot = 0;
     iUsable = 0;
-    ftOldest.dwLowDateTime  = 0xffffffff;
-    ftOldest.dwHighDateTime = 0xffffffff;
+    ullOldest = -1;
 
     while ( iSlot < MAX_HTASKALIAS_SIZE ) {
 
@@ -170,10 +172,8 @@ HTASK16 AddHtaskAlias(
         //
         // Remember the oldest guy
         //
-        if ( lphtaskalias[iSlot].ftCreationTime.dwHighDateTime < ftOldest.dwHighDateTime ||
-              (lphtaskalias[iSlot].ftCreationTime.dwHighDateTime == ftOldest.dwHighDateTime &&
-               lphtaskalias[iSlot].ftCreationTime.dwLowDateTime < ftOldest.dwLowDateTime) ) {
-            ftOldest = lphtaskalias[iSlot].ftCreationTime;
+        if ( lphtaskalias[iSlot].ullCreationTime < ullOldest  ) {
+            ullOldest = lphtaskalias[iSlot].ullCreationTime;
             iUsable = iSlot;
         }
 
@@ -243,8 +243,7 @@ void RemoveHtaskAlias(
 
         lphtaskalias[iSlot].dwThreadID32 = 0;
         lphtaskalias[iSlot].dwProcessID32 = 0;
-        lphtaskalias[iSlot].ftCreationTime.dwHighDateTime = 0;
-        lphtaskalias[iSlot].ftCreationTime.dwLowDateTime  = 0;
+        lphtaskalias[iSlot].ullCreationTime = 0;
 
         --cHtaskAliasCount;
     }
@@ -257,18 +256,19 @@ DWORD GetHtaskAlias(
     UINT        iSlot;
     DWORD       ThreadID32;
     HTASKALIAS  ha;
-    BOOL        fBad;
 
-    if ( !ISTASKALIAS(htask16) ) {
-        return( 0 );
+    ha.dwProcessID32 = 0;
+    ThreadID32 = 0;
+
+    if ( ! ISTASKALIAS(htask16) ) {
+        goto Done;
     }
+
     iSlot = MAP_HTASK_SLOT(htask16);
 
-
-    if (iSlot >= MAX_HTASKALIAS_SIZE) {
-        LOGDEBUG(LOG_ALWAYS, ("WOW::GetHtaskAlias : iSlot >= MAX_TASK_ALIAS_SIZE\n"));
-        WOW32ASSERT(FALSE);
-        return (0);
+    if ( iSlot >= MAX_HTASKALIAS_SIZE ) {
+        WOW32ASSERTMSGF(FALSE, ("WOW::GetHtaskAlias : iSlot >= MAX_TASK_ALIAS_SIZE\n"));
+        goto Done;
     }
 
     ThreadID32 = lphtaskalias[iSlot].dwThreadID32;
@@ -276,26 +276,22 @@ DWORD GetHtaskAlias(
     //
     // Make sure the thread still exists in the system
     //
-    fBad = TRUE;
 
-    if ( GetThreadIDHTASKALIAS( ThreadID32, &ha ) ) {
-        if ( ha.ftCreationTime.dwHighDateTime == lphtaskalias[iSlot].ftCreationTime.dwHighDateTime &&
-             ha.ftCreationTime.dwLowDateTime == lphtaskalias[iSlot].ftCreationTime.dwLowDateTime &&
-             ha.dwProcessID32 == lphtaskalias[iSlot].dwProcessID32 ) {
-                fBad = FALSE;
-        }
-    }
+    if ( ! GetThreadIDHTASKALIAS( ThreadID32, &ha ) ||
+         ha.ullCreationTime != lphtaskalias[iSlot].ullCreationTime ||
+         ha.dwProcessID32   != lphtaskalias[iSlot].dwProcessID32 ) {
 
-    if ( fBad ) {
         RemoveHtaskAlias( htask16 );
-        return( 0 );
+        ha.dwProcessID32 = 0;
+        ThreadID32 = 0;
     }
 
-    if ( lpProcessID32 != NULL ) {
+    if ( lpProcessID32 ) {
         *lpProcessID32 = ha.dwProcessID32;
     }
 
-    return( ThreadID32 );
+Done:
+    return ThreadID32;
 }
 
 UINT GetHtaskAliasProcessName(
@@ -306,29 +302,58 @@ UINT GetHtaskAliasProcessName(
     DWORD   dwThreadID32;
     DWORD   dwProcessID32;
     PSYSTEM_PROCESS_INFORMATION ProcessInfo;
-    UCHAR LargeBuffer1[16*1024];        // 16K should be plenty
-    NTSTATUS status;
-    ANSI_STRING pname;
+    PUCHAR  pucLargeBuffer;
+    ULONG   LargeBufferSize = 32*1024;
+    NTSTATUS status = STATUS_INFO_LENGTH_MISMATCH;
     ULONG TotalOffset;
 
     dwThreadID32 = GetHtaskAlias(htask16, &dwProcessID32);
-    if (  dwThreadID32 == 0 ) {
-        return( 0 );
+
+    if (  dwThreadID32 == 0 || 
+          cNameBufferSize == 0 || 
+          lpNameBuffer == NULL ) {
+
+        return 0;
     }
 
-    if ( cNameBufferSize == 0 || lpNameBuffer == NULL ) {
-        return( 0 );
-    }
+    while(status == STATUS_INFO_LENGTH_MISMATCH) {
 
-    status = NtQuerySystemInformation(
-                SystemProcessInformation,
-                LargeBuffer1,
-                sizeof(LargeBuffer1),
-                &TotalOffset
-                );
+        pucLargeBuffer = VirtualAlloc(NULL, 
+                                      LargeBufferSize, 
+                                      MEM_COMMIT, 
+                                      PAGE_READWRITE);
 
-    if ( !NT_SUCCESS(status) ) {
-        return( 0 );
+        if (pucLargeBuffer == NULL) {
+            WOW32ASSERTMSGF((FALSE),
+                            ("WOW::GetHtaskAliasProcessName: VirtualAlloc(%x) failed %x.\n",
+                            LargeBufferSize));
+            return 0;
+        }
+    
+        status = NtQuerySystemInformation(SystemProcessInformation,
+                                          pucLargeBuffer,
+                                          LargeBufferSize,
+                                          &TotalOffset);
+
+        if (NT_SUCCESS(status)) {
+            break;
+        }
+        else if (status == STATUS_INFO_LENGTH_MISMATCH) {
+            LargeBufferSize += 8192;
+            VirtualFree (pucLargeBuffer, 0, MEM_RELEASE);
+            pucLargeBuffer = NULL;
+        }
+        else {
+
+            WOW32ASSERTMSGF((NT_SUCCESS(status)),
+                            ("WOW::GetHtaskAliasProcessName: NtQuerySystemInformation failed %x.\n",
+                            status));
+
+            if(pucLargeBuffer) {
+                VirtualFree (pucLargeBuffer, 0, MEM_RELEASE);
+            }
+            return 0;
+        }
     }
 
     //
@@ -336,36 +361,48 @@ UINT GetHtaskAliasProcessName(
     // trying to find the one with the right process id.
     //
     TotalOffset = 0;
-    ProcessInfo = (PSYSTEM_PROCESS_INFORMATION)LargeBuffer1;
+    ProcessInfo = (PSYSTEM_PROCESS_INFORMATION)pucLargeBuffer;
 
     while (TRUE) {
         if ( (DWORD)ProcessInfo->UniqueProcessId == dwProcessID32 ) {
-            pname.Buffer = NULL;
+
+            //
+            // Found it, return the name.
+            //
+
             if ( ProcessInfo->ImageName.Buffer ) {
-                RtlUnicodeStringToAnsiString(&pname,(PUNICODE_STRING)&ProcessInfo->ImageName,TRUE);
 
-                //
-                // Truncate the name to make it fit
-                //
-                pname.Buffer[cNameBufferSize-1] = '\0';
+                cNameBufferSize = 
+                    WideCharToMultiByte(
+                        CP_ACP,
+                        0,
+                        ProcessInfo->ImageName.Buffer,    // src
+                        ProcessInfo->ImageName.Length,
+                        lpNameBuffer,                     // dest
+                        cNameBufferSize,
+                        NULL,
+                        NULL
+                        );
 
-                strcpy( lpNameBuffer, pname.Buffer );
+                lpNameBuffer[cNameBufferSize] = '\0';
 
-                RtlFreeAnsiString( &pname );
+                return cNameBufferSize;
 
-                return( strlen(lpNameBuffer) );
             } else {
+
                 //
                 // Don't let them get the name of a system process
                 //
-                return( 0 );
+
+                return 0;
             }
         }
         if (ProcessInfo->NextEntryOffset == 0) {
             break;
         }
         TotalOffset += ProcessInfo->NextEntryOffset;
-        ProcessInfo = (PSYSTEM_PROCESS_INFORMATION)&LargeBuffer1[TotalOffset];
+        ProcessInfo = (PSYSTEM_PROCESS_INFORMATION)&pucLargeBuffer[TotalOffset];
     }
-    return( 0 );
+    return 0;
 }
+

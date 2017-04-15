@@ -282,15 +282,15 @@ ULONG FASTCALL WU32GetClipboardData(PVDMFRAME pFrame)
                     break;
                 }
 
-                if (hMem32) {
-                    lpMem32 = GlobalLock(hMem32);
+                lpMem32 = GlobalLock(hMem32);
+                if (hMem32 && lpMem32) {
                     cb = GlobalSize(hMem32);
-		    vp = GlobalAllocLock16(GMEM_MOVEABLE | GMEM_DDESHARE, cb, &hMem16);
-		    // 16-bit memory may have moved - refresh flat pointers
-		    FREEARGPTR(parg16);
-		    FREEVDMPTR(pFrame);
-		    GETFRAMEPTR(((PTD)CURRENTPTD())->vpStack, pFrame);
-		    GETARGPTR(pFrame, sizeof(GETCLIPBOARDDATA16), parg16);
+	                vp = GlobalAllocLock16(GMEM_MOVEABLE | GMEM_DDESHARE, cb, &hMem16);
+		            // 16-bit memory may have moved - refresh flat pointers
+		            FREEARGPTR(parg16);
+		            FREEVDMPTR(pFrame);
+		            GETFRAMEPTR(((PTD)CURRENTPTD())->vpStack, pFrame);
+		            GETARGPTR(pFrame, sizeof(GETCLIPBOARDDATA16), parg16);
                     if (vp) {
                         GETMISCPTR(vp, lpMem16);
                         RtlCopyMemory(lpMem16, lpMem32, cb);
@@ -350,28 +350,28 @@ ULONG FASTCALL WU32GetClipboardData(PVDMFRAME pFrame)
                     break;
                 }
 
-                if (hMem32) {
-                    lpMem32 = GlobalLock(hMem32);
+                lpMem32 = GlobalLock(hMem32);
+                if (hMem32 && lpMem32) {
                     vp = GlobalAllocLock16(GMEM_MOVEABLE | GMEM_DDESHARE, sizeof(METAFILEPICT16), &hMem16);
-		    // 16-bit memory may have moved - refresh flat pointers
-		    FREEARGPTR(parg16);
-		    FREEVDMPTR(pFrame);
-		    GETFRAMEPTR(((PTD)CURRENTPTD())->vpStack, pFrame);
-		    GETARGPTR(pFrame, sizeof(GETCLIPBOARDDATA16), parg16);
-		    if (vp) {
+		            // 16-bit memory may have moved - refresh flat pointers
+		            FREEARGPTR(parg16);
+		            FREEVDMPTR(pFrame);
+		            GETFRAMEPTR(((PTD)CURRENTPTD())->vpStack, pFrame);
+		            GETARGPTR(pFrame, sizeof(GETCLIPBOARDDATA16), parg16);
+		            if (vp) {
                         GETMISCPTR(vp, lpMem16);
                         FixMetafile32To16 ((LPMETAFILEPICT) lpMem32, (LPMETAFILEPICT16) lpMem16);
                         FREEMISCPTR(lpMem16);
 
                         hMeta32 = ((LPMETAFILEPICT) lpMem32)->hMF;
                         if (hMeta32) {
-			    hMeta16 = WinMetaFileFromHMF(hMeta32, FALSE);
-			    // 16-bit memory may have moved
-			    FREEARGPTR(parg16);
-			    FREEVDMPTR(pFrame);
-			    GETFRAMEPTR(((PTD)CURRENTPTD())->vpStack, pFrame);
-			    GETARGPTR(pFrame, sizeof(GETCLIPBOARDDATA16), parg16);
-			}
+			                hMeta16 = WinMetaFileFromHMF(hMeta32, FALSE);
+			                // 16-bit memory may have moved
+			                FREEARGPTR(parg16);
+			                FREEVDMPTR(pFrame);
+			                GETFRAMEPTR(((PTD)CURRENTPTD())->vpStack, pFrame);
+			                GETARGPTR(pFrame,sizeof(GETCLIPBOARDDATA16),parg16);
+			            }
 
                         GETMISCPTR(vp, lpMem16);
                         STOREWORD(((LPMETAFILEPICT16) lpMem16)->hMF, hMeta16);
@@ -897,10 +897,10 @@ ULONG FASTCALL WU32SetClipboardData(PVDMFRAME pFrame)
                 vp = GlobalLock16(hMem16, &cb);
                 if (vp) {
                     GETMISCPTR(vp, lpMem16);
-                    hMem32 = GlobalAlloc(GMEM_DDESHARE, sizeof(METAFILEPICT));
+                    hMem32 = WOWGLOBALALLOC(GMEM_DDESHARE,sizeof(METAFILEPICT));
                     WOW32ASSERT(hMem32);
-                    if (hMem32) {
-                        lpMem32 = GlobalLock(hMem32);
+                    lpMem32 = GlobalLock(hMem32);
+                    if (hMem32 && lpMem32) {
                         ((LPMETAFILEPICT) lpMem32)->mm = FETCHSHORT(((LPMETAFILEPICT16) lpMem16)->mm);
                         ((LPMETAFILEPICT) lpMem32)->xExt = (LONG) FETCHSHORT(((LPMETAFILEPICT16) lpMem16)->xExt);
                         ((LPMETAFILEPICT) lpMem32)->yExt = (LONG) FETCHSHORT(((LPMETAFILEPICT16) lpMem16)->yExt);
@@ -1212,6 +1212,7 @@ VOID InitCBFormats ()
     CFOLEObjectDescriptor = RegisterClipboardFormat ("Object Descriptor");
     CFOLELinkSrcDescriptor = RegisterClipboardFormat ("Link Source Descriptor");
 
+#ifndef DBCS
 #ifdef DEBUG
 
     //
@@ -1220,11 +1221,11 @@ VOID InitCBFormats ()
     //
 
     if (!(OleStringConversion[WOW_OLE_STRINGCONVERSION].lpfn)) {
-        LoadLibraryAndGetProcAddresses("OLETHK32.DLL", OleStringConversion, WOW_OLESTRINGCONVERSION_COUNT);
+        LoadLibraryAndGetProcAddresses(L"OLETHK32.DLL", OleStringConversion, WOW_OLESTRINGCONVERSION_COUNT);
     }
 
 #endif
-
+#endif // !DBCS
 
 }
 
@@ -1234,7 +1235,7 @@ HGLOBAL W32ConvertObjDescriptor(HANDLE hMem, UINT flag)
     HANDLE hMemOut;
 
     if (!(OleStringConversion[WOW_OLE_STRINGCONVERSION].lpfn)) {
-        if (!LoadLibraryAndGetProcAddresses("OLETHK32.DLL", OleStringConversion, WOW_OLESTRINGCONVERSION_COUNT)) {
+        if (!LoadLibraryAndGetProcAddresses(L"OLETHK32.DLL", OleStringConversion, WOW_OLESTRINGCONVERSION_COUNT)) {
             return (0);
         }
     }

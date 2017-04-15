@@ -67,7 +67,7 @@ extern DWORD WWS32ThreadSerialNumberCounter;
 #define WWS32IsThreadVersion11 ( WWS32ThreadVersion == MAKEWORD(1, 1) )
 
 #define WWS32IsThreadInitialized \
-    ( TlsGetValue( WWS32TlsSlot ) == NULL ? FALSE : TRUE )
+    ( WWS32TlsSlot != 0xFFFFFFFF && TlsGetValue( WWS32TlsSlot ) != NULL )
 
 typedef struct _WINSOCK_ASYNC_CONTEXT_BLOCK {
     LIST_ENTRY ContextBlockListEntry;
