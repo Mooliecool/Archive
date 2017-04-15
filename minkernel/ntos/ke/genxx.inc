@@ -802,6 +802,7 @@ Revision History:
     genDef(Te, TEB, glCurrentRC);
     genDef(Te, TEB, glContext);
     genDef(Te, TEB, DeallocationStack);
+    genDef(Te, TEB, Vdm);
     genDef(Te, TEB, GdiBatchCount);
     genDef(Te, TEB, Instrumentation);
 
