@@ -22,6 +22,7 @@
 #include <softpc.h>
 #include <winbase.h>
 #include <mvdm.h>
+#include "dpmtbls.h"
 
 #define DOT '.'
 #define QMARK '?'
@@ -31,36 +32,36 @@
  *
  *
  * Entry - Client (ES:DI) - Full File Path
- *	   Client (AL)	  - 0 if not extended FCB
- *	   Client (DL)	  - File Attr. to be deleted (valid only if Al !=0 )
+ *    Client (AL)   - 0 if not extended FCB
+ *    Client (DL)   - File Attr. to be deleted (valid only if Al !=0 )
  *
  * Exit
- *	   SUCCESS
- *	     Client (CF) = 0
+ *    SUCCESS
+ *      Client (CF) = 0
  *
- *	   FAILURE
- *	     Client (CF) = 1
- *	     Client (AX) = system status code
- *	    HARD ERROR
- *	     Client (CF) = 1
- *	     Client (AX) = 0ffffh
+ *    FAILURE
+ *      Client (CF) = 1
+ *      Client (AX) = system status code
+ *     HARD ERROR
+ *      Client (CF) = 1
+ *      Client (AX) = 0ffffh
  *
  * Notes:  Following are the rules for FCB based delete:
- *	1. If normal FCB than dont allow delete on hidden,system files
- *	2. if extended FCB than search attributes should include hidden,
- *	   system or read-only if that kind of file is to be deleted.
+ * 1. If normal FCB than dont allow delete on hidden,system files
+ * 2. if extended FCB than search attributes should include hidden,
+ *    system or read-only if that kind of file is to be deleted.
  */
 
 VOID demDeleteFCB (VOID)
 {
-HANDLE	hFind;
-LPSTR	lpFileName;
-BYTE	bClientAttr=0;
-BOOL	fExtendedFCB=FALSE;
+HANDLE   hFind;
+LPSTR lpFileName;
+BYTE  bClientAttr=0;
+BOOL  fExtendedFCB=FALSE;
 WIN32_FIND_DATA  wfBuffer;
-BOOL	fSuccess = FALSE;
-DWORD	dwAttr;
-USHORT	uErr;
+BOOL  fSuccess = FALSE;
+DWORD dwAttr;
+USHORT   uErr;
 
 CHAR szPath_buffer[_MAX_PATH];
 CHAR szDrive[_MAX_DRIVE];
@@ -77,24 +78,24 @@ DWORD dwErrCode = 0, dwErrCodeKeep = 0;
 
     // Check if handling extended FCB
     if(getAL() != 0){
-	bClientAttr = getDL();
+   bClientAttr = getDL();
 
     /* Special case for delete volume label (INT 21 Func 13H, Attr = 8H */
 
     if((bClientAttr == ATTR_VOLUME_ID)) {
-	if((uErr = demDeleteLabel(lpFileName[DRIVEBYTE]))) {
-	    setCF(1);
-	    setAX(uErr);
-	    return;
-	}
-	setAX(0);
-	setCF(0);
-	return;
+   if((uErr = demDeleteLabel(lpFileName[DRIVEBYTE]))) {
+       setCF(1);
+       setAX(uErr);
+       return;
+   }
+   setAX(0);
+   setCF(0);
+   return;
     }
 
 
-	bClientAttr &= (ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM);
-	fExtendedFCB = TRUE;
+   bClientAttr &= (ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM);
+   fExtendedFCB = TRUE;
     }
 
     // Find the first instance of file
@@ -105,71 +106,73 @@ DWORD dwErrCode = 0, dwErrCodeKeep = 0;
 
     // loop for all files which match the name and attributes
     do {
-	// Check if read_only,hidden or system file
-	if((dwAttr= wfBuffer.dwFileAttributes & (FILE_ATTRIBUTE_READONLY |
-		      FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))){
+   // Check if read_only,hidden or system file
+   if((dwAttr= wfBuffer.dwFileAttributes & (FILE_ATTRIBUTE_READONLY |
+            FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))){
 
-	    // if so, try next file if normal FCB case. If extended fcb case
-	    // then check if right attributes are given by client.
-	    if(fExtendedFCB && ((dwAttr & (DWORD)bClientAttr) == dwAttr)){
+       // if so, try next file if normal FCB case. If extended fcb case
+       // then check if right attributes are given by client.
+       if(fExtendedFCB && ((dwAttr & (DWORD)bClientAttr) == dwAttr)){
 
-		// Yes, right attributes are given. So if the file is read
-		// only then change the modes to normal. Note NT will
-		// delete hidden and system files anyway.
-		if (dwAttr & FILE_ATTRIBUTE_READONLY){
-		    strcpy( szPath_buffer, szDrive);
-		    strcat( szPath_buffer, szDir);
-		    strcat( szPath_buffer, wfBuffer.cFileName);
+      // Yes, right attributes are given. So if the file is read
+      // only then change the modes to normal. Note NT will
+      // delete hidden and system files anyway.
+      if (dwAttr & FILE_ATTRIBUTE_READONLY){
+          strcpy( szPath_buffer, szDrive);
+          strcat( szPath_buffer, szDir);
+          strncat( szPath_buffer, wfBuffer.cFileName,sizeof(szPath_buffer)-strlen(szPath_buffer));
+          szPath_buffer[sizeof(szPath_buffer)-1] = 0;
 
-		    // if set attributes fail try next file
-		    if(SetFileAttributesOem (szPath_buffer,
-					     FILE_ATTRIBUTE_NORMAL) == -1)
-			continue;
-		}
-	    }
-	    else {
-		dwErrCodeKeep = ERROR_ACCESS_DENIED;
-		continue;
-	    }
-	}
+          // if set attributes fail try next file
+          if(SetFileAttributesOemSys (szPath_buffer,
+                    FILE_ATTRIBUTE_NORMAL, FALSE) == -1)
+         continue;
+      }
+       }
+       else {
+      dwErrCodeKeep = ERROR_ACCESS_DENIED;
+      continue;
+       }
+   }
 
-	strcpy( szPath_buffer, szDrive);
-	strcat( szPath_buffer, szDir);
-	strcat( szPath_buffer, wfBuffer.cFileName);
+   strcpy( szPath_buffer, szDrive);
+   strcat( szPath_buffer, szDir);
+   strncat( szPath_buffer, wfBuffer.cFileName,sizeof(szPath_buffer)-strlen(szPath_buffer));
+   szPath_buffer[sizeof(szPath_buffer)-1] = 0;
 
-	if(DeleteFileOem(szPath_buffer) == FALSE) {
-	    dwErrCode = GetLastError();
+   if(DeleteFileOem(szPath_buffer) == FALSE) {
+       dwErrCode = GetLastError();
 
-	    SetLastError(dwErrCode);
+       SetLastError(dwErrCode);
 
-	    if (((dwErrCode >= ERROR_WRITE_PROTECT) &&
-		   (dwErrCode <= ERROR_GEN_FAILURE)) ||
-		   dwErrCode == ERROR_WRONG_DISK ) {
-		demClientError(INVALID_HANDLE_VALUE, szPath_buffer[0]);
-		return;
-	    }
-	    continue;
-	}
+       if (((dwErrCode >= ERROR_WRITE_PROTECT) &&
+         (dwErrCode <= ERROR_GEN_FAILURE)) ||
+         dwErrCode == ERROR_WRONG_DISK ) {
+      demClientError(INVALID_HANDLE_VALUE, szPath_buffer[0]);
+      return;
+       }
+       continue;
+   }
 
-	// We have deleted at least one file, so report success
-	fSuccess = TRUE;
+   // We have deleted at least one file, so report success
+   fSuccess = TRUE;
 
     } while (FindNextFileOem(hFind,&wfBuffer) == TRUE);
 
-    if(FindClose(hFind) == FALSE)
-	demPrintMsg (MSG_INVALID_HFIND);
+    if(DPM_FindClose(hFind) == FALSE)
+   demPrintMsg (MSG_INVALID_HFIND);
 
     if (fSuccess == TRUE){
-	setCF(0);
-	return;
+   setCF(0);
+   return;
     }
 
     setCF(1);
 
     if(dwErrCodeKeep)
-	setAX((SHORT) dwErrCodeKeep);
+   setAX((SHORT) dwErrCodeKeep);
     else
-	setAX(ERROR_FILE_NOT_FOUND);
+   setAX(ERROR_FILE_NOT_FOUND);
     return;
 }
 
@@ -177,14 +180,14 @@ DWORD dwErrCode = 0, dwErrCodeKeep = 0;
 /* demRenameFCB - FCB based Rename file
  *
  * Entry - Client (DS:SI)    Sources file to be renamed
- *	   Client (ES:DI)    Destination file to be renamed to
+ *    Client (ES:DI)    Destination file to be renamed to
  *
  * Exit  - SUCCESS
- *	   Client (CF)	= 0
+ *    Client (CF) = 0
  *
- *	   FAILURE
- *	   Client(CF)	= 1
- *	   Client(AX)	= error code
+ *    FAILURE
+ *    Client(CF)  = 1
+ *    Client(AX)  = error code
  */
 
 VOID demRenameFCB (VOID)
@@ -218,7 +221,8 @@ VOID demRenameFCB (VOID)
     // source specified plus the filename part retrieved from the
     // FindFile call
     //
-    strcpy(CurrSrc, lpSrc);
+    strncpy(CurrSrc, lpSrc,sizeof(CurrSrc));
+    CurrSrc[sizeof(CurrSrc)-1] = 0;
     pCurrSrcFilePart = strrchr(CurrSrc, '\\');
     pCurrSrcFilePart++;
 
@@ -232,7 +236,8 @@ VOID demRenameFCB (VOID)
     //  NewDst string is constructed from template and the source string
     //  when doing meta file character substitution.
     //
-    strcpy(NewDst, lpDst);
+    strncpy(NewDst, lpDst, sizeof(NewDst));
+    NewDst[sizeof(NewDst)-1] = 0;
     pNewDstFilePart = strrchr(NewDst, '\\');
     pNewDstFilePart++;
 
@@ -242,11 +247,12 @@ VOID demRenameFCB (VOID)
        PCHAR pSrc;
        PCHAR pDst;
 
-       strcpy(pCurrSrcFilePart,
+       strncpy(pCurrSrcFilePart,
               W32FindData.cAlternateFileName[0]
                   ? W32FindData.cAlternateFileName
-                  : W32FindData.cFileName  //// ??? hpfs lfns ????
-              );
+                  : W32FindData.cFileName,  //// ??? hpfs lfns ????
+              sizeof(CurrSrc)+CurrSrc-pCurrSrcFilePart);
+              CurrSrc[sizeof(CurrSrc)-1] = 0;
 
        pSrc = pCurrSrcFilePart; // source fname
        pNew = pNewDstFilePart;  // dest fname to be constructed
@@ -296,13 +302,13 @@ VOID demRenameFCB (VOID)
        if (!_stricmp (CurrSrc, NewDst)) {
            setCF(1);
            setAX(0x5);
-           FindClose(hFind);
+           DPM_FindClose(hFind);
            return;
            }
 
        if (!MoveFileOem(CurrSrc, NewDst)){
            demClientError(INVALID_HANDLE_VALUE, *lpSrc);
-           FindClose(hFind);
+           DPM_FindClose(hFind);
            return;
            }
 
@@ -325,7 +331,7 @@ VOID demRenameFCB (VOID)
        setCF(0);
        }
 
-   FindClose(hFind);
+   DPM_FindClose(hFind);
    return;
 }
 
@@ -336,29 +342,29 @@ VOID demRenameFCB (VOID)
  * Entry - Client (AX:SI)    DWORD NT handle
  *
  * Exit  - SUCCESS
- *	   Client (CF)	= 0
+ *    Client (CF) = 0
  *
- *	   FAILURE
- *	   Client(CF)	= 1
- *	   Client(AX)	= error code
+ *    FAILURE
+ *    Client(CF)  = 1
+ *    Client(AX)  = error code
  */
 
 VOID demCloseFCB (VOID)
 {
-HANDLE	hFile;
+HANDLE   hFile;
 
     hFile = GETHANDLE (getAX(),getSI());
 
     if(hFile == 0) {
 
-	setCF(0);
-	return;
+   setCF(0);
+   return;
     }
 
-    if (CloseHandle (hFile) == FALSE){
+    if (DPM_CloseHandle (hFile) == FALSE){
 
-	demClientError(hFile, (CHAR)-1);
-	return;
+   demClientError(hFile, (CHAR)-1);
+   return;
 
     }
     setCF(0);
@@ -367,24 +373,24 @@ HANDLE	hFile;
 
 /* demCreateFCB - An FCB is being created get the NT handle.
  *
- * Entry - Client (AL)	  Creation Mode
- *			  00 - Normal File
- *			  01 - Read-only file
- *			  02 - Hidden File
- *			  04 - System file
- *	   Client (DS:SI) Full path filename
- *	   Client (ES:DI) SFT address
+ * Entry - Client (AL)    Creation Mode
+ *         00 - Normal File
+ *         01 - Read-only file
+ *         02 - Hidden File
+ *         04 - System file
+ *    Client (DS:SI) Full path filename
+ *    Client (ES:DI) SFT address
  *
  * Exit  - SUCCESS
- *	   Client (CF)	  = 0
- *	   Client (AX:BP) = NT Handle
- *	   Client (BX)	  = Time
- *	   Client (CX)	  = Date
- *	   Client (DX:SI) = Size
+ *    Client (CF)   = 0
+ *    Client (AX:BP) = NT Handle
+ *    Client (BX)   = Time
+ *    Client (CX)   = Date
+ *    Client (DX:SI) = Size
  *
- *	   FAILURE
- *	   Client(CF)	= 1
- *	   Client(AX)	= error code
+ *    FAILURE
+ *    Client(CF)  = 1
+ *    Client(AX)  = error code
  */
 
 VOID demCreateFCB (VOID)
@@ -398,13 +404,13 @@ VOID demCreateFCB (VOID)
  * Entry - None
  *
  * Exit  - Always Success
- *	   Client (AX) has date
- *	   Client (DX) has time
+ *    Client (AX) has date
+ *    Client (DX) has time
  * NOTES:
  *
  * DemDate16 returns the current date in AX, current time in DX in this format
- *	   AX - YYYYYYYMMMMDDDDD	years months days
- *	   DX - HHHHHMMMMMMSSSSS	hours minutes seconds/2
+ *    AX - YYYYYYYMMMMDDDDD   years months days
+ *    DX - HHHHHMMMMMMSSSSS   hours minutes seconds/2
  */
 
 VOID demDate16 (VOID)
@@ -412,50 +418,51 @@ VOID demDate16 (VOID)
 SYSTEMTIME TimeDate;
 
     GetLocalTime(&TimeDate);
-    setAX ( (USHORT) ((TimeDate.wYear << 9 ) |
-	    ((TimeDate.wMonth & 0xf) << 5 ) |
+    // date is stored in a packed word: ((year-1980)*512) + (month*32) + day
+    setAX ( (USHORT) (((TimeDate.wYear-1980) << 9 ) |
+       ((TimeDate.wMonth & 0xf) << 5 ) |
             (TimeDate.wDay & 0x1f))
-	  );
+     );
     setDX ( (USHORT) ((TimeDate.wHour << 11) |
-	    ((TimeDate.wMinute & 0x3f) << 5) |
+       ((TimeDate.wMinute & 0x3f) << 5) |
             ((TimeDate.wSecond / 2) & 0x1f))
-	  );
+     );
     return;
 }
 
 /* demFCBIO - Carry out the FCB based IO operation.
  *
  * Entry - Client (BX) = 1 if read operation, 0 if write
- *	   Client (AX:BP)  NT Handle
- *	   Client (DI:DX)  offset to start the operation with
- *	   Client (CX)	   Count of bytes
+ *    Client (AX:BP)  NT Handle
+ *    Client (DI:DX)  offset to start the operation with
+ *    Client (CX)    Count of bytes
  *
  * Exit  - SUCCESS
- *	   Client (CF)	= 0
- *	   Client (CX)	= counts of bytes read/written
- *	   Client (AX:BX)  = size
+ *    Client (CF) = 0
+ *    Client (CX) = counts of bytes read/written
+ *    Client (AX:BX)  = size
  *
- *	   FAILURE
- *	   Client(CF)	= 1
- *	   Client(AX)	= error code
+ *    FAILURE
+ *    Client(CF)  = 1
+ *    Client(AX)  = error code
  */
 
 VOID demFCBIO (VOID)
 {
-HANDLE	hFile;
-ULONG	CurOffset;
+HANDLE   hFile;
+ULONG CurOffset;
 PVOID   pBuf;
-DWORD	dwBytesIO;
-DWORD	dwSize,dwSizeHigh;
-DWORD	dwErrCode;
+DWORD dwBytesIO=0;
+DWORD dwSize,dwSizeHigh;
+DWORD dwErrCode;
 
     hFile = GETHANDLE (getAX(),getBP());
     CurOffset = (((ULONG)getDI()) << 16) + (ULONG)getDX();
 
-    if (SetFilePointer (hFile,
-			(LONG)CurOffset,
-			NULL,
-			(DWORD)FILE_BEGIN) == -1L){
+    if (DPM_SetFilePointer (hFile,
+         (LONG)CurOffset,
+         NULL,
+         (DWORD)FILE_BEGIN) == -1L){
         demClientError(hFile, (CHAR)-1);
         return ;
     }
@@ -463,59 +470,68 @@ DWORD	dwErrCode;
     pBuf = (PVOID)GetVDMAddr(*((PUSHORT)pulDTALocation + 1),
                               *((PUSHORT)pulDTALocation));
 
-    if(getBX()) {	// Read Operation
-	if (ReadFile (hFile,
+    if(getBX()) { // Read Operation
+       if (DPM_ReadFile (hFile,
                       pBuf,
-		      (DWORD)getCX(),
-		      &dwBytesIO,
-		      NULL) == FALSE){
+            (DWORD)getCX(),
+            &dwBytesIO,
+            NULL) == FALSE){
 
             Sim32FlushVDMPointer(*pulDTALocation, getCX(), pBuf, FALSE);
             Sim32FreeVDMPointer(*pulDTALocation, getCX(), pBuf, FALSE);
             demClientError(hFile, (CHAR)-1);
             return ;
-	}
-        Sim32FlushVDMPointer (*pulDTALocation, getCX(),pBuf, FALSE);
-        Sim32FreeVDMPointer (*pulDTALocation, getCX(), pBuf, FALSE);
+       }
+       Sim32FlushVDMPointer (*pulDTALocation, getCX(),pBuf, FALSE);
+       Sim32FreeVDMPointer (*pulDTALocation, getCX(), pBuf, FALSE);
     }
     else {
-	if (WriteFile (hFile,
-                       pBuf,
-		       (DWORD)getCX(),
-		       &dwBytesIO,
-		       NULL) == FALSE) {
+        if (getCX() == 0) {
+            //0 byte write, adjust file size
+           if(!DPM_SetEndOfFile(hFile)) {
+              dwErrCode = GetLastError();
+              SetLastError(dwErrCode);
+              demClientError(hFile,(CHAR)-1);
+              return;
+           }
+        }
+        else if (DPM_WriteFile (hFile,
+                            pBuf,
+                            (DWORD)getCX(),
+                            &dwBytesIO,
+                            NULL) == FALSE) {
 
-	// If disk is full then we should return number of bytes written
-	// AX = 1 and CF = 1
+                            // If disk is full then we should return number of bytes written
+                            // AX = 1 and CF = 1
 
-	    dwErrCode = GetLastError();
-	    if(dwErrCode == ERROR_DISK_FULL) {
+                            dwErrCode = GetLastError();
+                            if(dwErrCode == ERROR_DISK_FULL) {
 
-		setCX( (USHORT) dwBytesIO);
-		setAX(1);
-		setCF(1);
-		return;
-	    }
+                               setCX( (USHORT) dwBytesIO);
+                               setAX(1);
+                               setCF(1);
+                               return;
+                            }
 
-	    SetLastError(dwErrCode);
+                            SetLastError(dwErrCode);
 
-	    demClientError(hFile, (CHAR)-1);
-	    return ;
+                            demClientError(hFile, (CHAR)-1);
+                            return ;
 
-	}
+        }
     }
 
     // Get File Size
-    if((dwSize = GetFileSize(hFile,&dwSizeHigh)) == -1){
+    if((dwSize = DPM_GetFileSize(hFile,&dwSizeHigh)) == -1){
 
-	demPrintMsg(MSG_FILEINFO);
+   demPrintMsg(MSG_FILEINFO);
         ASSERT(FALSE);
         demClientError(hFile, (CHAR)-1);
         return;
     }
 
     if(dwSizeHigh) {
-	demPrintMsg(MSG_FILESIZE_TOOBIG);
+   demPrintMsg(MSG_FILESIZE_TOOBIG);
         ASSERT(FALSE);
         demClientError(hFile, (CHAR)-1);
         return;
@@ -534,23 +550,23 @@ DWORD	dwErrCode;
  * Entry - Client (DS:SI)    full path file name
  *
  * Exit  - SUCCESS
- *	   Client (CF)	= 0
- *	   Client (AX)	= Attribute of file
- *	   Client (CX)	= Time stamp of file
- *	   Client (DX	= Date stamp of file
- *	   Client (BX:DI)= Size of file (32 bit)
+ *    Client (CF) = 0
+ *    Client (AX) = Attribute of file
+ *    Client (CX) = Time stamp of file
+ *    Client (DX  = Date stamp of file
+ *    Client (BX:DI)= Size of file (32 bit)
  *
- *	   FAILURE
- *	   Client(CF)	= 1
- *	   Client(AX)	= error code
+ *    FAILURE
+ *    Client(CF)  = 1
+ *    Client(AX)  = error code
  */
 
 VOID demGetFileInfo (VOID)
 {
-HANDLE	hFile;
-LPSTR	lpFileName;
-WORD	wDate,wTime;
-DWORD	dwSize,dwAttr;
+HANDLE   hFile;
+LPSTR lpFileName;
+WORD  wDate,wTime;
+DWORD dwSize,dwAttr;
 
     lpFileName = (LPSTR) GetVDMAddr (getDS(),getSI());
 
@@ -567,19 +583,19 @@ DWORD	dwSize,dwAttr;
 
     // Get Misc. INfo
     if (demGetMiscInfo (hFile,&wTime, &wDate, &dwSize) == FALSE) {
-        CloseHandle (hFile);
+        DPM_CloseHandle (hFile);
         return;
     }
 
-    CloseHandle (hFile);
+    DPM_CloseHandle (hFile);
 
-    if ((dwAttr = GetFileAttributesOem (lpFileName)) == -1) {
+    if ((dwAttr = GetFileAttributesOemSys (lpFileName, FALSE)) == -1) {
          demClientError(INVALID_HANDLE_VALUE, *lpFileName);
          return;
     }
 
     if (dwAttr == FILE_ATTRIBUTE_NORMAL)
-	dwAttr = 0;
+   dwAttr = 0;
 
     setAX((USHORT)dwAttr);
     setCX(wTime);
@@ -592,19 +608,19 @@ DWORD	dwSize,dwAttr;
 
 /* demOpenFCB - An FCB is being opened get the NT handle.
  *
- * Entry - Client (AL)	  Open Mode
- *	   Client (DS:SI) Full path filename
+ * Entry - Client (AL)    Open Mode
+ *    Client (DS:SI) Full path filename
  *
  * Exit  - SUCCESS
- *	   Client (CF)	  = 0
- *	   Client (AX:BP) = NT Handle
- *	   Client (BX)	  = Time
- *	   Client (CX)	  = Date
- *	   Client (DX:SI) = Size
+ *    Client (CF)   = 0
+ *    Client (AX:BP) = NT Handle
+ *    Client (BX)   = Time
+ *    Client (CX)   = Date
+ *    Client (DX:SI) = Size
  *
- *	   FAILURE
- *	   Client(CF)	= 1
- *	   Client(AX)	= error code
+ *    FAILURE
+ *    Client(CF)  = 1
+ *    Client(AX)  = error code
  */
 
 VOID demOpenFCB (VOID)
@@ -616,30 +632,30 @@ VOID demOpenFCB (VOID)
 /* demFCBCommon - FCB Open/Create.
  *
  * Entry - CreateDirective - Open/Create
- *	   Client (AL)	  Open Mode
- *	   Client (DS:SI) Full path filename
+ *    Client (AL)   Open Mode
+ *    Client (DS:SI) Full path filename
  *
  * Exit  - SUCCESS
- *	   Client (CF)	  = 0
- *	   Client (AX:BP) = NT Handle
- *	   Client (BX)	  = Time
- *	   Client (CX)	  = Date
- *	   Client (DX:SI) = Size
+ *    Client (CF)   = 0
+ *    Client (AX:BP) = NT Handle
+ *    Client (BX)   = Time
+ *    Client (CX)   = Date
+ *    Client (DX:SI) = Size
  *
- *	   FAILURE
- *	   Client(CF)	= 1
- *	   Client(AX)	= error code
+ *    FAILURE
+ *    Client(CF)  = 1
+ *    Client(AX)  = error code
  */
 VOID demFCBCommon (ULONG CreateDirective)
 {
-HANDLE	hFile;
-LPSTR	lpFileName;
-UCHAR	uchMode,uchAccess;
-DWORD	dwDesiredAccess = GENERIC_WRITE | GENERIC_READ;
-DWORD	dwShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
-WORD	wDate,wTime;
-DWORD	dwSize,dwAttr=0;
-USHORT	uErr;
+HANDLE   hFile;
+LPSTR lpFileName;
+UCHAR uchMode,uchAccess;
+DWORD dwDesiredAccess = GENERIC_WRITE | GENERIC_READ;
+DWORD dwShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
+WORD  wDate,wTime;
+DWORD dwSize,dwAttr=0;
+USHORT   uErr;
 SECURITY_ATTRIBUTES sa;
 
     lpFileName = (LPSTR) GetVDMAddr (getDS(),getSI());
@@ -648,16 +664,16 @@ SECURITY_ATTRIBUTES sa;
     /* Special case for delete volume label (INT 21 Func 13H, Attr = 8H */
 
     if((uchMode == ATTR_VOLUME_ID) && (CreateDirective == CREATE_ALWAYS)) {
-	if((uErr = demCreateLabel(lpFileName[DRIVEBYTE],
-		       lpFileName+LABELOFF))) {
-	    setCF(1);
-	    setAX(uErr);
-	    return;
-	}
-	setAX(0);
-	setBP(0);
-	setCF(0);
-	return;
+   if((uErr = demCreateLabel(lpFileName[DRIVEBYTE],
+             lpFileName+LABELOFF))) {
+       setCF(1);
+       setAX(uErr);
+       return;
+   }
+   setAX(0);
+   setBP(0);
+   setCF(0);
+   return;
     }
 
 
@@ -666,39 +682,39 @@ SECURITY_ATTRIBUTES sa;
     // case AL has appropriate access and sharing information.
     if((CreateDirective == CREATE_ALWAYS) && ((uchMode &0xff) == 0)) {
 
-	dwAttr = FILE_ATTRIBUTE_NORMAL;
-	dwShareMode = FILE_SHARE_WRITE | FILE_SHARE_READ;
+   dwAttr = FILE_ATTRIBUTE_NORMAL;
+   dwShareMode = FILE_SHARE_WRITE | FILE_SHARE_READ;
     }
     else {
-	uchAccess = uchMode & (UCHAR)ACCESS_MASK;
+   uchAccess = uchMode & (UCHAR)ACCESS_MASK;
 
-	if (uchAccess == OPEN_FOR_READ)
-	    dwDesiredAccess = GENERIC_READ;
+   if (uchAccess == OPEN_FOR_READ)
+       dwDesiredAccess = GENERIC_READ;
 
-	else if (uchAccess == OPEN_FOR_WRITE)
-	    dwDesiredAccess = GENERIC_WRITE;
+   else if (uchAccess == OPEN_FOR_WRITE)
+       dwDesiredAccess = GENERIC_WRITE;
 
-	uchMode = uchMode & (UCHAR)SHARING_MASK;
+   uchMode = uchMode & (UCHAR)SHARING_MASK;
 
-	switch (uchMode) {
-	    case SHARING_DENY_BOTH:
-		dwShareMode = 0;
-		break;
-	    case SHARING_DENY_WRITE:
-		dwShareMode = FILE_SHARE_READ;
-		break;
-	    case SHARING_DENY_READ:
-		dwShareMode = FILE_SHARE_WRITE;
-		break;
-	}
+   switch (uchMode) {
+       case SHARING_DENY_BOTH:
+      dwShareMode = 0;
+      break;
+       case SHARING_DENY_WRITE:
+      dwShareMode = FILE_SHARE_READ;
+      break;
+       case SHARING_DENY_READ:
+      dwShareMode = FILE_SHARE_WRITE;
+      break;
+   }
     }
     sa.nLength = sizeof (SECURITY_ATTRIBUTES);
     sa.lpSecurityDescriptor = NULL;
     sa.bInheritHandle = TRUE;
 
     if ((hFile = CreateFileOem(lpFileName,
-			       dwDesiredAccess,
-			       dwShareMode | FILE_SHARE_DELETE,
+                dwDesiredAccess,
+                dwShareMode | FILE_SHARE_DELETE,
                                &sa,
                                CreateDirective,
                                dwAttr,
@@ -730,36 +746,36 @@ LPWORD lpDate;
 LPDWORD lpSize;
 {
 FILETIME LastWriteTime,ftLocal;
-DWORD	 dwSizeHigh=0;
+DWORD  dwSizeHigh=0;
 
     if(GetFileTime (hFile,NULL,NULL,&LastWriteTime) == -1){
-	demPrintMsg(MSG_FILEINFO);
+   demPrintMsg(MSG_FILEINFO);
         ASSERT(FALSE);
         demClientError(hFile, (CHAR)-1);
-        CloseHandle (hFile);
+        DPM_CloseHandle (hFile);
         return FALSE;
     }
 
     FileTimeToLocalFileTime (&LastWriteTime,&ftLocal);
 
     if(FileTimeToDosDateTime(&ftLocal,
-			     lpDate,
-			     lpTime) == FALSE){
-	demPrintMsg(MSG_FILEINFO);
+              lpDate,
+              lpTime) == FALSE){
+   demPrintMsg(MSG_FILEINFO);
         ASSERT(FALSE);
         demClientError(hFile, (CHAR)-1);
         return FALSE;
     }
 
-    if((*lpSize = GetFileSize(hFile,&dwSizeHigh)) == -1){
-	demPrintMsg(MSG_FILEINFO);
+    if((*lpSize = DPM_GetFileSize(hFile,&dwSizeHigh)) == -1){
+   demPrintMsg(MSG_FILEINFO);
         ASSERT(FALSE);
         demClientError(hFile, (CHAR)-1);
         return FALSE;
     }
 
     if(dwSizeHigh) {
-	demPrintMsg(MSG_FILESIZE_TOOBIG);
+   demPrintMsg(MSG_FILESIZE_TOOBIG);
         ASSERT(FALSE);
         demClientError(hFile, (CHAR)-1);
         return FALSE;

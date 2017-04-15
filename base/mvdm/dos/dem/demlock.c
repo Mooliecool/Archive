@@ -11,6 +11,7 @@
 #include "demmsg.h"
 
 #include <softpc.h>
+#include "dpmtbls.h"
 
 /* demLockOper - Lock or Unlock the file data
  *
@@ -34,7 +35,7 @@ DWORD	dwFileOffset,cbLock;
     cbLock = GETULONG (getSI(),getDI());
 
     if(getAL() == 0){  // Locking case
-	if (LockFile (hFile,
+	if (DPM_LockFile (hFile,
 		      dwFileOffset,
 		      0,
 		      cbLock,
@@ -45,7 +46,7 @@ DWORD	dwFileOffset,cbLock;
 	}
     }
     else {
-	if (UnlockFile (hFile,
+	if (DPM_UnlockFile (hFile,
 			dwFileOffset,
 			0,
 			cbLock,

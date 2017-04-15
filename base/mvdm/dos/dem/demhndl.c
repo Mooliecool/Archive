@@ -21,6 +21,7 @@
 #include <vrnmpipe.h>
 #include <exterr.h>
 #include <mvdm.h>
+#include "dpmtbls.h"
 
 BOOL (*VrInitialized)(VOID);  // POINTER TO FUNCTION
 extern BOOL IsVdmRedirLoaded(VOID);
@@ -31,6 +32,8 @@ extern BOOL IsVdmRedirLoaded(VOID);
  * Entry - Client (AX:BP) File Handle
  *         Client (CX:DX) File position (if -1 no seek needed before closing
  *                        the handle.
+ *         (VadimB)
+ *         Client (es:di) SFT ptr - this is implied in abort.asm code
  *
  * Exit
  *         SUCCESS
@@ -60,19 +63,22 @@ USHORT  usDX,usCX;
 
     if (!((usCX == (USHORT)-1) && (usDX == (USHORT)-1))) {
         lLoc  = (LONG)((((int)usCX) << 16) + (int)usDX);
-        if (SetFilePointer (hFile,
-                            lLoc,
-                            NULL,
-                            FILE_BEGIN) == -1L){
-            demClientError(hFile, (CHAR)-1);
-            return ;
-        }
+
+        //
+        // Note that we don't check for failure in this case as edlin,
+        // for instance, can have the file position be negative and
+        // we still need to do the cleanup below. Note that we are not
+        // even sure why seeking on close matter, but the DOS code does it...
+        //
+        DPM_SetFilePointer (hFile,
+                        lLoc,
+                        NULL,
+                        FILE_BEGIN);
 
     }
 
-    if (CloseHandle (hFile) == FALSE){
+    if (DPM_CloseHandle (hFile) == FALSE){
         demClientError(hFile, (CHAR)-1);
-        return;
     }
 
     //
@@ -96,7 +102,7 @@ USHORT  usDX,usCX;
  * Entry - Client (AX:BP) File Handle
  *         Client (CX)    Count to read
  *         Client (DS:DX) Buffer Address
- *         Client (BX:SI) = current file pointer location. 
+ *         Client (BX:SI) = current file pointer location.
  *         ZF = 1 if seek is not needed prior to read.
  *
  * Exit
@@ -188,7 +194,7 @@ LONG    lLoc;
     if (!getZF()) {
         ULONG   Zero = 0;
         lLoc  = (LONG)((((int)getBX()) << 16) + (int)getSI());
-        if ((SetFilePointer (hFile,
+        if ((DPM_SetFilePointer (hFile,
                             lLoc,
                             &Zero,
                             FILE_BEGIN) == -1L) &&
@@ -198,7 +204,7 @@ LONG    lLoc;
 
     }
 
-    if (ReadFile (hFile,
+    if (DPM_ReadFile (hFile,
                   lpBuf,
                   (DWORD)getCX(),
                   &dwBytesRead,
@@ -237,7 +243,7 @@ readSuccessExit:
  * Entry - Client (AX:BP) File Handle
  *         Client (CX)    Count to write
  *         Client (DS:DX) Buffer Address
- *         Client (BX:SI) = current file pointer location. 
+ *         Client (BX:SI) = current file pointer location.
  *         ZF = 1 if seek is not needed prior to write.
  *
  * Exit
@@ -257,7 +263,7 @@ HANDLE  hFile;
 DWORD   dwBytesWritten;
 LPVOID  lpBuf;
 LONG    lLoc;
-DWORD	dwErrCode;
+DWORD   dwErrCode;
 
     hFile = GETHANDLE (getAX(),getBP());
     lpBuf  = (LPVOID) GetVDMAddr (getDS(),getDX());
@@ -288,7 +294,7 @@ DWORD	dwErrCode;
     if (!getZF()) {
         ULONG   Zero = 0;
         lLoc  = (LONG)((((int)getBX()) << 16) + (int)getSI());
-        if ((SetFilePointer (hFile,
+        if ((DPM_SetFilePointer (hFile,
                             lLoc,
                             &Zero,
                             FILE_BEGIN) == -1L) &&
@@ -301,7 +307,7 @@ DWORD	dwErrCode;
 
     // In DOS CX=0 truncates or extends the file to current file pointer.
     if (getCX() == 0){
-        if (SetEndOfFile(hFile) == FALSE){
+        if (DPM_SetEndOfFile(hFile) == FALSE){
             demClientError(hFile, (CHAR)-1);
             return;
         }
@@ -309,26 +315,26 @@ DWORD	dwErrCode;
         return;
     }
 
-    if (WriteFile (hFile,
+    if (DPM_WriteFile (hFile,
            lpBuf,
            (DWORD)getCX(),
            &dwBytesWritten,
-	   NULL) == FALSE){
+           NULL) == FALSE){
 
-	// If disk is full then we should return 0 byte written and CF is clear
-	dwErrCode = GetLastError();
-	if(dwErrCode == ERROR_DISK_FULL) {
+        // If disk is full then we should return 0 byte written and CF is clear
+        dwErrCode = GetLastError();
+        if(dwErrCode == ERROR_DISK_FULL) {
 
-	    setCF(0);
-	    setAX(0);
-	    return;
-	}
+            setCF(0);
+            setAX(0);
+            return;
+        }
 
-	SetLastError(dwErrCode);
+        SetLastError(dwErrCode);
 
 writeFailureExit:
-	demClientError(hFile, (CHAR)-1);
-	return ;
+        demClientError(hFile, (CHAR)-1);
+        return ;
     }
 
 writeSuccessExit:
@@ -374,7 +380,7 @@ DWORD   dwLoc;
     hFile =  GETHANDLE (getAX(),getBP());
     lLoc  = (LONG)((((int)getCX()) << 16) + (int)getDX());
 
-    if ((dwLoc = SetFilePointer (hFile,
+    if ((dwLoc = DPM_SetFilePointer (hFile,
                                lLoc,
                                NULL,
                                (DWORD)getBL())) == -1L){
@@ -389,121 +395,6 @@ DWORD   dwLoc;
 }
 
 
-/* demFileTimes - Change or Get File date and times
- *
- * GET TIME (Client(BL) = 0)
- *
- *          Entry
- *              Client(AX:BP)
- *                  NT Handle
- *
- *          Exit
- *              SUCCESS
- *                  Client(CF) = 0
- *                  Client(CX) = File time
- *                  Client(DX) = File date
- *              FAILURE
- *                  Client(CF) = 1
- *                  Client(AX) = error code
- *
- * SET TIME (Client(BL) = 1)
- *
- *          Entry
- *              Client(AX:BP)
- *                  Nt Handle
- *              Client(CX)
- *                  New file time
- *              Client(DX)
- *                  New file date
- *
- *          Exit
- *              SUCCESS
- *                  Client(CF) = 0
- *              FAILURE
- *                  Client(CF) = 1
- *                  Client(AX) = error code
- *
- *          Hard Error Exit
- *              Client(CF) = 1
- *		Client(AX) = 0FFFFh
- *
- * GET TIME For device (Client(BL) = 2)
- *
- *          Entry
- *              Client(AX:BP)
- *		    NT Handle  - not in use
- *
- *          Exit
- *              SUCCESS
- *                  Client(CF) = 0
- *		    Client(CX) = Current time
- *		    Client(DX) = Curren  date
- *		FAILURE
- *		    None
- *
- */
-
-VOID demFileTimes (VOID)
-{
-HANDLE  hFile;
-WORD    wDate,wTime;
-FILETIME LastWriteTime,ftTemp;
-SYSTEMTIME stCurrentTime;
-UCHAR	uchOpt = 0;
-
-    uchOpt = getBL();
-    if(uchOpt != 2)
-	hFile = GETHANDLE(getAX(),getBP());
-
-    if(uchOpt != 1){
-
-	if(!uchOpt) {
-	    if(GetFileTime (hFile,NULL,NULL,&LastWriteTime) == -1){
-		demClientError(hFile, (CHAR)-1);
-		return;
-	    }
-	}
-	else {		// Device case. We should return current time
-	    GetSystemTime(&stCurrentTime);
-	    SystemTimeToFileTime(&stCurrentTime, &LastWriteTime);
-
-	}
-
-	FileTimeToLocalFileTime (&LastWriteTime,&ftTemp);
-	if(FileTimeToDosDateTime(&ftTemp,
-                                 (LPWORD)&wDate,
-                                 (LPWORD)&wTime) == FALSE){
-            demPrintMsg(MSG_TIMEDATE);
-	    setCF(0);
-            return;
-        }
-
-        setCX(wTime);
-        setDX(wDate);
-        setCF(0);
-        return;
-    }
-
-    wDate = getDX();
-    wTime = getCX();
-
-    if (DosDateTimeToFileTime(wDate,
-                              wTime,
-                              &LastWriteTime) == FALSE){
-	demPrintMsg(MSG_TIMEDATE);
-	setCF(0);
-	return;
-    }
-    LocalFileTimeToFileTime (&LastWriteTime,&ftTemp);
-
-    if(!SetFileTime(hFile,NULL,NULL,&ftTemp)){
-        demClientError(hFile, (CHAR)-1);
-        return;
-    }
-
-    setCF(0);
-    return;
-}
 
 /* DemCommit -- Commit File(Flush file buffers)
  *
@@ -512,7 +403,7 @@ UCHAR	uchOpt = 0;
  * Exit
  *         SUCCESS
  *           Client (CY)    = 0
- *	     buffer flushed
+ *           buffer flushed
  *
  *         FAILURE
  *           Client (CY) = 1
@@ -524,7 +415,7 @@ VOID demCommit(VOID)
     BOOL bRet;
 
     hFile = GETHANDLE(getAX(),getBP());
-    bRet = FlushFileBuffers(hFile);
+    bRet = DPM_FlushFileBuffers(hFile);
 #if DBG
     if (!bRet) {
 
@@ -555,7 +446,7 @@ VOID demCommit(VOID)
 
    Input:   Client (AX:BP) = 32bits NT file handle
    Output:  Client ZF = 1 if new data or EOF
-		   CF = 1 if EOF
+                   CF = 1 if EOF
 */
 
 
@@ -571,14 +462,14 @@ VOID demPipeFileDataEOF(VOID)
 
     DataEOF = cmdPipeFileDataEOF(hFile, &fEOF);
     if (fEOF) {
-	//EOF, get file size, max size = 32bits
-	FileSizeLow = GetFileSize(hFile, &FileSizeHigh);
-	setAX((WORD)(FileSizeLow / 0x10000));
-	setBP((WORD)FileSizeLow);
-	setCF(1);		    // EOF is encountered
+        //EOF, get file size, max size = 32bits
+        FileSizeLow = GetFileSize(hFile, &FileSizeHigh);
+        setAX((WORD)(FileSizeLow / 0x10000));
+        setBP((WORD)FileSizeLow);
+        setCF(1);                   // EOF is encountered
     }
     else
-	setCF(0);
+        setCF(0);
     setZF(DataEOF ? 0 : 1);
 }
 
@@ -595,11 +486,11 @@ VOID demPipeFileEOF(VOID)
 
     hFile = GETHANDLE(getAX(), getBP());
     if (cmdPipeFileEOF(hFile)) {
-	FileSizeLow = GetFileSize(hFile, &FileSizeHigh);
-	setAX((WORD)(FileSizeLow / 0x10000));	// file size in 32bits
-	setBP((WORD)FileSizeLow);
-	setCF(1);		    //EOF is encountered
+        FileSizeLow = GetFileSize(hFile, &FileSizeHigh);
+        setAX((WORD)(FileSizeLow / 0x10000));   // file size in 32bits
+        setBP((WORD)FileSizeLow);
+        setCF(1);                   //EOF is encountered
     }
     else
-	setCF(0);
+        setCF(0);
 }

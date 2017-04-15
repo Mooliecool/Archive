@@ -125,7 +125,6 @@ extern PVHE   pHardErrPacket;
 extern ULONG  CurrentISVC;
 extern PCHAR  aSVCNames[];
 extern PFNSVC apfnSVC[];
-extern PSZ    pszDefaultDOSDirectory;
 extern USHORT nDrives;
 extern PUSHORT pusCurrentPDB;
 extern PDEMEXTERR pExtendedError;
@@ -205,9 +204,9 @@ VOID demTerminatePDB    (VOID);
 VOID demExitVDM         (VOID);
 VOID demWOWFiles        (VOID);
 VOID demGetComputerName (VOID);
-VOID demCheckPath	(VOID);
+VOID demCheckPath       (VOID);
 VOID demSystemSymbolOp  (VOID);
-VOID demCommit		(VOID);
+VOID demCommit          (VOID);
 VOID demClientError         (HANDLE,CHAR);
 ULONG demClientErrorEx      (HANDLE,CHAR,BOOL);
 VOID demCreateCommon        (ULONG);
@@ -218,22 +217,28 @@ VOID demIoctlChangeable     (VOID);
 VOID demIoctlInvalid        (VOID);
 VOID demSaveHardErrInfo     (VOID);
 VOID demRestoreHardErrInfo  (VOID);
-VOID demAbsRead 	    (VOID);
-VOID demAbsWrite	    (VOID);
+VOID demAbsRead             (VOID);
+VOID demAbsWrite            (VOID);
 VOID demIoctlDiskGeneric    (VOID);
-VOID demIoctlDiskQuery	    (VOID);
-VOID demGetDPB		    (VOID);
-VOID demGetDPBList	    (VOID);
+VOID demIoctlDiskQuery      (VOID);
+VOID demGetDPB              (VOID);
+VOID demGetDPBList          (VOID);
 VOID demNotYetImplemented   (VOID);
 BOOL GetDiskSpaceInformation(CHAR chDrive, PDISKINFO pDiskInfo);
 BOOL demGetDiskFreeSpace(BYTE Drive, WORD * BytesPerSector,
-			 WORD * SectorsPerCluster, WORD * TotalClusters,
+                         WORD * SectorsPerCluster, WORD * TotalClusters,
                          WORD * FreeClusters);
 BOOL IsCdRomFile            (PSTR pszPath);
 
 BOOL GetMediaId( CHAR DriveNum, PVOLINFO pVolInfo);
 VOID demPipeFileDataEOF     (VOID);
-VOID demPipeFileEOF	    (VOID);
+VOID demPipeFileEOF         (VOID);
+VOID demLFNEntry            (VOID);
+
+VOID demSetDosVarLocation   (VOID);
+#ifdef FE_SB /* ConvNwPathToDosPath() */
+VOID ConvNwPathToDosPath   (CHAR *,CHAR *,ULONG);
+#endif /* FE_SB */
 
 /** Debug Function Prototypes */
 
@@ -253,8 +258,8 @@ USHORT demCreateLabel(BYTE Drive, LPSTR szName);
 #define DRIVEBYTE   0
 #define LABELOFF    3
 
-extern	BOOL cmdPipeFileDataEOF (HANDLE,BOOL *);
-extern	BOOL cmdPipeFileEOF(HANDLE);
+extern  BOOL cmdPipeFileDataEOF (HANDLE,BOOL *);
+extern  BOOL cmdPipeFileEOF(HANDLE);
 
 
 #endif /* _DEMINCLUDED_ */
