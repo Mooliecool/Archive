@@ -1,0 +1,2 @@
+X86_SOURCES=         \
+    ..\x86\callpr32.asm

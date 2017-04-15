@@ -1,2 +1,0 @@
-I386_SOURCES=         \
-    ..\i386\callpr32.asm

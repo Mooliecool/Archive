@@ -18,7 +18,7 @@
  *  None
  *
  * Exit
- *  None
+ *  TRUE - iff ok to run NTVDM
  */
 
 ULONG xmsMemorySize = (ULONG)0;   // Total XMS meory in K
@@ -27,7 +27,7 @@ extern BOOL VDMForWOW;
 
 PVOID ExtMemSA;
 
-BOOL XMSInit (int argc, char *argv[])
+BOOL XMSInit (VOID)
 {
     DWORD   Size;
     PVOID   Address;
