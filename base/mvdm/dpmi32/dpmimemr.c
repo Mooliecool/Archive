@@ -133,7 +133,7 @@ Return Value:
     return(Status);
 }
 
-BOOL
+NTSTATUS
 DpmiReallocateVirtualMemory(
     PVOID OldAddress,
     ULONG OldSize,
@@ -186,7 +186,7 @@ Return Value:
         }
     }
 
-    return NT_SUCCESS(Status);
+    return(Status);
     
 }
 
@@ -254,7 +254,7 @@ Return Value:
     // Director 4.0 get completlely confused if these fields are -1.
     // MaxUnlocked is correct based on LargestFree. The other two are fake
     // and match values on a real WFW machine. I have no way of making them
-    // any better than this at this point. Hell, it makes director happy.
+    // any better than this at this point. who cares it makes director happy.
     //
     // sudeepb 01-Mar-1995.
 

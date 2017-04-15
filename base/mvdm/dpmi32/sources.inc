@@ -30,34 +30,31 @@ TARGETNAME=dpmi32
 TARGETPATH=obj
 TARGETTYPE=LIBRARY
 
-TARGETLIBS=
+INCLUDES=..\.;..\..\inc;..\..\..\inc
 
-INCLUDES=..\inc
+SOURCES=        \
+        ..\dosmem.c    \
+        ..\dpmi32.c \
+        ..\dpmiint.c \
+        ..\dpmimscr.c  \
+        ..\dpmiselr.c \
+        ..\buffer.c    \
+        ..\data.c         \
+        ..\int21map.c  \
+        ..\int2f.c     \
+        ..\int31.c     \
+        ..\modesw.c    \
+        ..\register.c     \
+        ..\savestat.c     \
+        ..\stack.c     \
+        ..\vxd.c       \
+        ..\xmem.c
 
+i386_SOURCES=..\i386\dpmi386.c ..\i386\dpmimem.c
 
-NTPROFILEINPUT=YES
-
-SOURCES=debug.c     \
-        dpmi32.c    \
-        dpmiint.c   \
-        dpmiselr.c  \
-        buffer.c    \
-        data.c      \
-        int21map.c  \
-        modesw.c    \
-        register.c  \
-        savestat.c  \
-        stack.c     \
-        vxd.c       \
-        xmem.c
-
-X86_SOURCES=x86\dpmi386.c   \
-            x86\dpmimem.c   \
-            x86\dpmimisc.c
-
-MIPS_SOURCES=dpmimemr.c dpmimscr.c
-PPC_SOURCES=dpmimemr.c dpmimscr.c
-ALPHA_SOURCES=dpmimemr.c dpmimscr.c
+MIPS_SOURCES=..\dpmimemr.c
+PPC_SOURCES=..\dpmimemr.c
+ALPHA_SOURCES=..\dpmimemr.c
 
 C_DEFINES=-DLINKED_INTO_MONITOR
 
@@ -66,3 +63,4 @@ UMTYPE=console
 PRECOMPILED_INCLUDE=precomp.h
 PRECOMPILED_PCH=precomp.pch
 PRECOMPILED_OBJ=precomp.obj
+SOURCES_USED=..\sources.inc

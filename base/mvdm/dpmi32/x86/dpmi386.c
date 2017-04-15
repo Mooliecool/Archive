@@ -27,57 +27,60 @@ Revision History:
 #include <softpc.h>
 #include <memory.h>
 #include <malloc.h>
+#include <nt_vdd.h>
 
 
 BOOL
 DpmiSetX86Descriptor(
-    LDT_ENTRY *Descriptors,
-    USHORT  registerAX,
-    USHORT  registerCX
+    USHORT  SelStart,
+    USHORT  SelCount
     )
 /*++
 
 Routine Description:
 
-    This function puts descriptors into the Ldt.  It verifies the contents
-    and calls nt to actually set up the selector(s).
+    This function puts descriptors into the real LDT. It uses the client's
+    LDT as a source for the descriptor data.
 
 Arguments:
 
-    None
+    SelStart - The first selector in the block of selectors to set
+    SelCount - The number of selectors to set
 
 Return Value:
 
-    None.
+    This function returns TRUE if successful, FALSE otherwise
 
 --*/
 
 {
+    LDT_ENTRY UNALIGNED *Descriptors = &Ldt[SelStart>>3];
     PPROCESS_LDT_INFORMATION LdtInformation = NULL;
     NTSTATUS Status;
     ULONG ulLdtEntrySize;
     ULONG Selector0,Selector1;
 
-    ulLdtEntrySize =  registerCX * sizeof(LDT_ENTRY);
+    ulLdtEntrySize =  SelCount * sizeof(LDT_ENTRY);
 
     //
     // If there are only 2 descriptors, set them the fast way
     //
-    Selector0 = (ULONG)registerAX;
-    if ((registerCX <= 2) && (Selector0 != 0)) {
-        if (registerCX == 2) {
-            Selector1 = registerAX + sizeof(LDT_ENTRY);
+    Selector0 = (ULONG)SelStart;
+    if ((SelCount <= 2) && (Selector0 != 0)) {
+        VDMSET_LDT_ENTRIES_DATA ServiceData;
+
+        if (SelCount == 2) {
+            Selector1 = SelStart + sizeof(LDT_ENTRY);
         } else {
             Selector1 = 0;
         }
-        Status = NtSetLdtEntries(
-            Selector0,
-            *((PULONG)(&Descriptors[0])),
-            *((PULONG)(&Descriptors[0]) + 1),
-            Selector1,
-            *((PULONG)(&Descriptors[1])),
-            *((PULONG)(&Descriptors[1]) + 1)
-            );
+        ServiceData.Selector0 = Selector0;
+        ServiceData.Entry0Low = *((PULONG)(&Descriptors[0]));
+        ServiceData.Entry0Hi  = *((PULONG)(&Descriptors[0]) + 1);
+        ServiceData.Selector1 = Selector1;
+        ServiceData.Entry1Low = *((PULONG)(&Descriptors[1]));
+        ServiceData.Entry1Hi  = *((PULONG)(&Descriptors[1]) + 1);
+        Status = NtVdmControl(VdmSetLdtEntries, &ServiceData);
         if (NT_SUCCESS(Status)) {
           return TRUE;
         }
@@ -85,189 +88,40 @@ Return Value:
     }
 
     LdtInformation = malloc(sizeof(PROCESS_LDT_INFORMATION) + ulLdtEntrySize);
-    LdtInformation->Start = registerAX;
-    LdtInformation->Length = ulLdtEntrySize;
-    CopyMemory(
-        &(LdtInformation->LdtEntries),
-        Descriptors,
-        ulLdtEntrySize
-        );
 
-    Status = NtSetInformationProcess(
-        NtCurrentProcess(),
-        ProcessLdtInformation,
-        LdtInformation,
-        sizeof(PROCESS_LDT_INFORMATION) + ulLdtEntrySize
-        );
+    if (!LdtInformation ) {
+      return FALSE;
+    } else {
+        VDMSET_PROCESS_LDT_INFO_DATA ServiceData;
 
-    if (!NT_SUCCESS(Status)) {
-        VDprint(
-            VDP_LEVEL_ERROR,
-            ("DPMI: Failed to set selectors %lx\n", Status)
+        LdtInformation->Start = SelStart;
+        LdtInformation->Length = ulLdtEntrySize;
+        CopyMemory(
+            &(LdtInformation->LdtEntries),
+            Descriptors,
+            ulLdtEntrySize
             );
+
+        ServiceData.LdtInformation = LdtInformation;
+        ServiceData.LdtInformationLength =  sizeof(PROCESS_LDT_INFORMATION) + ulLdtEntrySize;
+        Status = NtVdmControl(VdmSetProcessLdtInfo, &ServiceData);
+
+        if (!NT_SUCCESS(Status)) {
+            VDprint(
+                VDP_LEVEL_ERROR,
+                ("DPMI: Failed to set selectors %lx\n", Status)
+                );
+            free(LdtInformation);
+            return FALSE;
+        }
+
         free(LdtInformation);
-        return FALSE;
-    }
 
-    free(LdtInformation);
-
-    return TRUE;
-}
-
-
-
-VOID
-switch_to_protected_mode(
-    VOID
-    )
-
-/*++
-
-Routine Description:
-
-    This routine switches the dos applications context to protected mode.
-
-Arguments:
-
-    None
-
-Return Value:
-
-    None.
-
---*/
-
-{
-
-    PCHAR StackPointer;
-
-    StackPointer = Sim32GetVDMPointer(((getSS() << 16) | getSP()),
-        0,
-        (UCHAR) (getMSW() & MSW_PE)
-        );
-
-    setCS(*(PUSHORT)(StackPointer + 12));
-
-    setEIP(*(PULONG)(StackPointer + 8));
-    setSS(*(PUSHORT)(StackPointer + 6));
-    setESP(*(PULONG)(StackPointer + 2));
-    setDS(*(PUSHORT)(StackPointer));
-    // Necessary to prevent loads of invalid selectors.
-    setES(0);
-    setGS(0);
-    setFS(0);
-    setMSW(getMSW() | MSW_PE);
-
-    //
-    // If we have fast if emulation in PM set the RealInstruction bit
-    //
-    if (VdmFeatureBits & PM_VIRTUAL_INT_EXTENSIONS) {
-        _asm {
-            mov eax,FIXED_NTVDMSTATE_LINEAR             ; get pointer to VDM State
-            lock or dword ptr [eax], dword ptr RI_BIT_MASK
-        }
-    } else {
-        _asm {
-            mov eax, FIXED_NTVDMSTATE_LINEAR    ; get pointer to VDM State
-            lock and dword ptr [eax], dword ptr ~RI_BIT_MASK
-        }
-    }
-
-    //
-    // Turn off real mode bit
-    //
-    _asm {
-        mov     eax,FIXED_NTVDMSTATE_LINEAR             ; get pointer to VDM State
-        lock and dword ptr [eax], dword ptr ~RM_BIT_MASK
+        return TRUE;
     }
 
 }
 
-
-VOID
-switch_to_real_mode(
-    VOID
-    )
-
-/*++
-
-Routine Description:
-
-    This routine services the switch to real mode bop.  It is included in
-    DPMI.c so that all of the mode switching services are in the same place
-
-Arguments:
-
-    None
-
-Return Value:
-
-    None.
-
---*/
-
-{
-    PCHAR StackPointer;
-
-    StackPointer = Sim32GetVDMPointer(((getSS() << 16) | getSP()),
-        0,
-        (UCHAR) (getMSW() & MSW_PE)
-        );
-
-    setDS(*(PUSHORT)(StackPointer));
-    setSP(*(PUSHORT)(StackPointer + 2));
-    setSS(*(PUSHORT)(StackPointer + 4));
-    setIP((*(PUSHORT)(StackPointer + 6)));
-    setCS(*(PUSHORT)(StackPointer + 8));
-    setMSW(getMSW() & ~MSW_PE);
-
-    //
-    // If we have v86 mode fast IF emulation set the RealInstruction bit
-    //
-
-    if (VdmFeatureBits & V86_VIRTUAL_INT_EXTENSIONS) {
-        _asm {
-            mov eax,FIXED_NTVDMSTATE_LINEAR             ; get pointer to VDM State
-            lock or dword ptr [eax], dword ptr RI_BIT_MASK
-        }
-    } else {
-        _asm {
-            mov eax,FIXED_NTVDMSTATE_LINEAR         ; get pointer to VDM State
-            lock and dword ptr [eax], dword ptr ~RI_BIT_MASK
-        }
-    }
-    //
-    // turn on real mode bit
-    //
-    _asm {
-        mov     eax,FIXED_NTVDMSTATE_LINEAR             ; get pointer to VDM State
-        lock or dword ptr [eax], dword ptr RM_BIT_MASK
-    }
-}
-
-VOID DpmiGetFastBopEntry(
-    VOID
-    )
-/*++
-
-Routine Description:
-
-    This routine is the front end for the routine that gets the address.  It
-    is necessary to get the address in asm, because the CS value is not
-    available in c
-
-Arguments:
-
-    None
-
-Return Value:
-
-    None.
-
---*/
-{
-    GetFastBopEntryAddress(&VdmTib.VdmContext);
-}
 
 UCHAR *
 Sim32pGetVDMPointer(
@@ -338,17 +192,64 @@ ExpSim32GetVDMPointer(
 }
 
 
-
-VOID
-DpmiSetDebugRegisters(
-    VOID
+PVOID
+VdmMapFlat(
+    WORD selector,
+    ULONG offset,
+    VDM_MODE mode
     )
 /*++
 
 Routine Description:
 
-    This routine is called by DOSX when an app has issued DPMI debug commands.
-    The six doubleword pointed to by the VDM's DS:SI are the desired values
+    This routine converts a 16/16 address to a linear address.
+
+    WARNIGN NOTE - This routine has been optimized so protect mode LDT lookup
+    falls stright through.   This routine is call ALL the time by WOW, if you
+    need to modify it please re optimize the path - mattfe feb 8 92
+
+Arguments:
+
+    Address -- specifies the address in seg:offset format
+    Size -- specifies the size of the region to be accessed.
+    ProtectedMode -- true if the address is a protected mode address
+
+Return Value:
+
+    The pointer.
+
+--*/
+
+{
+    PUCHAR ReturnPointer;
+
+    if (mode == VDM_PM) {
+        if (selector != 40) {
+            selector &= ~7;
+            ReturnPointer = (PUCHAR)FlatAddress[selector >> 3] + offset;
+            return ReturnPointer;
+    // Selector 40
+        } else {
+            ReturnPointer = (PUCHAR)0x400 + (offset & 0xFFFF);
+        }
+    // Real Mode
+    } else {
+        ReturnPointer = (PUCHAR)((((ULONG)selector) << 4) + (offset & 0xFFFF));
+    }
+    return ReturnPointer;
+}
+
+
+BOOL
+DpmiSetDebugRegisters(
+    PULONG RegisterPointer
+    )
+/*++
+
+Routine Description:
+
+    This routine is called by dpmi when an app has issued DPMI debug commands.
+    The six doubleword pointed to by the input parameter are the desired values
     for the real x86 hardware debug registers. This routine lets
     ThreadSetDebugContext() do all the work.
 
@@ -362,16 +263,9 @@ Return Value:
 
 --*/
 {
-    PCHAR RegisterPointer;
+    BOOL bReturn = TRUE;
 
-    setCF(0);
-
-    RegisterPointer = Sim32GetVDMPointer(((getDS() << 16) | getSI()),
-        0,
-        (UCHAR) (getMSW() & MSW_PE)
-        );
-
-    if (!ThreadSetDebugContext((PULONG) RegisterPointer))
+    if (!ThreadSetDebugContext(RegisterPointer))
         {
         ULONG ClearDebugRegisters[6] = {0, 0, 0, 0, 0, 0};
 
@@ -380,7 +274,33 @@ Return Value:
         //
 
         ThreadSetDebugContext (&ClearDebugRegisters[0]);
-        setCF(1);
+        bReturn = FALSE;
         }
+    return bReturn;
+}
 
+BOOL
+DpmiGetDebugRegisters(
+    PULONG RegisterPointer
+    )
+/*++
+
+Routine Description:
+
+    This routine is called by DOSX when an app has issued DPMI debug commands.
+    The six doubleword pointed to by the input parameter are the desired values
+    for the real x86 hardware debug registers. This routine lets
+    ThreadGetDebugContext() do all the work.
+
+Arguments:
+
+    None
+
+Return Value:
+
+    None.
+
+--*/
+{
+    return (ThreadGetDebugContext(RegisterPointer));
 }

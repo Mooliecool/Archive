@@ -18,10 +18,10 @@ Revision History:
 
 --*/
 
-#define DPMI_EXEC_INT(x)    DpmiSwitchToDosxStack(FALSE);   \
+#define DPMI_EXEC_INT(x)    SWITCH_TO_DOSX_RMSTACK();       \
                             DpmiPushRmInt(x);               \
                             host_simulate();                \
-                            DpmiSwitchFromDosxStack();
+                            SWITCH_FROM_DOSX_RMSTACK();
 
 //
 // VOID
@@ -36,6 +36,9 @@ Revision History:
     *off = (USHORT)(((ULONG)buffer-IntelBase) & 0xf);           \
 }
 
+//
+// Cast sel to USHORT such that we will never go beyond FlatAddress array.
+//
 
 #define SELECTOR_TO_INTEL_LINEAR_ADDRESS(sel) \
-    (FlatAddress[(sel & ~7) / sizeof(LDT_ENTRY)] - IntelBase)
+    (FlatAddress[((USHORT)(sel) & ~7) / sizeof(LDT_ENTRY)] - IntelBase)

@@ -22,6 +22,33 @@ Revision History:
 --*/
 #include "precomp.h"
 #pragma hdrstop
+
+//
+// Information about the current PSP
+//
+USHORT CurrentPSPSelector;
+ULONG  CurrentPSPXmem;
+
+//
+// Table of selector bases and limits
+//
+ULONG FlatAddress[LDT_SIZE];
+
+//
+// LDT information
+//
+
+PLDT_ENTRY Ldt;
+USHORT LdtSel;
+USHORT LdtMaxSel = 0;
+USHORT LdtUserSel = 0;
+
+//
+// Address of 16 bit Idt
+//
+PIDT_ENTRY Idt;
+
+
 //
 // Pointers to the low memory buffers
 //
@@ -50,27 +77,6 @@ USHORT DosxRmCodeSelector;
 PWORD16 DosxStackFramePointer;
 
 //
-// selector for Dosx DGROUP
-//
-USHORT DosxPmDataSelector;
-
-//
-// Segment to Selector routine (maybe should be 32 bit?)
-//  NOTE: This is a 16:16 pointer in a ULONG, not a flat address
-//
-// Entry:
-//      ds = Dosx DGROUP
-//      ss = Dosx stack
-//      AX = Paragraph to convert
-//      BX = Access rights for new selector
-//
-// Exit:
-//      Carry set for error
-//      AX = New selector
-
-ULONG DosxSegmentToSelector;
-
-//
 // Size of dosx stack frame
 //
 USHORT DosxStackFrameSize;
@@ -84,6 +90,7 @@ USHORT CurrentAppFlags;
 // Address of Bop fe for ending interrupt simulation
 //
 ULONG RmBopFe;
+ULONG PmBopFe;
 
 //
 // Address of buffer for DTA in Dosx
@@ -105,6 +112,17 @@ USHORT CurrentDtaSelector;
 USHORT CurrentDtaOffset;
 
 //
+// These are the functions in WOW (GlobalDOSAlloc, GlobalDOSFree)
+// that are used as helper functions to perform DPMI func's 100,101
+// when we are running under WOW.
+//
+
+USHORT WOWAllocSeg = 0;
+USHORT WOWAllocFunc;
+USHORT WOWFreeSeg = 0;
+USHORT WOWFreeFunc;
+
+//
 // Selector limits
 //
 #if DBG
@@ -117,10 +135,10 @@ PULONG ExpSelectorLimit = NULL;
 //
 // Start of intel address space in process memory
 //
-ULONG IntelBase;
+ULONG IntelBase = 0;
 
 //
-// Variables used for supporting stack switching 
+// Variables used for supporting stack switching
 // (on x86, these are in the vdmtib)
 //
 #ifndef i386
@@ -134,7 +152,30 @@ ULONG DosxFaultHandlerIret;
 ULONG DosxFaultHandlerIretd;
 ULONG DosxIntHandlerIret;
 ULONG DosxIntHandlerIretd;
+ULONG DosxRMReflector;
+
 #endif
+
+VDM_INTERRUPTHANDLER DpmiInterruptHandlers[256] = {0};
+VDM_FAULTHANDLER DpmiFaultHandlers[32] = {0};
 
 ULONG DosxIret;
 ULONG DosxIretd;
+
+USHORT PMReflectorSeg;
+
+ULONG DosxRmSaveRestoreState;
+ULONG DosxPmSaveRestoreState;
+ULONG DosxRmRawModeSwitch;
+ULONG DosxPmRawModeSwitch;
+
+ULONG DosxVcdPmSvcCall;
+ULONG DosxMsDosApi;
+ULONG DosxXmsControl;
+ULONG DosxHungAppExit;
+
+//
+// WORKITEM: should be in VDMTIB
+//
+ULONG LastLockedPMStackSS;
+ULONG LastLockedPMStackESP;

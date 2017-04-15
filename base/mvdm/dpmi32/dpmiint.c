@@ -39,18 +39,13 @@ Comments:
 #pragma hdrstop
 #include <softpc.h>
 #include <dpmiint.h>
-#include <intapi.h>
 
-
-VOID
-DpmiFatalExceptionHandler(
-    UCHAR XNumber, 
-    PCHAR VdmStackPointer
-    );
-
-VOID
-DpmiSetProtectedmodeInterrupt(
-    VOID
+BOOL
+SetProtectedModeInterrupt(
+    USHORT IntNumber,
+    USHORT Sel,
+    ULONG Offset,
+    USHORT Flags
     )
 
 /*++
@@ -65,27 +60,60 @@ Routine Description:
 --*/
 
 {
+    DECLARE_LocalVdmContext;
 
     PVDM_INTERRUPTHANDLER Handlers = DpmiInterruptHandlers;
-    USHORT IntNumber;
-    PCHAR StackPointer;
 
-    StackPointer = Sim32GetVDMPointer(((((ULONG)getSS()) << 16) | getSP()),
-        0,
-        (UCHAR) (getMSW() & MSW_PE)
-        );
+    if (IntNumber >= 256) {
+        return FALSE;
+    }
 
-    IntNumber = *(PWORD16)(StackPointer + 6);
+    if ((IntNumber >= 8 && IntNumber <= 0xf) ||
+        (IntNumber >= 0x70 && IntNumber <= 0x7f)) {
+        //
+        // Hardware Interrupt
+        //
+        Flags |= VDM_INT_INT_GATE;
+    } else {
+        //
+        // Software Interrupt
+        //
+        Flags |= VDM_INT_TRAP_GATE;
+    }
 
-    Handlers[IntNumber].Flags = *(PWORD16)(StackPointer + 8);
-    Handlers[IntNumber].CsSelector = *(PWORD16)(StackPointer + 4);
-    Handlers[IntNumber].Eip = *(PDWORD16)(StackPointer);
+    if (Sel != PMReflectorSeg) {
+        //
+        // The caller is setting the PM interrupt vector to be something other
+        // than the dpmi default "end-of-the-chain" PM handler. Now we check
+        // to see if the interrupt needs to be sent up to PM when it is encountered
+        // in v86 mode.
+        //
 
-    DBGTRACE(DPMI_SET_PMODE_INT_HANDLER, IntNumber,
-                                         Handlers[IntNumber].CsSelector,
-                                         Handlers[IntNumber].Eip);
-    
-#ifdef i386
+        if ((IntNumber == 0x1b) ||      //^Break?
+            (IntNumber == 0x1c) ||      //Timer Tick?
+            (IntNumber == 0x23) ||      //Ctrl-C?
+            (IntNumber == 0x24) ||      //Critical Error Handler?
+            (IntNumber == 0x02) ||      //Math co-processor exception used by math library routines!
+            ((IntNumber >= 0x08) && (IntNumber <= 0xf)) ||      //Hardware?
+            ((IntNumber >= 0x70) && (IntNumber <= 0x77))) {
+
+            // Flag this so that the v86 reflector code will send it to PM
+            Flags |= VDM_INT_HOOKED;
+
+            // Mark it down low so NTIO.SYS can do the right thing
+            if ( (IntNumber == 0x1c) || (IntNumber == 8) ) {
+                *(ULONG *)(IntelBase+FIXED_NTVDMSTATE_LINEAR) |= VDM_INTS_HOOKED_IN_PM;
+            }
+        }
+    }
+
+    Handlers[IntNumber].Flags = Flags;
+    Handlers[IntNumber].CsSelector = Sel;
+    Handlers[IntNumber].Eip = Offset;
+
+    DBGTRACE((USHORT)(VDMTR_TYPE_DPMI_SI | IntNumber), Sel, Offset);
+
+#ifdef _X86_
     if (IntNumber == 0x21)
     {
         VDMSET_INT21_HANDLER_DATA    ServiceData;
@@ -94,23 +122,58 @@ Routine Description:
         ServiceData.Selector = Handlers[IntNumber].CsSelector;
         ServiceData.Offset =   Handlers[IntNumber].Eip;
         ServiceData.Gate32 = Handlers[IntNumber].Flags & VDM_INT_32;
-        
+
         Status = NtVdmControl(VdmSetInt21Handler,  &ServiceData);
 
 #if DBG
         if (!NT_SUCCESS(Status)) {
             OutputDebugString("DPMI32: Error Setting Int21handler\n");
         }
-#endif        
+#endif
     }
-#endif      //i386
+#endif      //_X86_
 
-    setAX(0);
+    return TRUE;
 }
 
+
 VOID
-DpmiSetFaultHandler(
+DpmiInitIDT(
     VOID
+    )
+/*++
+
+Routine Description:
+
+    This function initializes the state of the IDT. It takes as input the
+    IDT set up by DOSX, updates the IDT's access bytes, and sets the DPMI32
+    interrupt handlers by calling SetProtectedModeInterrupt.
+
+--*/
+{
+    DECLARE_LocalVdmContext;
+    USHORT IntNumber;
+    USHORT Flags = getBX();
+
+    Idt = (PVOID)VdmMapFlat(getAX(), 0, getMODE());
+
+    for (IntNumber = 0; IntNumber<256; IntNumber++) {
+
+        SetProtectedModeInterrupt(IntNumber,
+                                  Idt[IntNumber].Selector,
+                                  (((ULONG)Idt[IntNumber].OffsetHi)<<16) +
+                                           Idt[IntNumber].OffsetLow,
+                                           Flags);
+
+    }
+
+}
+
+BOOL
+SetFaultHandler(
+    USHORT IntNumber,
+    USHORT Sel,
+    ULONG Offset
     )
 
 /*++
@@ -125,30 +188,47 @@ Routine Description:
 --*/
 
 {
+    DECLARE_LocalVdmContext;
 
     PVDM_FAULTHANDLER Handlers = DpmiFaultHandlers;
-    USHORT IntNumber;
-    PCHAR StackPointer;
 
-    StackPointer = Sim32GetVDMPointer(((((ULONG)getSS()) << 16) | getSP()),
-        0,
-        (UCHAR) (getMSW() & MSW_PE)
-        );
+    if (IntNumber >= 32) {
+        return FALSE;
+    }
 
-    IntNumber = *(PWORD16)(StackPointer + 12);
+    Handlers[IntNumber].Flags = VDM_INT_INT_GATE;
+    Handlers[IntNumber].CsSelector = Sel;
+    Handlers[IntNumber].Eip = Offset;
 
-    Handlers[IntNumber].Flags = *(PDWORD16)(StackPointer + 14);
-    Handlers[IntNumber].CsSelector = *(PWORD16)(StackPointer + 10);
-    Handlers[IntNumber].Eip = *(PDWORD16)(StackPointer + 6);
-    Handlers[IntNumber].SsSelector = *(PWORD16)(StackPointer + 4);
-    Handlers[IntNumber].Esp = *(PDWORD16)(StackPointer);
+    Handlers[IntNumber].SsSelector = 0;     //BUGBUG These are obselete
+    Handlers[IntNumber].Esp = 0;            //BUGBUG These are obselete
 
 
-    DBGTRACE(DPMI_SET_FAULT_HANDLER, IntNumber,
-                                     Handlers[IntNumber].CsSelector,
-                                     Handlers[IntNumber].Eip);
-    setAX(0);
+    DBGTRACE((USHORT)(VDMTR_TYPE_DPMI_SF | IntNumber),
+             Handlers[IntNumber].CsSelector,
+             Handlers[IntNumber].Eip);
+    return TRUE;
 }
+
+VOID
+DpmiInitExceptionHandlers(
+    VOID
+    )
+{
+    DECLARE_LocalVdmContext;
+    USHORT OffsetIncr = getAX();
+    USHORT IntCount = getBX();
+    USHORT Selector = getCX();
+    ULONG Offset = (ULONG) getDX();
+    USHORT IntNumber;
+
+    for (IntNumber = 0; IntNumber < 32; IntNumber++) {
+        SetFaultHandler(IntNumber, Selector, Offset);
+        Offset += OffsetIncr;
+    }
+
+}
+
 
 VOID
 DpmiUnhandledExceptionHandler(
@@ -161,8 +241,8 @@ Routine Description:
     This function gets control when a PM fault occurs that isn't handled
     by an installed handler. The body of this function emulates Win31
     DPMI behavior, where a fault that is reflected to the end of the
-    PM fault handler chain is then reflected to the PM *interrupt* 
-    chain. 
+    PM fault handler chain is then reflected to the PM *interrupt*
+    chain.
 
 Arguments:
 
@@ -172,6 +252,7 @@ Arguments:
 --*/
 
 {
+    DECLARE_LocalVdmContext;
     PVDM_INTERRUPTHANDLER Handlers = DpmiInterruptHandlers;
     USHORT SegSs, SegCs;
     UCHAR XNumber;
@@ -230,7 +311,7 @@ Arguments:
 
         FrameFlags = *(PDWORD16) (VdmStackPointer+20);
         *(PDWORD16) (VdmNewStackPointer+4) = FrameFlags;
-        FrameFlags &= ~(EFLAGS_INTERRUPT_MASK | EFLAGS_TF_MASK);
+        FrameFlags &= ~(EFLAGS_IF_MASK | EFLAGS_TF_MASK);
         *(PDWORD16) (VdmStackPointer+20) = FrameFlags;
 
         //
@@ -266,7 +347,7 @@ Arguments:
             *(PWORD16) (VdmNewStackPointer+2) = FrameCS;
 
             *(PWORD16) (VdmNewStackPointer+4) = FrameFlags;
-            FrameFlags &= ~(EFLAGS_INTERRUPT_MASK | EFLAGS_TF_MASK);
+            FrameFlags &= ~(EFLAGS_IF_MASK | EFLAGS_TF_MASK);
             *(PWORD16) (VdmStackPointer+10) = FrameFlags;
 
             //
@@ -283,7 +364,7 @@ Arguments:
 
             FrameCS = *(PWORD16) (VdmStackPointer+2);
             FrameIP = *(PWORD16) (VdmStackPointer);
-            FrameFlags &= ~EFLAGS_INTERRUPT_MASK;
+            FrameFlags &= ~EFLAGS_IF_MASK;
 
             setSP(getSP() - 2);
 
@@ -302,7 +383,7 @@ Arguments:
 
 VOID
 DpmiFatalExceptionHandler(
-    UCHAR XNumber, 
+    UCHAR XNumber,
     PCHAR VdmStackPointer
     )
 /*++
@@ -322,6 +403,7 @@ Arguments:
 --*/
 
 {
+    DECLARE_LocalVdmContext;
     char szBuffer[255];
     USHORT FaultingCS;
     ULONG FaultingEip;
@@ -336,7 +418,7 @@ Arguments:
 
     wsprintf(szBuffer, "X#=%.02X, CS=%.04X IP=%.08X",
                             XNumber, FaultingCS, FaultingEip);
-       
+
     RcErrorDialogBox(EG_BAD_FAULT, szBuffer, NULL);
 
     //
@@ -355,7 +437,7 @@ Arguments:
 }
 
 VOID
-DpmiPassPmStackInfo(
+DpmiInitPmStackInfo(
     VOID
     )
 /*++
@@ -380,115 +462,14 @@ Notes:
 
 --*/
 {
+    DECLARE_LocalVdmContext;
 
     LockedPMStackSel = getES();
     LockedPMStackCount = 0;
 
-#ifdef i386
-    {
-        ULONG pPmStackInfo;
-        VdmTib.PmStackInfo.Flags = CurrentAppFlags;
-        pPmStackInfo = (ULONG) &VdmTib.PmStackInfo;
-
-        setCX(HIWORD(pPmStackInfo));
-        setDX(LOWORD(pPmStackInfo));
-    }
+#ifdef _X86_
+    ((PVDM_TIB)NtCurrentTeb()->Vdm)->DpmiInfo.Flags = CurrentAppFlags;
 #endif
-}
-
-VOID
-BeginUseLockedPMStack(
-    VOID
-    )
-/*++
-
-Routine Description:
-
-    This routine switches to the protected DPMI stack as specified by
-    the DPMI spec. We remember the original values of EIP and ESP in
-    global variables if we are at level zero. This allows us to correctly
-    return to a 32 bit routine if we are dispatching a 16-bit interrupt
-    frame.
-
-
---*/
-
-{
-    if (!LockedPMStackCount++) {
-        PMLockOrigEIP = getEIP();
-        PMLockOrigSS = getSS();
-        PMLockOrigESP = getESP();
-        setSS(LockedPMStackSel);
-        setESP(LockedPMStackOffset);
-    }
-}
-
-BOOL
-EndUseLockedPMStack(
-    VOID
-    )
-/*++
-
-Routine Description:
-
-    This routine switches the stack back off the protected DPMI stack,
-    if we are popping off the last frame on the stack.
-
-Return Value:
-
-    TRUE if the stack was switched back, FALSE otherwise
-
---*/
-
-
-{
-
-    if (!--LockedPMStackCount) {
-        setEIP(PMLockOrigEIP);
-        setSS((WORD)PMLockOrigSS);
-        setESP(PMLockOrigESP);
-        return TRUE;
-    }
-    return FALSE;
-
-}
-
-void
-ReflectV86Int(
-    ULONG IntNumber,
-    ULONG Eflags
-    )
-/*++
-
-Routine Description:
-
-    This routine is responsible for simulating a real mode interrupt. It
-    uses the real mode IVT at 0:0.
-
-Arguments:
-
-    IntNumber - interrupt vector number
-    Eflags - client flags to save on the stack
-
-
---*/
-
-{
-    PUCHAR VdmStackPointer;
-    PWORD16 pIVT;
-    USHORT VdmSP;
-
-    VdmStackPointer = Sim32GetVDMPointer(((ULONG)getSS())<<16, 1, FALSE);
-    VdmSP = getSP() - 2;
-    *(PWORD16)(VdmStackPointer+VdmSP) = (WORD) Eflags;
-    VdmSP -= 2;
-    *(PWORD16)(VdmStackPointer+VdmSP) = (WORD) getCS();
-    VdmSP -= 2;
-    *(PWORD16)(VdmStackPointer+VdmSP) = (WORD) getIP();
-    setSP(VdmSP);
-    pIVT = (PWORD16) (IntelBase + IntNumber*4);
-    setIP(*pIVT++);
-    setCS(*pIVT);
 }
 
 BOOL
@@ -512,30 +493,39 @@ Return Value:
 --*/
 
 {
+    DECLARE_LocalVdmContext;
     PVDM_INTERRUPTHANDLER Handlers = DpmiInterruptHandlers;
-    PUCHAR VdmStackPointer;
     ULONG SaveEFLAGS;
     ULONG NewSP;
 
-    DBGTRACE(DPMI_SW_INT, IntNumber, 0, 0);
+    DBGTRACE(VDMTR_TYPE_DPMI | DPMI_SW_INT, (USHORT)IntNumber, 0);
 
-    if (!SEGMENT_IS_PRESENT(Handlers[IntNumber].CsSelector)) { 
-        return FALSE;
+    //
+    // If we're here via breakpoint, see if it belongs to NTVDM debug code.
+    //
+    if ((IntNumber == 3) &&
+        (*(ULONG *)(IntelBase+FIXED_NTVDMSTATE_LINEAR) & VDM_BREAK_DEBUGGER) &&
+        DbgBPInt()) {
+        return TRUE;
     }
 
-    SaveEFLAGS = getEFLAGS();
-    //BUGBUG turn off task bits
-    SaveEFLAGS &= ~0x4000;
-    setEFLAGS(SaveEFLAGS & ~EFLAGS_TF_MASK);
 
     if (!(getMSW() & MSW_PE)) {
 
-        ReflectV86Int(IntNumber, SaveEFLAGS);
+        EmulateV86Int((UCHAR)IntNumber);
 
     } else {
         PUCHAR VdmStackPointer;
 
         // Protect mode
+        SaveEFLAGS = getEFLAGS();
+        //BUGBUG turn off task bits
+        SaveEFLAGS &= ~EFLAGS_NT_MASK;
+        setEFLAGS(SaveEFLAGS & ~EFLAGS_TF_MASK);
+
+        if (!SEGMENT_IS_PRESENT(Handlers[IntNumber].CsSelector)) {
+            return FALSE;
+        }
 
         if (!BuildStackFrame(3, &VdmStackPointer, &NewSP)) {
             return FALSE;
@@ -565,14 +555,14 @@ Return Value:
         if (Handlers[IntNumber].CsSelector != getCS()) {
             char szFormat[] = "NTVDM Dpmi Error! Can't set CS to %.4X\n";
             char szMsg[sizeof(szFormat)+30];
-       
+
             wsprintf(szMsg, szFormat, Handlers[IntNumber].CsSelector);
             OutputDebugString(szMsg);
         }
 #endif
     }
 
-    DBGTRACE(DPMI_DISPATCH_INT, IntNumber, 0, 0);
+    DBGTRACE(VDMTR_TYPE_DPMI | DPMI_DISPATCH_INT, (USHORT)IntNumber, 0);
     return TRUE;
 }
 
@@ -598,24 +588,24 @@ Return Value:
 --*/
 
 {
+    DECLARE_LocalVdmContext;
     PVDM_INTERRUPTHANDLER Handlers = DpmiInterruptHandlers;
-    PUCHAR VdmStackPointer;
     ULONG SaveEFLAGS;
     ULONG NewSP;
 
-    DBGTRACE(DPMI_HW_INT, IntNumber, 0, 0);
-
-    SaveEFLAGS = getEFLAGS();
-    //BUGBUG turn off task bits
-    SaveEFLAGS &= ~0x4000;
-    setEFLAGS(SaveEFLAGS & ~(EFLAGS_INTERRUPT_MASK | EFLAGS_TF_MASK));
+    DBGTRACE(VDMTR_TYPE_DPMI | DPMI_HW_INT, (USHORT)IntNumber, 0);
 
     if (!(getMSW() & MSW_PE)) {
 
-        ReflectV86Int(IntNumber, SaveEFLAGS);
+        EmulateV86Int((UCHAR)IntNumber);
 
     } else {
         PUCHAR VdmStackPointer;
+
+        SaveEFLAGS = getEFLAGS();
+        //BUGBUG turn off task bits
+        SaveEFLAGS &= ~0x4000;
+        setEFLAGS(SaveEFLAGS & ~(EFLAGS_IF_MASK | EFLAGS_TF_MASK));
 
         BeginUseLockedPMStack();
 
@@ -646,7 +636,7 @@ Return Value:
         setCS(Handlers[IntNumber].CsSelector);
     }
 
-    DBGTRACE(DPMI_DISPATCH_INT, IntNumber, 0, 0);
+    DBGTRACE(VDMTR_TYPE_DPMI | DPMI_DISPATCH_INT, (USHORT)IntNumber, 0);
     return TRUE;
 }
 
@@ -669,6 +659,7 @@ Routine Description:
 --*/
 
 {
+    DECLARE_LocalVdmContext;
     PUCHAR VdmStackPointer;
     ULONG NewSP;
     USHORT SegSs;
@@ -686,7 +677,7 @@ Routine Description:
     //
     // Fast iret (without executing final 16-bit iret)
     //
-#ifdef i386
+#ifdef _X86_
 
     setCS(*(PWORD16)(VdmStackPointer+2));
     setEFLAGS((getEFLAGS()&0xffff0000) | *(PWORD16)(VdmStackPointer+4));
@@ -758,9 +749,8 @@ Routine Description:
         setEIP((ULONG)LOWORD(DosxIret));
 
     }
-#endif // i386
+#endif // _X86_
 
-    DBGTRACE(DPMI_INT_IRET16, 0, 0, 0);
 }
 
 VOID
@@ -781,6 +771,7 @@ Routine Description:
 --*/
 
 {
+    DECLARE_LocalVdmContext;
     PUCHAR VdmStackPointer;
     ULONG NewSP;
     USHORT SegSs;
@@ -795,7 +786,7 @@ Routine Description:
         VdmStackPointer += getSP();
     }
 
-#ifdef i386
+#ifdef _X86_
 
     setCS(*(PDWORD16)(VdmStackPointer+4));
     setEFLAGS(*(PDWORD16)(VdmStackPointer+8));
@@ -816,7 +807,7 @@ Routine Description:
         } else {
             setSP(getSP()+12);
         }
-    } 
+    }
 
 #else
     if (EndUseLockedPMStack()) {
@@ -851,12 +842,11 @@ Routine Description:
 
     setCS(HIWORD(DosxIretd));
     setEIP((ULONG)LOWORD(DosxIretd));
-#endif // i386
+#endif // _X86_
 
-    DBGTRACE(DPMI_INT_IRET32, 0, 0, 0);
 }
 
-#ifndef i386
+#ifndef _X86_
 
 BOOL
 DpmiFaultHandler(
@@ -882,25 +872,39 @@ Return Value:
 --*/
 
 {
+    DECLARE_LocalVdmContext;
     PVDM_FAULTHANDLER Handlers = DpmiFaultHandlers;
     PUCHAR VdmStackPointer;
     ULONG SaveSS, SaveESP, SaveEFLAGS, SaveCS, SaveEIP;
     ULONG StackOffset;
     ULONG NewSP;
 
-    DBGTRACE(DPMI_FAULT, IntNumber, ErrorCode, 0);
+    DBGTRACE(VDMTR_TYPE_DPMI | DPMI_FAULT, (USHORT)IntNumber, ErrorCode);
+
+    if ((IntNumber == 1)  &&
+        (*(ULONG *)(IntelBase+FIXED_NTVDMSTATE_LINEAR) & VDM_BREAK_DEBUGGER) &&
+        DbgTraceInt()) {
+        return TRUE;
+    }
+
+    if (DbgFault(IntNumber)) {      // try the debugger
+        //
+        // exception handled via user input
+        //
+        return TRUE;
+    }
+
+    if (!(getMSW() & MSW_PE)) {
+        EmulateV86Int((UCHAR)IntNumber);
+        return TRUE;
+    }
 
     SaveSS = getSS();
     SaveESP = getESP();
     SaveEFLAGS = getEFLAGS();
     SaveEIP = getEIP();
     SaveCS  = getCS();
-    setEFLAGS(SaveEFLAGS & ~(EFLAGS_INTERRUPT_MASK | EFLAGS_TF_MASK));
-
-    if (!(getMSW() & MSW_PE)) {
-        ReflectV86Int(IntNumber, getEFLAGS());
-        return TRUE;
-    }
+    setEFLAGS(SaveEFLAGS & ~(EFLAGS_IF_MASK | EFLAGS_TF_MASK));
 
     if ((IntNumber == 13) || (IntNumber == 6)) {
         if (DpmiEmulateInstruction()) {
@@ -908,7 +912,7 @@ Return Value:
         }
     }
 
-    if (!SEGMENT_IS_PRESENT(Handlers[IntNumber].CsSelector)) { 
+    if (!SEGMENT_IS_PRESENT(Handlers[IntNumber].CsSelector)) {
         return FALSE;
     }
 
@@ -934,7 +938,7 @@ Return Value:
         EndUseLockedPMStack();
         return FALSE;
     }
-                                              
+
     if (Frame32) {
         *(PDWORD16)(VdmStackPointer-4) = SaveSS;
         *(PDWORD16)(VdmStackPointer-8) = SaveESP;
@@ -964,17 +968,17 @@ Return Value:
     if (Handlers[IntNumber].CsSelector != getCS()) {
         char szFormat[] = "NTVDM Dpmi Error! Can't set CS to %.4X\n";
         char szMsg[sizeof(szFormat)+30];
-       
+
         wsprintf(szMsg, szFormat, Handlers[IntNumber].CsSelector);
         OutputDebugString(szMsg);
     }
 #endif
 
-    DBGTRACE(DPMI_DISPATCH_FAULT, IntNumber, 0, 0);
+    DBGTRACE(VDMTR_TYPE_DPMI | DPMI_DISPATCH_FAULT, (USHORT)IntNumber, 0);
     return TRUE;
 }
 
-#endif // i386
+#endif // _X86_
 
 VOID
 DpmiFaultHandlerIret16(
@@ -992,6 +996,7 @@ Routine Description:
 --*/
 
 {
+    DECLARE_LocalVdmContext;
     PUCHAR VdmStackPointer;
     USHORT SegSs;
 
@@ -1011,7 +1016,6 @@ Routine Description:
     setSP(*(PWORD16)(VdmStackPointer+8));
     setSS(*(PWORD16)(VdmStackPointer+10));
 
-    DBGTRACE(DPMI_FAULT_IRET, 0, 0, 0);
 }
 
 VOID
@@ -1030,6 +1034,7 @@ Routine Description:
 --*/
 
 {
+    DECLARE_LocalVdmContext;
     PUCHAR VdmStackPointer;
     USHORT SegSs;
 
@@ -1050,162 +1055,81 @@ Routine Description:
     setESP(*(PDWORD16)(VdmStackPointer+16));
     setSS((USHORT)*(PWORD16)(VdmStackPointer+20));
 
-    DBGTRACE(DPMI_FAULT_IRET, 0, 0, 0);
 }
 
+
+VOID
+DpmiHungAppIretAndExit(
+    VOID
+    )
+/*++
+
+Routine Description:
+
+    This routine is called via BOP during hung app processing. The
+    Keyboard driver calls this in the context of a hw interrupt in
+    order to terminate the app. We need to "unwind" the current
+    interrupt, and transfer control to code which will execute
+    a DOS exit.
+
+--*/
+
+{
+    DECLARE_LocalVdmContext;
+
+    EndUseLockedPMStack();
+    setCS(HIWORD(DosxHungAppExit));
+    setIP(LOWORD(DosxHungAppExit));
+}
 
 BOOL
-BuildStackFrame(
-    ULONG StackUnits,
-    PUCHAR *pVdmStackPointer,
-    ULONG *pNewSP
+DispatchPMInt(
+    UCHAR IntNumber
     )
 /*++
 
 Routine Description:
 
-    This routine builds stack frames for the caller. It figures if it needs
-    to use a 16 or 32-bit frame, and adjusts SP or ESP appropriately based
-    on the number of "stack units". It also returns a flat pointer to the
-    top of the frame to the caller.
+    This routine is called at the end of a PM int chain. It is provided
+    for compatibility to win31/win95. On win31/win95, VMM and VxD's have
+    the opportunity to perform some functionality at the point where
+    the dpmi host is about to switch the machine to v86 mode to continue
+    the interrupt chain. Sometimes, the function is totally handled by
+    a hook at this point.
+
+    This routine provides a framework for this mechanism to allow the
+    emulation of this behavior.
 
 Arguments:
 
-    StackUnits = number of registers needed to be saved on the frame. For
-                 example, 3 is how many elements there are on an iret frame
-                 (flags, cs, ip)
+    IntNumber - the interrupt# that is about to be reflected to v86 mode
 
 Return Value:
 
-    This function returns TRUE on success, FALSE on failure
-
-    VdmStackPointer - flat address pointing to the "top" of the frame
-
-Notes:
-
-    BUGBUG This routine doesn't check for stack faults or 'UP' direction
-           stacks
---*/
-
-{
-    USHORT SegSs;
-    ULONG VdmSp;
-    PUCHAR VdmStackPointer;
-    ULONG StackOffset;
-    ULONG Limit;
-    ULONG SelIndex;
-    ULONG NewSP;
-    BOOL bExpandDown;
-
-    SegSs = getSS();
-    SelIndex = (SegSs & ~0x7)/sizeof(LDT_ENTRY);
-
-    Limit = (ULONG) (Ldt[SelIndex].HighWord.Bits.LimitHi << 16) | 
-                     Ldt[SelIndex].LimitLow;
-
-    //
-    // 
-    // bugbug is this really correct?
-    Limit++;
-    if (Ldt[SelIndex].HighWord.Bits.Granularity) {
-        Limit = (Limit << 12) | 0xfff;
-    }
-
-
-    if (Ldt[SelIndex].HighWord.Bits.Default_Big) {
-        VdmSp = getESP();
-    } else {
-        VdmSp = getSP();
-    }
-
-    if (CurrentAppFlags) {
-        StackOffset = StackUnits*sizeof(DWORD);
-    } else {
-        StackOffset = StackUnits*sizeof(WORD);
-    }
-
-    NewSP = VdmSp - StackOffset;
-    bExpandDown = (BOOL) (Ldt[SelIndex].HighWord.Bits.Type & 4);
-    if ((StackOffset > VdmSp) || 
-        (!bExpandDown && (VdmSp > Limit)) ||
-        (bExpandDown && (NewSP < Limit))) {
-        // failed limit check
-        return FALSE;
-    }
-
-    *pNewSP = NewSP;
-    VdmStackPointer = Sim32GetVDMPointer(((ULONG)SegSs)<<16, 1, TRUE);
-    VdmStackPointer += VdmSp;
-    *pVdmStackPointer = VdmStackPointer;
-    return(TRUE);
-
-}
-
-VOID
-EnableIntHooks(
-    VOID
-    )
-
-/*++
-
-Routine Description:
-
-    This routine is called during startup to install our handlers with
-    the emulator.
-
-Arguments:
-
-    None
-
-Return Value:
-
-    None.
+    TRUE if the interrupt was handled and control can return to the app
+    FALSE otherwise, continue the reflection to v86 mode.
 
 --*/
 
 {
-#ifndef i386
-    if (fDpmiHookInts) {
-        VdmInstallHardwareIntHandler(DpmiHwIntHandler);
-        VdmInstallSoftwareIntHandler(DpmiSwIntHandler);
-        VdmInstallFaultHandler(DpmiFaultHandler);
-        fDpmiIntsHaveBeenHooked = TRUE;
+    BOOL bHandled;
+
+    switch(IntNumber) {
+
+    case 0x2f:
+
+        bHandled = PMInt2fHandler();
+        break;
+
+    default:
+        bHandled = FALSE;
     }
-#endif // i386
-}
 
-
-VOID
-DisableIntHooks(
-    VOID
-    )
-
-/*++
-
-Routine Description:
-
-    This routine is called to uninstall the our interrupt and exception
-    handlers from the emulator.
-
-Arguments:
-
-    None
-
-Return Value:
-
-    None.
-
---*/
-
-{
-#ifndef i386
-    if (fDpmiIntsHaveBeenHooked) {
-        VdmInstallHardwareIntHandler(NULL);
-        VdmInstallSoftwareIntHandler(NULL);
-        VdmInstallFaultHandler(NULL);
-        fDpmiIntsHaveBeenHooked = FALSE;
+    if (bHandled) {
+        SimulateIret(RESTORE_FLAGS);
     }
-#endif // i386
+    return bHandled;
+
 }
 
 
@@ -1234,7 +1158,7 @@ Return Value:
     return TRUE;
 }
 
-#ifndef i386
+#ifndef _X86_
 BOOL
 DpmiEmulateInstruction(
     VOID
@@ -1259,6 +1183,7 @@ Return Value:
 --*/
 
 {
+    DECLARE_LocalVdmContext;
     PUCHAR pCode;
     UCHAR Opcode;
     ULONG SegCS;
@@ -1305,7 +1230,7 @@ Return Value:
             break;
     }
 
-    DBGTRACE(DPMI_OP_EMULATION, Opcode, (ULONG) bReturn, 0);
+    DBGTRACE(VDMTR_TYPE_DPMI | DPMI_OP_EMULATION, Opcode, (ULONG) bReturn);
     return bReturn;
 }
 
@@ -1336,6 +1261,7 @@ Return Value:
 
 --*/
 {
+    DECLARE_LocalVdmContext;
     ULONG Value;
 
     switch (*pCode++) {
