@@ -13,7 +13,7 @@
 --*/
 
 extern BOOL XMSDispatch(ULONG iXMSSvc);
-extern BOOL XMSInit(int argc, char *argv[]);
+extern BOOL XMSInit(VOID);
 
 /*
  * handle for extended memory tracking.

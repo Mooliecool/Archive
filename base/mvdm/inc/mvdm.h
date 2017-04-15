@@ -88,4 +88,4 @@ typedef DWORD UNALIGNED *PDWORD16;
 
 #define NUMEL(a)	((sizeof a)/(sizeof a[0]))
 #define OFFSETOF(t,f)	((INT)&(((t *)0)->f))
-
+

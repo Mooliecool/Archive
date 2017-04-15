@@ -135,7 +135,6 @@
 #define FUN_GETPHYSICALFONTHANDLE   352 // Internal
 #define FUN_GETPIXEL            83  //
 #define FUN_GETPOLYFILLMODE     84  //
-#define FUN_GETREGIONDATA       262 // New Private
 #define FUN_GETRELABS           86  // Internal
 #define FUN_GETRGNBOX           134 //
 #define FUN_GETROP2         85  //
@@ -188,7 +187,7 @@
 #define FUN_POLYGON         36  //
 #define FUN_POLYLINE            37  //
 #define FUN_POLYPOLYGON         450 //
-#define FUN_POLYPOLYLINEWOW     490 //
+#define FUN_POLYPOLYLINEWOW     487 //
 #define FUN_PTINREGION          161 //
 #define FUN_PTVISIBLE           103 //
 #define FUN_QUERYABORT          155 // Internal
@@ -311,16 +310,16 @@
 #define FUN_DMSTRETCHDIBITS     218
 #define FUN_DMSETDIBTODEV       219
 #define FUN_DELETESPOOLPAGE     253
-#define FUN_ENGINEENUMERATEFONT     300     ;Internal
+#define FUN_ENGINEENUMERATEFONT     300     // Internal
 #define FUN_ENGINEDELETEFONT        301
 #define FUN_ENGINEREALIZEFONT       302
 #define FUN_ENGINEGETCHARWIDTH      303
 #define FUN_ENGINESETFONTCONTEXT    304
 #define FUN_ENGINEGETGLYPHBMP       305
 #define FUN_ENGINEMAKEFONTDIR       306
-#define FUN_ENGINEEXTTEXTOUT        314 ;internal
+#define FUN_ENGINEEXTTEXTOUT        314  // Internal
 #define FUN_GETKERNINGPAIRS     332
-#define FUN_FTRAPPING0          355 ;Internal
+#define FUN_FTRAPPING0          355  // Internal
 #define FUN_GDISEEGDIDO         452
 #define FUN_GDITASKTERMINATION      460
 #define FUN_SETOBJECTOWNER      461
@@ -328,17 +327,109 @@
 #define FUN_FIXUPBOGUSPUBLISHERMETAFILE 464
 #define FUN_RECTVISIBLE_EHH     465
 #define FUN_RECTINREGION_EHH        466
-#define FUN_UNICODETOANSI       467 ;Internal
+#define FUN_UNICODETOANSI       467  // Internal
 #define FUN_CONVERTOUTLINEFONTFILE  312
 #define FUN_GETTEXTEXTENTPOINT      471
 #define FUN_CREATEDIBSECTION        489
+#define FUN_SETDIBCOLORTABLE        602
+#define FUN_GETDIBCOLORTABLE        603
 
-// the chicago ordinals for Get/SetDIBColorTable are 603,602 respectively.  I use 487
-// and 488, which are other wise unused, to keep the table from expanding by over
-// 100 entries.  erick 5/10/94
+#ifdef  FE_SB
+// GetFontAssocStatus @488->459 for Taiwan, Prc and Korea
+#define FUN_GETFONTASSOCSTATUS      459
 
-#define FUN_GETDIBCOLORTABLE        487
-#define FUN_SETDIBCOLORTABLE        488
+/* EUDC/GAIJI escapes for FE */
+#define TTYMODE                      2560
+#define GAIJIFIRST                   TTYMODE+0x10
+#define GAIJIFONTSIZE                GAIJIFIRST
+#define GAIJIAREASIZE                GAIJIFIRST+1
+#define GAIJISYSTEMGETFONT           GAIJIFIRST+2
+#define GAIJISYSTEMSETFONT           GAIJIFIRST+3
+#define GAIJIITOCODE                 GAIJIFIRST+4
+#define GAIJILOCALOPEN               GAIJIFIRST+5
+#define GAIJILOCALCLOSE              GAIJIFIRST+6
+#define GAIJILOCALSETFONT            GAIJIFIRST+7
+#define GAIJILOCALSAVE               GAIJIFIRST+8
+#define GAIJILOCALRESTORE            GAIJIFIRST+9
+#define GAIJIGETFILENAME             GAIJIFIRST+10
+#define GAIJISETFILENAME             GAIJIFIRST+11
+#define GAIJIGETDESCRIPTIONNAME      GAIJIFIRST+12
+#define GAIJIPHYSICALFONTSIZE        GAIJIFIRST+13
+#endif  // FE_SB
+
+/* New for NT 5.0 Win95 compatibility */
+
+#define FUN_ABORTPATH               511
+#define FUN_ABORTPRINTER            271
+#define FUN_ADDLPKTOGDI             614
+#define FUN_BEGINPATH               512
+#define FUN_BUILDINVERSETABLEDIB    617  // export 650
+#define FUN_CLOSEENHMETAFILE        490
+#define FUN_CLOSEFIGURE             513
+#define FUN_CLOSEPRINTER            274
+#define FUN_COPYENHMETAFILE         491
+#define FUN_CREATEENHMETAFILE       492
+#define FUN_CREATEHALFTONEPALETTE   529
+#define FUN_DELETEENHMETAFILE       493
+#define FUN_DRVGETPRINTERDATA       282
+#define FUN_DRVSETPRINTERDATA       281
+#define FUN_ENDDOCPRINTER           272
+#define FUN_ENDPAGEPRINTER          270
+#define FUN_ENDPATH                 514
+#define FUN_ENGINEGETCHARWIDTHEX    299
+#define FUN_ENGINEGETCHARWIDTHSTR   316
+#define FUN_ENGINEGETGLYPHBMPEXT    305
+#define FUN_ENGINEREALIZEFONTEXT    315
+#define FUN_ENUMFONTFAMILIESEX      613
+#define FUN_EXTCREATEPEN            523
+#define FUN_EXTCREATEREGION         608
+#define FUN_EXTSELECTCLIPRGN        508
+#define FUN_FILLPATH                515
+#define FUN_FLATTENPATH             516
+#define FUN_GDICOMMENT              495
+#define FUN___AVAILABLE_609         609
+#define FUN_GDIPARAMETERSINFO       528
+#define FUN_GDISIGNALPROC32         610
+#define FUN_GETARCDIRECTION         524
+#define FUN_GETCHARACTERPLACEMENT   615
+#define FUN_GETENHMETAFILE          496
+#define FUN_GETENHMETAFILEBITS      497
+#define FUN_GETENHMETAFILEDESCRIPTION 498
+#define FUN_GETENHMETAFILEHEADER    499
+#define FUN_GETENHMETAFILEPALETTEENTRIES 501
+#define FUN_GETFONTLANGUAGEINFO     616
+#define FUN_GETMITERLIMIT           526
+#define FUN_GETPATH                 517
+#define FUN_GETRANDOMRGN            611
+#define FUN_GETREALDRIVERINFO       280
+#define FUN_GETREGIONDATA           607
+#define FUN_GETTEXTCHARSET          612
+#define FUN_GETTEXTEXTENTEX         188
+#define FUN_GETTTGLYPHINDEXMAP      404
+#define FUN_ICMCHECKCOLORSINGAMUT   622  // export 824
+#define FUN_ICMCREATETRANSFORM      618  // export 820
+#define FUN_ICMDELETETRANSFORM      619  // export 821
+#define FUN_ICMTRANSLATERGB         620  // export 822
+#define FUN_ICMTRANSLATERGBS        621  // export 823
+#define FUN_OPENPRINTERA            266
+#define FUN_PATHTOREGION            518
+#define FUN_PLAYENHMETAFILERECORD   504
+#define FUN_POLYBEZIER              502
+#define FUN_POLYBEZIERTO            503
+#define FUN_SELECTCLIPPATH          519
+#define FUN_SETARCDIRECTION         525
+#define FUN_SETENHMETAFILEBITS      505
+#define FUN_SETMAGICCOLORS          606
+#define FUN_SETMETARGN              506
+#define FUN_SETMITERLIMIT           527
+#define FUN_SETSOLIDBRUSH           604
+#define FUN_STARTDOCPRINTERA        267
+#define FUN_STARTPAGEPRINTER        268
+#define FUN_STROKEANDFILLPATH       520
+#define FUN_STROKEPATH              521
+#define FUN_SYSDELETEOBJECT         605
+#define FUN_WIDENPATH               522
+#define FUN_WRITEPRINTER            269
 
 
 /* XLATOFF */
@@ -963,13 +1054,6 @@ typedef struct _GETPOLYFILLMODE16 {     /* g84 */
 } GETPOLYFILLMODE16;
 typedef GETPOLYFILLMODE16 UNALIGNED *PGETPOLYFILLMODE16;
 
-typedef struct _GETREGIONDATA16 {       /* g262 */
-    VPSTR f3;
-    DWORD f2;
-    HRGN16 f1;
-} GETREGIONDATA16;
-typedef GETREGIONDATA16 UNALIGNED *PGETREGIONDATA16;
-
 typedef struct _GETRGNBOX16 {           /* g134 */
     VPRECT16 f2;
     HRGN16 f1;
@@ -985,6 +1069,13 @@ typedef struct _GETSTOCKOBJECT16 {      /* g87 */
     SHORT f1;
 } GETSTOCKOBJECT16;
 typedef GETSTOCKOBJECT16 UNALIGNED *PGETSTOCKOBJECT16;
+#define STOCK_MAX 19
+/* XLATOFF */
+// this is the only way we can tie STOCK_LAST with our assembly code
+#if(STOCK_MAX != STOCK_LAST)
+#error Must match sdk\inc\wingdi.h\STOCK_LAST
+#endif
+/* XLATON */
 
 typedef struct _GETSTRETCHBLTMODE16 {       /* g88 */
     HDC16 f1;
@@ -1205,7 +1296,7 @@ typedef struct _POLYPOLYGON16 {         /* g450 */
 } POLYPOLYGON16;
 typedef POLYPOLYGON16 UNALIGNED *PPOLYPOLYGON16;
 
-typedef struct _POLYPOLYLINEWOW16 {     /* g490 */
+typedef struct _POLYPOLYLINEWOW16 {     /* g487 */
     DWORD f4;
     VPDWORD f3;
     VPDWORD f2;
@@ -1497,6 +1588,12 @@ typedef struct _SETWINDOWORG16 {        /* g11 */
 } SETWINDOWORG16;
 typedef SETWINDOWORG16 UNALIGNED *PSETWINDOWORG16;
 
+#ifdef NULLSTRUCT
+typedef struct _SHRINKGDIHEAP16 {        /* g354 */
+} SHRINKGDIHEAP16;
+typedef SHRINKGDIHEAP16 UNALIGNED *PSHRINKGDIHEAP16;
+#endif
+
 typedef struct _STRETCHBLT16 {          /* g35 */
     DWORD f11;
     SHORT f10;
@@ -1646,16 +1743,6 @@ typedef struct _GETRASTERIZERCAPS16 {   /* g313 */
     VPVOID f1;
 } GETRASTERIZERCAPS16;
 typedef GETRASTERIZERCAPS16 UNALIGNED *PGETRASTERIZERCAPS16;
-
-typedef struct _GETTEXTEXTENTEX16 {     /* g2000 */
-    VPVOID f6;
-    VPVOID f5;
-    SHORT f4;
-    SHORT f3;
-    VPSZ f2;
-    HDC16 f1;
-} GETTEXTEXTENTEX16;
-typedef GETTEXTEXTENTEX16 UNALIGNED *PGETTEXTEXTENTEX16;
 
 typedef struct _GETTEXTEXTENTPOINT16 {      /* gxx */
     VPVOID f4;
@@ -1901,6 +1988,14 @@ typedef struct _WRITEDIALOG16 {  /* g242 */
 } WRITEDIALOG16;
 typedef WRITEDIALOG16 UNALIGNED *PWRITEDIALOG16;
 
+#ifdef FE_SB
+// GetFontAssocStatus @488->459 for Taiwan, Prc and Korea
+typedef struct _GETFONTASSOCSTATUS16 {          /* g459 */
+    HDC16 f1;
+} GETFONTASSOCSTATUS16;
+typedef GETFONTASSOCSTATUS16 UNALIGNED *PGETFONTASSOCSTATUS16;
+#endif  // FE_SB
+
 typedef struct _DMBITBLT16 {  /* g201 */
     VPSZ    pdrawmode;
     VPSZ    pbrush;
@@ -1921,6 +2016,497 @@ typedef struct _GETCURLOGFONT16 {        /* g411 */
 } GETCURLOGFONT16;
 typedef GETCURLOGFONT16 UNALIGNED *PGETCURLOGFONT16;
 
+
+/* New for NT 5.0 Win95 compatibility */
+
+
+typedef struct _ABORTPATH16 {        /* g511 */
+    HDC16 hdc;
+} ABORTPATH16;
+typedef ABORTPATH16 UNALIGNED *PABORTPATH16;
+
+typedef struct _ABORTPRINTER16 {        /* g271 */
+    DWORD hPrinter;
+} ABORTPRINTER16;
+typedef ABORTPRINTER16 UNALIGNED *PABORTPRINTER16;
+
+typedef struct _ADDLPKTOGDI16 {        /* g614 */
+    WORD  iCharset;
+    WORD  hlibLPK;
+} ADDLPKTOGDI16;
+typedef ADDLPKTOGDI16 UNALIGNED *PADDLPKTOGDI16;
+
+typedef struct _BEGINPATH16 {        /* g512 */
+    HDC16 hdc;
+} BEGINPATH16;
+typedef BEGINPATH16 UNALIGNED *PBEGINPATH16;
+
+typedef struct _BUILDINVERSETABLEDIB16 {        /* g617 */
+    DWORD  dwUniqueID;
+    VPVOID lpbi;
+} BUILDINVERSETABLEDIB16;
+typedef BUILDINVERSETABLEDIB16 UNALIGNED *PBUILDINVERSETABLEDIB16;
+
+typedef struct _CLOSEENHMETAFILE16 {        /* g490 */
+    HDC16 hdc;
+} CLOSEENHMETAFILE16;
+typedef CLOSEENHMETAFILE16 UNALIGNED *PCLOSEENHMETAFILE16;
+
+typedef struct _CLOSEFIGURE16 {        /* g513 */
+    HDC16 hdc;
+} CLOSEFIGURE16;
+typedef CLOSEFIGURE16 UNALIGNED *PCLOSEFIGURE16;
+
+typedef struct _CLOSEPRINTER16 {        /* g274 */
+    DWORD  hPrinter;
+} CLOSEPRINTER16;
+typedef CLOSEPRINTER16 UNALIGNED *PCLOSEPRINTER16;
+
+typedef struct _COPYENHMETAFILE16 {        /* g491 */
+    VPSTR   lpszFile;
+    HAND16  hemfSrc;
+} COPYENHMETAFILE16;
+typedef COPYENHMETAFILE16 UNALIGNED *PCOPYENHMETAFILE16;
+
+typedef struct _CREATEENHMETAFILE16 {        /* g492 */
+    VPSTR     lpszDescription;
+    VPRECTL16 lprclFrame;
+    VPSTR     lpszFile;
+    HDC16     hdcRef;
+} CREATEENHMETAFILE16;
+typedef CREATEENHMETAFILE16 UNALIGNED *PCREATEENHMETAFILE16;
+
+typedef struct _CREATEHALFTONEPALETTE16 {        /* g529 */
+    HDC16 hdc;
+} CREATEHALFTONEPALETTE16;
+typedef CREATEHALFTONEPALETTE16 UNALIGNED *PCREATEHALFTONEPALETTE16;
+
+typedef struct _DELETEENHMETAFILE16 {        /* g493 */
+    HAND16 hemf;
+} DELETEENHMETAFILE16;
+typedef DELETEENHMETAFILE16 UNALIGNED *PDELETEENHMETAFILE16;
+
+typedef struct _DRVGETPRINTERDATA16 {        /* g282 */
+    VPDWORD   lpdwNeeded;
+    DWORD     cbData;
+    VPBYTE    lpData;
+    VPDWORD   lpdwType;
+    VPSTR     lpszValueName;
+    VPSTR     lpszPrinter;
+} DRVGETPRINTERDATA16;
+typedef DRVGETPRINTERDATA16 UNALIGNED *PDRVGETPRINTERDATA16;
+
+typedef struct _DRVSETPRINTERDATA16 {        /* g281 */
+    DWORD     cbData;
+    VPBYTE    lpData;
+    VPDWORD   lpdwType;
+    VPSTR     lpszValueName;
+    VPSTR     lpszPrinter;
+} DRVSETPRINTERDATA16;
+typedef DRVSETPRINTERDATA16 UNALIGNED *PDRVSETPRINTERDATA16;
+
+typedef struct _ENDDOCPRINTER16 {        /* g272 */
+    DWORD     hPrinter;
+} ENDDOCPRINTER16;
+typedef ENDDOCPRINTER16 UNALIGNED *PENDDOCPRINTER16;
+
+typedef struct _ENDPAGEPRINTER16 {        /* g270 */
+    DWORD     hPrinter;
+} ENDPAGEPRINTER16;
+typedef ENDPAGEPRINTER16 UNALIGNED *PENDPAGEPRINTER16;
+
+typedef struct _ENDPATH16 {        /* g514 */
+    HDC16 hdc;
+} ENDPATH16;
+typedef ENDPATH16 UNALIGNED *PENDPATH16;
+
+typedef struct _ENGINEGETCHARWIDTHEX16 {        /* g299 */
+    VPWORD    lpwWidths;
+    WORD      nLast;
+    WORD      nFirst;
+    VPVOID    lpEFont;
+} ENGINEGETCHARWIDTHEX16;
+typedef ENGINEGETCHARWIDTHEX16 UNALIGNED *PENGINEGETCHARWIDTHEX16;
+
+typedef struct _ENGINEGETCHARWIDTHSTR16 {        /* g316 */
+    VPWORD    lpwWidths;
+    WORD      wCount;
+    VPSTR     lpGlyphs;
+    VPVOID    lpEFont;
+} ENGINEGETCHARWIDTHSTR16;
+typedef ENGINEGETCHARWIDTHSTR16 UNALIGNED *PENGINEGETCHARWIDTHSTR16;
+
+typedef struct _ENGINEGETGLYPHBMPEXT16 {        /* g305 */
+    VPVOID    lpBmpMetrics;
+    DWORD     dwSizeBmp;
+    VPVOID    lpBitmap;
+    WORD      wQueryType;
+    WORD      wChar;
+    VPVOID    lpEFont;
+    HDC16     hdc;
+} ENGINEGETGLYPHBMPEXT16;
+typedef ENGINEGETGLYPHBMPEXT16 UNALIGNED *PENGINEGETGLYPHBMPEXT16;
+
+typedef struct _ENGINEREALIZEFONTEXT16 {        /* g315 */
+    WORD        wFlags;
+    VPVOID      lpFont;
+    VPVOID      lpTextTransform;
+    VPLOGFONT16 lpLogFont;
+    HDC16       hdc;
+} ENGINEREALIZEFONTEXT16;
+typedef ENGINEREALIZEFONTEXT16 UNALIGNED *PENGINEREALIZEFONTEXT16;
+
+typedef struct _ENUMFONTFAMILIESEX16 {        /* g613 */
+    DWORD       dwFlags;
+    VPVOID      lpClientData;
+    VPPROC      lpfnCallBack;
+    VPLOGFONT16 lpLogFont;
+    HDC16       hdc;
+} ENUMFONTFAMILIESEX16;
+typedef ENUMFONTFAMILIESEX16 UNALIGNED *PENUMFONTFAMILIESEX16;
+
+typedef struct _EXTCREATEPEN16 {        /* g523 */
+    VPVOID    lpStyle;
+    DWORD     dwStyleCount;
+    VPVOID    lpntlb;
+    DWORD     dwWidth;
+    DWORD     dwPenStyle;
+} EXTCREATEPEN16;
+typedef EXTCREATEPEN16 UNALIGNED *PEXTCREATEPEN16;
+
+typedef struct _EXTCREATEREGION16 {        /* g608 */
+    VPVOID    lpRgnData;
+    DWORD     dwCount;
+    VPBYTE    lpReserved;
+} EXTCREATEREGION16;
+typedef EXTCREATEREGION16 UNALIGNED *PEXTCREATEREGION16;
+
+typedef struct _EXTSELECTCLIPRGN16 {        /* g508 */
+    SHORT     iMode;
+    HRGN16    hrgn;
+    HDC16     hdc;
+} EXTSELECTCLIPRGN16;
+typedef EXTSELECTCLIPRGN16 UNALIGNED *PEXTSELECTCLIPRGN16;
+
+typedef struct _FILLPATH16 {        /* g515 */
+    HDC16  hdc;
+} FILLPATH16;
+typedef FILLPATH16 UNALIGNED *PFILLPATH16;
+
+typedef struct _FLATTENPATH16 {        /* g516 */
+    HDC16  hdc;
+} FLATTENPATH16;
+typedef FLATTENPATH16 UNALIGNED *PFLATTENPATH16;
+
+typedef struct _GDICOMMENT16 {        /* g495 */
+    VPBYTE  lpData;
+    DWORD   cbSize;
+    HDC16   hdc;
+} GDICOMMENT16;
+typedef GDICOMMENT16 UNALIGNED *PGDICOMMENT16;
+
+typedef struct _GDIPARAMETERSINFO16 {        /* g528 */
+    WORD   flags;
+    VPVOID lParam;
+    WORD   wParam;
+    WORD   wFlag;
+} GDIPARAMETERSINFO16;
+typedef GDIPARAMETERSINFO16 UNALIGNED *PGDIPARAMETERSINFO16;
+
+typedef struct _GDISIGNALPROC3216 {        /* g610 */
+    WORD  hTask16;
+    DWORD dwFlags;
+    DWORD dwID;
+    DWORD dwSignalID;
+} GDISIGNALPROC3216;
+typedef GDISIGNALPROC3216 UNALIGNED *PGDISIGNALPROC3216;
+
+typedef struct _GETARCDIRECTION16 {        /* g524 */
+    HDC16 hdc;
+} GETARCDIRECTION16;
+typedef GETARCDIRECTION16 UNALIGNED *PGETARCDIRECTION16;
+
+typedef struct _GCP_RESULTS16                /* gcp_r */
+{
+    DWORD lStructSize;
+    VPSTR lpOutString;
+    VPSTR lpOrder;
+    VPSTR lpDx;
+    VPSTR lpCaretPos;
+    VPSTR lpClass;
+    VPSTR lpGlyphs;
+    SHORT nGlyphs;
+    SHORT nMaxFit;
+} GCP_RESULTS16;
+typedef GCP_RESULTS16 UNALIGNED *PGCP_RESULTS16;
+
+typedef struct _GETCHARACTERPLACEMENT16 {        /* g615 */
+    DWORD  dwFlags;
+    VPVOID lpResults;
+    WORD   wMaxExtent;
+    WORD   wCount;
+    VPSTR  lpszText;
+    HDC16  hdc;
+} GETCHARACTERPLACEMENT16;
+typedef GETCHARACTERPLACEMENT16 UNALIGNED *PGETCHARACTERPLACEMENT16;
+
+typedef struct _GETENHMETAFILE16 {        /* g496 */
+    VPSTR lpszFile;
+} GETENHMETAFILE16;
+typedef GETENHMETAFILE16 UNALIGNED *PGETENHMETAFILE16;
+
+typedef struct _GETENHMETAFILEBITS16 {        /* g497 */
+    VPBYTE  lpBuffer;
+    DWORD   cbBuffer;
+    HAND16  hemf;
+} GETENHMETAFILEBITS16;
+typedef GETENHMETAFILEBITS16 UNALIGNED *PGETENHMETAFILEBITS16;
+
+typedef struct _GETENHMETAFILEDESCRIPTION16 {        /* g498 */
+    VPSTR   lpszBuffer;
+    DWORD   cbBuffer;
+    HAND16  hemf;
+} GETENHMETAFILEDESCRIPTION16;
+typedef GETENHMETAFILEDESCRIPTION16 UNALIGNED *PGETENHMETAFILEDESCRIPTION16;
+
+typedef struct _GETENHMETAFILEHEADER16 {        /* g499 */
+    VPVOID  lpmrmf;
+    DWORD   cbBuffer;
+    HAND16  hemf;
+} GETENHMETAFILEHEADER16;
+typedef GETENHMETAFILEHEADER16 UNALIGNED *PGETENHMETAFILEHEADER16;
+
+typedef struct _GETENHMETAFILEPALETTEENTRIES16 {        /* g501 */
+    VPVOID  lpclr;
+    DWORD   cEntries;
+    HAND16  hemf;
+} GETENHMETAFILEPALETTEENTRIES16;
+typedef GETENHMETAFILEPALETTEENTRIES16 UNALIGNED *PGETENHMETAFILEPALETTEENTRIES16;
+
+typedef struct _GETFONTLANGUAGEINFO16 {        /* g616 */
+    HDC16 hdc;
+} GETFONTLANGUAGEINFO16;
+typedef GETFONTLANGUAGEINFO16 UNALIGNED *PGETFONTLANGUAGEINFO16;
+
+typedef struct _GETMITERLIMIT16 {        /* g526 */
+    VPLONG lpMiter;
+    HDC16  hdc;
+} GETMITERLIMIT16;
+typedef GETMITERLIMIT16 UNALIGNED *PGETMITERLIMIT16;
+
+typedef struct _GETPATH16 {        /* g517 */
+    LONG       cptl;
+    VPBYTE     lpby;
+    VPPOINTL16 lpptl;
+    HDC16      hdc;
+} GETPATH16;
+typedef GETPATH16 UNALIGNED *PGETPATH16;
+
+typedef struct _GETRANDOMRGN16 {        /* g611 */
+    WORD     iType;
+    HRGN16   hrgn;
+    HDC16    hdc;
+} GETRANDOMRGN16;
+typedef GETRANDOMRGN16 UNALIGNED *PGETRANDOMRGN16;
+
+typedef struct _GETREALDRIVERINFO16 {        /* g280 */
+    VPSTR lpszDriverPath;
+    VPSTR lpszDeviceName;
+    VPSTR lpszPrinterName;
+} GETREALDRIVERINFO16;
+typedef GETREALDRIVERINFO16 UNALIGNED *PGETREALDRIVERINFO16;
+
+typedef struct _GETREGIONDATA16 {        /* g607 */
+    VPVOID  lpRgnData;
+    DWORD   dwCount;
+    HDC16   hrgn;
+} GETREGIONDATA16;
+typedef GETREGIONDATA16 UNALIGNED *PGETREGIONDATA16;
+
+typedef struct _GETTEXTCHARSET16 {        /* g612 */
+    HDC16  hdc;
+} GETTEXTCHARSET16;
+typedef GETTEXTCHARSET16 UNALIGNED *PGETTEXTCHARSET16;
+
+typedef struct _GETTEXTEXTENTEX16 {        /* g188 */
+    WORD    wFlags;
+    VPWORD  lpDx;
+    VPWORD  lpnFit;
+    WORD    wMaxExtent;
+    WORD    wCount;
+    VPSTR   lpszString;
+    HDC16   hdc;
+} GETTEXTEXTENTEX16;
+typedef GETTEXTEXTENTEX16 UNALIGNED *PGETTEXTEXTENTEX16;
+
+typedef struct _GETTTGLYPHINDEXMAP16 {        /* g404 */
+    VPVOID  lpEFont;
+    WORD    wCharSet;
+} GETTTGLYPHINDEXMAP16;
+typedef GETTTGLYPHINDEXMAP16 UNALIGNED *PGETTTGLYPHINDEXMAP16;
+
+typedef struct _ICMCHECKCOLORSINGAMUT16 {        /* g622 */
+    DWORD  f4;
+    VPBYTE f3;
+    VPVOID lpRGBQuad;
+    DWORD  hcmTransform;
+} ICMCHECKCOLORSINGAMUT16;
+typedef ICMCHECKCOLORSINGAMUT16 UNALIGNED *PICMCHECKCOLORSINGAMUT16;
+
+typedef struct _ICMCREATETRANSFORM16 {        /* g618 */
+    VPBYTE lpdevchar;
+    VPBYTE lpdevcharacter;
+    VPBYTE lplogcolorspace;
+} ICMCREATETRANSFORM16;
+typedef ICMCREATETRANSFORM16 UNALIGNED *PICMCREATETRANSFORM16;
+
+typedef struct _ICMDELETETRANSFORM16 {        /* g619 */
+    DWORD     huh;
+    VPDWORD   lpColorRef;
+    RGBQUAD16 rgbQuad;
+    DWORD     hcmTransform;
+} ICMDELETETRANSFORM16;
+typedef ICMDELETETRANSFORM16 UNALIGNED *PICMDELETETRANSFORM16;
+
+typedef struct _ICMTRANSLATERGB16 {        /* g620 */
+    DWORD     huh;
+    VPDWORD   lpColorRef;
+    RGBQUAD16 rgbQuad;
+    DWORD     hcmTransform;
+} ICMTRANSLATERGB16;
+typedef ICMTRANSLATERGB16 UNALIGNED *PICMTRANSLATERGB16;
+
+typedef struct _ICMTRANSLATERGBS16 {        /* g621 */
+    DWORD     flags;
+    DWORD     destflags;
+    VPVOID    lpdest;
+    DWORD     nsrcwrap;
+    DWORD     nsrcheight;
+    DWORD     hsrcwidth;
+    DWORD     srcflags;
+    VPVOID    lpsrc;
+} ICMTRANSLATERGBS16;
+typedef ICMTRANSLATERGBS16 UNALIGNED *PICMTRANSLATERGBS16;
+
+typedef struct _OPENPRINTERA16 {        /* g266 */
+    VPVOID  lppd;
+    VPDWORD hPrinter;
+    VPSTR   lpszPrinter;
+} OPENPRINTERA16;
+typedef OPENPRINTERA16 UNALIGNED *POPENPRINTERA16;
+
+typedef struct _PATHTOREGION16 {        /* g518 */
+    HDC16 hdc;
+} PATHTOREGION16;
+typedef PATHTOREGION16 UNALIGNED *PPATHTOREGION16;
+
+typedef struct _PLAYENHMETAFILERECORD16 {        /* g504 */
+    DWORD   dwHandles;
+    VPVOID  lpemr;
+    VPVOID  lpht;
+    HDC16   hdc;
+} PLAYENHMETAFILERECORD16;
+typedef PLAYENHMETAFILERECORD16 UNALIGNED *PPLAYENHMETAFILERECORD16;
+
+typedef struct _POLYBEZIER16 {        /* g502 */
+    SHORT     f3;
+    VPPOINT16 f2;
+    HDC16     f1;
+} POLYBEZIER16;
+typedef POLYBEZIER16 UNALIGNED *PPOLYBEZIER16;
+
+typedef struct _POLYBEZIERTO16 {        /* g503 */
+    SHORT     f3;
+    VPPOINT16 f2;
+    HDC16     f1;
+} POLYBEZIERTO16;
+typedef POLYBEZIERTO16 UNALIGNED *PPOLYBEZIERTO16;
+
+typedef struct _SELECTCLIPPATH16 {        /* g519 */
+    SHORT     iMode;
+    HDC16     hdc;
+} SELECTCLIPPATH16;
+typedef SELECTCLIPPATH16 UNALIGNED *PSELECTCLIPPATH16;
+
+typedef struct _SETARCDIRECTION16 {        /* g525 */
+    SHORT     iArcDirection;
+    HDC16     hdc;
+} SETARCDIRECTION16;
+typedef SETARCDIRECTION16 UNALIGNED *PSETARCDIRECTION16;
+
+typedef struct _SETENHMETAFILEBITS16 {        /* g505 */
+    VPBYTE  lpBuffer;
+    DWORD   cbBuffer;
+} SETENHMETAFILEBITS16;
+typedef SETENHMETAFILEBITS16 UNALIGNED *PSETENHMETAFILEBITS16;
+
+typedef struct _SETMAGICCOLORS16 {        /* g606 */
+    WORD   iColor;
+    DWORD  c1;
+    HDC16  hdc;
+} SETMAGICCOLORS16;
+typedef SETMAGICCOLORS16 UNALIGNED *PSETMAGICCOLORS16;
+
+typedef struct _SETMETARGN16 {        /* g506 */
+    HDC16  hdc;
+} SETMETARGN16;
+typedef SETMETARGN16 UNALIGNED *PSETMETARGN16;
+
+typedef struct _SETMITERLIMIT16 {        /* g527 */
+    VPLONG  lpeMiter;
+    LONG    eMiter;
+    HDC16   hdc;
+} SETMITERLIMIT16;
+typedef SETMITERLIMIT16 UNALIGNED *PSETMITERLIMIT16;
+
+typedef struct _SETSOLIDBRUSH16 {        /* g604 */
+    DWORD   rgbNewColor;
+    HAND16  hbrush;
+} SETSOLIDBRUSH16;
+typedef SETSOLIDBRUSH16 UNALIGNED *PSETSOLIDBRUSH16;
+
+typedef struct _STARTDOCPRINTERA16 {        /* g267 */
+    VPVOID  lpDocInfo;
+    DWORD   dwLevel;
+    DWORD   hPrinter;
+} STARTDOCPRINTERA16;
+typedef STARTDOCPRINTERA16 UNALIGNED *PSTARTDOCPRINTERA16;
+
+typedef struct _STARTPAGEPRINTER16 {        /* g268 */
+    DWORD   hPrinter;
+} STARTPAGEPRINTER16;
+typedef STARTPAGEPRINTER16 UNALIGNED *PSTARTPAGEPRINTER16;
+
+typedef struct _STROKEANDFILLPATH16 {        /* g520 */
+    HDC16 hdc;
+} STROKEANDFILLPATH16;
+typedef STROKEANDFILLPATH16 UNALIGNED *PSTROKEANDFILLPATH16;
+
+typedef struct _STROKEPATH16 {        /* g521 */
+    HDC16 hdc;
+} STROKEPATH16;
+typedef STROKEPATH16 UNALIGNED *PSTROKEPATH16;
+
+typedef struct _SYSDELETEOBJECT16 {        /* g605 */
+    HAND16 h;
+} SYSDELETEOBJECT16;
+typedef SYSDELETEOBJECT16 UNALIGNED *PSYSDELETEOBJECT16;
+
+typedef struct _WIDENPATH16 {        /* g522 */
+    HDC16 hdc;
+} WIDENPATH16;
+typedef WIDENPATH16 UNALIGNED *PWIDENPATH16;
+
+typedef struct _WRITEPRINTER16 {        /* g269 */
+    VPDWORD lpdwWritten;
+    DWORD   cbBuf;
+    VPVOID  lpBuf;
+    DWORD   hPrinter;
+} WRITEPRINTER16;
+typedef WRITEPRINTER16 UNALIGNED *PWRITEPRINTER16;
+
 /* XLATOFF */
 #pragma pack()
+
 /* XLATON */
+

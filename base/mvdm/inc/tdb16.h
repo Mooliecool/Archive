@@ -33,6 +33,8 @@
 #define numTaskInts 7
 #define THUNKELEM   8   // (62*8) = 512-16 (low arena overhead)
 #define THUNKSIZE   8
+#define TDB_DIR_SIZE 64
+#define LFN_DIR_LEN 260
 
 /* XLATOFF */
 #pragma pack(2)
@@ -69,14 +71,14 @@ typedef struct TDB  {       /* tdb16 */
      WORD TDB_CompatFlags2 ;        // Upper 16 bits
      WORD TDB_CompatHandle ;    // for dBase bug
      WORD TDB_WOWCompatFlagsEx ;     // More WOW Compatibility flags
-     WORD TDB_WOWCompatFlagsEx2 ;        // Upper 16 bits  
+     WORD TDB_WOWCompatFlagsEx2 ;        // Upper 16 bits
      BYTE TDB_Free[3] ;         // Filler to keep TDB size unchanged
      BYTE TDB_cLibrary    ;     // tracks  add/del of ALL libs in system EMS
      DWORD TDB_PHT        ; // (HANDLE:OFFSET) to private handle table
      WORD TDB_PDB         ; // MSDOS Process Data Block (PDB)
      DWORD TDB_DTA        ; // MSDOS Disk Transfer Address
      BYTE TDB_Drive  ;      // MSDOS current drive
-     BYTE TDB_Directory[65] ;       // *** not used starting with win95
+     BYTE TDB_Directory[TDB_DIR_SIZE+1] ; // *** not used starting with win95
      WORD TDB_Validity    ;     // initial AX to be passed to a task
      WORD TDB_Yield_to    ;     // DirectedYield arg stored here
      WORD TDB_LibInitSeg      ; // segment address of libraries to init
@@ -89,8 +91,12 @@ typedef struct TDB  {       /* tdb16 */
      DWORD TDB_hThread	  ;	// 32-bit Thread Handle for this task
      WORD  TDB_WOWCompatFlags;  // WOW Compatibility flags
      WORD  TDB_WOWCompatFlags2; // WOW Compatibility flags
+#ifdef FE_SB
+     WORD  TDB_WOWCompatFlagsJPN;  // WOW Compatibility flags for JAPAN
+     WORD  TDB_WOWCompatFlagsJPN2; // WOW Compatibility flags for JAPAN
+#endif // FE_SB
      DWORD TDB_vpfnAbortProc;   // printer AbortProc
-     BYTE TDB_LFNDirectory[260]; // Long directory name
+     BYTE TDB_LFNDirectory[LFN_DIR_LEN]; // Long directory name.
 
 } TDB;
 typedef TDB UNALIGNED *PTDB;
@@ -98,6 +104,9 @@ typedef TDB UNALIGNED *PTDB;
 // This bit is defined for the TDB_Drive field
 #define TDB_DIR_VALID 0x80
 #define TDB_SIGNATURE 0x4454
+
+#define TDBF_OS2APP   0x8
+#define TDBF_WINOLDAP 0x1
 
 
 // NOTE TDB_ThreadID MUST be DWORD aligned or else it will fail on MIPS
