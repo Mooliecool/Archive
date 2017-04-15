@@ -29,33 +29,43 @@ include bop.inc
 
 // DPMI Bop Sub Functions
 
-#define SetDescriptorTableEntries   0
-#define DPMISwitchToProtectedMode   1 /* prefix necessary */
-#define SetProtectedmodeInterrupt   2
+#define InitDosxRM                  0
+#define InitDosx                    1
+#define InitLDT                     2
 #define GetFastBopAddress           3
-#define InitDosx                    4
-#define InitApp                     5
-#define XlatInt21Call               6
-#define AllocXmem                   7
-#define FreeXmem                    8
-#define ReallocXmem                 9
-#define SetFaultHandler             10
-#define GetMemoryInformation        11
-#define DpmiInUse                   12
-#define DpmiNoLongerInUse           13
-#define SetDebugRegisters           14
-#define PassTableAddress            15
-#define TerminateApp                16
-#define InitializePmStackInfo       17
-#define VcdPmSvcCall32              18
-#define FreeAllXmem                 19
-#define IntHandlerIret              20
-#define IntHandlerIretd             21
-#define FaultHandlerIret            22
-#define FaultHandlerIretd           23
-#define DpmiUnhandledException      24
+#define InitIDT                     4
+#define InitExceptionHandlers       5
+#define InitApp                     6
+#define TerminateApp                7
+#define DpmiInUse                   8
+#define DpmiNoLongerInUse           9
 
-#define MAX_DPMI_BOP_FUNC DpmiUnhandledException + 1
+#define DPMISwitchToProtectedMode   10 /* prefix necessary */
+#define DPMISwitchToRealMode        11
+#define SetAltRegs                  12
+
+#define IntHandlerIret              13
+#define IntHandlerIretd             14
+#define FaultHandlerIret            15
+#define FaultHandlerIretd           16
+#define DpmiUnhandledException      17
+
+#define RMCallBackCall              18
+#define ReflectIntrToPM             19
+#define ReflectIntrToV86            20
+
+#define InitPmStackInfo             21
+#define VcdPmSvcCall32              22
+#define SetDescriptorTableEntries   23
+#define ResetLDTUserBase            24
+
+#define XlatInt21Call               25
+#define Int31Entry                  26
+#define Int31Call                   27
+
+#define HungAppIretAndExit          28
+
+#define MAX_DPMI_BOP_FUNC HungAppIretAndExit + 1
 
 /* ASM
 DPMIBOP macro SubFun
@@ -64,61 +74,40 @@ DPMIBOP macro SubFun
     endm
 */
 
+
+//
+// Definitions for real mode call backs
+//
+
 /* XLATOFF */
-#if DBG
+typedef struct _RMCB_INFO {
+    BOOL bInUse;
+    USHORT StackSel;
+    USHORT StrucSeg;
+    ULONG  StrucOffset;
+    USHORT ProcSeg;
+    ULONG  ProcOffset;
+} RMCB_INFO;
 
-#define DBGTRACE(Type, v1, v2, v3) DpmiDbgTrace(Type, v1, v2, v3)
+// 16 is the minimum defined in the dpmi spec
+#define MAX_RMCBS 16
 
-#else
 
-#define DBGTRACE(Type, v1, v2, v3) {}
+typedef struct _MEM_DPMI {
+    PVOID Address;
+    ULONG Length;
+    struct _MEM_DPMI * Prev;
+    struct _MEM_DPMI * Next;
+    WORD Owner;
+    WORD Sel;
+    WORD SelCount;
+} MEM_DPMI, *PMEM_DPMI;
 
-#endif
+VOID
+SetShadowDescriptorEntries(
+    USHORT SelStart,
+    USHORT SelCount
+    );
 
 /* XLATON */
 
-
-VOID DpmiDbgTrace(
-    int Type,
-    ULONG v1,
-    ULONG v2,
-    ULONG v3
-    );
-
-
-#define DPMI_SET_PMODE_INT_HANDLER  1
-#define DPMI_SET_FAULT_HANDLER      2
-#define DPMI_DISPATCH_INT           3
-#define DPMI_HW_INT                 4
-#define DPMI_SW_INT                 5
-#define DPMI_INT_IRET16             6
-#define DPMI_INT_IRET32             7
-#define DPMI_FAULT                  8
-#define DPMI_DISPATCH_FAULT         9
-#define DPMI_FAULT_IRET             10
-#define DPMI_OP_EMULATION           11
-#define DPMI_DISPATCH_ENTRY         12
-
-
-typedef struct _DPMI_TRACE_ENTRY { /* DPMITRACE */
-    int Type;
-    ULONG v1;
-    ULONG v2;
-    ULONG v3;
-    ULONG eax;
-    ULONG ebx;
-    ULONG ecx;
-    ULONG edx;
-    ULONG esi;
-    ULONG edi;
-    ULONG ebp;
-    ULONG esp;
-    ULONG eip;
-    ULONG eflags;
-    USHORT cs;
-    USHORT ds;
-    USHORT es;
-    USHORT fs;
-    USHORT gs;
-    USHORT ss;
-} DPMI_TRACE_ENTRY;
