@@ -13,14 +13,6 @@ Abstract:
     compiler switches and libraries that are unique for the component being
     built.
 
-
-History:
-    Created 15-May-1991 by Sudeep Bharati (sudeepb)
-    from template created 12-Apr-1990 by Steve Wood (stevewo)
-
-
-NOTE:	Commented description of this file is in \nt\public\oak\bin\sources.tpl
-
 !ENDIF
 
 MAJORCOMP=mvdm
@@ -30,19 +22,10 @@ TARGETNAME=dbg
 TARGETPATH=obj
 TARGETTYPE=LIBRARY
 
-TARGETLIBS=
+INCLUDES=..\..\inc;..\..\softpc.new\host\inc
 
-INCLUDES=..\inc
-
-NTPROFILEINPUT=YES
-
-SOURCES=dbg.c
-
-X86_SOURCES=
-MIPS_SOURCES=
+SOURCES=..\dbg.c
 
 C_DEFINES=-DWIN_32 -DDEBUG
 
 UMTYPE=console
-UMTEST=
-UMLIBS=
