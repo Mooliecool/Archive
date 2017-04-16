@@ -1192,9 +1192,11 @@ ULONG WOWpSysErrorBox(
             ) &&
         RtlEqualMemory(szDesktop, "Default", 8)) {
 
-        dwParameters[HARDERROR_PARAMETERS_FLAGSPOS] = HARDERROR_FLAGS_DEFDESKTOPONLY;
+        // FIXME: Enable the following when we are ready.
+        //dwParameters[HARDERROR_PARAMETERS_FLAGSPOS] = HARDERROR_FLAGS_DEFDESKTOPONLY;
     } else {
-        dwParameters[HARDERROR_PARAMETERS_FLAGSPOS] = 0;
+        // FIXME: Enable the following when we are ready.
+        //dwParameters[HARDERROR_PARAMETERS_FLAGSPOS] = 0;
     }
 
     //

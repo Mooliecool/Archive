@@ -39,16 +39,16 @@ PASS1_PUBLISH={$(O)\ntvdm.lib=$(SDK_LIB_PATH)\ntvdm.lib}
 TARGETTYPE=PROGLIB
 NOT_TERMINAL_SERVER_AWARE=1
 
-TARGETLIBS=\
-        $(SDK_LIB_PATH)\kernl32p.lib \
-        $(WINDOWS_LIB_PATH)\gdi32p.lib     \
-        $(WINDOWS_LIB_PATH)\user32p.lib   \
-        $(WINDOWS_LIB_PATH)\apphelp.lib \
-        $(SDK_LIB_PATH)\ntdll.lib   \
-!if !$(386)
-        $(SDK_LIB_PATH)\binmode.obj  \
+TARGETLIBS= \
+        $(WINDOWS_LIB_PATH)\gdi32p.lib  \
+        $(WINDOWS_LIB_PATH)\user32p.lib \
+        $(SDK_LIB_PATH)\ntdll.lib       \
+!if !$(X86)
+        $(SDK_LIB_PATH)\binmode.obj     \
 !endif
         $(SDK_LIB_PATH)\advapi32.lib
+#       $(SDK_LIB_PATH)\kernl32p.lib    \
+#       $(WINDOWS_LIB_PATH)\apphelp.lib \
         
 BACKGROUND_USE=1
 
@@ -60,7 +60,7 @@ ALT_PROJECT_FE=fe
 ALT_PROJECT_OBJS=daytona
 ALT_PROJECT_LIBS=.
 
-!if !$(386)
+!if !$(X86)
 LINKER_FLAGS=$(LINKER_FLAGS) -INCLUDE:__mb_cur_max -INCLUDE:_pctype
 !endif
 
@@ -77,7 +77,7 @@ LINKLIBS = \
     $(SOFTPC_TREE)\base\disks\$(ALT_PROJECT_OBJS)\$(O)\DISKS.LIB  \
     $(SOFTPC_TREE)\base\keymouse\$(ALT_PROJECT)\$(O)\KEYMOUSE.LIB \
     $(SOFTPC_TREE)\host\src\$(ALT_PROJECT)\$(O)\SRC.LIB      \
-!if $(386)
+!if $(X86)
     $(MVDM_TREE)\v86\monitor\$(ALT_PROJECT_OBJS)\$(O)\monitor.lib      \
 !else
     $(SOFTPC_TREE)\base\dasm386\$(O)\DASM386.LIB   \
@@ -135,3 +135,5 @@ SOURCES_USED=..\sources.inc
 !if "$(ALT_PROJECT)" != "daytona"
 LINKER_FLAGS=$(LINKER_FLAGS) /pdb:$(O)\ntvdm_$(ALT_PROJECT).pdb
 !endif
+
+NO_SAFESEH=1

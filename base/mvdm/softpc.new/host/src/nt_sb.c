@@ -937,6 +937,11 @@ exit:
 // Debugging stuff
 //
 
+BOOL
+IsDebuggerPresent(
+    VOID
+    );
+
 //#if DBG
 
 int DebugLevel = 2;

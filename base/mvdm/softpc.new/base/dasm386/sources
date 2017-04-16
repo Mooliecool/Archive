@@ -32,7 +32,7 @@ INCLUDES=$(SOFTPC_TREE)\host\inc;$(SOFTPC_TREE)\base\inc
 
 ALPHA_SOURCES=dasm386.c build.c decode.c
 
-i386_SOURCES=
+X86_SOURCES=
 
 SOURCES=
 

@@ -108,7 +108,8 @@ VOID InitSound( BOOL bInit)
     if (bInit) {
         RtlInitializeCriticalSection(&SoundLock);
     } else {
-        if( NtCurrentPeb()->SessionId == 0 ) {
+        // FIXME: Enable the following when we are ready.
+        //if( NtCurrentPeb()->SessionId == 0 ) {
             LOCK_SOUND();
             LazyBeep(0L, 0L);
             if (hBeepDevice && hBeepDevice != INVALID_HANDLE_VALUE) {
@@ -117,7 +118,7 @@ VOID InitSound( BOOL bInit)
                 }
             UNLOCK_SOUND();
             return;
-        }
+        //}
     }
 }
 
@@ -130,9 +131,12 @@ HANDLE OpenBeepDevice(void)
     IO_STATUS_BLOCK IoStatus;
     HANDLE hBeep;
 
+    // FIXME: Enable the following when we are ready.
+    /*
     if (NtCurrentPeb()->SessionId != 0) {
         return( INVALID_HANDLE_VALUE );
     }
+    */
 
     RtlInitUnicodeString( &NameString, DD_BEEP_DEVICE_NAME_U );
     InitializeObjectAttributes( &ObjectAttributes,
@@ -204,9 +208,11 @@ VOID LazyBeep(ULONG Freq, ULONG Duration)
          BeepLastDuration  = Duration;
          }
 
+      // FIXME: Enable the following when we are ready.
+      /*
       if (NtCurrentPeb()->SessionId != 0) {
           Beep( Freq, Duration );
-      } else {
+      } else {*/
           if (!hBeepDevice) {
               hBeepDevice = OpenBeepDevice();
               }
@@ -228,7 +234,7 @@ VOID LazyBeep(ULONG Freq, ULONG Duration)
                                  );
 
           BeepCloseCount = 1000;
-      }
+      //}
       }
 
 
@@ -433,7 +439,8 @@ void PlayContinuousTone(void)
 
    PlaySound(FALSE);
 
-   if (NtCurrentPeb()->SessionId == 0) {
+   // FIXME: Enable the following when we are ready.
+   //if (NtCurrentPeb()->SessionId == 0) {
        if (!BeepLastFreq && !BeepLastDuration &&
            BeepCloseCount && !--BeepCloseCount)
          {
@@ -442,7 +449,7 @@ void PlayContinuousTone(void)
                hBeepDevice = 0;
                }
            }
-   }
+   //}
 
    UNLOCK_SOUND();
 }

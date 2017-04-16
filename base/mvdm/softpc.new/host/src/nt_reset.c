@@ -10,6 +10,9 @@
  *
  * Notes                :
  */
+ 
+#pragma warning(disable:4090)
+ 
 #include <nt.h>
 #include <ntrtl.h>
 #include <nturtl.h>

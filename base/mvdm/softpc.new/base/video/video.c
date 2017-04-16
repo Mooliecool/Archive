@@ -448,6 +448,9 @@ void SetDBCSVector( int CP )
         {
             dbcs_first[i] = FALSE;
         }
+        
+        // FIXME: Enable the following when we are ready.
+        /*
         // Set cursor mode
         if (!SetConsoleCursorMode( sc.OutputHandle,
                                    TRUE,             // Bringing
@@ -456,6 +459,7 @@ void SetDBCSVector( int CP )
         {
             DbgPrint( "NTVDM: SetConsoleCursorMode Error\n" );
         }
+        */
     }
     else
     { // CP == 932
@@ -481,6 +485,9 @@ void SetDBCSVector( int CP )
         {
             dbcs_first[j] = FALSE;
         }
+        
+        // FIXME: Enable the following when we are ready.
+        /*
         // Set cursor mode
         if (!SetConsoleCursorMode( sc.OutputHandle,
                                    FALSE,            //  No bringing
@@ -489,6 +496,7 @@ void SetDBCSVector( int CP )
         {
             DbgPrint( "NTVDM: SetConsoleCursorMode Error\n" );
         }
+        */
     }
 
 }
@@ -4418,12 +4426,16 @@ void SetBitmap()
                 cFontSize.X = width;
                 cFontSize.Y = height;
 
+                // FIXME: Enable the following when we are ready.
+                /*
                 if (!SetConsoleLocalEUDC(sc.OutputHandle,
                                          getCX(),
                                          cFontSize,
                                          (PCHAR)(pCache16->font16x16[getCL()-0x40].ajBits)))
                     DbgPrint("NTVDM: SetConsoleEUDC() Error. CodePoint=%04x\n",
                              getCX());
+                */
+                
                 setAL(0);
                 return;
             }
@@ -4445,12 +4457,15 @@ void SetBitmap()
                 cFontSize.X = width;
                 cFontSize.Y = height;
 
+                // FIXME: Enable the following when we are ready.
+                /*
                 if (!SetConsoleLocalEUDC(sc.OutputHandle,
                                          getCX(),
                                          cFontSize,
                                          (PCHAR)(pCache24->font24x24[getCL()-0x40].ajBits)))
                     DbgPrint("NTVDM: SetConsoleEUDC() Error. CodePoint=%04x\n",
                              getCX() );
+                */
                 setAL(0);
                 return;
             }

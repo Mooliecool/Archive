@@ -38,7 +38,7 @@ SOURCES=                ..\debuggng.c    \
                         ..\pigyoda.c     \
                         ..\yoda.c
 
-i386_SOURCES=		..\dasm.c
+X86_SOURCES=            ..\dasm.c
 
 !INCLUDE $(SOFTPC_TREE)\obj.vdm\CDEFINE.INC
 !INCLUDE $(SOFTPC_TREE)\base\condincl.inc

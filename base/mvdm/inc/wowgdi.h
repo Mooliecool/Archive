@@ -1069,7 +1069,7 @@ typedef struct _GETSTOCKOBJECT16 {      /* g87 */
     SHORT f1;
 } GETSTOCKOBJECT16;
 typedef GETSTOCKOBJECT16 UNALIGNED *PGETSTOCKOBJECT16;
-#define STOCK_MAX 19
+#define STOCK_MAX 17 // 19
 /* XLATOFF */
 // this is the only way we can tie STOCK_LAST with our assembly code
 #if(STOCK_MAX != STOCK_LAST)

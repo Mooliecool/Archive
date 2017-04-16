@@ -97,6 +97,9 @@ GLOBALS           :     describe what exported data objects are
 #include "ga_mark.h"
 #include "ga_defs.h"
 
+// HACKHACK: For some reason, compiler assumes that abs is stdcall. We force it cdecl.
+int     __cdecl abs(int);
+
 /*[3.2 INTERMODULE EXPORTS]                                             */
 
 /*

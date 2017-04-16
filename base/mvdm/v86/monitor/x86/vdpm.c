@@ -119,7 +119,8 @@ void InitTaskDpmSupport(int             numHookedFams,
         goto ErrorExit;
     }
 
-    wdLen = GetSystemWindowsDirectory(szDpmModName, MAX_PATH-1);
+    wdLen = GetWindowsDirectory(szDpmModName, MAX_PATH-1);
+    //wdLen = GetSystemWindowsDirectory(szDpmModName, MAX_PATH-1);
     strcat(szDpmModName, szAppPatch);
     wdLen += (sizeof(szAppPatch)/sizeof(char)) - 1;
 
@@ -526,9 +527,16 @@ PCMDLNPARMS GetSdbCommandLineParams(LPWSTR  pwszAppFilePath,
 }
 */
 
+PFLAGINFOBITS GetFlagCommandLine(PVOID pFlagInfo, DWORD dwFlag, DWORD dwFlags) 
+{
+    //
+    // NOTE: This function has been disabled because it is not relevant in NT 4.0.
+    //
+    
+    return NULL;
+}
 
-
-
+/*
 // Retrieves the SDB command line associated with dwFlag.  The command line is
 // parsed into argv, argc form based on ';' delimiters.
 PFLAGINFOBITS GetFlagCommandLine(PVOID pFlagInfo, DWORD dwFlag, DWORD dwFlags) 
@@ -626,7 +634,7 @@ GFIerror:
     }
     return NULL;
 }
-
+*/
 
 
 

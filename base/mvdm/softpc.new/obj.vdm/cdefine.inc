@@ -31,7 +31,7 @@ SOFTPC_TREE=$(PROJECT_ROOT)\mvdm\softpc.new
 
 # Set machine specific variables. Differences are for X86 vs. RISC
 
-!IF $(386)
+!IF $(X86)
 
 !IF "$(ALT_PROJECT)" == "NEC_98"
 SPC_MC_DEF=   -DMONITOR \

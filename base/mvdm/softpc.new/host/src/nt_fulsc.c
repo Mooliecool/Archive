@@ -1688,6 +1688,8 @@ GLOBAL VOID SwitchToFullScreen(BOOL Restore)
         {
             RcErrorDialogBox(ED_INITFSCREEN, NULL, NULL);
         }
+        // FIXME: Enable the following when we are ready.
+        /*
         else if (NtCurrentPeb()->SessionId != 0)
         {
             if (GetLastError() == ERROR_CTX_GRAPHICS_INVALID)
@@ -1695,6 +1697,7 @@ GLOBAL VOID SwitchToFullScreen(BOOL Restore)
                 RcErrorDialogBox(ED_INITGRAPHICS, NULL, NULL);
             }
         }
+        */
         else
         {
             ErrorExit();

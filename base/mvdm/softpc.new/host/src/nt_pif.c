@@ -162,6 +162,8 @@ BOOL GetPIFData(PIF_DATA * pd, char *PifName)
             }
         }
 
+    // FIXME: Enable the following when we are ready.
+    /*
         // if _default.pif isn't there, try again with non-virtualized (TS)
         // %windir%\_default.pif
     if (!*PifName) {
@@ -172,6 +174,7 @@ BOOL GetPIFData(PIF_DATA * pd, char *PifName)
         strcat(pathBuff, achDef);
         PifName = pathBuff;
         }
+    */
 
 
 /*================================================================

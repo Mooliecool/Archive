@@ -286,6 +286,106 @@ demGetPhysicalDriveType(
 //
 // worker function for DemGetDrives
 //
+
+UCHAR GetPhysicalDriveType(UCHAR DriveNum)
+{
+
+    NTSTATUS Status;
+    HANDLE Handle;
+    UCHAR  uchRet;
+    OBJECT_ATTRIBUTES Obja;
+    IO_STATUS_BLOCK IoStatusBlock;
+    OEM_STRING OemString;
+    UNICODE_STRING UniString;
+    UNICODE_STRING FileName;
+    FILE_FS_DEVICE_INFORMATION DeviceInfo;
+    CHAR  RootName[] = "A:\\";
+    WCHAR wRootName[sizeof(RootName)*sizeof(WCHAR)];
+
+    OemString.Buffer = RootName;
+    OemString.Length = sizeof(RootName) - 1;
+    OemString.MaximumLength = sizeof(RootName);
+    UniString.Buffer = wRootName;
+    UniString.MaximumLength = sizeof(wRootName);
+
+    RootName[0] = 'A' + DriveNum;
+    Status = RtlOemStringToUnicodeString(&UniString,&OemString,FALSE);
+    if (!NT_SUCCESS(Status) ||
+        !RtlDosPathNameToNtPathName_U(wRootName, &FileName, NULL, NULL) )
+       {
+        return DRIVE_UNKNOWN;
+        }
+
+    uchRet = DRIVE_UNKNOWN;
+    InitializeObjectAttributes(&Obja,
+                               &FileName,
+                               OBJ_CASE_INSENSITIVE,
+                               NULL,
+                               NULL
+                               );
+
+    //
+    // Open the file, excluding directories
+    //
+    FileName.Length -= sizeof(WCHAR);
+    Status = NtOpenFile(
+                &Handle,
+                FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                &Obja,
+                &IoStatusBlock,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE
+                );
+
+        // subst drives are not physical drives (actually dirs)
+    if (!NT_SUCCESS(Status)) {
+        goto GPDExitClean;
+        }
+
+    //
+    // Determine if this is a network or disk file system. If it
+    // is a disk file system determine if this is removable or not
+    //
+
+    Status = NtQueryVolumeInformationFile(
+                Handle,
+                &IoStatusBlock,
+                &DeviceInfo,
+                sizeof(DeviceInfo),
+                FileFsDeviceInformation
+                );
+
+    NtClose(Handle);
+    if (!NT_SUCCESS(Status) ||
+        DeviceInfo.Characteristics & FILE_REMOTE_DEVICE)
+       {
+        goto GPDExitClean;
+        }
+
+    switch ( DeviceInfo.DeviceType ) {
+
+        case FILE_DEVICE_CD_ROM:
+        case FILE_DEVICE_CD_ROM_FILE_SYSTEM:
+            uchRet = DRIVE_CDROM;
+            break;
+
+        case FILE_DEVICE_VIRTUAL_DISK:
+            uchRet = DRIVE_RAMDISK;
+            break;
+
+        case FILE_DEVICE_DISK:
+        case FILE_DEVICE_DISK_FILE_SYSTEM:
+            uchRet = DeviceInfo.Characteristics & FILE_REMOVABLE_MEDIA
+                      ? DRIVE_REMOVABLE : DRIVE_FIXED;
+            break;
+        }
+
+GPDExitClean:
+    RtlFreeHeap(RtlProcessHeap(), 0, FileName.Buffer);
+
+    return uchRet;
+}
+
 UCHAR
 DosDeviceDriveTypeToPhysicalDriveType(
       UCHAR DeviceDriveType
@@ -313,9 +413,6 @@ DosDeviceDriveTypeToPhysicalDriveType(
 
    return DRIVE_UNKNOWN;
 }
-
-
-
 
 
 /* demGetDrives - Get number of logical drives in the system

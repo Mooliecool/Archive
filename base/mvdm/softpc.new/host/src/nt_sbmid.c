@@ -861,6 +861,11 @@ Return Value:
 }
 
 #if REPORT_SB_MODE
+BOOL
+IsDebuggerPresent(
+    VOID
+    );
+
 void
 DisplaySbMode(
     USHORT Mode

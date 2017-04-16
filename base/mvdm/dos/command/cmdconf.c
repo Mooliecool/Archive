@@ -283,7 +283,8 @@ void ExpandConfigFiles(BOOLEAN bConfig)
    fKoreanCP = (GetConsoleCP() ==  KOREAN_WANSUNG_CP) ? TRUE : FALSE;
    dwLenHotkeyOption = GetHotkeyOption( achHotkeyOption, sizeof(achHotkeyOption) );
 #endif // KOREA
-   dw = GetSystemWindowsDirectory(achRawFile, sizeof(achRawFile));
+    dw = GetWindowsDirectory(achRawFile, sizeof(achRawFile));
+   //dw = GetSystemWindowsDirectory(achRawFile, sizeof(achRawFile));
    dwLenSysRoot = GetShortPathNameA(achRawFile, achSysRoot, sizeof(achSysRoot));
    if (dwLenSysRoot >= sizeof(achSysRoot)) {
         dwLenSysRoot = 0;

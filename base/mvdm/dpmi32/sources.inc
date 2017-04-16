@@ -50,7 +50,7 @@ SOURCES=        \
         ..\vxd.c       \
         ..\xmem.c
 
-i386_SOURCES=..\i386\dpmi386.c ..\i386\dpmimem.c
+X86_SOURCES=..\i386\dpmi386.c ..\i386\dpmimem.c
 
 MIPS_SOURCES=..\dpmimemr.c
 PPC_SOURCES=..\dpmimemr.c

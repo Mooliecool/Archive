@@ -55,7 +55,7 @@ SOURCES=  \
     ..\cg.c            \
     ..\ggdc.c
 
-i386_SOURCES=           ..\i386\ggdcdraw.asm
+X86_SOURCES=..\i386\ggdcdraw.asm
 
 !INCLUDE $(SOFTPC_TREE)\obj.vdm\CDEFINE.INC
 
