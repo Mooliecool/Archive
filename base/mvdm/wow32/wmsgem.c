@@ -124,7 +124,7 @@ BOOL FASTCALL ThunkEMMsg16(LPMSGPARAMEX lpmpex)
 
         case EM_SETHANDLE:
             lpmpex->uParam = (UINT)MAKELONG(lpmpex->Parm16.WndProc.wParam,
-                                  LOWORD((DWORD)lpmpex->pww->hInstance) | 1);
+                                  LOWORD(lpmpex->pww->hModule) | 1);
              break;
 
         case EM_REPLACESEL:
@@ -135,7 +135,12 @@ BOOL FASTCALL ThunkEMMsg16(LPMSGPARAMEX lpmpex)
                 if (psz) {
                     i = strlen(psz)+1;
                     lpmpex->lParam = (LONG) LocalAlloc (LMEM_FIXED, i);
-                    RtlCopyMemory ((PSZ)lpmpex->lParam, psz, i);
+                    if (lpmpex->lParam ) {
+                        RtlCopyMemory ((PSZ)lpmpex->lParam, psz, i);
+                    }
+                    else {
+                        LOGDEBUG (0, ("WOW::WMSGEM.C: EM_REPLACESEL: Out of Memory Failure/n"));
+                    }
                 }
                 FREEPSZPTR(psz);
             }
@@ -167,20 +172,9 @@ BOOL FASTCALL ThunkEMMsg16(LPMSGPARAMEX lpmpex)
 
                 l = lpmpex->Parm16.WndProc.lParam;
 
-                //
-                // FEATURE-O-RAMA
-                //
-                // if the selector already has the high bit on then turn off bit 2
-                // of the selector (the LDT bit, which should always be on).  we
-                // need a way to not blindly strip off the high bit in our wndproc.
-                //
+                // mark the proc as WOW proc and save the high bits in the RPL
+                MarkWOWProc (l,lpmpex->lParam);
 
-                if (l & WNDPROC_WOW) {
-                    WOW32ASSERT(l & WOWCLASS_VIRTUAL_NOT_BIT31);
-                    l &= ~WOWCLASS_VIRTUAL_NOT_BIT31;
-                }
-
-                lpmpex->lParam = l | WNDPROC_WOW;
                 LOGDEBUG (0, ("WOW::WMSGEM.C: EM_SETWORDBREAKPROC: lpmpex->Parm16.WndProc.lParam = %08lx, new lpmpex->Parm16.WndProc.lParam = %08lx\n", lpmpex->Parm16.WndProc.lParam, lpmpex->lParam));
 
             }
@@ -243,22 +237,16 @@ VOID FASTCALL UnThunkEMMsg16(LPMSGPARAMEX lpmpex)
         if (lpmpex->Parm16.WndProc.wParam > 0) {
             STACKORHEAPFREE((LPINT)lParamNew, lpmpex->MsgBuffer);
         }
+        break;
 
     case EM_GETWORDBREAKPROC:
         if (lpmpex->lReturn) {
-            if (lpmpex->lReturn & WNDPROC_WOW) {
+            if (IsWOWProc (lpmpex->lReturn)) {
 
                 LOGDEBUG (0, ("WOW::WMSGEM.C: EM_GETWORDBREAKPROC: lReturn = %08lx ", lpmpex->lReturn));
-                lpmpex->lReturn = lpmpex->lReturn & (~WNDPROC_WOW);
 
-                //
-                // if the actual selector had the high bit on then we turned off
-                // bit 2 of the selector (the LDT bit, which will always be on)
-                //
-
-                if (!(lpmpex->lReturn & WOWCLASS_VIRTUAL_NOT_BIT31)) {
-                    lpmpex->lReturn |= (WNDPROC_WOW | WOWCLASS_VIRTUAL_NOT_BIT31);
-                }
+                //Unmark the proc and restore the high bits from rpl field
+                UnMarkWOWProc (lpmpex->lReturn,lpmpex->lReturn);
 
                 LOGDEBUG (0, (" and new lReturn = %08lx\n", lpmpex->lReturn));
             }

@@ -1,4 +1,4 @@
-/* command.h - This file has all the defines and data structures nneded
+/* command.h - This file has all the defines and data structures needed
  *	       for command.com/command.dll communication.
  *
  * Sudeepb 17-Sep-1991 Created
@@ -87,7 +87,7 @@ typedef struct _SAVEWORLD {
     ULONG   ImageSize;
 } SAVEWORLD, *PSAVEWORLD;
 
-extern BOOL CMDInit (int argc, char *argv[]);
+extern VOID CMDInit (VOID);
 extern BOOL CMDRebootVDM (void);
 
 extern BOOL fEnableInt10;

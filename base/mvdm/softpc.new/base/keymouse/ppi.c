@@ -84,6 +84,7 @@ static boolean SPKRDATA_was_low = TRUE;	/* speaker data for sound */
 
 void ppi_inb IFN2(io_addr, port, half_word *, value)
 {
+#ifndef NEC_98
 #ifdef PROD
 	UNUSED(port);
 #endif
@@ -105,10 +106,12 @@ void ppi_inb IFN2(io_addr, port, half_word *, value)
     *value = ppi_register;
 
     note_trace2(PPI_VERBOSE, "ppi_inb() - port %x, returning val %x", port, *value);
+#endif   //NEC_98
 }
 
 void ppi_outb IFN2(io_addr, port, half_word, value)
 {
+#ifndef NEC_98
     port = port & PPI_BIT_MASK;		/* clear unused bits */
 
     if (port == PPI_GENERAL)
@@ -176,6 +179,7 @@ void ppi_outb IFN2(io_addr, port, half_word, value)
 	}
     else
 	    note_trace2(PPI_VERBOSE, "ppi_outb() - Value %x to unsupported port %x", value, port);
+#endif   //NEC_98
 }
 
 #ifdef SEGMENTATION
@@ -189,6 +193,7 @@ void ppi_outb IFN2(io_addr, port, half_word, value)
 
 void ppi_init IFN0()
 {
+#ifndef NEC_98
     io_addr i;
     io_define_inb(PPI_ADAPTOR, ppi_inb);
     io_define_outb(PPI_ADAPTOR, ppi_outb);
@@ -197,4 +202,5 @@ void ppi_init IFN0()
 		io_connect_port(i, PPI_ADAPTOR, IO_READ_WRITE);
 
     ppi_register = 0x00;
+#endif   //NEC_98
 }

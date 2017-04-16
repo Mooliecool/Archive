@@ -111,7 +111,7 @@ void illegal_bop()
 						&ignValue) == 1))
 					{
 						ignoreBops[maxIgnore++] =
-							ignValue;
+							(IU8)ignValue;
 					}
 					
 					/* Skip the bop number. */

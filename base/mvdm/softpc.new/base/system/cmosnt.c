@@ -10,9 +10,9 @@
  * Sccs ID:		@(#)cmos.c	1.38 07/11/95
  *
  * Purpose:		Unknown
- * 
+ *
  * (c)Copyright Insignia Solutions Ltd., 1990. All rights reserved.
- * 
+ *
  */
 
 /*
@@ -117,7 +117,7 @@ struct host_timeval RtcTickTime = {0,0};
 
 
 /*
- * 
+ *
  * ===========================================================================
  * Internal functions
  * ===========================================================================
@@ -213,12 +213,12 @@ HostTimeAdjust(
     LARGE_INTEGER  liTime;
 
     tf.Milliseconds = 0;
-    tf.Second     = ht->Second;
-    tf.Minute     = ht->Minute;
-    tf.Hour       = ht->Hour;
-    tf.Day        = ht->Day;
-    tf.Month      = ht->Month;
-    tf.Year       = ht->Year;
+    tf.Second     = (SHORT)ht->Second;
+    tf.Minute     = (SHORT)ht->Minute;
+    tf.Hour       = (SHORT)ht->Hour;
+    tf.Day        = (SHORT)ht->Day;
+    tf.Month      = (SHORT)ht->Month;
+    tf.Year       = (SHORT)ht->Year;
 
     if (!RtlTimeFieldsToTime(&tf, &liTime)) {
         return FALSE;
@@ -434,7 +434,7 @@ int yes_12to24 IFN1(int, x)
 
 int verify_equip_byte IFN1(half_word *, equip)
 {
-	static half_word display_mask[] = 
+	static half_word display_mask[] =
 	{
 		MDA_PRINTER,	CGA_80_COLUMN,	CGA_80_COLUMN,
 		OWN_BIOS,	MDA_PRINTER
@@ -1138,9 +1138,9 @@ GLOBAL void cmos_post IFN0()
 
 	/* Check the extended memory */
 	if ((cmos[CMOS_E_M_S_LO] !=
-	     ((sys_addr) (sas_memory_size() - PC_MEM_SIZE) >> 10) & 0xff) ||
+	     (((sys_addr) (sas_memory_size() - PC_MEM_SIZE) >> 10) & 0xff)) ||
 	    (cmos[CMOS_E_M_S_HI] !=
-	     ((sys_addr) (sas_memory_size() - PC_MEM_SIZE) >> 18) & 0xff))
+	     (((sys_addr) (sas_memory_size() - PC_MEM_SIZE) >> 18) & 0xff)))
 		cmos_err |= BAD_XMS;
 
 	/* Ignore the Contents of the Drive C and Drive D extended bytes */

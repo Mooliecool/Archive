@@ -52,7 +52,7 @@ typedef struct _M32 {   /* w32 */
 #ifdef DEBUG_OR_WOWPROFILE
     LPSZ    lpszW32;    // message name (DEBUG version only)
     DWORD   cCalls;     // # times the message has been passed
-    DWORD   cTics;      // sum total of thunk tics
+    LONGLONG cTics;      // sum total of thunk tics
 #endif
 } M32, *PM32;
 
@@ -63,6 +63,7 @@ extern  BOOL fThunkDDEmsg;
 /* Function prototypes
  */
 LONG    W32Win16WndProcEx(HWND hwnd, UINT uMsg, UINT uParam, LONG lParam, DWORD dwCPD, PWW pww);
+BOOL    W32Win16DlgProcEx(HWND hwnd, UINT uMsg, UINT uParam, LONG lParam, DWORD dwCPD, PWW pww);
 
 LPFNM32PROTO WM32NoThunking;
 LPFNM32PROTO WM32Undocumented;
@@ -77,6 +78,7 @@ LPFNM32PROTO WM32ActivateApp;
 LPFNM32PROTO WM32RenderFormat;
 LPFNM32PROTO WM32GetMinMaxInfo;
 LPFNM32PROTO WM32NCPaint;
+LPFNM32PROTO WM32NCDestroy;
 LPFNM32PROTO WM32GetDlgCode;
 LPFNM32PROTO WM32NextDlgCtl;
 LPFNM32PROTO WM32DrawItem;
@@ -123,8 +125,14 @@ LPFNM32PROTO WM32CopyData;
 LPFNM32PROTO WM32MMCalcScroll;
 LPFNM32PROTO WM32Thunk16To32;
 LPFNM32PROTO WM32WinHelp;
+LPFNM32PROTO WM32Notify;
+LPFNM32PROTO WM32Sizing;
+LPFNM32PROTO WM32xxxUIState;
 LPFNM32PROTO WM32NotifyWow;
+#ifdef FE_IME
+LPFNM32PROTO WM32IMEReport;
+#endif // FE_IME
+LPFNM32PROTO WM32PrintClient;
 
 #endif  // #ifndef _DEF_WMDISP32_ THIS SHOULD BE THE LAST LINE IN THIS FILE
-
 

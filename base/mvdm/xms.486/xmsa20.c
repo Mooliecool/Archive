@@ -30,8 +30,8 @@ BYTE * pHimemA20State = NULL;
  *	   SUCCESS
  *	     Client (AX) = 1
  *	     if on entry AX=2 Then
- *		Cleint (AX) =1 means was enabled
- *		Cleint (AX) =0 means was disabled
+ *		Client (AX) =1 means was enabled
+ *		Client (AX) =0 means was disabled
  *
  *	   FAILURE
  *	     Client (AX) = 0

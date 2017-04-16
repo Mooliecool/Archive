@@ -4,7 +4,7 @@ Copyright (c) 1992  Microsoft Corporation
 
 Module Name:
 
-    xmscmt86.c
+    xmsmemr.c
 
 Abstract:
 

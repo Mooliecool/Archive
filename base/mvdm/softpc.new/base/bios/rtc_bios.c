@@ -106,7 +106,7 @@ void rtc_int(void)
               outb( CMOS_PORT, (CMOS_REG_B + NMI_DISABLE) );
               inb( CMOS_DATA, &regB_value2 );
               outb( CMOS_PORT, (CMOS_REG_B + NMI_DISABLE) );
-              outb( CMOS_DATA, (regB_value2 & 0xbf) );
+              outb( CMOS_DATA, (IU8)((regB_value2 & 0xbf)) );
 
               /* set users flag       */
               sas_loadw( USER_FLAG_SEG, &flag_seg );

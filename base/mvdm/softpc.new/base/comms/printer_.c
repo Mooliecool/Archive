@@ -1,3 +1,5 @@
+#if defined(NEC_98)
+#else  // !NEC_98
 
 #include "insignia.h"
 #include "host_def.h"
@@ -54,8 +56,8 @@ static char SccsID[]="@(#)printer_io.c	1.11 08/25/93 Copyright Insignia Solution
 #include "sas.h"
 #include "ios.h"
 #include "bios.h"
-#include "printer.h" 
-#include "trace.h" 
+#include "printer.h"
+#include "trace.h"
 #include "error.h"
 #include "config.h"
 #include "host_lpt.h"
@@ -74,11 +76,11 @@ void    printer_bop_openclose (int);
  */
 static sys_addr port_address[] = {
 			LPT1_PORT_ADDRESS,
-			LPT2_PORT_ADDRESS, 
+			LPT2_PORT_ADDRESS,
 			LPT3_PORT_ADDRESS };
 static sys_addr timeout_address[] = {
-			LPT1_TIMEOUT_ADDRESS, 
-			LPT2_TIMEOUT_ADDRESS, 
+			LPT1_TIMEOUT_ADDRESS,
+			LPT2_TIMEOUT_ADDRESS,
 			LPT3_TIMEOUT_ADDRESS };
 
 #endif /* PRINTER */
@@ -175,7 +177,7 @@ void printer_io()
 		status ^= 0x48;				/* flip the odd bit	    */
 		setAH(status);
 	        break;
-    
+
         case 1: outb(printer_control_reg, 0x08);	/* set init line low	    */
                 outb(printer_control_reg, 0x0C);	/* set init line high	    */
 		inb(printer_status_reg, &status);
@@ -197,13 +199,14 @@ void printer_io()
 #endif
 }
 
+extern  void  host_lpt_dos_open(int);
+extern  void  host_lpt_dos_close(int);
+
 #if defined(NTVDM) && defined(MONITOR)
 /* for printing performance on x86 */
 
 extern  sys_addr lp16BitPrtId;
 extern  boolean  host_print_buffer(int);
-extern  void  host_lpt_dos_open(int);
-extern  void  host_lpt_dos_close(int);
 
 void printer_bop_flush(void)
 {
@@ -240,3 +243,4 @@ void printer_bop_openclose(int func)
 #endif
 }
 #endif
+#endif // !NEC_98

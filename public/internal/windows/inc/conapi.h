@@ -32,6 +32,7 @@ SetLastConsoleEventActive( VOID );
 #define VDM_SCREEN_TO_CLIENT    5
 #define VDM_IS_HIDDEN           6
 #define VDM_FULLSCREEN_NOPAINT  7
+#define VDM_SET_VIDEO_MODE      8
 
 BOOL
 WINAPI
@@ -470,3 +471,89 @@ WriteConsoleInputVDMW(
 #else
 #define WriteConsoleInputVDM  WriteConsoleInputVDMA
 #endif // !UNICODE
+
+#if defined(FE_SB)
+BOOL
+APIENTRY
+GetConsoleNlsMode(
+    IN HANDLE hConsole,
+    OUT PDWORD lpdwNlsMode
+    );
+
+BOOL
+APIENTRY
+SetConsoleNlsMode(
+    IN HANDLE hConsole,
+    IN DWORD fdwNlsMode
+    );
+
+BOOL
+APIENTRY
+GetConsoleCharType(
+    IN HANDLE hConsole,
+    IN COORD coordCheck,
+    OUT PDWORD pdwType
+    );
+
+#define CHAR_TYPE_SBCS     0   // Displayed SBCS character
+#define CHAR_TYPE_LEADING  2   // Displayed leading byte of DBCS
+#define CHAR_TYPE_TRAILING 3   // Displayed trailing byte of DBCS
+
+BOOL
+APIENTRY
+SetConsoleLocalEUDC(
+    IN HANDLE hConsoleHandle,
+    IN WORD   wCodePoint,
+    IN COORD  cFontSize,
+    IN PCHAR  lpSB
+    );
+
+BOOL
+APIENTRY
+SetConsoleCursorMode(
+    IN HANDLE hConsoleHandle,
+    IN BOOL   Blink,
+    IN BOOL   DBEnable
+    );
+
+BOOL
+APIENTRY
+GetConsoleCursorMode(
+    IN HANDLE hConsoleHandle,
+    OUT PBOOL  pbBlink,
+    OUT PBOOL  pbDBEnable
+    );
+
+BOOL
+APIENTRY
+RegisterConsoleOS2(
+    IN BOOL fOs2Register
+    );
+
+BOOL
+APIENTRY
+SetConsoleOS2OemFormat(
+    IN BOOL fOs2OemFormat
+    );
+
+BOOL
+IsConsoleFullWidth(
+    IN HDC hDC,
+    IN DWORD CodePage,
+    IN WCHAR wch
+    );
+
+#if defined(FE_IME)
+BOOL
+APIENTRY
+RegisterConsoleIME(
+    IN HWND  hWndConsoleIME,
+    OUT DWORD *dwConsoleThreadId
+    );
+
+BOOL
+APIENTRY
+UnregisterConsoleIME(
+    );
+#endif // FE_IME
+#endif // FE_SB

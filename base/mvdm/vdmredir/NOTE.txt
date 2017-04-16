@@ -1,0 +1,2 @@
+In order to build this portion, you must set BUILD_ALLOW_LINKER_WARNINGS environment variable to 1.
+This is because we are forcing this module to build with multiply symbols and it should eventually be resolved by making a separate lib called netapi32p.lib that does not export the duplicate symbols.

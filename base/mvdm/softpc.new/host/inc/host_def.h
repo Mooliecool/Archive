@@ -30,9 +30,7 @@
 #endif
 #define HOST_OPEN(a,b,c)    open(a,b,c)
 #define PROF_REZ_ID	0
-#define CMOS_REZ_ID	0
 #define ROMS_REZ_ID	1
-#define CMOS_FILE_NAME "cmos.ram"
 #define HOST_IDEAL_ALARM			SYSTEM_TICK_INTV
 #define YYLENG_ADJUST 0
 
@@ -98,11 +96,19 @@ extern	quick_event_delays	host_delays;
 *	system parameter defines				*
 \***************************************************************/
 #ifndef NUM_PARALLEL_PORTS
+#if defined(NEC_98)
+#define NUM_PARALLEL_PORTS      1
+#else  // !NEC_98
 #define NUM_PARALLEL_PORTS	3
+#endif // !NEC_98
 #endif /* NUM_PARALLEL_PORTS */
 
 #ifndef NUM_SERIAL_PORTS
+#if defined(NEC_98)
+#define NUM_SERIAL_PORTS        1
+#else  // !NEC_98
 #define NUM_SERIAL_PORTS	4
+#endif // !NEC_98
 #endif /* NUM_SERIAL_PORTS */
 
 /***************************************************************\
@@ -195,6 +201,11 @@ memset4(
 void host_lpt_close_all(void);
 void host_lpt_heart_beat(void);
 
+// from nt_reset.c
+PCHAR pszSystem32Path;
+ULONG ulSystem32PathLen; // Does not include '\0'.
+HANDLE LoadSystem32Library(PCWSTR pcwsShortNameW); // WARNING: don't forget the L
+#define UnloadSystem32Library(handle) LdrUnloadDll((PVOID)handle)
 
 // from nt_rflop.c
 void host_flpy_heart_beat(void);
@@ -206,6 +217,9 @@ void InitSound(BOOL);
 
 // from config.c
 extern unsigned char PifFgPriPercent;
+#ifdef ARCX86
+extern BOOL UseEmulationROM;
+#endif
 
 // fomr unix.c
 void WakeUpNow(void);

@@ -1,33 +1,12 @@
 NAME ntvdm.exe
 
 EXPORTS
-#if defined(i386)
-    getEAX
-    getEBX
-    getECX
-    getEDX
-    getESP
-    getEBP
-    getESI
-    getEDI
-    getFS
-    getGS
-    setEAX
-    setEBX
-    setECX
-    setEDX
-    setESP
-    setEBP
-    setESI
-    setEDI
-    setFS
-    setGS
+#ifdef _X86_
     MGetVdmPointer = ExpSim32GetVDMPointer      ; for 1.0 VDD compatibility
-    setMSW
-    getEIP
     CurrentMonitorTeb  DATA
-    ExpVdmTib = VdmTib DATA
     SelectorLimit = ExpSelectorLimit DATA
+
+    DpmiSetIncrementalAlloc
 
 #else   // Risc platforms
     c_getAX     = getAX
@@ -59,6 +38,7 @@ EXPORTS
     c_getIF     = getIF
     c_getDF     = getDF
     c_getOF     = getOF
+    c_getMSW    = getMSW
     c_setAX     = setAX
     c_setAH     = setAH
     c_setAL     = setAL
@@ -96,6 +76,31 @@ EXPORTS
 
 #endif
 
+    getEAX
+    getEBX
+    getECX
+    getEDX
+    getESP
+    getEBP
+    getESI
+    getEDI
+    getFS
+    getGS
+    setEAX
+    setEBX
+    setECX
+    setEDX
+    setESP
+    setEBP
+    setESI
+    setEDI
+    setFS
+    setGS
+    setMSW
+    getEIP
+    setEIP
+    getEFLAGS
+    setEFLAGS
     getMSW
     getAX
     getAL
@@ -168,13 +173,13 @@ EXPORTS
     ResumeTimerThread
 
     call_ica_hw_interrupt = ica_hw_interrupt
-    GetWOWShortCutInfo
 
     DispatchInterrupts
     ExpLdt = Ldt  DATA
     FlatAddress   DATA
     pDeviceChain  DATA
     fSeparateWow  DATA
+    Dos_Flag_Addr DATA
 
     host_com_close
     host_direct_access_error
@@ -214,9 +219,32 @@ EXPORTS
     WOWSysErrorBox
     SoftPcEoi
 
+    demFileDelete
     demFileFindFirst
     demFileFindNext
     demClientErrorEx
+
+    demWOWLFNEntry
+    demWOWLFNInit
+    demGetFileTimeByHandle_WOW
+    demIsShortPathName
+    demLFNGetCurrentDirectory
+    demSetCurrentDirectoryGetDrive
+    demGetPhysicalDriveType
+
+    cmdCheckTempInit
+    cmdCheckTemp
+
+
+    demWOWLFNAllocateSearchHandle
+    demWOWLFNGetSearchHandle
+    demWOWLFNCloseSearchHandle
+    demLFNCleanup
+
+    BuildGlobalDpmStuffForWow       ; for internal use
+    InitTaskDpmSupport              ; for internal use
+    FreeTaskDpmSupport              ; for internal use
+    InitGlobalDpmTables             ; for internal use
 
 #ifdef CPU_40_STYLE
 
@@ -229,8 +257,25 @@ EXPORTS
 
 #endif
 
-#ifndef i386
+#ifdef  _X86_
 
-    VdmAddDescriptorMapping
+    SetShadowDescriptorEntries
 
 #endif
+
+#ifndef _X86_
+
+    VdmAddDescriptorMapping
+    VdmFlushCache
+    VdmUnmapFlat
+
+#endif
+
+    VdmTraceEvent
+    VdmParametersInfo
+    VdmGetParametersInfoError
+    VdmMapFlat
+    VdmDbgAttach
+    IsCdRomFile
+
+    GetDOSAppName

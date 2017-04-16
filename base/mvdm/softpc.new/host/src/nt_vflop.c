@@ -221,8 +221,8 @@ if (bs_diskette_open)
    }
 strcpy(dpath, configuration.cf_fl_dir);
 strcat(dpath, "\\");
-strcat(dpath, diskette_name);
-
+strncat(dpath, diskette_name,sizeof(dpath)-strlen(dpath));
+dpath[sizeof(dpath)-1] = '\0';
 
 bs_diskette_open   = TRUE;     /* Assume success */
 diskette_read_only = FALSE;    /* Assume read/write */

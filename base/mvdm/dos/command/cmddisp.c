@@ -11,12 +11,19 @@
 #include <cmdsvc.h>
 #include <softpc.h>
 
+//'cmdSetWinTitle' and 'cmdGetCursorPos' are not available in NON-DBCS builds. 
+#ifndef DBCS
+#define cmdSetWinTitle cmdIllegalFunc
+#endif
+#ifndef NEC_98
+#define cmdGetCursorPos cmdIllegalFunc
+#endif
 
 PFNSVC	apfnSVCCmd [] = {
      cmdExitVDM,		//SVC_CMDEXITVDM
      cmdGetNextCmd,		//SVC_CMDGETNEXTCMD
      cmdComSpec,		//SVC_CMDCOMSPEC
-     cmdSaveWorld,		//SVC_CMDSAVEWORLD
+     cmdIllegalFunc,		//SVC_CMDSAVEWORLD was removed
      cmdGetCurrentDir,		//SVC_CMDGETCURDIR
      cmdSetInfo,		//SVC_CMDSETINFO
      cmdGetStdHandle,		//SVC_GETSTDHANDLE
@@ -29,7 +36,21 @@ PFNSVC	apfnSVCCmd [] = {
      cmdGetAutoexecBat,		//SVC_GETAUTOEXECBAT
      cmdGetKbdLayout,		//SVC_GETKBDLAYOUT
      cmdGetInitEnvironment,     //SVC_GETINITENVIRONMENT
-     cmdGetStartInfo            //SVC_GETSTARTINFO
+     cmdGetStartInfo,            //SVC_GETSTARTINFO
+     cmdSetWinTitle,		//SVC_CHANGEWINTITLE
+     cmdIllegalFunc,            // 18 
+     cmdIllegalFunc,            // 19 
+     cmdIllegalFunc,            // 20 
+     cmdIllegalFunc,            // 21 
+     cmdIllegalFunc,            // 22 
+     cmdIllegalFunc,            // 23 
+     cmdIllegalFunc,            // 24 
+     cmdIllegalFunc,            // 25 
+     cmdIllegalFunc,            // 26 
+     cmdIllegalFunc,            // 27 
+     cmdIllegalFunc,            // 28 
+     cmdIllegalFunc,            // 29 
+     cmdGetCursorPos            //SVC_GETCURSORPOS 
 };
 
 
@@ -54,3 +75,13 @@ BOOL CmdDispatch (ULONG iSvc)
 
     return TRUE;
 }
+
+
+BOOL cmdIllegalFunc ()                                 
+{                                                                
+#if DBG                                                       
+    DbgPrint("Unimplemented SVC index for COMMAND\n");       
+#endif                                                         
+    setCF(1);                                                 
+    return FALSE;                                            
+}                                                                

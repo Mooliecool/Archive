@@ -3,15 +3,15 @@
 /*
  * SoftPC Revision 3.0
  *
- * Title	: Bios Virtual Screen Interface
+ * Title        : Bios Virtual Screen Interface
  *
- * Description	: Top level call to the video interface.  Uses a function
- *		  jump table to call the lower level functions.
+ * Description  : Top level call to the video interface.  Uses a function
+ *                jump table to call the lower level functions.
  *
- * Author	: Henry Nash
+ * Author       : Henry Nash
  *
- * Notes	: None
- * SCCS ID	: @(#)video_io.c	1.8 08/19/94
+ * Notes        : None
+ * SCCS ID      : @(#)video_io.c        1.8 08/19/94
  *
  */
 
@@ -43,7 +43,7 @@
 #include "debug.h"
 #include "idetect.h"
 
-#define check_video_func(AH)	(AH < EGA_FUNC_SIZE)
+#define check_video_func(AH)    (AH < EGA_FUNC_SIZE)
 
 void video_io()
 {
@@ -64,7 +64,7 @@ void video_io()
     assert1(check_video_func(getAH()),"Illegal VIO:%#x",getAH());
     if (check_video_func(getAH()))
     {
-	IDLE_video();
-	(*video_func[getAH()])();
+        IDLE_video();
+        (*video_func[getAH()])();
     }
 }

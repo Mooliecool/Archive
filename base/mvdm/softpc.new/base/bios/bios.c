@@ -1,5 +1,5 @@
 #include "insignia.h"
-#include "host_def.h" 
+#include "host_def.h"
 /*
  * VPC-XT Revision 1.0
  *
@@ -15,13 +15,6 @@
  *                with the dummy routine rom_basic().
  *
  */
-
-// BUGBUG: stephanos 04/02/2017
-//  These warnings were deliberately disabled to allow compilation.
-// ==
-#pragma warning(disable:4113)
-#pragma warning(disable:4276)
-// ==
 
 #ifdef SCCSID
 static char SccsID[]="@(#)bios.c	1.64 06/28/95 Copyright Insignia Solutions Ltd.";
@@ -62,7 +55,7 @@ static char SccsID[]="@(#)bios.c	1.64 06/28/95 Copyright Insignia Solutions Ltd.
 
 
 #ifdef RDCHK
-extern void get_lar();
+extern void get_lar IPT0();
 #endif /* RDCHK */
 
 #ifdef CPU_40_STYLE
@@ -273,7 +266,16 @@ void (*BIOS[])() = {
 #else
 			illegal_bop,	/* BOP 42 */
 #endif
+#ifdef JAPAN
+                        MS_DosV_bop,    /* BOP 43 - for MS-DOS/V */
+#elif defined(KOREA) // !JAPAN
+/* The basic function of Korean Hangul DOS BOP is similary with Japanese DOS/V.
+   But, We just change the name.
+*/
+                        MS_HDos_bop,    /* BOP 43 - for MS-HDOS */
+#else // !KOREA
 			illegal_bop,	/* BOP 43 */
+#endif // !KOREA
 			illegal_bop,	/* BOP 44 */
 			illegal_bop,	/* BOP 45 */
 			illegal_bop,	/* BOP 46 */
@@ -515,8 +517,8 @@ void (*BIOS[])() = {
 #else /* WINSOCK */
                         illegal_bop,    /* BOP A6 */
                         illegal_bop,    /* BOP A7 */
-#endif /* WINSOCK */ 
-			illegal_bop,	/* BOP A8 */ 
+#endif /* WINSOCK */
+			illegal_bop,	/* BOP A8 */
 			illegal_bop,	/* BOP A9 */
 #ifdef SWIN_HFX
 			v_SwinRedirector,   /* BOP AA */ /* SwinRedirector */
@@ -571,7 +573,7 @@ void (*BIOS[])() = {
 			v_host_mouse_install1,	/* BOP C8 */ /* host_mouse_install1 */
 			v_host_mouse_install2,	/* BOP C9 */ /* host_mouse_install2 */
 #else
-#ifdef GISP_SVGA 
+#ifdef GISP_SVGA
 			mouse_install1,
 			mouse_install2,
 #else /* GISP_SVGA */
@@ -857,7 +859,7 @@ LOCAL struct BOP_name BOP_names[] = {
 	BOP_NAME(v_host_mouse_install1),
 	BOP_NAME(v_host_mouse_install2),
 #else
-#ifdef GISP_SVGA 
+#ifdef GISP_SVGA
 	BOP_NAME(mouse_install1),
 	BOP_NAME(mouse_install2),
 #endif /* GISP_SVGA */

@@ -294,7 +294,7 @@ static char *CODE_D0[] = {"ROL   ","ROR   ","RCL   ","RCR   ",
 static int LEN_F6[] = { 3,3,2,2,2,2,2,2 };
 static int LEN_F7[] = { 4,4,2,2,2,2,2,2 };
 
-static int LEN_ASM[] =
+static word LEN_ASM[] =
    {
    2,2,2,2,2,3,1,1,  2,2,2,2,2,3,1,1,  /* 00 - 0f */
    2,2,2,2,2,3,1,1,  2,2,2,2,2,3,1,1,  /* 10 - 1f */

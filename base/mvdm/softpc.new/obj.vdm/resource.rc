@@ -2,7 +2,7 @@
 
 Filename :  softpc.rc
 Purpose  :  Contains resource file definition for softpc
-Author	 :  D.A.Bartlett
+Author   :  D.A.Bartlett
 
 Contains :
 
@@ -44,7 +44,7 @@ BEGIN
     PUSHBUTTON   "OK",       IDB_OKEDIT,  200, 64, 40, 16, WS_TABSTOP
 END
 
-/* removed for Daytona, as they are obsolete */
+/* obsolete */
 /* EG_GATE_A20,         "Extended Memory has not been configured."*/
 /* EG_BAD_COMMS_NAME,   "The communications name is invalid."*/
 /* EG_BAD_CONF,         "The configuration file entry shown below has an invalid value." */
@@ -53,33 +53,34 @@ END
 /* D_A_OLDPIF,   "use an obsolete PIF format" */
 /* EG_EMM_CONFIG, "Your machine configuration will not support Expanded Memory." */
 
+/* EG_NO_REZ_UPDATE,    "The CMOS file cmos.ram could not be created." */
+/* EG_REZ_UPDATE,       "The CMOS file cmos.ram could not be updated." */
+
 STRINGTABLE
      {
 
-	/* First, Base errors (range 0 - ) */
+        /* First, Base errors (range 0 - ) */
         EG_BAD_OP,           "The NTVDM CPU has encountered an illegal instruction."
         EG_OWNUP,            "Internal error in NTVDM procedure."
         EG_NO_ROM_BASIC,     "NTVDM does not support a ROM BASIC."
         EG_EXPANDED_MEM_FAILURE, "Failure to allocate the requested number of Expanded Memory pages."
         EG_CONT_RESET,       "A continuous RESET state has been entered."
-        EG_NO_REZ_UPDATE,    "The CMOS file cmos.ram could not be created."
-        EG_REZ_UPDATE,       "The CMOS file cmos.ram could not be updated."
         EG_MALLOC_FAILURE,   "The memory resources needed by NTVDM could not be allocated."
         EG_SYS_MISSING_FILE, "An installation file required by NTVDM is missing, execution must terminate."
         EG_INSUF_MEMORY,     "Insufficient memory resources."
-	EG_PIF_BAD_FORMAT,   "PIF file not found or bad file format."
-	EG_PIF_STARTDIR_ERR, "Invalid startup directory, please check your pif file."
-	EG_PIF_STARTFILE_ERR,"Invalid program file name, please check your pif file."
-	EG_PIF_CMDLINE_ERR,  "Command line too long."
-	EG_PIF_ASK_CMDLINE,  "Please input parameters for the application:"
+        EG_PIF_BAD_FORMAT,   "PIF file not found or bad file format."
+        EG_PIF_STARTDIR_ERR, "Invalid startup directory, please check your pif file."
+        EG_PIF_STARTFILE_ERR,"Invalid program file name, please check your pif file."
+        EG_PIF_CMDLINE_ERR,  "Command line too long."
+        EG_PIF_ASK_CMDLINE,  "Please input parameters for the application:"
         EG_ENVIRONMENT_ERR,  "Error while setting up environment for the application."
         EG_BAD_OP386,        "The NTVDM CPU has encountered an unsupported 386 instruction."
-	EG_BAD_EMM_LINE,     "The EMM command line in your config.nt contains invalid parameters or syntax errors."
+        EG_BAD_EMM_LINE,     "The EMM command line in your config.nt contains invalid parameters or syntax errors."
         EG_BAD_FAULT,        "The NTVDM CPU has encountered an unhandled exception."
-	EG_DOS_PROG_EXTENSION,"\nThe file is not a valid MS-DOS program file.\n MS-DOS program files must end with the extension .EXE, .COM, or .BAT."
-	/* Direct Access panel strings */
+        EG_DOS_PROG_EXTENSION,"\nThe file is not a valid MS-DOS program file.\n MS-DOS program files must end with the extension .EXE, .COM, or .BAT."
+        /* Direct Access panel strings */
         D_A_MESS,  "An application has attempted to %s, which cannot be supported. This may cause the application to function incorrectly."
-	D_A_FLOPPY,   "directly access an incompatible diskette format"
+        D_A_FLOPPY,   "directly access an incompatible diskette format"
         D_A_HARDDISK, "directly access the hard disk"
         D_A_DRIVER,   "load a 16-bit Dos device driver"
         D_A_ILLBOP,   "perform an unknown internal 'BOP' opcode"
@@ -88,6 +89,7 @@ STRINGTABLE
 
         ED_WOWPROMPT, "Choose 'Close' to terminate the application."
         ED_WOWTITLE,  "16 bit Windows Subsystem"
+        ED_DOSTITLE   "16 bit MS-DOS Subsystem"
         ED_BADSYSFILE,"The system file is not suitable for running MS-DOS and Microsoft Windows applications."
         ED_INITMEMERR, "Memory error during intialization."
         ED_INITTMPFILE,"A temporary file needed for initialization could not be created or could not be written to. Make sure that the directory path exists, and disk space is available."
@@ -99,6 +101,12 @@ STRINGTABLE
         ED_LOCKDRIVE, "Unable to lock for exclusive access. Another application may be using the drive. When the other application has finished using the drive you may retry the operation."
         ED_DRIVENUM,  "Drive %c: "
 
+        ED_INITGRAPHICS, "The Application attempted to enable DOS graphics mode. DOS graphics mode is not supported."
+
+        ED_FORMATSTR0, "%s %lxh"
+        ED_FORMATSTR1, "\n%s"
+        ED_FORMATSTR2, "%s"
+        ED_FORMATSTR3, "%s\n"
 
         SM_HIDE_MOUSE, "&Hide Mouse Pointer"
         SM_DISPLAY_MOUSE, "&Display Mouse Pointer"
@@ -110,15 +118,15 @@ STRINGTABLE
         /* Host Errors range (1000 - ??)*/
         EHS_FUNC_FAILED,   "Function failed"
         EHS_SYSTEM_ERROR,  "NTVDM has encountered a System Error"
-	EHS_UNSUPPORTED_BAUD, "Driver does not support selected Baud Rate"
-	EHS_ERR_OPENING_COM_PORT, "The system cannot open %s port requested by the application."
+        EHS_UNSUPPORTED_BAUD, "Driver does not support selected Baud Rate"
+        EHS_ERR_OPENING_COM_PORT, "The system cannot open %s port requested by the application."
      }
 
 #include <ntverp.h>
 
-#define VER_FILETYPE		    VFT_DLL
-#define VER_FILESUBTYPE		    VFT2_UNKNOWN
+#define VER_FILETYPE                VFT_DLL
+#define VER_FILESUBTYPE             VFT2_UNKNOWN
 #define VER_FILEDESCRIPTION_STR     "NTVDM.EXE"
-#define VER_INTERNALNAME_STR	    "NTVDM.EXE\0"
+#define VER_INTERNALNAME_STR        "NTVDM.EXE\0"
 
 #include "common.ver"

@@ -1,5 +1,3 @@
-#undef ANSI     // until file tidied or better still, lost
-
 #include <windows.h>
 #include <string.h>
 #include <math.h>
@@ -11,7 +9,7 @@
 #include "debug.h"
 #include "sas.h"
 #include "config.h"
-#include "chkmallc.h"
+#include "ckmalloc.h"
 
 #ifdef X86GFX
 #include "egacpu.h"
@@ -21,19 +19,19 @@
 #ifdef MONITOR
 GLOBAL void sas_loads_to_transbuf IFN3(sys_addr, src, host_addr, dest, sys_addr, len)
 {
-	sas_loads (src, dest, len);
+        sas_loads (src, dest, len);
 }
 
 /* write a string into M */
 GLOBAL void sas_stores_from_transbuf IFN3(sys_addr, dest, host_addr, src, sys_addr, len)
 {
-	sas_stores (dest, src, len);
+        sas_stores (dest, src, len);
 }
 
 GLOBAL host_addr sas_transbuf_address IFN2(sys_addr, dest_intel_addr, sys_addr, length)
 {
-	UNUSED (dest_intel_addr);
-	return (sas_scratch_address (length));
+        UNUSED (dest_intel_addr);
+        return (sas_scratch_address (length));
 }
 #endif
 
@@ -41,8 +39,7 @@ GLOBAL host_addr sas_transbuf_address IFN2(sys_addr, dest_intel_addr, sys_addr, 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: log1p */
 
 #ifndef MONITOR
-GLOBAL double log1p(x)
-double x;
+GLOBAL double log1p(double x)
 {
     return log(1+x);
 }
@@ -54,7 +51,7 @@ double x;
 
 #ifdef MONITOR
 GLOBAL void npx_reset()
-{ 
+{
     return;
 }
 
@@ -65,17 +62,16 @@ GLOBAL void initialise_npx()
 
 GLOBAL void sas_overwrite_memory IFN2(sys_addr, addr, int, type)
 {
-	UNUSED(addr);
-	UNUSED(type);
+        UNUSED(addr);
+        UNUSED(type);
 }
 
-LOCAL LONG stub_q_ev_count = 0;	// holder for below
+LOCAL LONG stub_q_ev_count = 0; // holder for below
 
 /* Monitor controlled code will call quick event code immediately so the
  * following needn't be at all accurate.
  */
-void host_q_ev_set_count(value)
-LONG value;
+void host_q_ev_set_count(LONG value)
 {
     stub_q_ev_count = value;
 }
@@ -100,22 +96,22 @@ int host_calc_q_ev_time_for_inst(LONG inst)
 ////// The following support the major surgery to remove unneeded video stuff
 
 GLOBAL ULONG Gdp;
-GLOBAL half_word bg_col_mask = 0x70;	// usually defined in cga.c
+GLOBAL half_word bg_col_mask = 0x70;    // usually defined in cga.c
 GLOBAL READ_STATE read_state;
 
-ULONG sr_lookup[16] =	// Handy array to extract all 4 plane values in one go
+ULONG sr_lookup[16] =   // Handy array to extract all 4 plane values in one go
 {
 #ifdef LITTLEND
-	0x00000000,0x000000ff,0x0000ff00,0x0000ffff,
-	0x00ff0000,0x00ff00ff,0x00ffff00,0x00ffffff,
-	0xff000000,0xff0000ff,0xff00ff00,0xff00ffff,
-	0xffff0000,0xffff00ff,0xffffff00,0xffffffff
+        0x00000000,0x000000ff,0x0000ff00,0x0000ffff,
+        0x00ff0000,0x00ff00ff,0x00ffff00,0x00ffffff,
+        0xff000000,0xff0000ff,0xff00ff00,0xff00ffff,
+        0xffff0000,0xffff00ff,0xffffff00,0xffffffff
 #endif
 #ifdef BIGEND
-	0x00000000,0xff000000,0x00ff0000,0xffff0000,
-	0x0000ff00,0xff00ff00,0x00ffff00,0xffffff00,
-	0x000000ff,0xff0000ff,0x00ff00ff,0xffff00ff,
-	0x0000ffff,0xff00ffff,0x00ffffff,0xffffffff
+        0x00000000,0xff000000,0x00ff0000,0xffff0000,
+        0x0000ff00,0xff00ff00,0x00ffff00,0xffffff00,
+        0x000000ff,0xff0000ff,0x00ff00ff,0xffff00ff,
+        0x0000ffff,0xff00ffff,0x00ffffff,0xffffffff
 #endif
 };
 
@@ -192,7 +188,7 @@ GLOBAL int get_ega_switch_setting()
     return(0);
 }
 
-GLOBAL VOID ega_read_init()	// Do normal inits - ports will do this fully
+GLOBAL VOID ega_read_init()     // Do normal inits - ports will do this fully
 {
     read_state.mode = 0;
     read_state.colour_compare = 0x0f;
@@ -233,12 +229,23 @@ GLOBAL ULONG setup_global_data_ptr()
     return(0xDefaced);
 }
 
+#if defined(NEC_98)
+GLOBAL VOID setup_NEC98_globals()
+{
+    check_malloc(NEC98_CPU.globals, sizeof(NEC98_GLOBALS), char);
+}
+#else  // !NEC_98
 GLOBAL VOID setup_vga_globals()
 {
     check_malloc(EGA_CPU.globals, 1, VGA_GLOBALS);
 }
+#endif // !NEC_98
 
-#endif	//MONITOR
+#endif  //MONITOR
+
+
+
+
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: ASSERT CODE */
 
@@ -363,22 +370,22 @@ GLOBAL void host_sigio_event IPT0()
 #ifndef CPU_40_STYLE
 int get_287_sp()
 {
-	 extern char *GDP;
-	 return((int) (*(ULONG *)(GDP + 0x70))/8);
+         extern char *GDP;
+         return((int) (*(ULONG *)(GDP + 0x70))/8);
 }
 word get_287_tag_word()
 {
-	 extern char *GDP;
-	 return((int) *(ULONG *)(GDP + 0x74));
+         extern char *GDP;
+         return((int) *(ULONG *)(GDP + 0x74));
 }
 word get_287_control_word()
 {
-	 extern char *GDP;
-	 return((int) *(ULONG *)(GDP + 0x68));
+         extern char *GDP;
+         return((int) *(ULONG *)(GDP + 0x68));
 }
 word get_287_status_word()
 {
-	 extern char *GDP;
+         extern char *GDP;
         return((int) *(ULONG *)(GDP + 0x6c));
 }
 #endif /* CPU_40_STYLE */
@@ -582,7 +589,8 @@ void force_yoda()
 
 VOID
 cpu_createthread(
-    HANDLE Thread
+    HANDLE Thread,
+    PVDM_TIB VdmTib
     )
 /*++
 
@@ -594,6 +602,8 @@ Routine Description:
 Arguments:
 
     Thread -- Supplies a thread handle
+
+    VdmContext -- Supplies a pointer to a vdm context
 
 Return Value:
 
@@ -609,6 +619,6 @@ Return Value:
 ULONG CurrentMonitorTeb;
 #endif
 
-void host_note_queue_added() 
+void host_note_queue_added()
 {
 }

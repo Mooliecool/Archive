@@ -58,6 +58,9 @@
 #include "debug.h"
 #endif  //HUNTER
 
+#ifdef ARCX86
+#include "rom.h"
+#endif /* ARCX86 */
 
 /*================================================================
 External references
@@ -114,16 +117,16 @@ LOCAL ConfTabEntry *conf_tab = NULL;
 PIF_DATA pfdata; /* data structure for holding all the relavent information
                     from the PIF file interrogated */
 /* must be unsigned because they can be over 32768 */
-USHORT PIFExtendMemSize = 0;	 /* save value of extend mem from PIF file */
-USHORT PIFEMSMemSize = 0;	 /* save value of LIM mem from PIF file */
+USHORT PIFExtendMemSize = 0;     /* save value of extend mem from PIF file */
+USHORT PIFEMSMemSize = 0;        /* save value of LIM mem from PIF file */
 ULONG emsMemorySize;
 
 #ifdef LIM
 LIM_CONFIG_DATA     lim_config_data = {FALSE, 0, 0, 640 * 1024 / 16, FALSE};
 #endif
 
-APPKEY Shortkey;	/* PIF Shortcut key settings */
-BYTE ReserveKey;	/* PIF Reserved key setting */
+APPKEY Shortkey;        /* PIF Shortcut key settings */
+BYTE ReserveKey;        /* PIF Reserved key setting */
 int  nShortKeys;
 /*
  * ===========================================================================
@@ -132,40 +135,43 @@ int  nShortKeys;
  */
 GLOBAL SHORT Npx_enabled = TRUE;        //For Jazz CPU support
 GLOBAL BOOL IdleDisabledFromPIF = FALSE;//Flag showing idledetection wishes
-GLOBAL UTINY number_of_floppy = 0;	// number of floppy drives
+GLOBAL UTINY number_of_floppy = 0;      // number of floppy drives
+#ifdef ARCX86
+GLOBAL BOOL UseEmulationROM = FALSE;   // For ARCx86 system
+#endif /* ARCX86 */
 
 
 /*================================================================
 Local defines
 ================================================================*/
+
 /* command definitions for read_profile_int */
 
 #define PROFILE_LPT_AUTOCLOSE_DELAY 0
 #define PROFILE_COM_AUTOCLOSE_DELAY 1
 #define PROFILE_LPT_AUTOFLUSH_DELAY 2
-#define PROFILE_COM_SYNCWRITE	    3
+#define PROFILE_COM_SYNCWRITE     3
 #define PROFILE_COM_TXBUFFER_SIZE   4
-#define PROFILE_MAX_INDEX	    PROFILE_COM_TXBUFFER_SIZE + 1
+#define PROFILE_MAX_INDEX      PROFILE_COM_TXBUFFER_SIZE + 1
 
 #define EMBITSET        0x4
 
 #define ONEMEG  0x100000L
-#define ONEKB	0x400L
+#define ONEKB   0x400L
 
 #define RESERVED_LENGTH  129
 #define PMVDM_NTVDM_NAME    "ntvdm."
-#define PMVDM_NTVDM_NAME_LENGTH 6	/* doesn't include NULL */
+#define PMVDM_NTVDM_NAME_LENGTH 6       /* doesn't include NULL */
 
 #define XMS_DEFAULT_MEMORY_SIZE 15*1024
 #define EMS_DEFAULT_MEMORY_SIZE 4*1024
 #define DPMI_DEFAULT_MEMORY_SIZE_FOR_DOS 8*1024
 #define DPMI_DEFAULT_MEMORY_SIZE_FOR_WOW 16*1024
 /* maximum ems memory size */
-#define EMS_MAX_MEMORY_SIZE	32 * 1024   /* from EMM 4.0 specification */
+#define EMS_MAX_MEMORY_SIZE     32 * 1024   /* from EMM 4.0 specification */
+#define XMS_MAX_MEMORY_SIZE     15 * 1024
 
 int read_profile_int(int index);
-ULONG GetVDMSize(BOOL);
-ULONG GetDefaultVDMSize(BOOL);
 void InitNtCpuInfo(void);
 
 /*
@@ -212,56 +218,59 @@ VOID process_pif_exe (char *PifName)
     */
     nShortKeys = 0;
     ReserveKey = 0;
+    Shortkey.Modifier = 0;
+    Shortkey.ScanCode = 0;
+
     if (DosSessionId || (pfdata.AppHasPIFFile && pfdata.SubSysId == SUBSYS_DOS))
     {
-	ReserveKey = pfdata.reskey;
-	if (!pfdata.IgnoreShortKeyInPIF) {
-	    Shortkey.Modifier = pfdata.ShortMod;
-	    Shortkey.ScanCode = pfdata.ShortScan;
-	    nShortKeys = (Shortkey.Modifier || Shortkey.ScanCode) ? 1 : 0;
-	}
-	if (ReserveKey || nShortKeys)
-	    SetConsoleKeyShortcuts(TRUE,
-				   ReserveKey,
-				   (nShortKeys) ? &Shortkey : NULL,
-				   nShortKeys
-				  );
+        ReserveKey = pfdata.reskey;
+        if (!pfdata.IgnoreShortKeyInPIF) {
+            Shortkey.Modifier = pfdata.ShortMod;
+            Shortkey.ScanCode = pfdata.ShortScan;
+            nShortKeys = (Shortkey.Modifier || Shortkey.ScanCode) ? 1 : 0;
+        }
+        if (ReserveKey || nShortKeys)
+            SetConsoleKeyShortcuts(TRUE,
+                                   ReserveKey,
+                                   &Shortkey,
+                                   nShortKeys
+                                  );
     }
 
     if (pfdata.idledetect == 1)
-	IdleDisabledFromPIF = FALSE;
+        IdleDisabledFromPIF = FALSE;
     else
-	IdleDisabledFromPIF = TRUE;
+        IdleDisabledFromPIF = TRUE;
 #ifdef X86GFX
     if (DosSessionId)    /* Only check screen state if we are in a NEW_CONSOLE */
     {
         /* Check to see if we are currently running windowed or full-screen. */
         if (!GetConsoleDisplayMode(&flags))
-	    ErrorExit();
+            ErrorExit();
 
         /* If PIF is telling us to switch to a different state, do so. */
         if (flags & CONSOLE_FULLSCREEN_HARDWARE)
         {
-	    if (pfdata.fullorwin == PF_WINDOWED)
-	    {
+            if (pfdata.fullorwin == PF_WINDOWED)
+            {
 #ifndef PROD
-	        fprintf(trace_file, "Going windowed...\n");
+                fprintf(trace_file, "Going windowed...\n");
 #endif /* PROD */
-	        if (!SetConsoleDisplayMode(sc.OutputHandle,
-				           CONSOLE_WINDOWED_MODE,
-				           &scrSize))
-		    ErrorExit();
-	    }
+                if (!SetConsoleDisplayMode(sc.OutputHandle,
+                                           CONSOLE_WINDOWED_MODE,
+                                           &scrSize))
+                    ErrorExit();
+            }
         }
         else /* WINDOWED */
         {
-	    if (pfdata.fullorwin == PF_FULLSCREEN)
-	    {
+            if (pfdata.fullorwin == PF_FULLSCREEN)
+            {
 #ifndef PROD
-	        fprintf(trace_file, "Going fullscreen...\n");
+                fprintf(trace_file, "Going fullscreen...\n");
 #endif /* PROD */
-	        if (!SetConsoleDisplayMode(sc.OutputHandle,
-				           CONSOLE_FULLSCREEN_MODE,
+                if (!SetConsoleDisplayMode(sc.OutputHandle,
+                                           CONSOLE_FULLSCREEN_MODE,
                                            &scrSize))
                   {
                    if (GetLastError() == ERROR_INVALID_PARAMETER)  {
@@ -282,8 +291,13 @@ VOID process_pif_exe (char *PifName)
 void DisablePIFKeySetup(void)
 {
     /* only doing this if the application was launched from a new console */
-    if (ReserveKey || nShortKeys)
-	SetConsoleKeyShortcuts(TRUE, 0, (APPKEY *)0, 0);
+    if (ReserveKey || nShortKeys) {
+        APPKEY ShortKey;
+            Shortkey.Modifier = 0;
+            Shortkey.ScanCode = 0;
+
+            SetConsoleKeyShortcuts(TRUE, 0, &ShortKey, 0);
+    }
 }
 
 /* Turn on the PIF reserved & shortcut keys - on resume */
@@ -291,13 +305,14 @@ void EnablePIFKeySetup(void)
 {
     /* only doing this if the app has a new console.*/
     if (ReserveKey || nShortKeys)
-	SetConsoleKeyShortcuts(TRUE,
-			       ReserveKey,
-			       (nShortKeys) ? &Shortkey : NULL,
-			       nShortKeys
-			       );
+        SetConsoleKeyShortcuts(TRUE,
+                               ReserveKey,
+                               &Shortkey,
+                               nShortKeys
+                               );
 
 }
+
 
 
 GLOBAL VOID config( VOID )
@@ -305,7 +320,7 @@ GLOBAL VOID config( VOID )
     VDMINFO GetPIF;
     char    UniqueTitle[64];
     char    Title[MAX_PATH];
-    char    PifName[MAX_PATH + 1];
+    char    PifName[2*MAX_PATH + 1];
     char    CurDir[MAX_PATH + 1];
     char    Reserved[RESERVED_LENGTH];
     char    achRoot[] = "=?:";
@@ -315,6 +330,34 @@ GLOBAL VOID config( VOID )
     DWORD   dw;
     char    achPIF[] = ".pif";
     ULONG dpmiMemorySize, vdmMemorySize;
+
+#ifdef ARCX86
+    {
+        HKEY    hSystemKey;
+        UCHAR   identifier[256];
+        ULONG   identifierSize = 256;
+
+        if (RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                         "HARDWARE\\DESCRIPTION\\System",
+                         0,
+                         KEY_QUERY_VALUE,
+                         &hSystemKey) == ERROR_SUCCESS)
+        {
+            if (RegQueryValueEx(hSystemKey,
+                                "Identifier",
+                                NULL,
+                                NULL,
+                                (LPBYTE)identifier,
+                                &identifierSize) == ERROR_SUCCESS)
+            {
+                if (strstr(identifier, "ARCx86")) {
+                    UseEmulationROM = TRUE;
+                }
+            }
+            RegCloseKey(hSystemKey);
+        }
+    }
+#endif /* ARCX86 */
 
 #ifdef HUNTER
 
@@ -341,11 +384,14 @@ GLOBAL VOID config( VOID )
                 Title[0] = '\0';
             sprintf(UniqueTitle, "ntvdm-%lx.%lx.%lx",
                    GetCurrentProcessId(), GetCurrentThreadId(),
-                   NtCurrentPeb()->ProcessParameters->ConsoleHandle);
+                   (DWORD)NtCurrentPeb()->ProcessParameters->ConsoleHandle);
             SetConsoleTitle(UniqueTitle);
             }
         else {
-            strcpy(Title, "Hidden Console of WOW VDM");
+            // vdm for wow
+            sprintf(Title, "Hidden Console of WOW VDM - %lx.%lx",
+                   WowSessionId,
+                   (DWORD)NtCurrentPeb()->ProcessParameters->ConsoleHandle);
             }
 
 
@@ -355,8 +401,8 @@ GLOBAL VOID config( VOID )
          */
         GetPIF.PifFile = PifName;
         GetPIF.PifLen = MAX_PATH;
-	GetPIF.EnviornmentSize = 0;
-	GetPIF.Enviornment = NULL;
+        GetPIF.EnviornmentSize = 0;
+        GetPIF.Enviornment = NULL;
 
         if (fSeparateWow) {
             GetPIF.VDMState = ASKING_FOR_PIF | ASKING_FOR_SEPWOW_BINARY;
@@ -372,11 +418,11 @@ GLOBAL VOID config( VOID )
         GetPIF.CmdSize = 0;
         GetPIF.AppName = NULL;
         GetPIF.AppLen = 0;
-        GetPIF.iTask    = DosSessionId;
-	GetPIF.Desktop	  = NULL;
+        GetPIF.iTask      = VDMForWOW && !fSeparateWow ? WowSessionId : DosSessionId;
+        GetPIF.Desktop    = NULL;
         GetPIF.DesktopLen = 0;
         GetPIF.ReservedLen = (VDMForWOW) ? 0 : RESERVED_LENGTH;
-	GetPIF.Reserved = (VDMForWOW) ? NULL : Reserved;
+        GetPIF.Reserved = (VDMForWOW) ? NULL : Reserved;
         GetPIF.CurDirectoryLen = MAX_PATH + 1;
         GetPIF.CurDirectory = CurDir;
 
@@ -389,40 +435,44 @@ GLOBAL VOID config( VOID )
             GetPIF.Title    = NULL;
             GetPIF.TitleLen = 0;
             }
+#ifdef JAPAN
+        // only take win31j extention if we are running from a new console.
+        pfdata.IgnoreWIN31JExtention = (DosSessionId) ? 0 : 1;
+#endif // JAPAN
 
-	PifName[0] = '\0';
-	pfdata.IgnoreTitleInPIF = 0;
-	pfdata.IgnoreStartDirInPIF = 0;
-	pfdata.IgnoreShortKeyInPIF = 0;
-	if (GetNextVDMCommand(&GetPIF)) {
-	    /* parsing the reserve field to decide if
-	       we should take StartDir, Title and hotkey from
-	       pif file. See windows\inc\pmvdm.h for the detail
-	    */
+        PifName[0] = '\0';
+        pfdata.IgnoreTitleInPIF = 0;
+        pfdata.IgnoreStartDirInPIF = 0;
+        pfdata.IgnoreShortKeyInPIF = 0;
+        if (GetNextVDMCommand(&GetPIF)) {
+            /* parsing the reserve field to decide if
+               we should take StartDir, Title and hotkey from
+               pif file. See windows\inc\pmvdm.h for the detail
+            */
 
-	    Reserved[GetPIF.ReservedLen] = '\0';
-	    if (!VDMForWOW && GetPIF.ReservedLen &&
-		(pch = strstr(Reserved, PMVDM_NTVDM_NAME)) != NULL)
-	    {
-		pch += PMVDM_NTVDM_NAME_LENGTH;
-		pch1 = pch;
-		dw = 0;
-		while(*pch >= '0' && *pch <= '9')
-		    pch++;
-		if (pch1 != pch) {
-		    ch = *pch;
-		    *pch = '\0';
-		    dw = (DWORD) strtol(pch1, (char **)NULL, 10);
-		    *pch = ch;
-		    if (dw &  PROPERTY_HAS_CURDIR)
-			pfdata.IgnoreStartDirInPIF = 1;
-		    if (dw & PROPERTY_HAS_HOTKEY)
-			pfdata.IgnoreShortKeyInPIF = 1;
-		    if (dw & PROPERTY_HAS_TITLE)
-			pfdata.IgnoreTitleInPIF = 1;
-		}
-	    }
-	    if (GetPIF.CurDirectoryLen) {
+            Reserved[GetPIF.ReservedLen] = '\0';
+            if (!VDMForWOW && GetPIF.ReservedLen &&
+                (pch = strstr(Reserved, PMVDM_NTVDM_NAME)) != NULL)
+            {
+                pch += PMVDM_NTVDM_NAME_LENGTH;
+                pch1 = pch;
+                dw = 0;
+                while(*pch >= '0' && *pch <= '9')
+                    pch++;
+                if (pch1 != pch) {
+                    ch = *pch;
+                    *pch = '\0';
+                    dw = (DWORD) strtol(pch1, (char **)NULL, 10);
+                    *pch = ch;
+                    if (dw &  PROPERTY_HAS_CURDIR)
+                        pfdata.IgnoreStartDirInPIF = 1;
+                    if (dw & PROPERTY_HAS_HOTKEY)
+                        pfdata.IgnoreShortKeyInPIF = 1;
+                    if (dw & PROPERTY_HAS_TITLE)
+                        pfdata.IgnoreTitleInPIF = 1;
+                }
+            }
+            if (GetPIF.CurDirectoryLen) {
                 achRoot[1] = CurDir[0];
 
                 /* these needs to be ANSI calls not OEM as server passes
@@ -431,20 +481,26 @@ GLOBAL VOID config( VOID )
                 SetEnvironmentVariable(achRoot, CurDir);
                 SetCurrentDirectory(CurDir);
 
-	    }
+            }
         }
 
 
-	pfdata.IgnoreCmdLineInPIF = 0;
+        pfdata.IgnoreCmdLineInPIF = 0;
         pfdata.IgnoreConfigAutoexec = 0;
         pfdata.AppHasPIFFile = PifName[0] ? 1 : 0;
 
-        if(VDMForWOW){
+        if(VDMForWOW) {
+#ifdef JAPAN             
+            if (!GetPIF.PifLen || !(pch = strchr(PifName, ' '))) {
+              memcpy(PifName, pszSystem32Path, ulSystem32PathLen);
+              memcpy(PifName+ulSystem32PathLen, "\\krnl386.pif", sizeof("\\krnl386.pif"));
+            }
+#endif // JAPAN
             DosSessionId = 0;            // Wow has hidden console !
             pfdata.IgnoreCmdLineInPIF =
-	    pfdata.IgnoreTitleInPIF =
-	    pfdata.IgnoreStartDirInPIF = 1;
-	    pfdata.IgnoreShortKeyInPIF = 1;
+            pfdata.IgnoreTitleInPIF =
+            pfdata.IgnoreStartDirInPIF = 1;
+            pfdata.IgnoreShortKeyInPIF = 1;
         }
 
         process_pif_exe(PifName);
@@ -464,28 +520,32 @@ GLOBAL VOID config( VOID )
             // XMS to satisfy win16 apps looking at the real machine size
             //
             emsMemorySize = 0;
-            xmsMemorySize = 8192;
-	    dpmiMemorySize = DPMI_DEFAULT_MEMORY_SIZE_FOR_WOW;
+            xmsMemorySize = XMS_DEFAULT_MEMORY_SIZE;
+            dpmiMemorySize = DPMI_DEFAULT_MEMORY_SIZE_FOR_WOW;
         } else {
 
-	    emsMemorySize = PIFEMSMemSize == (USHORT)(-1)
+            emsMemorySize = PIFEMSMemSize == (USHORT)(-1)
                             ? EMS_DEFAULT_MEMORY_SIZE
                             : PIFEMSMemSize;
 
-	    /* maximum size is 63MB */
-	    xmsMemorySize = PIFExtendMemSize == (USHORT)(-1)
+            /* maximum size is 63MB */
+            xmsMemorySize = PIFExtendMemSize == (USHORT)(-1)
                             ? XMS_DEFAULT_MEMORY_SIZE
                             : PIFExtendMemSize;
 
-	    /* put a upper limit on ems memory size based on EMM 4.0 spec */
-	    if (emsMemorySize > EMS_MAX_MEMORY_SIZE)
-		emsMemorySize = EMS_MAX_MEMORY_SIZE;
+            /* put a upper limit on ems memory size based on EMM 4.0 spec */
+            if (emsMemorySize > EMS_MAX_MEMORY_SIZE)
+                emsMemorySize = EMS_MAX_MEMORY_SIZE;
 
             // Force at least 1 megabyte xms to keep himem and dosx working.
             if (xmsMemorySize < 1024) {
                 xmsMemorySize = 1024;
-	    }
-	    dpmiMemorySize = DPMI_DEFAULT_MEMORY_SIZE_FOR_DOS;
+            }
+            else if(xmsMemorySize > XMS_MAX_MEMORY_SIZE) {
+                xmsMemorySize = XMS_MAX_MEMORY_SIZE;
+            }
+
+            dpmiMemorySize = DPMI_DEFAULT_MEMORY_SIZE_FOR_DOS;
         }
 
 #ifdef LIM
@@ -504,31 +564,31 @@ GLOBAL VOID config( VOID )
         //
 
 #ifdef i386
-	 // adding 1024 below is for conventional memory
-	 vdmMemorySize = xmsMemorySize + emsMemorySize + 1024;
+         // adding 1024 below is for conventional memory
+         vdmMemorySize = xmsMemorySize + emsMemorySize + 1024;
 #else
-	 vdmMemorySize = GetVDMSize(VDMForWOW);
+         vdmMemorySize = 16L * 1024L
 
-	 // Extend the vdm size if the user asks for it through a .PIF.
-	 // Also make sure we have at least appropriate size of dpmi
-	 // memory.
-	 //
-	 if ((xmsMemorySize + emsMemorySize +  1024 + dpmiMemorySize) >
-	      vdmMemorySize)
-	 {
-	    vdmMemorySize = xmsMemorySize + emsMemorySize + 1024 +
-			    dpmiMemorySize;
-	 }
+         // Extend the vdm size if the user asks for it through a .PIF.
+         // Also make sure we have at least appropriate size of dpmi
+         // memory.
+         //
+         if ((xmsMemorySize + emsMemorySize +  1024 + dpmiMemorySize) >
+              vdmMemorySize)
+         {
+            vdmMemorySize = xmsMemorySize + emsMemorySize + 1024 +
+                            dpmiMemorySize;
+         }
 #endif
 
 #ifndef PROD
-	dpmiMemorySize = vdmMemorySize - (xmsMemorySize + emsMemorySize + 1024);
+        dpmiMemorySize = vdmMemorySize - (xmsMemorySize + emsMemorySize + 1024);
 
-	printf("NTVDM: %dK Memory: %dK XMS, %dK EMS, %dK DPMI\n",
-	       vdmMemorySize, xmsMemorySize, emsMemorySize, dpmiMemorySize);
+        printf("NTVDM: %dK Memory: %dK XMS, %dK EMS, %dK DPMI\n",
+               vdmMemorySize, xmsMemorySize, emsMemorySize, dpmiMemorySize);
 #endif
 
-	sas_init(vdmMemorySize*ONEKB);
+        sas_init(vdmMemorySize*ONEKB);
 
 
 #ifdef CPU_40_STYLE
@@ -544,7 +604,54 @@ GLOBAL VOID config( VOID )
 #ifdef X86GFX
         GetROMsMapped();        /* before anyone else can toy with memory */
 
-	locateNativeBIOSfonts();	/* get fonts from page 0 */
+#ifdef ARCX86
+    if (UseEmulationROM) {
+        PVOID   BaseAddress;
+        ULONG   ViewSize;
+        NTSTATUS Status;
+#if 0
+   // XXX Temporary hack for ARCX86 VDM to work on PC with BIOS
+   Status = NtUnmapViewOfSection(NtCurrentProcess(), 0xc0000);
+   DbgPrint("config: NtUnmapViewOfSection 0xc0000. Status = %x\n", Status);
+   Status = NtUnmapViewOfSection(NtCurrentProcess(), 0xf0000);
+   DbgPrint("config: NtUnmapViewOfSection 0xf0000. Status = %x\n", Status);
+#endif
+
+        /* commit memory for ROM area */
+        BaseAddress = (PVOID)EGA_ROM_START;
+        ViewSize = 0x8000;
+        Status = NtAllocateVirtualMemory(NtCurrentProcess(),
+                         &BaseAddress,
+                         0L,
+                         &ViewSize,
+                         MEM_RESERVE | MEM_COMMIT,
+                         PAGE_EXECUTE_READWRITE
+                         );
+        if(!NT_SUCCESS(Status)) {
+            TerminateVDM();
+        }
+
+        BaseAddress = (PVOID)(BIOS_START);
+        ViewSize = PC_MEM_SIZE - BIOS_START;
+        Status = NtAllocateVirtualMemory(NtCurrentProcess(),
+                         &BaseAddress,
+                         0L,
+                         &ViewSize,
+                         MEM_RESERVE | MEM_COMMIT,
+                         PAGE_EXECUTE_READWRITE
+                         );
+        if(!NT_SUCCESS(Status)) {
+            TerminateVDM();
+        }
+
+        rom_init();
+    } else {
+        locateNativeBIOSfonts();        /* get fonts from page 0 */
+    }
+#else  /* ARCX86 */
+        locateNativeBIOSfonts();        /* get fonts from page 0 */
+#endif /* ARCX86 */
+
 #endif
 
            //  Now see if we can get the console window handle
@@ -570,17 +677,17 @@ GLOBAL VOID config( VOID )
 
 
 // Create UMB list (both MIPS and x86) -- williamh
-	InitUMBList();
+        InitUMBList();
 //
         host_runtime_init();            /* initialise the runtime system */
 
 
         /* Do not attempt to initialise printer system here */
 // activate(open) floppy drives if there are any
-	number_of_floppy = 0;
-	for (i = 0, hostID = C_FLOPPY_A_DEVICE; i < MAX_FLOPPY; i++, hostID++)
-	    if ((gfi_floppy_active(hostID, 1, NULL)) == C_CONFIG_OP_OK)
-		number_of_floppy++;
+        number_of_floppy = 0;
+        for (i = 0, hostID = C_FLOPPY_A_DEVICE; i < MAX_FLOPPY; i++, hostID++)
+            if ((gfi_floppy_active(hostID, 1, NULL)) == C_CONFIG_OP_OK)
+                number_of_floppy++;
 }
 
 GLOBAL VOID *
@@ -629,12 +736,12 @@ config_inquire(UTINY hostID, ConfigValues *values)
                         return ((VOID *) values->index);
 
                 case C_EXTENDED_MEM_SIZE:
-			values->index = (SHORT)(xmsMemorySize/1024);
+                        values->index = (SHORT)(xmsMemorySize/1024);
                         return ((VOID *)values->index);
 
                 case C_LIM_SIZE:
-			values->index = (SHORT)(emsMemorySize/1024);
-			return ((VOID *)values->index);
+                        values->index = (SHORT)(emsMemorySize/1024);
+                        return ((VOID *)values->index);
 
                 case C_MEM_LIMIT:
                         values->index = 640;
@@ -642,48 +749,48 @@ config_inquire(UTINY hostID, ConfigValues *values)
 
                 case C_COM1_NAME:
                         strcpy (values->string, "COM1");
-			values->index = (short)read_profile_int(PROFILE_COM_AUTOCLOSE_DELAY);
+                        values->index = (short)read_profile_int(PROFILE_COM_AUTOCLOSE_DELAY);
                         return ((VOID *) values->string);
 
                 case C_COM2_NAME:
                         strcpy (values->string, "COM2");
-			values->index = (short)read_profile_int(PROFILE_COM_AUTOCLOSE_DELAY);
+                        values->index = (short)read_profile_int(PROFILE_COM_AUTOCLOSE_DELAY);
                         return ((VOID *) values->string);
 
                 case C_COM3_NAME:
                         strcpy (values->string, "COM3");
-			values->index = (short)read_profile_int(PROFILE_COM_AUTOCLOSE_DELAY);
+                        values->index = (short)read_profile_int(PROFILE_COM_AUTOCLOSE_DELAY);
                         return ((VOID *) values->string);
 
                 case C_COM4_NAME:
                         strcpy (values->string, "COM4");
-			values->index = (short)read_profile_int(PROFILE_COM_AUTOCLOSE_DELAY);
+                        values->index = (short)read_profile_int(PROFILE_COM_AUTOCLOSE_DELAY);
                         return ((VOID *) values->string);
 
                 case C_LPT1_NAME:
                         strcpy (values->string, "LPT1");
-			values->index = (short)read_profile_int(PROFILE_LPT_AUTOCLOSE_DELAY);
+                        values->index = (short)read_profile_int(PROFILE_LPT_AUTOCLOSE_DELAY);
                         return ((VOID *) values->string);
 
                 case C_LPT2_NAME:
                         strcpy (values->string, "LPT2");
-			values->index = (short)read_profile_int(PROFILE_LPT_AUTOCLOSE_DELAY);
+                        values->index = (short)read_profile_int(PROFILE_LPT_AUTOCLOSE_DELAY);
                         return ((VOID *) values->string);
 
                 case C_LPT3_NAME:
                         strcpy (values->string, "LPT3");
-			values->index = (short)read_profile_int(PROFILE_LPT_AUTOCLOSE_DELAY);
+                        values->index = (short)read_profile_int(PROFILE_LPT_AUTOCLOSE_DELAY);
                         return ((VOID *) values->string);
 
 
 /* Auto flush closes the port after 'n' seconds of inactivaty */
 
                 case C_AUTOFLUSH:
-			values->index = TRUE;
+                        values->index = TRUE;
                         return ((VOID *)values->index);
 
                 case C_AUTOFLUSH_DELAY:
-			values->index = read_profile_int(PROFILE_LPT_AUTOFLUSH_DELAY); //Delay in secs
+                        values->index = (short)read_profile_int(PROFILE_LPT_AUTOFLUSH_DELAY); //Delay in secs
                         return((VOID *)values->index);
 
 //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -693,15 +800,15 @@ config_inquire(UTINY hostID, ConfigValues *values)
                         strcpy (values->string, "\\");
                         return ((VOID *) values->string);
 
-		case C_VDMLPT1_NAME:
-			strcpy(values->string, "\\\\.\\$VDMLPT1");
-			return ((VOID *)values->string);
-		case C_VDMLPT2_NAME:
-			strcpy(values->string, "\\\\.\\$VDMLPT2");
-			return ((VOID *)values->string);
-		case C_VDMLPT3_NAME:
-			strcpy(values->string, "\\\\.\\$VDMLPT3");
-			return ((VOID *)values->string);
+                case C_VDMLPT1_NAME:
+                        strcpy(values->string, "\\\\.\\$VDMLPT1");
+                        return ((VOID *)values->string);
+                case C_VDMLPT2_NAME:
+                        strcpy(values->string, "\\\\.\\$VDMLPT2");
+                        return ((VOID *)values->string);
+                case C_VDMLPT3_NAME:
+                        strcpy(values->string, "\\\\.\\$VDMLPT3");
+                        return ((VOID *)values->string);
 
 
 #ifdef HUNTER
@@ -736,13 +843,13 @@ config_inquire(UTINY hostID, ConfigValues *values)
 
 #endif /* HUNTER */
 
-		case C_COM_SYNCWRITE:
-		    values->index = (short)read_profile_int(PROFILE_COM_SYNCWRITE);
-		    return ((VOID *)values->index);
+                case C_COM_SYNCWRITE:
+                    values->index = (short)read_profile_int(PROFILE_COM_SYNCWRITE);
+                    return ((VOID *)values->index);
 
-		case C_COM_TXBUFFER_SIZE:
-		    values->index = (short)read_profile_int(PROFILE_COM_TXBUFFER_SIZE);
-		    return ((VOID *)values->index);
+                case C_COM_TXBUFFER_SIZE:
+                    values->index = (short)read_profile_int(PROFILE_COM_TXBUFFER_SIZE);
+                    return ((VOID *)values->index);
 
                 default:        /* ie everything else */
                         /* fail */
@@ -793,7 +900,7 @@ config_activate(UTINY hostID, BOOL reqState)
         UNREFERENCED_FORMAL_PARAMETER(hostID);
         UNREFERENCED_FORMAL_PARAMETER(reqState);
 
-        /* do bugger all */
+        /* do all */
 }
 
 GLOBAL char *   host_expand_environment_vars IFN1(const char *, string)
@@ -823,21 +930,21 @@ void host_runtime_init()
     txt.ContextFlags = CONTEXT_FLOATING_POINT;
     if (! GetThreadContext(GetCurrentThread(), &txt) )
     {
-        runtime_status.npx_enabled = FALSE;     //dont know for sure so be safe 
+        runtime_status.npx_enabled = FALSE;     //dont know for sure so be safe
     }
     else
     {
-#if 0	/* if the correct fix ever is made... */
-	if (txt.FloatSave.Cr0NpxState & EMBITSET)
+#if 0   /* if the correct fix ever is made... */
+        if (txt.FloatSave.Cr0NpxState & EMBITSET)
             runtime_status.npx_enabled = FALSE;     //EM only on if no NPX
-	else
+        else
             runtime_status.npx_enabled = TRUE;      //NPX present.
 #endif
 
-	// If no coprocessor, the CONTEXT_F_P bit will have been cleared
-	if ((txt.ContextFlags & CONTEXT_FLOATING_POINT) == CONTEXT_FLOATING_POINT)
+        // If no coprocessor, the CONTEXT_F_P bit will have been cleared
+        if ((txt.ContextFlags & CONTEXT_FLOATING_POINT) == CONTEXT_FLOATING_POINT)
             runtime_status.npx_enabled = TRUE;     //EM only on if no NPX
-	else
+        else
             runtime_status.npx_enabled = FALSE;
     }
 #else
@@ -861,6 +968,7 @@ short host_runtime_inquire IFN1(UTINY, what)
 #endif
                         ;
         }
+        return FALSE;
 }
 
 void host_runtime_set IFN2(UTINY, what, SHORT, val)
@@ -1020,8 +1128,10 @@ read_trapper_variables(VOID)
 
         /* Get the variable. */
         vp = host_getenv(defP->optionName);
-        if (vp != NULL)
-            strcpy(arg, vp);
+        if (vp != NULL) {
+            strncpy(arg, vp,sizeof(arg));
+            arg[sizeof(arg)-1] = '\0';
+        }
         else
             arg[0] = '\0';
 
@@ -1111,24 +1221,24 @@ check_value(OptionDescription *defP, ConfigValues *dataP)
  * LPT and COM devices behaviors.
  *
  * "PrinterAutoClose=n" -- the printer port will be closed if there are
- *			   not activities on the port for n seconds
- * "CommsAutoClose=n"	-- the comm port will be closed(suspended" if there
- *			   there are not activities on the port for
- *			   n s. 0 means auto close is disabled.
- * "LPT_timeout=n"	-- the printer port will be flushed every n seconds
+ *          not activities on the port for n seconds
+ * "CommsAutoClose=n"   -- the comm port will be closed(suspended" if there
+ *          there are not activities on the port for
+ *          n s. 0 means auto close is disabled.
+ * "LPT_timeout=n"   -- the printer port will be flushed every n seconds
  * "COM_SyncWrite=[0,1]" -- if 0, write to comm port(tx) if performed in
- *			    async way(using overlapped i/o). If 1, then
- *			    data will be written to the port in synchrounously.
+ *           async way(using overlapped i/o). If 1, then
+ *           data will be written to the port in synchrounously.
  * "COM_TxBuffer_Size=n" -- comm tx queue buffer size. It also used to control
- *			    the tx threshold -- setting the buffer size to
- *			    1 effectively disables tx queuing.
+ *           the tx threshold -- setting the buffer size to
+ *           1 effectively disables tx queuing.
  */
 struct { char *keyword; int def; } ProfileStrings[] =
 {
     { "PrinterAutoClose", 15 },
     { "CommsAutoClose", 0 },
     { "LPT_timeout", 15},
-    { "COM_SyncWrite", },
+    { "COM_SyncWrite",0 },
     { "COM_TxBuffer_Size", 200}
 };
 
@@ -1137,43 +1247,33 @@ int read_profile_int(int index)
     CHAR  CmdLine[100];
     ULONG CmdLineSize = 100;
     HKEY  hWowKey;
-    int   Value;
 
     ASSERT((unsigned int) index < PROFILE_MAX_INDEX);
-    /* make sure we have right index constants */
-    ASSERT(PROFILE_LPT_AUTOCLOSE_DELAY == 0 &&
-	   PROFILE_COM_AUTOCLOSE_DELAY == 1 &&
-	   PROFILE_LPT_AUTOFLUSH_DELAY == 2 &&
-	   PROFILE_COM_SYNCWRITE       == 3 &&
-	   PROFILE_COM_TXBUFFER_SIZE == 4);
 
     if (RegOpenKeyEx ( HKEY_LOCAL_MACHINE,
-		       "SYSTEM\\CurrentControlSet\\Control\\WOW",
-		       0,
-		       KEY_QUERY_VALUE,
-		       &hWowKey
-		     ) != 0)
+                       "SYSTEM\\CurrentControlSet\\Control\\WOW",
+                       0,
+                       KEY_QUERY_VALUE,
+                       &hWowKey
+                       ) != 0)
     {
-	/* wow key doesn't exist, use default value */
-	return(ProfileStrings[index].def);
+        return(ProfileStrings[index].def);
     }
 
     if (RegQueryValueEx (hWowKey,
-			 ProfileStrings[index].keyword,
-			 NULL,
-			 NULL,
-			 (LPBYTE)&CmdLine,
-			 &CmdLineSize) != 0)
+                         ProfileStrings[index].keyword,
+                         NULL,
+                         NULL,
+                         (LPBYTE)CmdLine,
+                         &CmdLineSize) != 0)
     {
-	/* if the value doesn't exist, use the default value */
-	Value = ProfileStrings[index].def;
+        RegCloseKey (hWowKey);
+        return(ProfileStrings[index].def);
     }
-    else
-	Value = (int)atoi(CmdLine);
 
     RegCloseKey (hWowKey);
 
-    return Value;
+    return ((int) atoi(CmdLine));
 }
 
 
@@ -1213,81 +1313,3 @@ unsigned short get_lim_backfill_segment(void)
 }
 #endif
 
-/*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
-/*:::::::::::::::::::::: Get VDM Memory Size :::::::::::::::::::::::::::::*/
-/*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
-#define REGISTRY_BUFFER_SIZE 512
-
-// Returns the size in K.
-
-ULONG
-GetVDMSize (BOOL fwow)
-{
-    CHAR  CmdLine[REGISTRY_BUFFER_SIZE];
-    PCHAR pCmdLine,KeywordName;
-    ULONG CmdLineSize = REGISTRY_BUFFER_SIZE;
-    HKEY  WowKey;
-
-    //
-    // Get Vdm size
-    //
-
-    if (RegOpenKeyEx ( HKEY_LOCAL_MACHINE,
-                       "SYSTEM\\CurrentControlSet\\Control\\WOW",
-                       0,
-                       KEY_QUERY_VALUE,
-                       &WowKey
-                       ) != 0){
-        return GetDefaultVDMSize (fwow);    // returns in K
-    }
-
-    if (fwow) {
-        KeywordName = "wowsize" ;
-    } else {
-        KeywordName = "size" ;
-    }
-
-    if (RegQueryValueEx (WowKey,
-                         KeywordName,
-                         NULL,
-                         NULL,
-                         (LPBYTE)&CmdLine,
-                         &CmdLineSize) != 0){
-        RegCloseKey (WowKey);
-        return GetDefaultVDMSize (fwow); // returns in K
-    }
-
-    RegCloseKey (WowKey);
-
-    CmdLineSize = 1024L * atoi(CmdLine);
-
-    if (CmdLineSize == 0)
-            CmdLineSize = GetDefaultVDMSize (fwow);  // returns in K
-
-    return (CmdLineSize);
-    }
-
-#define VDM_SMALL_SYSTEM  (12*1024*1024)
-#define VDM_MEDIUM_SYSTEM (16*1024*1024)
-
-ULONG
-GetDefaultVDMSize ( BOOL fwow )
-{
-    MEMORYSTATUS MemoryStatus;
-
-    GlobalMemoryStatus (&MemoryStatus);
-
-    //
-    // System Size < 12Mb   is small    = VDM Size = 3MB
-    // System Size = 12-16  is medium   = VDM Size = 6MB
-    // System Size = > 16   is large    = VDM Size = 8Mb
-    //
-
-    if (MemoryStatus.dwTotalPhys < VDM_SMALL_SYSTEM )
-        return 8L * 1024L;
-
-    if (MemoryStatus.dwTotalPhys <= VDM_MEDIUM_SYSTEM )
-        return 12L * 1024L;
-    else
-        return 16L * 1024L;
-}

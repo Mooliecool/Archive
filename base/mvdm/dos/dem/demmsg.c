@@ -7,7 +7,7 @@
 #if DBG
 
 #include <stdio.h>
-#include <demmsg.h>
+#include "demmsg.h"
 #include "dem.h"
 
 PCHAR   aMsg [] = {
@@ -39,8 +39,6 @@ VOID demPrintMsg (ULONG iMsg)
        sprintf(demDebugBuffer,aMsg[iMsg]);
        OutputDebugStringOem(demDebugBuffer);
     }
-
-    iMsg;
 
     return;
 }

@@ -1,7 +1,6 @@
 !IF 0
 
 Copyright (c) 1989  Microsoft Corporation
-Copyright (c) 2017  OpenNT Project
 
 Module Name:
 
@@ -12,24 +11,37 @@ Abstract:
     This file specifies the subdirectories of the current directory that
     contain component makefiles.
 
+History:
+    Created 27-Mar-91 by Jeff Parsons (jeffpar)
+    from template created 12-Apr-1990 by Steve Wood (stevewo)
+
+
+NOTE:   Commented description of this file is in \nt\public\oak\bin\dirs.tpl
+
 !ENDIF
 
 
-DIRS=           \
-    inc         \
-    dos         \
-    xms.486     \
-    dbg         \
-    v86         \
-    dpmi32      \
-    suballoc    \
-    oemuni      \
-    softpc.new  \
-    wow32  \
-#    vdmexts \
-#    vdmdbg \
-#    vdmutils \
-#    vdd \
-#    fax
+DIRS=inc        \
+     dos        \
+     xms.486    \
+     dbg        \
+     v86        \
+     dpmi32     \
+     suballoc   \
+     oemuni     \
+     softpc.new \
+     wow32      \
+     vdmexts    \
+     vdmdbg     \
+     dbgdll     \
+     vdmutils   \
+     vdd        \
+     fax        \
+     bin86      \
+     vdmredir   \
+     wow16      \
+     dpmi       \
+     dpm        \
+     setup
 
-OPTIONAL_DIRS=vdmredir
+OPTIONAL_DIRS=

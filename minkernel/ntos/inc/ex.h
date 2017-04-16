@@ -915,6 +915,34 @@ ExUnlockUserBuffer(
 
 //++
 //
+// VOID
+// ProbeForReadSmallStructure(
+//     IN PVOID Address,
+//     IN ULONG Length,
+//     IN ULONG Alignment
+//     )
+//
+//--
+
+#define ProbeForReadSmallStructure(Address,Size,Alignment) {                 \
+    ASSERT(((Alignment) == 1) || ((Alignment) == 2) ||                       \
+           ((Alignment) == 4) || ((Alignment) == 8) ||                       \
+           ((Alignment) == 16));                                             \
+    if (Size == 0 || Size > 0x10000) {                                       \
+        ASSERT (0);                                                          \
+        ProbeForRead (Address,Size,Alignment);                               \
+    } else {                                                                 \
+        if (((ULONG_PTR)(Address) & ((Alignment) - 1)) != 0) {               \
+            ExRaiseDatatypeMisalignment();                                   \
+        }                                                                    \
+        if ((ULONG_PTR)(Address) >= (ULONG_PTR)MM_USER_PROBE_ADDRESS) {      \
+            *(volatile ULONG * const)MM_USER_PROBE_ADDRESS = 0;              \
+        }                                                                    \
+    }                                                                        \
+}
+
+//++
+//
 // BOOLEAN
 // ProbeAndReadBoolean(
 //     IN PBOOLEAN Address

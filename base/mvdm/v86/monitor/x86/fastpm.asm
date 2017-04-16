@@ -22,20 +22,22 @@ include ks386.inc
 include callconv.inc
 include bop.inc
 include vint.inc
-include vdmtb.inc
+include vdmtib.inc
 
 _TEXT   SEGMENT PARA PUBLIC 'CODE'
         ASSUME  DS:NOTHING, ES:NOTHING, SS:FLAT, FS:NOTHING, GS:NOTHING
 _TEXT   ENDS
 
 _DATA   SEGMENT  DWORD PUBLIC 'DATA'
-        extrn _VdmTib:Dword
 
         public _NTVDMpLockPrefixTable
 _NTVDMpLockPrefixTable    label dword
         dd offset FLAT:_ntvdmlock1
         dd offset FLAT:_ntvdmlock2
         dd 0
+
+ClientPMStack   df      ?
+ClientPMEntry   df      ?
 
 _DATA   ENDS
 
@@ -50,6 +52,32 @@ CPU_TIMER_TICK          equ 1
 BIT_CPU_TIMER_TICK      equ 2
 CPU_HW_INT              equ 3
 BIT_CPU_HW_INT          equ 3
+
+        assume DS:NOTHING
+cPublicProc _VdmTrapcHandler, 0
+
+;
+; On entry, [ebx]->VdmContext
+;
+
+;
+; zero higher 16bit of esp. (The Iretd in kernel trap handler puts higher 16bit
+; of kernel esp back to our user mode esp even though the higher 16bit of
+; TrapFrame.HardwareEsp is zeroed.
+;
+        and     esp, 0ffffh
+;@@:
+
+;
+; Note, here we use app's stack to do the far return
+;
+
+        push    [ebx].VtVdmContext.CsSegCs
+        push    [ebx].VtVdmContext.CsEip
+        mov     ebx, [ebx].VtVdmContext.CsEbx
+        retf
+
+stdENDP _VdmTrapcHandler
 
         page    ,132
         subttl "FastEnterPm"
@@ -76,8 +104,12 @@ cPublicProc _FastEnterPm,0
         push    ebp
         mov     ebp,esp                         ; set up stack frame
 
-	push	ebx				; free up reg for pointer
-        lea     ebx,_VdmTib
+        push    ebx                             ; free up reg for pointer
+
+        mov     ebx, KGDT_R3_TEB OR RPL_MASK
+        mov     fs, ebx
+        mov     ebx, fs:[PcTeb]
+        mov     ebx, dword ptr [ebx].TeVdm
 
         ; translate the interrupt flag to the virtual interrupt flag
 
@@ -86,7 +118,7 @@ cPublicProc _FastEnterPm,0
 
 _ntvdmlock1:
         lock or dword ptr ds:FIXED_NTVDMSTATE_LINEAR,dword ptr VDM_VIRTUAL_INTERRUPTS
-	test	dword ptr ds:FIXED_NTVDMSTATE_LINEAR,dword ptr VDM_INTERRUPT_PENDING
+        test    dword ptr ds:FIXED_NTVDMSTATE_LINEAR,dword ptr VDM_INTERRUPT_PENDING
         jz      fe20
 
         ; set up event info for an interrupt acknowlege
@@ -107,7 +139,7 @@ fe20:
         mov     [ebx].VtMonitorContext.CsEax,eax
         mov     eax,[ebp - 4]
         mov     [ebx].VtMonitorContext.CsEbx,eax
-	mov	[ebx].VtMonitorContext.CsEcx,ecx
+        mov     [ebx].VtMonitorContext.CsEcx,ecx
         mov     [ebx].VtMonitorContext.CsEdx,edx
         mov     [ebx].VtMonitorContext.CsEsi,esi
         mov     [ebx].VtMonitorContext.CsEdi,edi
@@ -136,6 +168,19 @@ fe20:
         pop     eax
         mov     [ebx].VtMonitorContext.CsEflags,eax
 
+
+        test    [ebx].VtVdmContext.CsEflags, EFLAGS_TF_MASK ; debugging?
+        jz      fe_atomic                       ; no, return the robust way
+
+;
+; Beginning STACK-BASED return
+;
+; The following code transitions us back to client code in protect mode
+; using the client's stack. This is not a good thing to do in general
+; since this is not how things worked on win31. But it is necessary if
+; we are setting the trap flag in the EFLAGS register in order to break
+; on the correct instruction.
+;
         mov     eax,[ebx].VtVdmContext.CsSegSs
         mov     es,eax
         mov     edi,[ebx].VtVdmContext.CsEsp    ; es:edi -> stack
@@ -180,20 +225,81 @@ fe40:   push    es
         ; set up VDM seg regs
         pop     es
         pop     ds
-        pop     gs             ; pop fs,gs of invalid selectors are trapped in ntoskrnl,
+        pop     gs             ; pop es,fs,gs of invalid selectors are trapped in ntoskrnl,
         pop     fs             ; and handled by setting to zero
 
         ; set up VDM general regs
         popad
 
         ; set up vdm stack
-	lss	esp,[ebp - 12]
+        lss esp,[ebp - 12]
 
         ; restore ebp
         pop     ebp
 
         ; return to VDM
         iretd
+
+;
+; Beginning STACK-LESS return
+;
+; WARNING:
+; The following code does the final dispatch to the Client code.
+; It uses STATIC data to hold CS, EIP, SS, ESP. THAT MAKES THIS CODE
+; NON-REENTRANT. For correct operation, the rest of this code in this
+; routine must execute to completion before coming back through. All
+; ntvdm support code must honor this arrangement.
+;
+; The reason this code has this restriction is to avoid using the
+; client's stack. Originally, this routine built a stack frame on the
+; client stack, and IRET'd to it. This breaks some DPMI applications,
+; either at a point where they have a transient condition with an invalid
+; stack pointer, or because they expect unused stack space to be left
+; alone by the system.
+;
+fe_atomic:
+        mov     eax,[ebx].VtVdmContext.CsSegCs
+        mov     word ptr ClientPmEntry+4, ax
+        mov     eax,[ebx].VtVdmContext.CsEip
+        mov     dword ptr ClientPmEntry, eax
+        mov     eax,[ebx].VtVdmContext.CsSegSs
+        mov     word ptr ClientPmStack+4, ax
+        mov     eax,[ebx].VtVdmContext.CsEsp    ; es:edi -> stack
+        mov     dword ptr ClientPmStack, eax
+
+        mov     eax,esp                 ; save sp for pushad
+
+        ; simulate pushad
+        push    dword ptr [ebx].VtVdmContext.CsEax
+        push    dword ptr [ebx].VtVdmContext.CsEcx
+        push    dword ptr [ebx].VtVdmContext.CsEdx
+        push    dword ptr [ebx].VtVdmContext.CsEbx
+        push    eax
+        push    dword ptr [ebx].VtVdmContext.CsEbp
+        push    dword ptr [ebx].VtVdmContext.CsEsi
+        push    dword ptr [ebx].VtVdmContext.CsEdi
+
+        ; push seg regs
+        push    dword ptr [ebx].VtVdmContext.CsSegFs
+        push    dword ptr [ebx].VtVdmContext.CsSegGs
+        push    dword ptr [ebx].VtVdmContext.CsSegDs
+        push    dword ptr [ebx].VtVdmContext.CsSegEs
+
+        push    dword ptr [ebx].VtVdmContext.CsEflags
+        popfd
+
+        ; set up VDM seg regs
+        pop     es
+        pop     ds
+        pop     gs             ; pop fs,gs of invalid selectors are trapped in ntoskrnl,
+        pop     fs             ; and handled by setting to zero
+
+        ; set up VDM general regs
+        popad
+
+        lss     esp, cs:ClientPMStack
+        jmp     fword ptr cs:ClientPMEntry
+
 stdENDP _FastEnterPm
 
         page    ,132
@@ -253,15 +359,21 @@ stdENDP _GetFastBopEntryAddress
         assume DS:Nothing,ES:Nothing,SS:Nothing
 ALIGN 16
 cPublicProc _FastLeavePm,0
-
-	push	ebx
+        push    ebx
 
         mov     bx,ds
         push    bx                              ; so push and pop size same
         mov     bx,KGDT_R3_DATA OR RPL_MASK
         mov     ds,bx
-	assume	ds:FLAT
-	lea	ebx,_VdmTib			; get pointer to contexts
+        assume  ds:FLAT
+
+        push    fs
+        mov     ebx, KGDT_R3_TEB OR RPL_MASK
+        mov     fs, bx
+        mov     ebx, fs:[PcTeb]
+        mov     ebx, dword ptr [ebx].TeVdm
+        pop     fs
+
         pushfd
         mov     dword ptr [ebx].VtVdmContext.CsEax,eax
         pop     eax
@@ -270,7 +382,7 @@ cPublicProc _FastLeavePm,0
         mov     word ptr [ebx].VtVdmContext.CsSegDs,ax
         pop     eax
         mov     dword ptr [ebx].VtVdmContext.CsEbx,eax
-	mov	dword ptr [ebx].VtVdmContext.CsEcx,ecx
+        mov     dword ptr [ebx].VtVdmContext.CsEcx,ecx
         mov     dword ptr [ebx].VtVdmContext.CsEdx,edx
         mov     dword ptr [ebx].VtVdmContext.CsEsi,esi
         mov     dword ptr [ebx].VtVdmContext.CsEdi,edi
@@ -326,7 +438,7 @@ cPublicProc _FastLeavePm,0
         push    dword ptr [ebx].VtMonitorContext.CsSegDs
         push    dword ptr [ebx].VtMonitorContext.CsSegEs
 
-	test	ds:FIXED_NTVDMSTATE_LINEAR,dword ptr VDM_VIRTUAL_INTERRUPTS
+        test    ds:FIXED_NTVDMSTATE_LINEAR,dword ptr VDM_VIRTUAL_INTERRUPTS
         jz      fl10
 
         or      [ebx].VtVdmContext.CsEFlags,dword ptr EFLAGS_INTERRUPT_MASK
@@ -344,7 +456,11 @@ fl20:
         popad
 
         xor eax,eax                     ; indicate success
-        ; return
+
+        ; clear the NT bit in EFLAGS and return with iret
+        pushfd
+        and     dword ptr [esp], 0ffffbfffH
+        popfd
         iretd
 stdENDP _FastLeavePm
 

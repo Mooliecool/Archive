@@ -23,51 +23,49 @@ Revision History:
 #include "precomp.h"
 #pragma hdrstop
 #include "softpc.h"
-//
-// Information about the current PSP
-//
-USHORT CurrentPSPSelector;
-
-//
-// Table of selector bases and limits
-//
-ULONG FlatAddress[LDT_SIZE];
-
-//
-// Index # for DPMI bop.  Used for error reporting on risc
-//
-ULONG Index;
+#include <intapi.h>
 
 //
 // DPMI dispatch table
 //
 VOID (*DpmiDispatchTable[MAX_DPMI_BOP_FUNC])(VOID) = {
-    DpmiSetDescriptorEntry,                     // 0
-    switch_to_protected_mode,                   // 1
-    DpmiSetProtectedmodeInterrupt,              // 2
+    DpmiInitDosxRM,                             // 0
+    DpmiInitDosx,                               // 1
+    DpmiInitLDT,                                // 2
     DpmiGetFastBopEntry,                        // 3
-    DpmiInitDosx,                               // 4
-    DpmiInitApp,                                // 5
-    DpmiXlatInt21Call,                          // 6
-    DpmiAllocateXmem,                           // 7
-    DpmiFreeXmem,                               // 8
-    DpmiReallocateXmem,                         // 9
-    DpmiSetFaultHandler,                        // a
-    DpmiGetMemoryInfo,                          // b
-    DpmiDpmiInUse,                              // c
-    DpmiDpmiNoLongerInUse,                      // d
-    DpmiSetDebugRegisters,                      // e
-    DpmiPassTableAddress,                       // f
-    DpmiFreeAppXmem,                            // 10
-    DpmiPassPmStackInfo,                        // 11
-    DpmiVcdPmSvcCall32,                         // 12
-    DpmiFreeAllXmem,                            // 13
-    DpmiIntHandlerIret16,                       // 14
-    DpmiIntHandlerIret32,                       // 15
-    DpmiFaultHandlerIret16,                     // 16
-    DpmiFaultHandlerIret32,                     // 17
-    DpmiUnhandledExceptionHandler               // 18
+    DpmiInitIDT,                                // 4
+    DpmiInitExceptionHandlers,                  // 5
+    DpmiInitApp,                                // 6
+    DpmiTerminateApp,                           // 7
+    DpmiDpmiInUse,                              // 8
+    DpmiDpmiNoLongerInUse,                      // 9
+
+    switch_to_protected_mode,                   // 10 (DPMISwitchToProtectedMode)
+    switch_to_real_mode,                        // 11 (DPMISwitchToRealMode)
+    DpmiSetAltRegs,                             // 12
+
+    DpmiIntHandlerIret16,                       // 13
+    DpmiIntHandlerIret32,                       // 14
+    DpmiFaultHandlerIret16,                     // 15
+    DpmiFaultHandlerIret32,                     // 16
+    DpmiUnhandledExceptionHandler,              // 17
+
+    DpmiRMCallBackCall,                         // 18
+    DpmiReflectIntrToPM,                        // 19
+    DpmiReflectIntrToV86,                       // 20
+
+    DpmiInitPmStackInfo,                        // 21
+    DpmiVcdPmSvcCall32,                         // 22
+    DpmiSetDescriptorEntry,                     // 23
+    DpmiResetLDTUserBase,                       // 24
+
+    DpmiXlatInt21Call,                          // 25
+    DpmiInt31Entry,                             // 26
+    DpmiInt31Call,                              // 27
+
+    DpmiHungAppIretAndExit                      // 28
 };
+
 
 VOID
 DpmiDispatch(
@@ -89,17 +87,18 @@ Return Value:
 
 --*/
 {
+    DECLARE_LocalVdmContext;
+    ULONG Index;
+    static USHORT NestLevel = 0;
 
-    Index = *(Sim32GetVDMPointer(
-        ((getCS() << 16) | getIP()),
-        1,
-        (UCHAR) (getMSW() & MSW_PE)));
+    Index = *(PUCHAR)VdmMapFlat(getCS(), getIP(), getMODE());
 
     setIP((getIP() + 1));           // take care of subfn.
 
-    DBGTRACE(DPMI_DISPATCH_ENTRY, Index, 0, 0);
+    DBGTRACE(VDMTR_TYPE_DPMI | DPMI_DISPATCH_ENTRY, NestLevel++, Index);
 
     if (Index >= MAX_DPMI_BOP_FUNC) {
+        //BUGBUG IMHO, we should fatal exit here
 #if DBG
         DbgPrint("NtVdm: Invalid DPMI BOP %lx\n", Index);
 #endif
@@ -107,8 +106,11 @@ Return Value:
     }
 
     (*DpmiDispatchTable[Index])();
+
+    DBGTRACE(VDMTR_TYPE_DPMI | DPMI_DISPATCH_EXIT, --NestLevel, Index);
 }
 
+#if 0   // This probably is for private debugging only
 VOID
 DpmiIllegalFunction(
     VOID
@@ -132,13 +134,13 @@ Return Value:
 
 --*/
 {
-   char szFormat[] = "NtVdm: Invalid DPMI BOP 0x%x from CS:IP %4.4x:%4.4x (%s mode), could be i386 dosx.exe.\n";
+    DECLARE_LocalVdmContext;
+   char szFormat[] = "NtVdm: Invalid DPMI BOP from CS:IP %4.4x:%4.4x (%s mode), could be i386 dosx.exe.\n";
    char szMsg[sizeof(szFormat)+64];
 
    wsprintf(
        szMsg,
        szFormat,
-       Index,
        (int)getCS(),
        (int)getIP(),
        (getMSW() & MSW_PE) ? "prot" : "real"
@@ -146,16 +148,17 @@ Return Value:
 
    OutputDebugString(szMsg);
 }
+#endif
 
 VOID
-DpmiInitDosx(
+DpmiInitDosxRM(
     VOID
     )
 /*++
 
 Routine Description:
 
-    This routine handle the initialization bop for the dos extender.
+    This routine handles the RM initialization bop for the dos extender.
     It get the addresses of the structures that the dos extender and
     32 bit code share.
 
@@ -169,39 +172,98 @@ Return Value:
 
 --*/
 {
-    PUCHAR SharedData;
+    DECLARE_LocalVdmContext;
+    PDOSX_RM_INIT_INFO pdi;
+
+    ASSERT(!(getMSW() & MSW_PE));
+
+    pdi = (PDOSX_RM_INIT_INFO) VdmMapFlat(getDS(), getSI(), VDM_V86);
+
+    DosxStackFrameSize    = pdi->StackFrameSize;
+
+    RmBopFe = pdi->RmBopFe;
+    PmBopFe = pdi->PmBopFe;
+
+    DosxStackSegment      = pdi->StackSegment;
+    DosxRmCodeSegment     = pdi->RmCodeSegment;
+    DosxRmCodeSelector    = pdi->RmCodeSelector;
+
+    DosxFaultHandlerIret  = pdi->pFaultHandlerIret;
+    DosxFaultHandlerIretd = pdi->pFaultHandlerIretd;
+    DosxIntHandlerIret    = pdi->pIntHandlerIret;
+    DosxIntHandlerIretd   = pdi->pIntHandlerIretd;
+    DosxIret              = pdi->pIret;
+    DosxIretd             = pdi->pIretd;
+    DosxRMReflector       = pdi->RMReflector;
+
+    RMCallBackBopOffset   = pdi->RMCallBackBopOffset;
+    RMCallBackBopSeg      = pdi->RMCallBackBopSeg;
+    PMReflectorSeg        = pdi->PMReflectorSeg;
+
+    DosxRmSaveRestoreState= pdi->RmSaveRestoreState;
+    DosxPmSaveRestoreState= pdi->PmSaveRestoreState;
+    DosxRmRawModeSwitch   = pdi->RmRawModeSwitch;
+    DosxPmRawModeSwitch   = pdi->PmRawModeSwitch;
+
+    DosxVcdPmSvcCall      = pdi->VcdPmSvcCall;
+    DosxMsDosApi          = pdi->MsDosApi;
+    DosxXmsControl        = pdi->XmsControl;
+
+    DosxHungAppExit       = pdi->HungAppExit;
+
+    //
+    // Load the temporary LDT info (updated in DpmiInitLDT())
+    //
+    Ldt       = VdmMapFlat(pdi->InitialLDTSeg, 0, VDM_V86);
+    LdtMaxSel = pdi->InitialLDTSize;
+
+#ifdef _X86_
+    //
+    // On x86 platforms, return the fast bop address
+    //
+    GetFastBopEntryAddress(&((PVDM_TIB)NtCurrentTeb()->Vdm)->VdmContext);
+#endif
+
+}
+
+VOID
+DpmiInitDosx(
+    VOID
+    )
+/*++
+
+Routine Description:
+
+    This routine handles the PM initialization bop for the dos extender.
+    It get the addresses of the structures that the dos extender and
+    32 bit code share.
+
+    Note: These values are initialized here since they are FLAT pointers,
+    and are thus not easily computed at the time of InitDosxRM.
+
+Arguments:
+
+    None
+
+Return Value:
+
+    None.
+
+--*/
+{
+    DECLARE_LocalVdmContext;
+    PDOSX_INIT_INFO pdi;
 
     ASSERT((getMSW() & MSW_PE));
 
-    SharedData = Sim32GetVDMPointer(((getDS() << 16) | getSI()), 2, TRUE);
+    pdi = (PDOSX_INIT_INFO) VdmMapFlat(getDS(), getSI(), VDM_PM);
 
-    DosxStackSegment = *((PWORD16)SharedData);
-
-    SmallXlatBuffer = Sim32GetVDMPointer(*((PDWORD16)(SharedData+2)), 4, TRUE);
-
-    LargeXlatBuffer = Sim32GetVDMPointer(*((PDWORD16)(SharedData+6)), 4, TRUE);
+    SmallXlatBuffer = Sim32GetVDMPointer(pdi->pSmallXlatBuffer, 4, TRUE);
+    LargeXlatBuffer = Sim32GetVDMPointer(pdi->pLargeXlatBuffer, 4, TRUE);
+    DosxDtaBuffer   = Sim32GetVDMPointer(pdi->pDtaBuffer, 4, TRUE);
 
     DosxStackFramePointer = (PWORD16)((PULONG)Sim32GetVDMPointer(
-                                     *((PDWORD16)(SharedData + 10)), 4, TRUE));
-
-    DosxStackFrameSize = *((PWORD16)(SharedData + 14));
-
-    RmBopFe = *((PDWORD16)(SharedData + 16));
-
-    DosxRmCodeSegment = *((PWORD16)(SharedData + 20));
-
-    DosxDtaBuffer = Sim32GetVDMPointer(*(PDWORD16)(SharedData+22), 4, TRUE);
-
-    DosxPmDataSelector = *(PWORD16)(SharedData + 26);
-    DosxRmCodeSelector = *(PWORD16)(SharedData + 28);
-    DosxSegmentToSelector = *(PDWORD16)(SharedData + 30);
-
-    DosxFaultHandlerIret = *(PDWORD16)(SharedData + 34);
-    DosxFaultHandlerIretd= *(PDWORD16)(SharedData + 38);
-    DosxIntHandlerIret   = *(PDWORD16)(SharedData + 42);
-    DosxIntHandlerIretd  = *(PDWORD16)(SharedData + 46);
-    DosxIret             = *(PDWORD16)(SharedData + 50);
-    DosxIretd            = *(PDWORD16)(SharedData + 54);
+                                     pdi->pStackFramePointer, 4, TRUE));
 
 }
 
@@ -233,19 +295,15 @@ Notes:
 
 --*/
 {
+    DECLARE_LocalVdmContext;
     PWORD16 Data;
 
-    Data = (PWORD16)Sim32GetVDMPointer(
-        ((ULONG)getSS() << 16) | getSP(),
-        1,
-        TRUE
-        );
-
+    Data = (PWORD16) VdmMapFlat(getSS(), getSP(), VDM_PM);
 
     // Only 1 bit defined in dpmi
     CurrentAppFlags = getAX() & DPMI_32BIT;
-#if defined(i386)
-    VdmTib.PmStackInfo.Flags = CurrentAppFlags;
+#ifdef _X86_
+    ((PVDM_TIB)NtCurrentTeb()->Vdm)->DpmiInfo.Flags = CurrentAppFlags;
     if (CurrentAppFlags & DPMI_32BIT) {
         *pNtVDMState |= VDM_32BIT_APP;
     }
@@ -264,16 +322,54 @@ Notes:
     CurrentDtaOffset = *Data;
     CurrentDtaSelector = *(Data + 1);
     CurrentPSPSelector = *(Data + 2);
+    CurrentPSPXmem = 0;
 }
-VOID DpmiPassTableAddress(
+
+VOID
+DpmiTerminateApp(
     VOID
     )
 /*++
 
 Routine Description:
 
-    This routine stores the flat address for the LDT table in the 16bit
-    land (pointed to by selGDT in 16bit land).
+    This routine handles any necessary 32 bit destruction for extended
+    applications.
+
+Arguments:
+
+    None.
+
+Return Value:
+
+    None.
+
+Notes:
+
+--*/
+{
+    DECLARE_LocalVdmContext;
+
+    DpmiFreeAppXmem(getDX());
+    CurrentPSPXmem = 0;                               // DpmiFreeAppXmem should also zero it
+    CurrentPSPSelector = getCX();                     // indicate no running app
+}
+
+
+VOID
+DpmiEnableIntHooks(
+    VOID
+    )
+
+/*++
+
+Routine Description:
+
+    This routine is called very early on in NTVDM initialization. It
+    gives the dpmi code a chance to do some startup stuff before any
+    client code has run.
+
+    This is not called via bop.
 
 Arguments:
 
@@ -284,14 +380,33 @@ Return Value:
     None.
 
 --*/
+
 {
-
-    Ldt = (PVOID)Sim32GetVDMPointer(
-        (getAX() << 16),
-        0,
-        (UCHAR) (getMSW() & MSW_PE)
-        );
-
-    IntelBase = (ULONG) Sim32GetVDMPointer((ULONG)0, 1, FALSE);
-
+#ifndef _X86_
+    IntelBase = (ULONG) VdmMapFlat(0, 0, VDM_V86);
+    VdmInstallHardwareIntHandler(DpmiHwIntHandler);
+    VdmInstallSoftwareIntHandler(DpmiSwIntHandler);
+    VdmInstallFaultHandler(DpmiFaultHandler);
+#endif // _X86_
 }
+
+#ifdef DBCS
+VOID
+DpmiSwitchToDosxStack(
+    VOID
+    )
+{
+    DECLARE_LocalVdmContext;
+
+    SWITCH_TO_DOSX_RMSTACK();
+}
+VOID
+DpmiSwitchFromDosxStack(
+    VOID
+    )
+{
+    DECLARE_LocalVdmContext;
+
+    SWITCH_FROM_DOSX_RMSTACK();
+}
+#endif

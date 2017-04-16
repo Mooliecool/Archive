@@ -17,6 +17,11 @@
 
 MODNAME(walias.c);
 
+extern HANDLE hmodWOW32;
+
+extern CRITICAL_SECTION gcsWOW;
+extern PTD gptdTaskHead;
+
 //BUGBUG - this must be removed once MM_MCISYSTEM_STRING is defined in MMSYSTEM.H.
 #ifndef MM_MCISYSTEM_STRING
     #define MM_MCISYSTEM_STRING 0x3CA
@@ -77,7 +82,7 @@ INT GetStdClassNumber(
         // They passed us a string
 
         for ( i = WOWCLASS_BUTTON; i < NUMEL(stdClasses); i++ ) {
-            if ( _stricmp(pszClass, stdClasses[i].lpszClassName) == 0 ) {
+            if ( WOW32_stricmp(pszClass, stdClasses[i].lpszClassName) == 0 ) {
                 return( i );
             }
         }
@@ -89,14 +94,14 @@ INT GetStdClassNumber(
             if ( stdClasses[i].aClassAtom == 0 ) {
                 // RegisterWindowMessage is an undocumented way of determining
                 // an atom value in the context of the server-side heap.
-                stdClasses[i].aClassAtom = RegisterWindowMessage(stdClasses[i].lpszClassName);
+                stdClasses[i].aClassAtom = (ATOM)RegisterWindowMessage(stdClasses[i].lpszClassName);
             }
             if ( (ATOM)LOWORD(pszClass) == stdClasses[i].aClassAtom ) {
                 return( i );
             }
         }
     }
-    return( WOWCLASS_UNKNOWN );
+    return( WOWCLASS_WIN16 );  // private 16-bit class created by the app
 }
 
 // Returns a 32 window proc given a class index
@@ -106,7 +111,7 @@ WNDPROC GetStdClassWndProc(
 ) {
     WNDPROC lpfn32;
 
-    if ( iClass < WOWCLASS_UNKNOWN || iClass > WOWCLASS_MAX ) {
+    if ( iClass < WOWCLASS_WIN16 || iClass > WOWCLASS_MAX ) {
         WOW32ASSERT(FALSE);
         return( NULL );
     }
@@ -121,7 +126,7 @@ WNDPROC GetStdClassWndProc(
 
         if ( f ) {
             VPVOID  vp;
-	    DWORD UNALIGNED * lpdw;
+       DWORD UNALIGNED * lpdw;
 
             lpfn32 = wc.lpfnWndProc;
             stdClasses[iClass].lpfnWndProc = lpfn32;
@@ -150,15 +155,15 @@ DWORD GetStdClassThunkProc(
     INT     iClass
 ) {
     DWORD   dwResult;
-    INT     iOrdinal;
+    SHORT   iOrdinal;
     PARM16  Parm16;
 
-    if ( iClass < WOWCLASS_UNKNOWN || iClass > WOWCLASS_MAX ) {
+    if ( iClass < WOWCLASS_WIN16 || iClass > WOWCLASS_MAX ) {
         WOW32ASSERT(FALSE);
         return( 0 );
     }
 
-    iOrdinal = stdClasses[iClass].iOrdinal;
+    iOrdinal = (SHORT)stdClasses[iClass].iOrdinal;
 
     if ( iOrdinal == 0 ) {
         return( (DWORD)NULL );
@@ -182,68 +187,6 @@ DWORD GetStdClassThunkProc(
         stdClasses[iClass].vpfnWndProc = dwResult;
     }
     return( dwResult );
-}
-
-PWW FindPWW(HANDLE h32, INT iClass)
-{
-
-    PWW pww;
-    CHAR szClassName[16];
-
-    if (!h32) {
-        return (PWW) NULL;
-    }
-    else {
-        try {
-            pww = (PWW) GetWindowLong(h32, GWL_WOWWORDS);
-        }
-        except (EXCEPTION_ACCESS_VIOLATION == GetExceptionCode()) {
-            pww = (PWW) NULL;
-        }
-
-        if (pww) {
-            if (WOWCLASS_UNKNOWN == pww->iClass &&
-                !(pww->flState & WWSTATE_ICLASSISSET)) {
-
-                if (WOWCLASS_UNKNOWN == iClass &&
-                    GetClassName(h32, szClassName, sizeof(szClassName))) {
-
-                    iClass = GetStdClassNumber(szClassName);
-
-                }
-
-                if (WOWCLASS_UNKNOWN != iClass) {
-                    SETWL(h32, GWL_WOWiClassAndflState,
-                            MAKECLASSANDSTATE(iClass, pww->flState | WWSTATE_ICLASSISSET));
-                } else {
-                    SETWL(h32, GWL_WOWiClassAndflState,
-                            MAKECLASSANDSTATE(pww->iClass, pww->flState | WWSTATE_ICLASSISSET));
-                }
-            }
-        }
-        else {
-            LOGDEBUG(2,("WOW::FindPWW(): *** Invalid hwnd32 %08x\n", h32));
-        }
-    }
-
-    return (pww);
-}
-
-PWC FindPWC(HANDLE h32)
-{
-    PWC pwc;
-
-    try {
-        pwc = (PWC) GetClassLong(h32, GCL_WOWWORDS);
-        WOW32ASSERT(pwc);
-    }
-    except (EXCEPTION_ACCESS_VIOLATION == GetExceptionCode()) {
-        pwc = (PWC) NULL;
-        LOGDEBUG(LOG_ALWAYS,("WOW::FindPWC(): *** Invalid hwnd32 %08x\n", h32));
-        WOW32ASSERT(FALSE);
-    }
-
-    return (pwc);
 }
 
 /*
@@ -406,11 +349,9 @@ BOOL MessageNeedsThunking(UINT uMsg)
 #endif
 
 
-extern PTD gptdTaskHead;
-
 PTD ThreadProcID32toPTD(DWORD dwThreadID, DWORD dwProcessID)
 {
-    PTD ptd;
+    PTD ptd, ptdThis;
     PWOAINST pWOA;
 
     //
@@ -419,9 +360,11 @@ PTD ThreadProcID32toPTD(DWORD dwThreadID, DWORD dwProcessID)
     // to the corresponding WinOldAp PTD.
     //
 
-    ptd = CURRENTPTD();
+    ptdThis = CURRENTPTD();
 
-    pWOA = ptd->pWOAList;
+    EnterCriticalSection(&ptdThis->csTD);
+
+    pWOA = ptdThis->pWOAList;
 
     while (pWOA && pWOA->dwChildProcessID != dwProcessID) {
         pWOA = pWOA->pNext;
@@ -431,12 +374,18 @@ PTD ThreadProcID32toPTD(DWORD dwThreadID, DWORD dwProcessID)
 
         ptd = pWOA->ptdWOA;
 
+        LeaveCriticalSection(&ptdThis->csTD);
+
     } else {
+
+        LeaveCriticalSection(&ptdThis->csTD);
 
         //
         // We didn't find a WinOldAp PTD to return, see
         // if the thread ID matches one of our app threads.
         //
+
+        EnterCriticalSection(&gcsWOW);
 
         ptd = gptdTaskHead;
 
@@ -444,6 +393,7 @@ PTD ThreadProcID32toPTD(DWORD dwThreadID, DWORD dwProcessID)
             ptd = ptd->ptdNext;
         }
 
+        LeaveCriticalSection(&gcsWOW);
     }
 
     return ptd;
@@ -455,17 +405,21 @@ PTD Htask16toPTD(
 ) {
     PTD  ptd;
 
+    EnterCriticalSection(&gcsWOW);
+
     ptd = gptdTaskHead;
 
     while(ptd) {
 
         if ( ptd->htask16 == htask16 ) {
-            return( ptd );
+            break;
         }
         ptd = ptd->ptdNext;
     }
 
-    return((PTD)NULL);
+    LeaveCriticalSection(&gcsWOW);
+
+    return ptd;
 }
 
 
@@ -553,6 +507,8 @@ ULONG GetGCL_HMODULE(HWND hwnd)
 
         ptd = CURRENTPTD();
 
+        EnterCriticalSection(&ptd->csTD);
+
         pWOA = ptd->pWOAList;
         while (pWOA && pWOA->dwChildProcessID != dwProcessID) {
             pWOA = pWOA->pNext;
@@ -566,6 +522,8 @@ ULONG GetGCL_HMODULE(HWND hwnd)
             ul = (ULONG) gUser16hInstance;
             WOW32ASSERT(ul);
         }
+
+        LeaveCriticalSection(&ptd->csTD);
     }
     else {
         ul = (ULONG)GETHMOD16(ul);      // 32-bit hmod is HMODINST32
@@ -655,9 +613,12 @@ WORD WOWHandle16 (HANDLE h32, WOW_HANDLE_TYPE htype)
     }
 }
 
+extern PVOID GdiQueryTable();
+
 PVOID gpGdiHandleInfo = (PVOID)-1;
 
 //WARNING: This structure must match ENTRY in ntgdi\inc\hmgshare.h
+//         and in ..\vdmexts\wow.c
 
 typedef struct _ENTRYWOW
 {
@@ -668,19 +629,1067 @@ typedef struct _ENTRYWOW
     LONG   l3;
 } ENTRYWOW, *PENTRYWOW;
 
-//
-// this routine converts a 16bit GDI handle to a 32bit handle.  There
-// is no need to do any validation on the handle since the 14bit space
-// for handles ignoring the low two bits is completely contained in the
-// valid 32bit handle space.
-//
 
+/*++
+ Notes on GDI handle mapping:
+
+ Since NT 3.1, GDI has been limited to handles that had values < 16K. The reason
+ for this limitation is not known. But we do know that on Windows 3.1 the same 
+ limitation existed since GDI handles were really just hLocalMem handles which
+ in reality were just offsets into GDI's local heap.  The local heap manager
+ always returned handles with the two lowest bits set to 0. The 2nd bit, the 2's
+ bit, was used by the Win 3.1 heap manager to mark memory as fixed. The 1's bit 
+ we assume was not set because memory offsets probably weren't odd.  Therefore 
+ they only had 14-bits available for handle values.  There are notes in WOW that
+ 16-bit applications were aware of this and used the two lowest bits for their 
+ own evil purposes. In fact, we use the lowest bit at times in WOW for evil
+ purposes of our own! (see notes in GetDC() thunk in wuser.c) 
+
+ GDI32 handles are made up of two parts, the loword of the handle is the handle 
+ value which, until Windows XP, was < 16K as mentioned above.  The hiword of the
+ handle consists of a bunch of "uniqueness" (bad name for these really) bits. 
+ Prior to Windows XP, WOW thunked GDI32 handles by stripping off the hiword 
+ uniqueness bits and then left-shifted the loword handle value by 2 -- exposing
+ the two low order bits for apps to use to their heart's content. Since the 
+ handle value was < 16K, we didn't lose any relevant handle information by left-
+ shiftng by two. To un-thunk the handle back to 32-bits, we right-shifted it by
+ 2 and OR'd the uniqueness bits back onto the hiword (we get the uniqueness bits
+ from a table that GDI32 exposes to us). This scheme allowed a very nice one-to-
+ one mapping of the handles back-and-forth so there was never any need to create
+ a mapping table.
+
+ Enter Windows XP. The GDI group, with good reason, needed to increase the 
+ number of handles system-wide, so they changed their handles to use all 16-bits
+ in the loword handle values. Unfortunately, when we do our left-shift thunk
+ thing, any handles values > 16K get trashed and things go south pretty quickly.
+ We found this whole issue out very late in the XP client ship cycle (3 weeks to
+ RTM) and couldn't do too much about it at that point. So we just tested the
+ handles values to see if they were > 16K and told the user that the 16-bit
+ subsystem was out of resources & that they needed to reboot their system --
+ then we killed the VDM. Gack! Not something somebody running an enterprise
+ server wants to see. So...
+
+ For the .NET Server & SP1 releases of XP we decided that we needed to come up 
+ with a mapping algorithm that allows WOW to use handles with values above 16K. 
+ Here it is:
+
+ 1. We allocate a mapping table with 64K entries to accomodate all possible 
+    32-bit handles.  The loword of an h32 is used to index directly into this 
+    table.  An entry in this table is the index of the corresponding h16 in the 
+    h16 mapping table.
+
+ 2. We reserve a mapping table with 16K entries in virtual memory.  Each entry
+    in the table contains the corresponding h32, an index to the next free entry
+    in the table, and a State.  The State can be one of the following: IN_USE,
+    SLOT_FREE, H16_DELETE, and GDI_STOCK_OBJECT.  Initially we only commit one
+    "table page" of memory in the table -- enough to map 1K handles.
+
+ 3. When an app calls an API such as CreateBrush(), we map the returned handle
+    into the first available slot in the free list. The index of the selected
+    slot is left-shifted by 2 (to open up the lower two bits as before) and that
+    value is used as the h16 that we return to the app.
+
+ 4. When the app calls an API using an h16 such as SelectObject(), we right
+    shift the handle back into an index into our table and retreive the mapped
+    h32 that we stored at the index location.
+
+ 5. When an app calls DeleteObject(), we originally released all the mapping
+    information and returned the associated slot index to the end of the free
+    list. This didn't work so good.  We found that many apps will try to use old
+    handles that they already free'd.  They also depend on getting back the same
+    handle value that they had just free'd -- not good. So, we implemented a
+    "lazy-deletion" algorithm to leave all the mapping info in the table as long
+    as possible before finally returning it to the free list.  Things got much
+    better. We also try to re-map recycled 32-bit handles back to the same index
+    mapping that they previously had.
+
+ 6. If our free list becomes empty (most slots are marked IN_USE or H16_DELETE
+    for lazy-deletion) we will be forced into a reclaim function to try to 
+    reclaim leaked handles (handles that an app created but never deleted) and
+    also finally free *some* of the lazy-delete handles.  Reclaimed handles are
+    added to the end of the free list. We try not to reclaim all the lazy-delete
+    handles during reclaim because that would kind of put a hiccup in our lazy
+    deletion scheme.  If we are unable to reclaim enough handles, we then commit
+    a new table page from our virtual memory reserve and add the new slots to 
+    the front of the free list.
+    
+ 7. We do have to be careful of handle leaks in our table. One potential leak is
+    for messages of the WM_PAINTCLIPBOARD nature. Assume that a 16-bit app put
+    something on the clipboard in a format only understood by that app.  Now, a
+    32-bit app wants to paste what is on the clipboard onto his client window.o     After a query, the 32-bit app finds that our 16-bit can do the painting for
+    him, so the 32-bit app sends a WM_PAINTCLIPBOARD message to the 16-bit app
+    complete with an hDC to 32-bit client window.  Problem is, GDI handles are
+    only good in the process they were created in.  User32, intercepts the
+    message and just before dispatching it to the 16-bit app, it essentially
+    does a CreateCompatibleDC() in the context of the 16-bit app's process and
+    passes on the new handle.  Works great.  We just need to make sure that we
+    know when to un-map the new handle from our table or we'll get a leak.  See
+    code for WM_PAINTCLIPBOARD in wmdisp32.c to see how we do this.  There are
+    other issues of this nature that aren't so easy because there are no 
+    reliable clues as to when we can delete these handles that are created by
+    external elements on our behalf.  To try to keep our table fromm leaking too
+    badly we check all handles in our table at reclaim time to see if they are 
+    still valid.  And finally, if the only running task in the VDM is wowexec,
+    we just throw away the tables altogether & re-build them from scratch.
+
+--*/
+
+/*+++
+
+ Here are some restrictions to 16-bit GDI handles:
+  - An h16 can't = 0 since that means failure from API's that return handles.
+    If an app specifies an hDC = 0, it usually means the DISPLAY DC.
+  - We can't give out handles with values <= COLOR_ENDCOLORS since the
+    hbrBackground member of WNDCLASS structs can specify ordinals in that 
+    range.
+  - We can't give out handle values > 0x3FFF (16K).
+  - GDI16 caches the stock objects at WOW32 boot time.  We need to make sure
+    that the stock object handles are always mapped the same -- across all
+    WOW processes.
+
+ So we reduce the size of our table to deal with handles in the range of
+ COLOR_ENDCOLORS+1 -> 0x3FFF. Since we left shift table index values by 2 (ie.
+ multiply by 4) to get the h16 we give to the app, we can calculate the first
+ allowable index value by COLOR_ENDCOLORS/4 + 1.
+
+--*/
+#define FIRST_ALLOWABLE_INDEX ((COLOR_ENDCOLORS/4) + 1)
+#define LAST_ALLOWABLE_INDEX  0x3FFF // Allows for 
+                                     // FIRST_ALLOWABLE_INDEX -> 0x3FFF entries
+
+// These two constants give us the absolute maximum number of GDI16 handles
+// we can support and the maximum size of the GDI16 handle table.
+// If the table is static we should define MAX_GDI16_HANDLES as follows:
+//#define MAX_GDI16_HANDLES ((LAST_ALLOWABLE_INDEX - FIRST_ALLOWABLE_INDEX) + 1)
+// Since the 16-bit mapping table is to grow dynamically, we'll make all pages
+// the same size to simplify things and waste the first few entries in the first
+// page.
+#define MAX_GDI16_HANDLES 0x4000   // 16K handles
+#define MAX_GDI16_HANDLE_TABLE_SIZE (MAX_GDI16_HANDLES * sizeof(GDIH16MAP))
+
+#define GDI16_HANDLES_PER_PAGE  512
+#define GDI16_HANDLE_PAGE_SIZE  (GDI16_HANDLES_PER_PAGE * sizeof(GDIH16MAP))
+
+
+// This table *has to* have 64K entries so we can index the 32-bit GDI handles 
+// directly by the low word of the h32.  
+#define GDI32_HANDLE_TABLE_ENTRIES 0x10000
+#define GDI32_HANDLE_TABLE_SIZE (GDI32_HANDLE_TABLE_ENTRIES * sizeof(GDIH32MAP))
+
+// Max number of handles to reclaim when we're short
+#define GDI16_RECLAIM_SIZE 64
+
+WORD MapGdi32Handle(HANDLE h32, WORD State);
+void RegisterStockObjects(void);
+BOOL ReclaimTableEntries(void);
+BOOL DeleteMappedGdi32Handle(HANDLE h32, WORD index, BOOL bReclaim);
+BOOL OkToDeleteThis(HANDLE h32, WORD index, BOOL bReclaim);
+BOOL CommitNewGdi16TablePage(PGDIH16MAP pTable16);
+PGDIH16MAP AllocGDI16Table(void);
+
+// This is a global so it can be tuned via app comaptflag if necessary.
+int              gGdi16ReclaimSize = GDI16_RECLAIM_SIZE;
+
+WORD             gH16_deleted_count = 0;
+WORD             ghGdi16NextFree = 0;
+WORD             ghGdi16LastFree = 0;
+HANDLE           hGdi32TableHeap = NULL;
+UINT             gMaxGdiHandlesPerProcess = 0;
+WORD             gLastAllowableIndex = 0;
+WORD             gFirstNonStockObject = 0;
+WORD             gwNextReclaimStart = 0;
+DWORD            gdwPageCommitSize = 0;
+PGDIH16MAP       pGdiH16MappingTable = NULL;
+PGDIH32MAP       pGdiH32MappingTable = NULL;
+#ifdef DEBUG
+WORD             gprevNextFree = 0xFFFF;
+UINT             gAllocatedHandleCount = 0;
+#endif
+
+
+// This routine converts a 16bit GDI handle to a GDI32 handle.
 HANDLE hConvert16to32(int h16)
 {
-    ULONG h32;
-    int i = h16 >> 2;
+    WORD   index;
+    DWORD  h32;
+    DWORD  h_32;
 
-    h32 = i | (ULONG)(((PENTRYWOW)gpGdiHandleInfo)[i].FullUnique) << 16;
+    // Apps can specify a NULL handle.  For instance hDC = NULL => DISPLAY
+    if(h16 == 0)
+        return(0);
 
+    // right shift out our left shift thing
+    index = (WORD)(h16 >> 2); 
+
+    if((index < FIRST_ALLOWABLE_INDEX) || (index > gLastAllowableIndex)) {
+
+        // Some WM_CTLCOLOR messages return wierd values for brushes
+        WOW32WARNMSG((FALSE),"WOW::hConvert16to32:Bad index value!\n");
+
+        // bad handles get mapped to 0
+        return(0);
+    }
+    
+    h32 = (DWORD)pGdiH16MappingTable[index].h32;
+
+    WOW32WARNMSG((h32),"WOW::hConvert16to32:h32 missing from table!\n");
+
+    // We might get this because an app is using a handle it already deleted.
+    // These can probably be ignored if they come from ReleaseCachedDCs().
+    WOW32WARNMSG((pGdiH32MappingTable[LOWORD(h32)].h16index == index),
+                 "WOW::hConvert16to32:indicies don't jive!\n");
+
+    // Update the uniqueness bits to match what they currently are in GDI32's
+    // handle table. This will give us the "previous" behavior.
+    // See bug #498038 -- we might possibly want to remove this.
+    h_32 = h32 & 0x0000FFFF;
+    h_32 = h_32 | (DWORD)(((PENTRYWOW)gpGdiHandleInfo)[h_32].FullUnique) << 16; 
+    if(h32 != h_32) {
+        WOW32WARNMSG((FALSE),"WOW::hConvert16to32:uniqueness bits !=\n");
+
+        h32 = h_32;
+        pGdiH16MappingTable[index].h32 = (HANDLE)h32; 
+    }
+    
     return((HANDLE)h32);
 }
+
+
+
+// This routine converts a GDI32 handle to a 16bit GDI handle
+HAND16 hConvert32to16(DWORD h32)
+{
+    WORD   index;
+    WORD   State;
+    HANDLE h_32;
+    
+    // A handle == 0 isn't necessarily bad, we just don't do anything with it.
+    if(h32 == 0) {
+        return(0);
+    }
+    
+    // See if we have already mapped a 16-bit version of this handle
+    index = pGdiH32MappingTable[LOWORD(h32)].h16index;
+    h_32  = pGdiH16MappingTable[index].h32;
+    State = pGdiH16MappingTable[index].State;
+                 
+    // If it looks like we may have already registered this handle...
+    if(index) {
+
+        WOW32ASSERTMSG((index <= gLastAllowableIndex),
+                       "WOW::hConvert32to16:Bad index!\n");
+                     
+        // Verify the handle indicies match
+        if(LOWORD(h32) == LOWORD(h_32)) {
+ 
+            // If the 16-bit mapping is marked "IN_USE" will be true for 
+            // two reasons:
+            //   1. The mapping is still valid
+            //   2. h32 got deleted without our knowledge and is comming back as
+            //      a recycled handle.  We might as well use the same mapping as
+            //      before.
+            if(State == IN_USE) {
+        
+                // All we need to do is effectively update the uniqueness bits 
+                // in the 16-bit table entry.
+                if(HIWORD(h32) != HIWORD(h_32)) {
+                    LOGDEBUG(12, ("WOW::hConvert32to16:recycled handle!\n"));
+                    pGdiH16MappingTable[index].h32 = (HANDLE)h32;
+                }
+            }
+
+            // If the mapping was marked for deletion, let's renew it.  h32 has
+            // been recycled. We might as well use the same mapping as before.
+            else if(State == H16_DELETED) {
+                pGdiH16MappingTable[index].h32 = (HANDLE)h32;
+                pGdiH16MappingTable[index].State = IN_USE;
+                gH16_deleted_count--;
+            }
+            // else h32 is a GDI_STOCK_OBJECT in which case the index is OK
+            else if(State != GDI_STOCK_OBJECT) {
+                WOW32ASSERTMSG((FALSE),"WOW::hConvert32to16:SLOT_FREE!\n");
+                return(0); // debug this
+            }
+        }
+
+        // Else if the handle indicies don't match, the h32 got deleted without
+        // our knowledge and is now coming back as a recycled handle. We'll use
+        // the same mapping as before.
+        else {
+            pGdiH16MappingTable[index].h32 = (HANDLE)h32;
+            pGdiH16MappingTable[index].State = IN_USE;
+        }
+    }
+
+    // looks like we need to create a new mapping
+    else {
+
+        index = MapGdi32Handle((HANDLE)h32, IN_USE);
+    }
+
+    // If we couldn't get an index, go see if we can reclaim some entries and
+    // find one.
+    if(!index) {
+        if(ReclaimTableEntries()) {
+            index = MapGdi32Handle((HANDLE)h32, IN_USE);
+        }
+    }
+
+    if((index < FIRST_ALLOWABLE_INDEX) || (index > gLastAllowableIndex)) {
+#ifdef DEBUG
+        if(index < FIRST_ALLOWABLE_INDEX) {
+            WOW32ASSERTMSG((FALSE),"WOW::hConvert32to16:index too small!\n");
+        }
+        else {
+            WOW32ASSERTMSG((FALSE),"WOW::hConvert32to16:index too big!\n");
+        }
+#endif
+        return(0);
+    }
+
+    // Do our left shift thing and we're done
+    return(index << 2);
+}
+
+
+
+
+
+WORD MapGdi32Handle(HANDLE h32, WORD State)
+{
+    WORD   index = 0;
+
+
+    // If all free entries are gone -- nothing to do
+    if(ghGdi16NextFree != END_OF_LIST) {
+
+        index = ghGdi16NextFree;
+
+        ghGdi16NextFree = pGdiH16MappingTable[index].NextFree;
+
+#ifdef DEBUG
+        if(ghGdi16NextFree == END_OF_LIST) {
+            gprevNextFree = index;
+            WOW32WARNMSG((FALSE),"WOW::MapGdi32Handle:Bad NextFree!\n");
+        }
+#endif
+        // Set the state (either IN_USE or GDI_STOCK_OBJECT)
+        pGdiH16MappingTable[index].State = State;
+
+        // Map the 32bit handle with the 16-bit handle
+        pGdiH16MappingTable[index].h32 = h32;
+        pGdiH32MappingTable[LOWORD(h32)].h16index = index;
+
+#ifdef DEBUG
+        gAllocatedHandleCount++;
+#endif
+    }
+
+    return(index);
+}
+
+
+
+// Requires that index & h32 are both non-null.
+// Assumes that index is an *index* and *not* an h16 (not an index << 2).
+// bReclaim specifies that the handle needs to be added to the freelist.
+BOOL DeleteMappedGdi32Handle(HANDLE h32, WORD index, BOOL bReclaim)
+{
+    BOOL bRet = FALSE;
+    
+    
+    if(OkToDeleteThis(h32, index, bReclaim)) {
+
+        // We don't actually want to *remove* the mapping from our table unless
+        // we are reclaiming entries. Lame apps call us with old deleted handles
+        // and we want to pass on the same mapping that they had when the handle
+        // was still good. This also allows us to reuse old mappings for h32 
+        // handles that get recycled.
+        if(bReclaim) {
+
+            // re-initialized the slot
+            pGdiH16MappingTable[index].State    = SLOT_FREE;  
+            pGdiH16MappingTable[index].h32      = NULL;
+            pGdiH16MappingTable[index].NextFree = END_OF_LIST;  
+
+            // add this slot to the end of the free list
+            pGdiH16MappingTable[ghGdi16LastFree].NextFree = index;
+
+            pGdiH32MappingTable[LOWORD(h32)].h16index = 0;
+
+            ghGdi16LastFree = index;
+
+#ifdef DEBUG
+            if(gAllocatedHandleCount > 0)  gAllocatedHandleCount--;
+#endif
+        }
+
+        // else just mark this as potentially deleted
+        else {
+            pGdiH16MappingTable[index].State = H16_DELETED;
+            gH16_deleted_count++;
+        }
+
+        bRet = TRUE;
+    }
+    
+    return(bRet);
+}
+
+
+
+// Check list of "What can go wrong?'s"
+BOOL OkToDeleteThis(HANDLE h32, WORD index, BOOL bReclaim)
+{
+    
+    HANDLE  h_32;
+    WORD    NextFree;
+    WORD    index16;
+    WORD    State;
+
+    // If we see this, it may be an app error calling DeleteObject(0).
+    if(index == 0) {
+        WOW32WARNMSG((FALSE),"WOW::OkToDeleteThis:Null index");
+        return(FALSE);
+    }
+
+    // Debug why we get this
+    if(h32 == NULL) {
+        WOW32ASSERTMSG((FALSE),"WOW::OkToDeleteThis:Null h32\n");
+        return(FALSE);
+    }
+
+    // Debug why we get this.  May be just an app being stupid
+    if((index < FIRST_ALLOWABLE_INDEX) || (index > gLastAllowableIndex)) {
+        WOW32ASSERTMSG((FALSE),"WOW::OkToDeleteThis:index bad\n");
+        return(FALSE);
+    }
+
+    h_32 = pGdiH16MappingTable[index].h32; 
+    State = pGdiH16MappingTable[index].State;
+    NextFree = pGdiH16MappingTable[index].NextFree; 
+    index16 = pGdiH32MappingTable[LOWORD(h32)].h16index;
+
+    // Don't remove stock objects from the table!
+    if(State == GDI_STOCK_OBJECT) {
+        return(FALSE);
+    }
+
+    // Check for the "IN_USE" flag.  If it isn't currently in use then it is
+    // already in the free list and we don't want to mess with it.  Apps 
+    // have been known to call DeleteObject() twice on the same handle.
+    if(!bReclaim && (State != IN_USE)) {
+        WOW32WARNMSG((FALSE),"WOW::OkToDeleteThis:Not IN_USE\n");
+        return(FALSE);
+    }
+
+    // We should allow this since the index is obviously pointing to an old h32.
+    if(h32 != h_32) {
+        WOW32WARNMSG((FALSE),"WOW::OkToDeleteThis:h32 != h_32\n");
+        return(TRUE);
+    }
+
+    // Don't mark it for delete if the object is still valid.
+    if(GetObjectType(h32)) {
+        return(FALSE);
+    }
+
+#ifdef DEBUG
+    // Debug this.  We should probably let the table repair itself.
+    if(index16 == 0) {
+        WOW32ASSERTMSG((FALSE),"WOW::OkToDeleteThis:index=0 in h32 table\n");
+        return(TRUE);
+    }
+#endif
+
+    return(TRUE);
+}
+
+
+
+
+// This should be called by functions outside this file to delete mapped h16's.
+void DeleteWOWGdiHandle(HANDLE h32, HAND16 h16)
+{
+    WORD index;
+
+    // convert h16 back into table index
+    index = (WORD)(h16 >> 2);
+
+    DeleteMappedGdi32Handle(h32, index, FALSE);
+}
+
+        
+        
+
+// This should be called by functions outside this file to retrieve the WOWInfo
+// associated with an h32.
+// Returns:
+//    The 16-bit mapping for this h32
+//    0 - if h32 is valid but not mapped in our table
+//    -1 - if h32 is 0 or bad (BAD_GDI32_HANDLE)
+HAND16 IsGDIh32Mapped(HANDLE h32)
+{
+    WORD   index;
+    HANDLE h_32 = NULL;
+
+    if(h32) {
+
+        if(GetObjectType(h32)) {
+
+            index = pGdiH32MappingTable[LOWORD(h32)].h16index;
+
+            if(index) {
+                h_32 = pGdiH16MappingTable[index].h32;
+            }
+            
+            if(h_32 == h32) {
+                return((HAND16)index<<2);
+            }
+            return(0);
+        }
+    }
+    return(BAD_GDI32_HANDLE);
+}
+
+    
+#if 0
+// This is really for a sanity check that the GDI guys haven't increased the
+// GdiProcessHandleQuota past 16K. 
+int DisplayYouShouldNotDoThatMsg(int nMsg)
+{
+    CHAR   szWarn[512];
+    CHAR   szText[256];
+
+    LoadString(hmodWOW32, 
+               iszYouShouldNotDoThat,
+               szWarn, 
+               sizeof(szWarn)/sizeof(CHAR));
+
+    LoadString(hmodWOW32, 
+               nMsg,
+               szText, 
+               sizeof(szText)/sizeof(CHAR));
+
+    if((strlen(szWarn) + strlen(szText)) < 512) {
+        strcat(szWarn, szText);
+    }
+ 
+    LoadString(hmodWOW32, 
+               iszHeavyUse,
+               szText, 
+               sizeof(szText)/sizeof(CHAR));
+
+    if((strlen(szWarn) + strlen(szText)) < 512) {
+        strcat(szWarn, szText);
+    }
+
+    return(MessageBox(NULL,
+                      szWarn,
+                      NULL,
+                      MB_YESNO       | 
+                      MB_DEFBUTTON2  | 
+                      MB_SYSTEMMODAL | 
+                      MB_ICONEXCLAMATION));
+}
+
+#endif
+
+
+
+BOOL InitializeGdiHandleMappingTable(void)
+{
+    HKEY   hKey = 0;
+    DWORD  dwType;
+    DWORD  cbSize = sizeof(DWORD);
+    CHAR   szError[256];
+
+    gpGdiHandleInfo = GdiQueryTable();
+
+    // The GDI per-process handle limit has to be obtained from the registry.
+    // ie. It can be changed by a user! (not doc'd but you know how that goes)
+    if(RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                    "Software\\Microsoft\\Windows NT\\CurrentVersion\\Windows",
+                    0, 
+                    KEY_READ, 
+                    &hKey ) == ERROR_SUCCESS) {
+
+        RegQueryValueEx(hKey, 
+                        "GdiProcessHandleQuota", 
+                        0, 
+                        &dwType, 
+                        (LPBYTE)&gMaxGdiHandlesPerProcess, 
+                        &cbSize);
+
+        RegCloseKey(hKey);
+    }
+
+    WOW32ASSERTMSG((gMaxGdiHandlesPerProcess != 0),
+                   "WOW::InitializeGdiHandleMappingTable:Default GDI max!\n");
+
+    // We have to be <= ~16K or we wouldn't have to do all this stuff.
+    if(gMaxGdiHandlesPerProcess > MAX_GDI16_HANDLES) {
+
+        // limit them at the max.
+        gMaxGdiHandlesPerProcess = MAX_GDI16_HANDLES;
+    }
+    
+    // Allocate the 32-bit handle mapping table.
+    hGdi32TableHeap = HeapCreate(HEAP_NO_SERIALIZE,
+                                 GDI32_HANDLE_TABLE_SIZE,
+                                 GROW_HEAP_AS_NEEDED);
+
+    if(hGdi32TableHeap == NULL) {
+        goto IGHMT_error;
+    }
+
+    pGdiH32MappingTable = HeapAlloc(hGdi32TableHeap, 
+                                    HEAP_ZERO_MEMORY, 
+                                    GDI32_HANDLE_TABLE_SIZE);
+
+    if(pGdiH32MappingTable == NULL) {
+        goto IGHMT_error;
+    }
+
+    pGdiH16MappingTable = AllocGDI16Table();
+
+    if(pGdiH16MappingTable == NULL) {
+        goto IGHMT_error;
+    }
+
+    // Add the stock objects as the first entries in the GDI handle mapping 
+    // tables.
+    RegisterStockObjects();
+
+    return(TRUE);
+
+IGHMT_error:
+    cbSize = LoadString(hmodWOW32, 
+                        iszStartupFailed,
+                        szError, 
+                        sizeof(szError)/sizeof(CHAR));
+
+    if((cbSize == 0) || (cbSize >= 256)) {
+
+        strcpy(szError, "Not enough memory to load 16-bit subsystem.");
+    }
+
+    WOWSysErrorBox(NULL, szError, SEB_OK, 0, 0);
+
+    if(pGdiH32MappingTable) {
+        HeapFree(hGdi32TableHeap, HEAP_NO_SERIALIZE, pGdiH32MappingTable);
+    }
+
+    if(hGdi32TableHeap) {
+        HeapDestroy(hGdi32TableHeap);
+    }
+
+    return(FALSE);
+}
+
+
+
+PGDIH16MAP AllocGDI16Table(void)
+{
+    SIZE_T     dwSize;
+    PGDIH16MAP pTable16;
+
+#ifdef DEBUG
+    SYSTEM_INFO sSysInfo;
+
+    GetSystemInfo(&sSysInfo);
+
+    // If either of these go off we need to come up with a way to align our 
+    // struct within memory page sizes.
+    WOW32ASSERTMSG((!(sSysInfo.dwPageSize % sizeof(GDIH16MAP))),
+                   "WOW::AllocGDI16Table:Page alignment issue!\n");
+    WOW32ASSERTMSG(
+       (!((sizeof(GDIH16MAP) * GDI16_HANDLES_PER_PAGE) % sSysInfo.dwPageSize)),
+       "WOW::AllocGDI16Table:Page alignment issue 2!\n");
+#endif
+
+    // Reserve the biggest table we'll ever need. 
+    // (This is a call to VirtualAlloc() in disguise).
+    dwSize = MAX_GDI16_HANDLE_TABLE_SIZE;
+    pTable16 = NULL;
+    if(!NT_SUCCESS(NtAllocateVirtualMemory(ghProcess,
+                                           (PVOID *)&pTable16,
+                                           0,
+                                           &dwSize,
+                                           MEM_RESERVE,
+                                           PAGE_READWRITE))) {
+        WOW32ASSERTMSG((FALSE),
+                       "WOW::AllocGDI16Table:Alloc reserve failed!\n");
+        return(NULL);
+    }
+
+    // Commit the first "table page"
+    gdwPageCommitSize = 0;
+    gLastAllowableIndex = (WORD)-1; // cheese!
+    ghGdi16NextFree = END_OF_LIST;
+    if(!CommitNewGdi16TablePage(pTable16)) {
+        dwSize = 0;
+        NtFreeVirtualMemory(ghProcess,
+                            (PVOID *)&pTable16,
+                            &dwSize,
+                            MEM_RELEASE);
+        return(NULL);
+    }
+
+    ghGdi16NextFree = FIRST_ALLOWABLE_INDEX; // adjust this for init case
+    ghGdi16LastFree = gLastAllowableIndex;
+    gH16_deleted_count = 0;
+
+    return(pTable16);    
+}
+
+
+
+
+BOOL CommitNewGdi16TablePage(PGDIH16MAP pTable16)
+{
+    WORD   index;
+    WORD   wFirstNewIndex, wLastNewIndex;
+    SIZE_T dwSize;
+    PVOID  p;
+
+    // If we've allocated the last table page already -- we can't grow any more.
+    if(gdwPageCommitSize >= MAX_GDI16_HANDLE_TABLE_SIZE) {
+        WOW32WARNMSG((FALSE),
+                     "WOW::CommitNewGDI16TablePage:End of table!\n");
+        return(FALSE);
+    }
+
+    // Try to grow the number of comitted pages in our table.
+    dwSize = GDI16_HANDLE_PAGE_SIZE;
+    p = (PVOID)(((LPBYTE)pTable16) + gdwPageCommitSize);
+    if(!NT_SUCCESS(NtAllocateVirtualMemory(ghProcess,
+                                           &p,
+                                           0,
+                                           &dwSize,
+                                           MEM_COMMIT,
+                                           PAGE_READWRITE))) {
+        WOW32ASSERTMSG((FALSE),
+                       "WOW::CommitNewGDI16TablePage:Commit failed!\n");
+
+        return(FALSE);
+    }
+
+    WOW32ASSERTMSG((dwSize == GDI16_HANDLE_PAGE_SIZE),
+                   "WOW::CommitNewGDI16TablePage:Page boundary mismatch!\n");
+
+    // Build the free list in the new page.
+    // Note: NtAllocateVirtualMemory() zero init's memory, therefore the h32 and
+    // State members of each GDIH16MAP entry are NULL & SLOT_FREE by default.
+    wFirstNewIndex = gLastAllowableIndex + 1;
+    wLastNewIndex  = wFirstNewIndex + GDI16_HANDLES_PER_PAGE - 1;
+    for(index = wFirstNewIndex; index < wLastNewIndex; index++) {
+        pTable16[index].NextFree = index + 1; 
+    }
+    gLastAllowableIndex += GDI16_HANDLES_PER_PAGE;
+
+    // Put these new entries at the head of the free list.
+    pTable16[gLastAllowableIndex].NextFree = ghGdi16NextFree;
+    ghGdi16NextFree = wFirstNewIndex;
+
+    gdwPageCommitSize += GDI16_HANDLE_PAGE_SIZE;
+
+    return(TRUE);
+}
+
+
+
+
+// Add the list of stock objects to begining of our table.  
+void RegisterStockObjects(void)
+{
+    WORD   index = 0;
+    HANDLE h32;
+    int    i;
+
+    for(i = WHITE_BRUSH; i <= STOCK_MAX; i++) {
+
+        h32 = GetStockObject(i);
+
+        // currently there is no stock object ordinal == 9
+        if(h32) {
+
+            // Marking the State as GDI_STOCK_OBJECT assures us that stock
+            // objects won't get deleted from the table.
+            index = MapGdi32Handle(h32, GDI_STOCK_OBJECT);
+        }
+    }
+    gFirstNonStockObject = index + 1;
+    gwNextReclaimStart  = gFirstNonStockObject;
+}
+
+
+
+
+
+// Reclaim some of the lazily deleted handles (State == H16_DELETE) into the
+// free list. Also attempt to clean up handles that may have leaked and are
+// no longer valid.
+BOOL ReclaimTableEntries(void) 
+{
+    WORD   index;
+    WORD   State;
+    WORD   wReclaimStart, wReclaimEnd;
+    WORD   PrevLastFree = ghGdi16LastFree;
+    HANDLE h32;
+    WORD   i;
+    int    cFree;
+    BOOL   bFirst = TRUE;
+
+    // Note that we attempt to somewhat preserve the lazy-deletion scheme
+    // to avoid putting a large hiccup in the scheme.
+    
+    // First determine if we can reclaim without deleting too many H16_DELETE
+    // entries.  If we can't keep a minimal number around, it's time to commit
+    // a new table page.
+    if(gH16_deleted_count < (gGdi16ReclaimSize * 2)) {
+        if(CommitNewGdi16TablePage(pGdiH16MappingTable)) {
+            return(TRUE);
+        }
+        // if the commit failed, all we can do is reclaim
+    }
+
+    // This is an attempt to keep from always reclaiming from the front of the
+    // table.  It might not be that important to do this as things get pretty 
+    // well shuffled over time.  Probably advisable during table's early life.
+    // The first time through we start at where we left off last time.  The
+    // 2nd time through we start from the beginning.
+    wReclaimStart = gwNextReclaimStart;
+    wReclaimEnd   = gLastAllowableIndex;
+    cFree = 0;
+    for(i = 0; i < 2; i++) {
+        for(index = wReclaimStart; index <= wReclaimEnd; index++){
+
+            State = pGdiH16MappingTable[index].State;
+            h32   = pGdiH16MappingTable[index].h32;
+
+            // If it is marked as deleted...
+            if(State == H16_DELETED) {
+
+                // ...destroy the mapping and add it to the free list
+                if(DeleteMappedGdi32Handle(h32, index, TRUE)) {
+                    cFree++;
+                    gH16_deleted_count--;
+
+                    // If this is the first index we're reclaiming and the free
+                    // list is empty, make index to the new previous lastfree
+                    // the new start of the free list. This is kind of tricky.
+                    // It will be the case where the call to MapGdi32Handle()
+                    // returns index == 0 in hConvert32to16() and this function
+                    // is called as a result.  What has happened is that the
+                    // ghGdi16NextFree ptr has caught up with ghGdi16LastFree
+                    // ptr and then we get another call to hConvert32to16() to
+                    // map a new h32.  ghGdi16NextFree is now == 0 at this point
+                    // so we fail the call to MapGdi32Handle(). This forces this
+                    // reclaim function to be called. Here ghGdi16NextFree is 
+                    // set back to ghGdi16LastFree while ghGdi16LastFree will be
+                    // set to the value of the first handle to be reclaimed via
+                    // DeleteMappedGdi32Handle(). While in this reclaim loop,
+                    // the freelist will quickly grow again and there will be
+                    // plenty of room between ghGdi16NextFree & ghGdi16LastFree
+                    // again.
+                    if(bFirst && (ghGdi16NextFree == END_OF_LIST)) {
+                        ghGdi16NextFree = PrevLastFree;
+                    }
+                    bFirst = FALSE;
+ 
+                    // if we've reclaimed enough, we're done.
+                    if(cFree >= gGdi16ReclaimSize) {
+                        gwNextReclaimStart = index + 1;
+                        goto Done;
+                    }
+                }
+            }
+            // else if it is marked in use...
+            else if(State == IN_USE) {
+
+                // ...see if the handle is still valid, if not, it is a leak. 
+                if(!GetObjectType(h32)) {
+
+                    // Mark it H16_DELETED.
+                    DeleteMappedGdi32Handle(h32, index, FALSE);
+                }
+            }
+
+        } // end for
+
+        wReclaimEnd   = wReclaimStart;
+        wReclaimStart = gFirstNonStockObject;
+
+        // If we started at the beginning the first time, no sense in doing
+        // it again.
+        if(wReclaimEnd == gFirstNonStockObject) {
+            goto Done;
+        }
+    } // end for
+
+    gwNextReclaimStart = index;
+
+Done:
+    if(gwNextReclaimStart == gLastAllowableIndex) {
+        gwNextReclaimStart = gFirstNonStockObject;
+    }
+        
+    WOW32ASSERTMSG((cFree),"WOW::ReclaimTableEntries:cFree = 0!\n");
+    return(cFree);
+}
+
+
+
+// NOTE: This should only be called if nWOWTasks == 1!
+// If the only task running is wowexec, we can cleanup any handles that
+// the WOW process leaked. 
+// Note: This can break the debug wowexec if anybody ever changes it to use
+//       any GDI handles other than stock objects.
+void RebuildGdiHandleMappingTables(void)
+{
+    SIZE_T dwSize;
+    PGDIH16MAP pTable16 = pGdiH16MappingTable;
+#if 0
+// We should look at this to see if we can clean up any leaks for our process in
+// GDI32.  We have to be careful though because there may be handles that were
+// allocated on our behalf from such components as USER32 who might have cached
+// the handle.  If we call DeleteObject() on a handle that is in a USER32 cache
+// it might be disasterous. In short, we would like to do this but probably
+// can't.
+    DWORD  dwType;
+    HANDLE h32;
+    WORD   index;
+
+    // Go free any GDI handles that this process might have.
+    for(index = FIRST_ALLOWABLE_INDEX; index <= gLastAllowableIndex; index++) {
+
+        h32 = pGdiH16MappingTable[index].h32;
+
+        // if the handle is still valid in our process...
+        dwType = GetObjectType(h32);
+        if(h32 && dwType) {
+
+            // formally delete the handle
+            switch(dwType) {
+
+                // No way to tell which DC allocation mechanism this came 
+                // from (CreateDC(), BeginPaint(), GetxxxDC() etc).  We can
+                // really mess things up if we call the wrong delete 
+                // function, so we'll just let the GDI32 & USER32 process 
+                // clean-up code deal with these.
+                case OBJ_DC:
+                    break;
+
+                // The rest we can use DeleteObject()
+                default:
+                    DeleteObject(h32);
+                    break;
+            }
+        }
+    }
+#endif
+
+    // De-commit entire 16-bit handle table & re-build both tables. This could
+    // burn us if the debug version of wowexec is running with its window open
+    // and they get a GDI handle but I don't think it is likely. We're also
+    // somewhat protected by the fact the GDI16 caches the stock objects.
+    dwSize = gdwPageCommitSize;
+    if(NT_SUCCESS(NtFreeVirtualMemory(ghProcess,
+                                      (PVOID *)&pTable16,
+                                      &dwSize,
+                                      MEM_DECOMMIT))) {
+
+        RtlZeroMemory(pGdiH32MappingTable, GDI32_HANDLE_TABLE_SIZE);
+
+        // Commit the first "table page" again
+        gdwPageCommitSize = 0;
+        gLastAllowableIndex = (WORD)-1; // cheese!
+        ghGdi16NextFree = END_OF_LIST;
+#ifdef DEBUG
+        gAllocatedHandleCount = 0;
+#endif
+        if(!CommitNewGdi16TablePage(pTable16)) {
+            dwSize = 0;
+            NtFreeVirtualMemory(ghProcess,
+                                (PVOID *)&pTable16,
+                                &dwSize,
+                                MEM_RELEASE);
+            WOW32ASSERTMSG((FALSE),
+                           "WOW::RebuildGdiHandleMappingTables:Panic!\n");
+            return;
+        }
+
+        ghGdi16NextFree = FIRST_ALLOWABLE_INDEX; // adjust this for init case
+        ghGdi16LastFree = gLastAllowableIndex;
+        gH16_deleted_count = 0;
+ 
+        // re-register the stock object & we're on our way!
+        RegisterStockObjects();
+    }
+}
+
+
+
+
+void DeleteGdiHandleMappingTables(void)
+{
+    SIZE_T dwSize;
+
+    dwSize = 0;
+    NtFreeVirtualMemory(ghProcess,
+                        (PVOID *)&pGdiH16MappingTable,
+                        &dwSize,
+                        MEM_RELEASE);
+
+    HeapFree(hGdi32TableHeap, HEAP_NO_SERIALIZE, pGdiH32MappingTable);
+    HeapDestroy(hGdi32TableHeap);
+}
+
+
+
+
+// We probably don't need to worry about this buffer being too small since we're
+// really only interested in the predefined standard classes which tend to
+// be rather short-named.
+#define MAX_CLASSNAME_LEN  64
+
+// There is a time frame (from when an app calls CreateWindow until USER32 gets
+// a message at one of its WndProc's for the window - see FritzS) during which
+// the fnid (class type) can't be set officially for the window.  If the
+// GETICLASS macro is invoked during this period, it will be unable to find the
+// iClass for windows created on any of the standard control classes using the
+// fast fnid index method (see walias.h).  Once the time frame is passed, the
+// fast fnid method will work fine for these windows.
+//
+// This is manifested in apps that set CBT hooks and try to subclass the
+// standard classes while in their hook proc.  See bug #143811.
+
+INT GetIClass(PWW pww, HWND hwnd)
+{
+    INT   iClass;
+    DWORD dwClassAtom;
+
+    // if it is a standard class
+    if(((pww->fnid & 0xfff) >= FNID_START) &&
+                 ((pww->fnid & 0xfff) <= FNID_END)) {
+
+        // return the class id for this initialized window
+        iClass = pfnOut.aiWowClass[( pww->fnid & 0xfff) - FNID_START];
+
+    }
+
+    else {
+
+       iClass = WOWCLASS_WIN16;       // default return: app private class           
+   
+       dwClassAtom = GetClassLong(hwnd, GCW_ATOM);
+   
+       if(dwClassAtom) {
+           iClass = GetStdClassNumber((PSZ)dwClassAtom);
+       }
+    }
+
+    return(iClass);
+}
+

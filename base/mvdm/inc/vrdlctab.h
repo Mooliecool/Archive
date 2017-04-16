@@ -67,7 +67,7 @@ typedef DOS_DLC_STATUS UNALIGNED * PDOS_DLC_STATUS;
 // adapter software, but is made available to applications through DIR.STATUS.
 // Token Ring and Ethernet adapter have different adapter status parameters
 //
-// Note: some fields prefixed by Tr or Eth because the moronic x86 assembler
+// Note: some fields prefixed by Tr or Eth because the x86 assembler
 // can't handle the same field name in different structures
 //
 

@@ -16,7 +16,7 @@ DOCUMENT 		: name and number
 
 RELATED DOCS		: include all relevant references
 
-DESIGNER		: 
+DESIGNER		:
 
 REVISION HISTORY	:
 First version		: August 1988, J. Maiden
@@ -26,7 +26,7 @@ SUBMODULE NAME		: ega
 
 SOURCE FILE NAME	: ega_read.c
 
-PURPOSE			: emulation of EGA read operations 
+PURPOSE			: emulation of EGA read operations
 
 SccsID = @(#)ega_read.c	1.32 09/07/94 Copyright Insignia Solutions Ltd.
 		
@@ -50,7 +50,7 @@ SccsID = @(#)ega_read.c	1.32 09/07/94 Copyright Insignia Solutions Ltd.
 [1.3 INTERMODULE IMPORTS]
 	 (not o/s objects or standard libs)
 
-	PROCEDURES() : 
+	PROCEDURES() :
 
 	DATA 	     : 	give name, and source module name
 
@@ -138,10 +138,10 @@ ERROR RECOVERY	  :	none.
 
 /* [3.1.2 DECLARATIONS]                                                 */
 
-/* [3.2 INTERMODULE EXPORTS]						*/ 
+/* [3.2 INTERMODULE EXPORTS]						*/
 
 /*
-5.0 MODULE INTERNALS   :   (not visible externally, global internally)]     
+5.0 MODULE INTERNALS   :   (not visible externally, global internally)]
 
 [5.1 LOCAL DECLARATIONS]						*/
 
@@ -382,7 +382,7 @@ READ_POINTERS Glue_reads =
 extern read_byte_ev_glue IPT1(IU32, eaOff);
 extern read_word_ev_glue IPT1(IU32, eaOff);
 extern read_str_fwd_ev_glue IPT3(IU8 *, dest, IU32, eaOff, IU32, count);
-READ_POINTERS Glue_reads = 
+READ_POINTERS Glue_reads =
 {
 	read_byte_ev_glue,
 	read_word_ev_glue,
@@ -426,6 +426,7 @@ rdm0_byte_ch2 IFN1(ULONG, offset )
 {
 	IU32 lsb;
 	UTINY temp;
+#ifndef NEC_98
 
 	lsb = offset & 0x1;
 	offset = ( offset >> 1 ) << 2;
@@ -438,6 +439,7 @@ rdm0_byte_ch2 IFN1(ULONG, offset )
 #ifdef C_VID
 	EasVal = temp;
 #endif
+#endif  //NEC_98
 	return( temp );
 }
 
@@ -447,6 +449,7 @@ GLOBAL IU32
 rdm0_word_ch2 IFN1(ULONG, offset )
 {
 	IU32 temp;
+#ifndef NEC_98
 	IU32 lsb;
 
 	setVideolatches(*(IU32 *)( EGA_planes +
@@ -469,6 +472,7 @@ rdm0_word_ch2 IFN1(ULONG, offset )
 #ifdef C_VID
 	EasVal = temp;
 #endif
+#endif  //NEC_98
 	return( temp );
 }
 
@@ -477,6 +481,7 @@ rdm0_word_ch2 IFN1(ULONG, offset )
 GLOBAL void
 rdm0_string_ch2 IFN3(UTINY *, dest, ULONG, offset, ULONG, count )
 {
+#ifndef NEC_98
 	ULONG lsb;
 	ULONG inc;
 	UTINY *planes;
@@ -509,6 +514,7 @@ rdm0_string_ch2 IFN3(UTINY *, dest, ULONG, offset, ULONG, count )
 		offset += inc;
 		inc ^= 0x2;
     }
+#endif  //NEC_98
 }
 
 /* Used to correct writes to M when in mode 1 */
@@ -516,6 +522,9 @@ rdm0_string_ch2 IFN3(UTINY *, dest, ULONG, offset, ULONG, count )
 GLOBAL IU32
 rdm1_byte_ch2 IFN1(ULONG, offset )
 {
+#if defined(NEC_98)
+        return((IU32)0L);
+#else   //NEC_98
 	IU32 temp, lsb;
 
 	lsb = offset & 0x1;
@@ -539,11 +548,15 @@ rdm1_byte_ch2 IFN1(ULONG, offset )
 	EasVal = temp;
 #endif
 	return( temp );
+#endif  //NEC_98
 }
 
 GLOBAL IU32
 rdm1_word_ch2 IFN1(ULONG, offset )		/* used to correct writes to M when in mode 1 */
 {
+#if defined(NEC_98)
+        return((IU32)0L);
+#else   //NEC_98
 	IU32 temp1, temp2, lsb;
 
 	setVideolatches(*(IU32 *)( EGA_planes + ((( offset + 1 ) >> 1 ) << 2 )));
@@ -577,11 +590,13 @@ rdm1_word_ch2 IFN1(ULONG, offset )		/* used to correct writes to M when in mode 
 	EasVal = temp1;
 #endif
 	return( temp1 );
+#endif  //NEC_98
 }
 
 GLOBAL void
 rdm1_string_ch2 IFN3(UTINY *, dest, ULONG, offset, ULONG, count )	/* used to correct writes to M when in mode 1 */
 {
+#ifndef NEC_98
 	UTINY *p01, *p23;
 	ULONG tcount, lsb;
 
@@ -612,8 +627,8 @@ rdm1_string_ch2 IFN3(UTINY *, dest, ULONG, offset, ULONG, count )	/* used to cor
 
 	if( lsb )
 	{
-		*(dest MINUS count) = (( *(p01 + 1) ^ comp1 ) | dont_care1 )
-							& (( *(p23 + 1) ^ comp3 ) | dont_care3 );
+		*(dest MINUS count) = (UTINY)((( *(p01 + 1) ^ comp1 ) | dont_care1 )
+   							        & (( *(p23 + 1) ^ comp3 ) | dont_care3 ));
 		count--;
 		offset += 4;
 	}
@@ -622,23 +637,24 @@ rdm1_string_ch2 IFN3(UTINY *, dest, ULONG, offset, ULONG, count )	/* used to cor
 
 	while( tcount-- )
 	{
-		*(dest MINUS tcount) = (( *(p01 + offset) ^ comp0) | dont_care0 )
-							& (( *(p23 + offset) ^ comp2 ) | dont_care2 );
+		*(dest MINUS tcount) = (UTINY)((( *(p01 + offset) ^ comp0) | dont_care0 )
+							        & (( *(p23 + offset) ^ comp2 ) | dont_care2 ));
 
 		tcount--;
 		offset += 1;
 
-		*(dest MINUS tcount) = (( *(p01 + offset) ^ comp1) | dont_care1 )
-							& (( *(p23 + offset) ^ comp3 ) | dont_care3 );
+		*(dest MINUS tcount) = (UTINY)((( *(p01 + offset) ^ comp1) | dont_care1 )
+							        & (( *(p23 + offset) ^ comp3 ) | dont_care3 ));
 
 		offset += 3;
 	}	
 
 	if( count & 1 )
 	{
-		*(dest MINUS count) = (( *(p01 + offset) ^ comp0 ) | dont_care0 )
-							& (( *(p23 + offset) ^ comp2 ) | dont_care2 );
+		*(dest MINUS count) = (UTINY)((( *(p01 + offset) ^ comp0 ) | dont_care0 )
+							        & (( *(p23 + offset) ^ comp2 ) | dont_care2 ));
 	}
+#endif  //NEC_98
 }
 
 #ifdef SEGMENTATION
@@ -654,6 +670,7 @@ rdm1_string_ch2 IFN3(UTINY *, dest, ULONG, offset, ULONG, count )	/* used to cor
 GLOBAL void
 Glue_set_vid_rd_ptrs IFN1(READ_POINTERS *, handler )
 {
+#ifndef NEC_98
 #ifndef CPU_40_STYLE	/* EVID */
 #ifdef A3CPU
 #ifdef C_VID
@@ -690,6 +707,7 @@ Glue_set_vid_rd_ptrs IFN1(READ_POINTERS *, handler )
 #endif	/* C_VID */
 #endif	/* A3CPU */
 #endif	/* CPU_40_STYLE - EVID */
+#endif  //NEC_98
 }	
 #endif /* !(NTVDM && MONITOR) */
 
@@ -706,6 +724,7 @@ GLOBAL void
 update_shift_count IFN0()
 
 {
+#ifndef NEC_98
 	switch( EGA_CPU.chain )
 	{
 		case UNCHAINED:
@@ -744,12 +763,14 @@ update_shift_count IFN0()
 			break;
 #endif	/* VGG */
 	}
+#endif  //NEC_98
 }
 
 void
 ega_read_routines_update IFN0()
 
 {
+#ifndef NEC_98
 	LOCAL BOOL ram_off = TRUE;	/* optimised to avoid updates if ram disabled */
 	LOCAL READ_POINTERS *read_ptrs;
 
@@ -776,7 +797,7 @@ ega_read_routines_update IFN0()
 #endif /* A3CPU */
 #endif /* GISP_CPU */
 
-#ifndef	NO_STRING_OPERATIONS 
+#ifndef	NO_STRING_OPERATIONS
 		setVideofwd_str_read_addr(_rd_ram_dsbld_fwd_string_lge);
 		setVideofwd_str_read_addr(_rd_ram_dsbld_bwd_string_lge);
 #endif	/* NO_STRING_OPERATIONS */
@@ -802,7 +823,7 @@ ega_read_routines_update IFN0()
 #else  /* CPU_40_STYLE */
 
 				read_ptrs = &pointers_mode0_nch;
-#ifndef	NO_STRING_OPERATIONS 
+#ifndef	NO_STRING_OPERATIONS
 				setVideofwd_str_read_addr(_rdm0_fwd_string_nch_lge);
 				setVideobwd_str_read_addr(_rdm0_bwd_string_nch_lge);
 #endif	/* NO_STRING_OPERATIONS */
@@ -815,7 +836,7 @@ ega_read_routines_update IFN0()
 #else  /* CPU_40_STYLE */
 
 				read_ptrs = &pointers_mode0_ch2;
-#ifndef	NO_STRING_OPERATIONS 
+#ifndef	NO_STRING_OPERATIONS
 				string_read_ptr = rdm0_string_ch2;
 #endif	/* NO_STRING_OPERATIONS */
 #endif	/* CPU_40_STYLE */
@@ -830,7 +851,7 @@ ega_read_routines_update IFN0()
 #else  /* CPU_40_STYLE */
 
 				read_ptrs = &pointers_mode0_ch4;
-#ifndef	NO_STRING_OPERATIONS 
+#ifndef	NO_STRING_OPERATIONS
 				setVideofwd_str_read_addr(_rdm0_fwd_string_ch4_lge);
 				setVideobwd_str_read_addr(_rdm0_bwd_string_ch4_lge);
 #endif
@@ -855,7 +876,7 @@ ega_read_routines_update IFN0()
 #else  /* CPU_40_STYLE */
 
 				read_ptrs = &pointers_mode1_nch;
-#ifndef	NO_STRING_OPERATIONS 
+#ifndef	NO_STRING_OPERATIONS
 				setVideofwd_str_read_addr(_rdm1_fwd_string_nch_lge);
 				setVideobwd_str_read_addr(_rdm1_bwd_string_nch_lge);
 #endif	/* NO_STRING_OPERATIONS */
@@ -878,7 +899,7 @@ ega_read_routines_update IFN0()
 #else  /* CPU_40_STYLE */
 
 				read_ptrs = &pointers_mode1_ch2;
-#ifndef	NO_STRING_OPERATIONS 
+#ifndef	NO_STRING_OPERATIONS
 				string_read_ptr = rdm1_string_ch2;
 #endif	/* NO_STRING_OPERATIONS */
 
@@ -896,7 +917,7 @@ ega_read_routines_update IFN0()
 #else  /* CPU_40_STYLE */
 
 				read_ptrs = &pointers_mode1_ch4;
-#ifndef	NO_STRING_OPERATIONS 
+#ifndef	NO_STRING_OPERATIONS
 				setVideofwd_str_read_addr(_rdm1_fwd_string_ch4_lge);
 				setVideobwd_str_read_addr(_rdm1_bwd_string_ch4_lge);
 #endif	/* NO_STRING_OPERATIONS */
@@ -922,12 +943,14 @@ ega_read_routines_update IFN0()
 #endif /* A3CPU */
 #endif /* GISP_CPU */
 #endif	/* CPU_40_STYLE */
+#endif  //NEC_98
 }
 
 void
 ega_read_init IFN0()
 
 {
+#ifndef NEC_98
 	read_state.mode = 0;
 	read_state.colour_compare = 0x0f;		/* looking for bright white */
 	read_state.colour_dont_care = 0xf;		/* all planes significant */
@@ -936,7 +959,7 @@ ega_read_init IFN0()
 	SetReadPointers(2);
 #else  /* CPU_40_STYLE */
 
-#ifndef	NO_STRING_OPERATIONS 
+#ifndef	NO_STRING_OPERATIONS
 	setVideofwd_str_read_addr(_rd_ram_dsbld_fwd_string_lge);
 	setVideobwd_str_read_addr(_rd_ram_dsbld_bwd_string_lge);
 #endif	/* NO_STRING_OPERATIONS */
@@ -968,12 +991,14 @@ ega_read_init IFN0()
 #endif	/* A3CPU */
 #endif /* GISP_CPU */
 #endif	/* CPU_40_STYLE */
+#endif  //NEC_98
 }
 
 void
 ega_read_term IFN0()
 
 {
+#ifndef NEC_98
 	/*
 	 *	Turn off read calculations for non EGA/VGA adaptors
 	 */
@@ -994,6 +1019,7 @@ ega_read_term IFN0()
 #endif /* A3CPU */
 #endif /* GISP_CPU */
 #endif	/* CPU_40_STYLE */
+#endif  //NEC_98
 }
 
 #endif /* REAL_VGA */

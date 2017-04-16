@@ -22,11 +22,13 @@ NOTE:   Commented description of this file is in \nt\bak\bin\sources.tpl
 
 !ENDIF
 
+!include $(PROJECT_ROOT)\ntdll\ntdll.inc
+
 MAJORCOMP=ntos
 MINORCOMP=rtl
 
 TARGETNAME=rtl
-TARGETPATH=..\obj
+TARGETPATH=obj
 TARGETTYPE=LIBRARY
 
 INCLUDES=..;..\..\inc;..\..\..\inc;$(BASE_INC_PATH);$(MINWIN_INC_PATH)

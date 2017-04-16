@@ -41,7 +41,7 @@ FILE *LogHandle;
 
 /*:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: */
 
-_CRTAPI1 main(int argc, char *argv[])
+__cdecl main(int argc, char *argv[])
 {
 
     HANDLE pipe;		// Handle of pipe

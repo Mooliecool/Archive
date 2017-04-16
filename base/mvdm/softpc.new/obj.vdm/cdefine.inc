@@ -1,6 +1,6 @@
 # Check for Checked (dev) or Free (PROD) builds.
 
-!IF "$(NTDEBUG)" == "" || "$(NTDEBUG)" == "retail"
+!IF $(FREEBUILD)
 
 SPC_VAR=-DPROD
 
@@ -27,15 +27,24 @@ SPC_VAR=-DPIG
 !ENDIF
 
 
-SOFTPC_TREE=$(NTROOT)\base\mvdm\softpc.new
+SOFTPC_TREE=$(PROJECT_ROOT)\mvdm\softpc.new
 
 # Set machine specific variables. Differences are for X86 vs. RISC
 
 !IF $(X86)
 
+!IF "$(ALT_PROJECT)" == "NEC_98"
 SPC_MC_DEF=   -DMONITOR \
               -DC_VID   \
               -DX86GFX
+!ELSE
+
+SPC_MC_DEF=   -DMONITOR \
+              -DC_VID   \
+              -DX86GFX  \
+              -DARCX86
+!ENDIF
+
 !ELSE
 
 # not an X86.  At this point, all RISC architectures have the same defines.
@@ -56,7 +65,7 @@ SPC_MC_DEF=   $(CPU_DEFS) \
 
 
 #Amend include path to include CPU build system generated files
-!if "$(NTDEBUG)" == ""
+!IF $(FREEBUILD)
 CPU_INCLUDES=$(SOFTPC_TREE)\host\inc\$(PROCESSOR_ARCHITECTURE)\prod
 !else
 CPU_INCLUDES=$(SOFTPC_TREE)\host\inc\$(PROCESSOR_ARCHITECTURE)\pig
@@ -66,4 +75,4 @@ INCLUDES=$(CPU_INCLUDES);$(INCLUDES)
 
 !ENDIF
 
-C_DEFINES= $(SPC_VAR) $(SPC_MC_DEF) -DANSI
+C_DEFINES= $(SPC_VAR) $(SPC_MC_DEF) $(C_DEFINES) -DANSI

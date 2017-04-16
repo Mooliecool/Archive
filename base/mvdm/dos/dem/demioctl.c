@@ -14,6 +14,7 @@
 #include <softpc.h>
 #include <winbase.h>
 #include "demdasd.h"
+#include "dpmtbls.h"
 
 PFNSVC	apfnSVCIoctl [] = {
     demIoctlInvalid,		// IOCTL_GET_DEVICE_INFO    0
@@ -126,6 +127,14 @@ UCHAR   DriveNum;
     }
 
     if (ulSubFunc == IOCTL_CHANGEABLE){
+#ifdef	JAPAN
+	/* For MS-WORKS 2.5 */
+        if (DriveType == DRIVE_REMOTE || DriveType == DRIVE_CDROM){
+	    setCF(1);
+	    setAX(0x000f);
+	    return;
+	}
+#endif // JAPAN
         if(DriveType == DRIVE_REMOVABLE)
 	    setAX(0);
 	else
@@ -134,11 +143,18 @@ UCHAR   DriveNum;
     else {
         setAL(0);
         if (DriveType == DRIVE_REMOTE || DriveType == DRIVE_CDROM)
+#ifdef	JAPAN
+	/* For ICHITARO Ver.4 */
+            setDH(0x10);
+        else
+            setDH(0);
+#else // !JAPAN
             setDX(0x1000);
         else
             // We have to return 800 rather then 0 as Dos Based Quatrro pro
             // behaves very badly if this bit is not set. sudeepb 15-Jun-1994
             setDX(0x800);
+#endif // !JAPAN
     }
     setCF(0);
     return;
@@ -199,6 +215,20 @@ VOID demIoctlDiskGeneric (VOID)
         }
 
 
+#ifdef	JAPAN
+    /* For Ichitaro Ver.4 */
+    if (!demIsDriveFloppy(Drive) && Code==IOCTL_GETDPM){
+	CHAR	RootPathName[] = "?:\\";
+	DWORD	dwDriveType;
+	RootPathName[0] = (CHAR)('A' + getBL());
+	dwDriveType = GetDriveTypeOem(RootPathName);
+	if (dwDriveType == DRIVE_FIXED){
+	    pdms = (PDEVICE_PARAMETERS)GetVDMAddr(getSI(), getDX());
+	    pdms->DeviceType  = 5;
+	    pdms->DeviceAttrs = NON_REMOVABLE;
+	}
+    }
+#endif // JAPAN
 
     // if we don't know the drive, bail out
     if((pbds = demGetBDS(Drive)) == NULL && Code != IOCTL_GETDPM) {
@@ -381,7 +411,7 @@ VOID demIoctlDiskGeneric (VOID)
 
 		    achRoot[4] = Drive + 'A';
 
-		    hVolume = CreateFileA(achRoot,
+		    hVolume = DPM_CreateFile(achRoot,
 					  FILE_READ_ATTRIBUTES | SYNCHRONIZE,
 					  FILE_SHARE_READ | FILE_SHARE_WRITE,
 					  NULL,
@@ -402,12 +432,12 @@ VOID demIoctlDiskGeneric (VOID)
 					 &SizeReturned,
 					 NULL
 					 )) {
-			CloseHandle(hVolume);
+			DPM_CloseHandle(hVolume);
 			setAX(demWinErrorToDosError(GetLastError()));
 			setCF(1);
 			return;
 		    }
-		    CloseHandle(hVolume);
+		    DPM_CloseHandle(hVolume);
 		    Sectors = DiskGM.Cylinders.LowPart *
 			      DiskGM.TracksPerCylinder *
 			      DiskGM.SectorsPerTrack;

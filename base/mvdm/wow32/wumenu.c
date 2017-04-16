@@ -190,6 +190,19 @@ ULONG FASTCALL WU32AppendMenu(PVDMFRAME pFrame)
                               wIDNewItem,
                               psz4));
 
+#ifdef	FE_SB
+    // For AutherWare Star ( APP BUG ) MAKKBUG:3203
+    if (CURRENTPTD()->dwWOWCompatFlagsFE & WOWCF_FE_ASWHELPER) {                        	if (parg16->f2 & MF_POPUP) {
+	    HWND hWnd;
+
+	    if (!(hWnd=GetActiveWindow())) {
+        	hWnd = GetForegroundWindow();
+	    }
+	    SetMenu(hWnd , HMENU32(parg16->f1));
+	}
+    }
+#endif // FE_SB
+
     FREEPSZPTR(psz4);
     FREEARGPTR(parg16);
     RETURN(ul);
@@ -552,19 +565,30 @@ ULONG FASTCALL WU32CreatePopupMenu(PVDMFRAME pFrame)
     Whenever a menu changes (whether or not the menu resides in a window that is
     displayed), the application should call %DrawMenuBar%.
 --*/
-
 ULONG FASTCALL WU32DeleteMenu(PVDMFRAME pFrame)
 {
     ULONG ul;
     register PDELETEMENU16 parg16;
+    PSZ pszModName;
 
     GETARGPTR(pFrame, sizeof(DELETEMENU16), parg16);
 
-    ul = GETBOOL16(DeleteMenu(
-    HMENU32(parg16->f1),
-    WORD32(parg16->f2),
-    WORD32(parg16->f3)
-    ));
+    // Nasty Hack to fix MSVC 1.5, they remove the close item
+    // from their system menu, so we prevent them from doing
+    // this and act like nothing happened ( ie return TRUE ).
+    // From Win 95, Bug#8154, [t-arthb]
+
+    if ((parg16->f2 == 6) && (parg16->f3 & MF_BYPOSITION)) {
+        pszModName = ((PTDB)SEGPTR(CURRENTPTD()->htask16,0))->TDB_ModName;
+        if (!WOW32_strncmp(pszModName, "MSVC", 4)) {
+            FREEARGPTR(parg16);
+            RETURN(GETBOOL16(TRUE));
+        }
+    }
+
+    ul = GETBOOL16(DeleteMenu(HMENU32(parg16->f1),
+                              WORD32(parg16->f2),
+                              WORD32(parg16->f3)));
 
     FREEARGPTR(parg16);
     RETURN(ul);
@@ -1610,4 +1634,3 @@ ULONG FASTCALL WU32TrackPopupMenu(PVDMFRAME pFrame)
     FREEARGPTR(parg16);
     RETURN(ul);
 }
-

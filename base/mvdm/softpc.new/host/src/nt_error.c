@@ -11,20 +11,20 @@
 /*
  * SoftPC Revision 2.0
  *
- * Title	: General Error Handler
+ * Title        : General Error Handler
  *
- * Description	: General purpose error handler.  It handles both
- *		  general SoftPC errors (error numbers 0 - 999) and
- *		  host specific errors (error numbers >= 1000)
+ * Description  : General purpose error handler.  It handles both
+ *                general SoftPC errors (error numbers 0 - 999) and
+ *                host specific errors (error numbers >= 1000)
  *
- * Author(s)	: Dave Bartlett (based on module by John Shanly)
+ * Author(s)    : Dave Bartlett (based on module by John Shanly)
  *
- * Parameters	: int used to index an array of error messages
- *		  held in message.c, and a bit mask indicating
- *		  the user's possible options:
+ * Parameters   : int used to index an array of error messages
+ *                held in message.c, and a bit mask indicating
+ *                the user's possible options:
  *                    Quit, Reset, Continue, Setup
  *
- */ 
+ */
 
 
 #include <sys/types.h>
@@ -54,7 +54,8 @@
 
 
 
-extern VOID (*pW32HungAppNotifyThread)(UINT);
+extern DWORD (*pW32HungAppNotifyThread)(UINT);
+extern PVOID  CurrentMonitorTeb;   // thread that is currently executing instructions.
 int error_window_options = 0;
 
 VOID SuspendTimerThread(VOID);
@@ -77,7 +78,7 @@ char achPERIOD[]=". ";
 
 /*:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: STDOUT macro */
 
-#define ERRORMSG	      OutputDebugString
+#define ERRORMSG              OutputDebugString
 #define HIDEDLGITM(d,b)       ShowWindow(GetDlgItem(d,b),SW_HIDE);
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
@@ -85,7 +86,7 @@ char achPERIOD[]=". ";
 int ErrorDialogBox(char *message, char *Edit, DWORD dwOptions);
 DWORD ErrorDialogBoxThread(VOID *pv);
 int WowErrorDialogEvents(ERRORDIALOGINFO *pedgi);
-LONG APIENTRY ErrorDialogEvents(HWND hDlg,WORD wMsg,LONG wParam,LONG lParam);
+BOOL CALLBACK ErrorDialogEvents(HWND hDlg, UINT wMsg, WPARAM wParam, LPARAM lParam);
 void SwpButtons(HWND hDlg, DWORD dwOptions);
 void SwpDosDialogs(HWND hDlg, HWND hWndCon,HWND SwpInsert, UINT SwpFlags);
 DWORD OemMessageToAnsiMessage(CHAR *, CHAR *);
@@ -135,13 +136,14 @@ ERRORFUNCS *working_error_funcs = &nt_error_funcs;
 /*:::::::::::::::::::::: Display error, terminate ::::::::::::::::::::::::::*/
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 
-int DisplayErrorTerm(int ErrorNo,	/* Softpc Error number */
+int DisplayErrorTerm(int ErrorNo,       /* Softpc Error number */
                      DWORD OSErrno,         /* OS Error number */
                      char *Filename,        /* File name of file containing err */
                      int Lineno)            /* LIne number of error */
 {
     char Msg[EHS_MSG_LEN];
-    DWORD errno, len;
+    CHAR FormatStr[EHS_MSG_LEN]="%s %lxh";
+    DWORD myerrno, len;
 
     UNUSED(ErrorNo);    //Always internal error
 
@@ -154,21 +156,27 @@ int DisplayErrorTerm(int ErrorNo,	/* Softpc Error number */
     // this means we'll confuse some of the lesser NT errors but we get a
     // second chance if the mapping fails.
     if (OSErrno & 0xc0000000)
-	errno = RtlNtStatusToDosError(OSErrno);
+        myerrno = RtlNtStatusToDosError(OSErrno);
     else
-	errno = OSErrno;
+        myerrno = OSErrno;
 
            // Now get message from system
     len = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM,
                         NULL,
-                        errno,
+                        myerrno,
                         0,
                         Msg,
                         EHS_MSG_LEN,
                         NULL
                         );
     if (!len) {
-        sprintf(Msg, "%s %lxh", szSysErrMsg, OSErrno);
+        LoadString(GetModuleHandle(NULL),
+                   ED_FORMATSTR0,
+                   FormatStr,
+                   sizeof(FormatStr)/sizeof(CHAR));
+
+        _snprintf(Msg, EHS_MSG_LEN, FormatStr, szSysErrMsg, OSErrno);
+        Msg[EHS_MSG_LEN-1] = '\0';
         }
 
     return(host_error(EHS_SYSTEM_ERROR, ERR_QUIT, Msg));
@@ -182,8 +190,13 @@ int DisplayErrorTerm(int ErrorNo,	/* Softpc Error number */
 SHORT host_error(int error_num, int options, char *extra_char)
 {
     char message[EHS_MSG_LEN];
+    ULONG uLen = EHS_MSG_LEN -2;
+   
+    if(extra_char) {
+       uLen -= strlen(extra_char);
+    }
 
-    host_nls_get_msg(error_num, message, EHS_MSG_LEN);
+    host_nls_get_msg(error_num, message, uLen);
 
     if (extra_char && *extra_char) {
        strcat(message,"\n");
@@ -242,7 +255,8 @@ VOID host_direct_access_error(ULONG type)
         LoadString(GetModuleHandle(NULL), D_A_MESS + type + 1,
                    acctype, sizeof(acctype)/sizeof(CHAR))     )
        {
-        sprintf(message, dames, acctype);
+        _snprintf(message, EHS_MSG_LEN, dames, acctype);
+        message[EHS_MSG_LEN-1] = '\0';
         }
     else {
         strcpy(message, szDoomMsg);
@@ -545,11 +559,22 @@ int ErrorDialogBox(char *message, char *pEdit, DWORD dwOptions)
         EnumWindows((WNDENUMPROC)GetThreadTopLevelWindow,(LPARAM)&hWndApp);
         if (hWndApp == (HWND)GetCurrentThreadId()) {
             hWndApp = HWND_DESKTOP;
-            }
         }
-    else {
+    }
+    else
+    {
         hWndApp = edgi.hWndCon;
+
+        //
+        // Set suspended event for the current thread to allow
+        // screen switch to proceed.
+        //
+        if (CurrentMonitorTeb != NtCurrentTeb()) {
+            EnableScreenSwitch(FALSE, hConsoleSuspended);
+        } else {
+            EnableScreenSwitch(FALSE, hMainThreadSuspended);
         }
+    }
 
         //
         // get title of app, using DefWindowProc in lieu of
@@ -565,69 +590,66 @@ int ErrorDialogBox(char *message, char *pEdit, DWORD dwOptions)
 
 
     //
-    // spin off a separate thread, why ?
-    // For DOS, to avoid suspended threads during full screen switching
-    // For Wow required for task termination if user chooses terminate.
+    // if this dialog has an edit window, then we have to use our own
+    // dialog, which contains an edit box, and we MUST do it from
+    // a separate thread, to avoid problems with full screen switching.
+    // Editwnd is only used for Pif file options see cmdpif.
     //
-    dw = 5;
-    do {
-       hThread = CreateThread(NULL,           // security
+    // If no editwnd then we can use the systems harderror thread
+    // which is safe to do without a secondary thread.
+    //
+
+
+    if (dwOptions & RMB_EDIT) {
+       dw = 5;
+       do {
+          hThread = CreateThread(NULL,           // security
                        0,                     // stack size
                        ErrorDialogBoxThread,  // start address
                        &edgi,                 // thread argument
                        0,                     // flags
                        &dwThreadID            // gets thread ID
                        );
-       if (hThread)
-           break;
-       else
-           Sleep(2000);
-       } while (dw--);
+          if (hThread)
+             break;
+          else
+             Sleep(5000);
 
+          } while (dw--);
+       }
     if (hThread)  {
         do {
             dw = WaitForSingleObject(hThread, 1000);
            } while (dw == WAIT_TIMEOUT && !edgi.dwReply);
         CloseHandle(hThread);
-        ResumeTimerThread();
-
-
-        if (edgi.dwReply == RMB_ABORT)
-               //
-               // The wow termination will occur via the ErrorDialogBoxThread
-               // as it calls the HungAppNotifyThread. Befotrewe return give
-               // wow a chance to set up for termination.
-               //
-            if (VDMForWOW) {
-               Sleep(10);
-               }
-
-               //
-               // If a dos app terminate now!
-               //
-            else {
-               TerminateVDM();
-               }
+        }
+    else {
+        ErrorDialogBoxThread(&edgi);
         }
 
-    else {
-#ifndef PROD
-        printf("CreateThread(ErrorDialogBoxThread) GLE=%d\n", GetLastError());
-        printf("NTVDM:<%s>\n<%s>\n", edgi.Title, edgi.message );
-        HostDebugBreak();
-#endif
-        ResumeTimerThread();
+    ResumeTimerThread();
 
+    if (edgi.dwReply == RMB_ABORT) {
         //
-        // If we can't create a thread, we are in a pretty bad way
-        //    wow: ignore error, since not alllowed to kill WOW ssystem
-        //    dos: terminate the VDM
+        // if current thread is a wow task, then invoke wow32 to kill it.
         //
-        if (!VDMForWOW)
+
+        if (VDMForWOW &&  NtCurrentTeb()->WOW32Reserved && pW32HungAppNotifyThread)  {
+            (*pW32HungAppNotifyThread)(0);
+            }
+        else {
             TerminateVDM();
+            }
         }
 
     bCalled--;
+    if (!VDMForWOW) {
+        if (CurrentMonitorTeb != NtCurrentTeb()) {
+            DisableScreenSwitch(hConsoleSuspended);
+        } else {
+            DisableScreenSwitch(hMainThreadSuspended);
+        }
+    }
     return (int) edgi.dwReply;
 }
 
@@ -651,8 +673,14 @@ DWORD ErrorDialogBoxThread(VOID *pv)
     ERRORDIALOGINFO *pedgi = pv;
     char *pch;
     char *pLast;
+#ifdef DBCS
+    static char *pTemplate  = "ERRORPANEL";
+    static char *pTemplate2 = "ERRORPANEL2";
+    LANGID LangID;
+#endif // DBCS
 
 
+#ifndef DBCS // kksuzuka:#4003 don't need isgraph check
         // skip leading white space
     pch = pedgi->Title;
     while (*pch && !isgraph(*pch)) {
@@ -670,34 +698,42 @@ DWORD ErrorDialogBoxThread(VOID *pv)
        pch++;
        }
    *pLast = '\0';
+#endif // !DBCS
 
 
-    if (VDMForWOW)  {
-        i = WowErrorDialogEvents(pedgi);
-        }
-    else {
+    if (pedgi->dwOptions & RMB_EDIT) {
         if (pedgi->hWndCon != HWND_DESKTOP) {
             SetForegroundWindow(pedgi->hWndCon);
             }
 
+#ifdef DBCS
+        LangID = GetSystemDefaultLangID();
+        // KKFIX 10/19/96
+        if ((BYTE)LangID == 0x04) {  // Chinese
+            pTemplate = pTemplate2;
+        }
+#endif // DBCS
         i = DialogBoxParam(GetModuleHandle(NULL),
+#ifdef DBCS
+                           (LPCTSTR)pTemplate,
+#else // !DBCS
                            "ERRORPANEL",
+#endif // !DBCS
                            GetDesktopWindow(),
-                           (DLGPROC) ErrorDialogEvents,
+                           ErrorDialogEvents,
                            (LPARAM) pedgi
                            );
         }
+    else {
+        i = WowErrorDialogEvents(pedgi);
+        }
 
-   if (i == RMB_ABORT || i == -1) {
-       pedgi->dwReply = RMB_ABORT;
-       if (VDMForWOW && pW32HungAppNotifyThread)  {
-           (*pW32HungAppNotifyThread)(0);   // we won't return from this
-           }
-       }
-   else {
-       pedgi->dwReply = i;
-       }
-
+    if (i == -1) {
+        pedgi->dwReply = RMB_ABORT;
+        }
+    else {
+        pedgi->dwReply = i;
+        }
 
    return 0;
 }
@@ -706,10 +742,11 @@ DWORD ErrorDialogBoxThread(VOID *pv)
 
 
 
-LONG APIENTRY ErrorDialogEvents(HWND hDlg,WORD wMsg,LONG wParam,LONG lParam)
+BOOL CALLBACK ErrorDialogEvents(HWND hDlg, UINT wMsg, WPARAM wParam, LPARAM lParam)
 {
     ERRORDIALOGINFO *pedgi;
     CHAR  szBuff[MAX_PATH];
+    CHAR  FormatStr[EHS_MSG_LEN];
     int i;
     LPSTR  lpstr;
     LONG  l;
@@ -761,9 +798,19 @@ LONG APIENTRY ErrorDialogEvents(HWND hDlg,WORD wMsg,LONG wParam,LONG lParam)
 
                 // set app title text
             if (*pedgi->Title) {
+
+                if (!LoadString(GetModuleHandle(NULL),
+                               strlen(pedgi->Title) < 80 ? ED_FORMATSTR1:ED_FORMATSTR2,
+                               FormatStr,
+                               sizeof(FormatStr)/sizeof(CHAR))) {
+                   strcpy(FormatStr, "%s");
+                   }
+
                 sprintf(szBuff,
-                        strlen(pedgi->Title) < 80 ? "\n%s" : "%s",
-                        pedgi->Title);
+                        FormatStr,
+                        pedgi->Title
+                        );
+
                 SetWindowText(GetDlgItem(hDlg,IDE_APPTITLE), szBuff);
                 }
 
@@ -912,7 +959,7 @@ void SwpButtons(HWND hDlg, DWORD dwOptions)
                       xOrg, yClientPos, 0,0,
                       SWP_NOSIZE | SWP_NOZORDER);
          xOrg += xIncr;
-	 }
+         }
      else {
          ShowWindow(GetDlgItem(hDlg,IDB_CONTINUE), SW_HIDE);
          }
@@ -922,12 +969,12 @@ void SwpButtons(HWND hDlg, DWORD dwOptions)
                       xOrg, yClientPos, 0,0,
                       SWP_NOSIZE | SWP_NOZORDER);
          xOrg += xIncr;
-	 // if we have edit control, its button is awlays
-	 // the default button
-	 SendMessage(hDlg, DM_SETDEFID,
-		     (WPARAM)IDB_OKEDIT,
-		     (LPARAM)0);
-	 }
+         // if we have edit control, its button is awlays
+         // the default button
+         SendMessage(hDlg, DM_SETDEFID,
+                     (WPARAM)IDB_OKEDIT,
+                     (LPARAM)0);
+         }
      else {
          ShowWindow(GetDlgItem(hDlg,IDB_OKEDIT), SW_HIDE);
          }
@@ -1000,28 +1047,35 @@ int WowErrorDialogEvents(ERRORDIALOGINFO *pedgi)
 {
    CHAR  szTitle[MAX_PATH];
    CHAR  szMsg[EHS_MSG_LEN];
+   CHAR  FormatStr[EHS_MSG_LEN]="%s\n";
    USHORT wButt1, wButt2, wButt3;
 
    if (*pedgi->Title) {
-       sprintf(szMsg, "%s\n", pedgi->Title);
+       LoadString(GetModuleHandle(NULL), ED_FORMATSTR3,
+                   FormatStr, sizeof(FormatStr)/sizeof(CHAR));
+       sprintf(szMsg, FormatStr, pedgi->Title);
        }
    else {
        szMsg[0] = '\0';
        }
 
    strcat(szMsg, pedgi->message);
-   strcat(szMsg, " ");
+   if (pedgi->dwOptions & RMB_ABORT) { // abort means terminate which uses "close" button.
+      strcat(szMsg, " ");
 
-   if (!LoadString(GetModuleHandle(NULL), ED_WOWPROMPT,
+      if (!LoadString(GetModuleHandle(NULL), ED_WOWPROMPT,
                   szTitle, sizeof(szTitle) - 1))
-       {
-        szTitle[0] = '\0';
-        }
-   strcat(szMsg, szTitle);
+         {
+          szTitle[0] = '\0';
+          }
+      strcat(szMsg, szTitle);
+      }
+   if (!LoadString(GetModuleHandle(NULL),
+                   VDMForWOW ? ED_WOWTITLE : ED_DOSTITLE,
+                   szTitle,
+                   sizeof(szTitle) - 1
+                   ))
 
-
-   if (!LoadString(GetModuleHandle(NULL), ED_WOWTITLE,
-                  szTitle, sizeof(szTitle) - 1))
        {
         szTitle[0] = '\0';
         }
@@ -1057,11 +1111,38 @@ int WowErrorDialogEvents(ERRORDIALOGINFO *pedgi)
 }
 
 
+/*
+ * The next values should be in the same order
+ * with the ones in IDOK and STR_OK lists
+ */
+#define  SEB_USER_OK         0  /* Button with "OK".     */
+#define  SEB_USER_CANCEL     1  /* Button with "Cancel"  */
+#define  SEB_USER_ABORT      2  /* Button with "&Abort"   */
+#define  SEB_USER_RETRY      3  /* Button with "&Retry"   */
+#define  SEB_USER_IGNORE     4  /* Button with "&Ignore"  */
+#define  SEB_USER_YES        5  /* Button with "&Yes"     */
+#define  SEB_USER_NO         6  /* Button with "&No"      */
+#define  SEB_USER_CLOSE      7  /* Button with "&Close"   */
 
+static USHORT rgsTranslateButton[] =
+{  SEB_USER_OK,
+   SEB_USER_CANCEL,
+   SEB_USER_YES,
+   SEB_USER_NO,
+   SEB_USER_ABORT,
+   SEB_USER_RETRY,
+   SEB_USER_IGNORE,
+   SEB_USER_CLOSE
+};
 
+#define SEB_XBTN(wBtn) \
+((0 == (wBtn)) || ((wBtn) > sizeof(rgsTranslateButton)/sizeof(rgsTranslateButton[0])) ? \
+(wBtn) : \
+(rgsTranslateButton[(wBtn)-1]+1))
 
-
-
+#define SEB_TRANSLATE(wBtn) \
+((wBtn) & SEB_DEFBUTTON ? SEB_XBTN((wBtn) & ~SEB_DEFBUTTON) | SEB_DEFBUTTON  : \
+SEB_XBTN(wBtn))
 
 /*++
  *  WOWpSysErrorBox
@@ -1081,11 +1162,13 @@ ULONG WOWpSysErrorBox(
     USHORT wBtn3)
 {
     NTSTATUS Status;
-    ULONG dwParameters[4];
+    ULONG dwParameters[MAXIMUM_HARDERROR_PARAMETERS];
     ULONG dwResponse;
     ANSI_STRING AnsiString;
     UNICODE_STRING UnicodeTitle;
     UNICODE_STRING UnicodeMessage;
+    char szDesktop[10];   // only needs to be big enough for "Default"
+    DWORD dwUnused;
 
     RtlInitAnsiString(&AnsiString, szTitle);
     RtlAnsiStringToUnicodeString(&UnicodeTitle, &AnsiString, TRUE);
@@ -1093,10 +1176,28 @@ ULONG WOWpSysErrorBox(
     RtlInitAnsiString(&AnsiString, szMessage);
     RtlAnsiStringToUnicodeString(&UnicodeMessage, &AnsiString, TRUE);
 
-    dwParameters[0] = ((ULONG)TRUE << 16) | (ULONG) wBtn1;
-    dwParameters[1] = ((ULONG)wBtn2 << 16) | (ULONG) wBtn3;
+    dwParameters[0] = ((ULONG)TRUE << 16) | (ULONG) SEB_TRANSLATE(wBtn1);
+    dwParameters[1] = ((ULONG)SEB_TRANSLATE(wBtn2) << 16) | (ULONG) SEB_TRANSLATE(wBtn3);
     dwParameters[2] = (ULONG)&UnicodeTitle;
     dwParameters[3] = (ULONG)&UnicodeMessage;
+
+    ASSERT(4 < MAXIMUM_HARDERROR_PARAMETERS);
+
+    if (GetUserObjectInformation(
+            GetThreadDesktop( GetCurrentThreadId() ),
+            UOI_NAME,
+            szDesktop,
+            sizeof(szDesktop),
+            &dwUnused
+            ) &&
+        RtlEqualMemory(szDesktop, "Default", 8)) {
+
+        // FIXME: Enable the following when we are ready.
+        //dwParameters[HARDERROR_PARAMETERS_FLAGSPOS] = HARDERROR_FLAGS_DEFDESKTOPONLY;
+    } else {
+        // FIXME: Enable the following when we are ready.
+        //dwParameters[HARDERROR_PARAMETERS_FLAGSPOS] = 0;
+    }
 
     //
     // OR in 0x10000000 to force the hard error through even if
@@ -1105,7 +1206,7 @@ ULONG WOWpSysErrorBox(
 
     Status = NtRaiseHardError(
         STATUS_VDM_HARD_ERROR | 0x10000000,
-        4,
+        MAXIMUM_HARDERROR_PARAMETERS,
         1 << 2 | 1 << 3,
         dwParameters,
         0,
@@ -1117,7 +1218,6 @@ ULONG WOWpSysErrorBox(
 
     return NT_SUCCESS(Status) ? dwResponse : 0;
 }
-
 
 /*
  *  Exported routine for wow32 to invoke a system error box
@@ -1180,7 +1280,8 @@ VOID RcErrorBoxPrintf(UINT wId, CHAR *szMsg)
     if (LoadString(GetModuleHandle(NULL),wId,
                     dames, sizeof(dames)/sizeof(CHAR)))
        {
-        sprintf(message, dames, acctype);
+        _snprintf(message,EHS_MSG_LEN, dames, acctype);
+        message[EHS_MSG_LEN-1] = '\0';
         }
     else  {
         strcpy(message, szDoomMsg);

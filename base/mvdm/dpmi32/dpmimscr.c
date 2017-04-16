@@ -31,12 +31,13 @@ DpmiGetFastBopEntry(
 
 Routine Description:
 
-    This routine fails the get fast bop entry bop.  It is used by
-    krnl286 on risc.
+    This routine is the front end for the routine that gets the address.  It
+    is necessary to get the address in asm, because the CS value is not
+    available in c
 
 Arguments:
 
-    None.
+    None
 
 Return Value:
 
@@ -44,16 +45,22 @@ Return Value:
 
 --*/
 {
-        //
-        // krnl286 does a DPMIBOP GetFastBopAddress even on
-        // risc, so just fail the call since fast-bopping
-        // will only ever work on x86.
-        //
+#ifdef _X86_
+    GetFastBopEntryAddress(&((PVDM_TIB)NtCurrentTeb()->Vdm)->VdmContext);
+#else
+    //
+    // krnl286 does a DPMIBOP GetFastBopAddress even on
+    // risc, so just fail the call since fast-bopping
+    // will only ever work on x86.
+    //
 
-        setBX(0);
-        setDX(0);
-        setES(0);
+    setBX(0);
+    setDX(0);
+    setES(0);
+#endif
 }
+
+
 
 VOID
 DpmiDpmiInUse(
@@ -63,12 +70,7 @@ DpmiDpmiInUse(
 
 Routine Description:
 
-    This routine notifies the CPU that the NT dpmi server is in use,
-    so that IRET hooks can be used in protected mode.  If the NT DPMI
-    server is not used, no protected mode iret hooks can be used, because
-    we don't have a protected mode address that points to the correct bop.
-    Apps that run in protected mode without using DPMI will likely change
-    the LDT and GDT in unpredictable ways.
+    This routine currently does nothing.
 
 Arguments:
 
@@ -80,8 +82,7 @@ Return Value:
 
 --*/
 {
-    EnableEmulatorIretHooks();
-    EnableIntHooks();
+
 }
 
 VOID
@@ -93,7 +94,6 @@ DpmiDpmiNoLongerInUse(
 Routine Description:
 
     This routine notifies the CPU that the NT dpmi server is no longer in use.
-    This will cause the CPU to stop using PM iret hooks.
 
 Arguments:
 
@@ -105,6 +105,7 @@ Return Value:
 
 --*/
 {
-    DisableEmulatorIretHooks();
-    DisableIntHooks();
+
+    DpmiFreeAllXmem();
+
 }

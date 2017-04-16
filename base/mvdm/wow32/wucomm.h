@@ -43,14 +43,14 @@
 
 // LPT assignments a la Win3.1
 #define LPTFIRST       0x80                   // 0x80 == LPT1
-#define LPTLAST        LPTFIRST + NUMLPTS - 1 // 0x82 == LPT3 
+#define LPTLAST        LPTFIRST + NUMLPTS - 1 // 0x82 == LPT3
 
 // other useful deinitions & macros
 #define COMMASK        0x00FF                    // strip garbage from idComDev
 #define LPTMASK        0x007F                    // get 0-based LPT #
 #define GETLPTID(id)   ((id & LPTMASK) + LPT1)   // 0x80 LPT to PortTab[] index
 #define TABIDTOLPT(id) (id + LPTFIRST - NUMCOMS) // PortTab[] index to LPT 0x80
-#define VALIDCOM(id)   (((id >= COM1)     && (id <  NUMCOMS)) ? TRUE : FALSE)
+#define VALIDCOM(id)   ((id <  NUMCOMS) ? TRUE : FALSE)
 #define VALIDLPT(id)   (((id >= LPTFIRST) && (id <= LPTLAST)) ? TRUE : FALSE)
 
 #define GETPWOWPTR(id) (VALIDCOM(id) ? PortTab[id].pWOWPort : (VALIDLPT(id) ? PortTab[GETLPTID(id)].pWOWPort : NULL))
@@ -94,7 +94,7 @@
 #define CE_CTSTO        0x0020
 #define CE_DSRTO        0x0040
 
-// constants for the Event Word 
+// constants for the Event Word
 #define EV_CTSS     0x00000400 // bit for Win3.1 showing CTS state
 #define EV_DSRS     0x00000800 // bit for Win3.1 showing DSR state
 #define EV_RLSDS    0x00001000 // bit for Win3.1 showing RLSD state
@@ -128,7 +128,7 @@ typedef struct _WOWPORT {
     BOOL       fWriteDone;     // Indicates app thread completed first write.
     DWORD      cbWritten;      // Valid when fWriteDone == TRUE.
     DWORD      dwThreadID;     // app's thread id for crashed/hung app support
-    DWORD      dwErrCode;      // most recent error for this idComDev 
+    DWORD      dwErrCode;      // most recent error for this idComDev
     COMSTAT    cs;             // struct for error handling
     BOOL       fChEvt;         // TRUE if app set fChEvt in DCB struct
   // 16-bit DCB for LPT support only
@@ -148,6 +148,9 @@ typedef struct _WOWPORT {
     WORD       RLSDTimeout;    // max time in msec to wait for RLSD (0->ignore)
     WORD       CTSTimeout;     // max time in msec to wait for CTS (0->ignore)
     WORD       DSRTimeout;     // max time in msec to wait for DSR (0->ignore)
+    DWORD      QLStackSeg;     // Quicklink 1.3 hack See bug #398011
+                               // save the seg val of COMDEB16 in low word, &
+                               // the QuickLink stack selector in the high word
 } WOWPORT, *PWOWPORT;
 
 // Table of above structs, one entry needed for each comm port
@@ -221,7 +224,7 @@ typedef struct _PORTTAB {
 // constants for conversions from Win3.1 baud specifications to 32-bit baud
 #define W31_DLATCH_110      1047
 #define W31_DLATCH_300       384
-#define W31_DLATCH_600       192 
+#define W31_DLATCH_600       192
 #define W31_DLATCH_1200       96
 #define W31_DLATCH_2400       48
 #define W31_DLATCH_4800       24
@@ -277,8 +280,8 @@ void CommIODebug(ULONG fhCommIO, HANDLE hCommIO, LPSZ lpsz, ULONG cb, LPSZ lpszF
 
 #else  // endif DEBUG
 
-#define COMMDEBUG(lpszFormat) 
-#define DEBUGWATCHMODEMEVENTS(dwE, dwM, dwS, pcE16, pcM16) 
+#define COMMDEBUG(lpszFormat)
+#define DEBUGWATCHMODEMEVENTS(dwE, dwM, dwS, pcE16, pcM16)
 #define CommIODebug(fhCommIO, hCommIO, lpsz, cb, lpszFile)
 
 #endif // endif !DEBUG

@@ -10,9 +10,14 @@
 
 #define VER_FILETYPE			VFT_DLL
 #define VER_FILESUBTYPE			VFT_UNKNOWN
-#define VER_FILEDESCRIPTION_STR 	"32-bit WOW Subsystem Library"
 #define VER_INTERNALNAME_STR            "WOW32"
 #define VER_ORIGINALFILENAME_STR	"WOW32.DLL"
+
+#ifdef _HYDRA_
+#define VER_FILEDESCRIPTION_STR 	"Multi-User 32-bit WOW Subsystem Library"
+#else
+#define VER_FILEDESCRIPTION_STR 	"32-bit WOW Subsystem Library"
+#endif
 
 #include "common.ver"
 

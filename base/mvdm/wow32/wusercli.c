@@ -12,7 +12,6 @@
 
 MODNAME(wusercli.c);
 
-#ifndef PMODE32             // NOT INCLUDED IN I386/PMODE32
 
 //**************************************************************************
 //  WU32ClientToScreen -
@@ -32,29 +31,6 @@ ULONG FASTCALL WU32ClientToScreen(PVDMFRAME pFrame)
     PUTPOINT16(parg16->f2, &t2);
     FREEARGPTR(parg16);
     RETURN(0);
-}
-
-
-//**************************************************************************
-//  WU32GetClassName -
-//
-//**************************************************************************
-
-ULONG FASTCALL WU32GetClassName(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    PSZ psz2;
-    register PGETCLASSNAME16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETCLASSNAME16), parg16);
-    ALLOCVDMPTR(parg16->f2, parg16->f3, psz2);
-
-    ul = GETINT16(GetClassName( HWND32(parg16->f1), psz2, INT32(parg16->f3)));
-
-    FLUSHVDMPTR(parg16->f2, strlen(psz2)+1, psz2);
-    FREEVDMPTR(psz2);
-    FREEARGPTR(parg16);
-    RETURN(ul);
 }
 
 
@@ -194,105 +170,6 @@ ULONG FASTCALL WU32GetMenuItemCount(PVDMFRAME pFrame)
 
 
 //**************************************************************************
-//  WU32GetMenuItemID -
-//
-//**************************************************************************
-
-ULONG FASTCALL WU32GetMenuItemID(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETMENUITEMID16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETMENUITEMID16), parg16);
-
-    ul = GETWORD16(GetMenuItemID( HMENU32(parg16->f1), INT32(parg16->f2) ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-
-//**************************************************************************
-//  WU32GetMenuState -
-//
-//**************************************************************************
-
-ULONG FASTCALL WU32GetMenuState(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETMENUSTATE16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETMENUSTATE16), parg16);
-
-    ul = GETWORD16(GetMenuState( HMENU32(parg16->f1), WORD32(parg16->f2), WORD32(parg16->f3) ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-//**************************************************************************
-//  WU32GetNextWindow -
-//
-//**************************************************************************
-
-ULONG FASTCALL WU32GetNextWindow(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETNEXTWINDOW16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETNEXTWINDOW16), parg16);
-
-    ul = GETHWND16(GetNextWindow(HWND32(parg16->f1), WORD32(parg16->f2)));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-//**************************************************************************
-//  WU32GetParent -
-//
-//**************************************************************************
-
-ULONG FASTCALL WU32GetParent(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETPARENT16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETPARENT16), parg16);
-
-    ul = GETHWND16(GetParent(HWND32(parg16->f1)));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-
-
-//**************************************************************************
-//  WU32GetSubMenu -
-//
-//**************************************************************************
-
-ULONG FASTCALL WU32GetSubMenu(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETSUBMENU16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETSUBMENU16), parg16);
-
-    ul = GETHMENU16(GetSubMenu(HMENU32(parg16->f1), INT32(parg16->f2)));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-
-//**************************************************************************
 //  WU32GetSysColor -
 //
 //**************************************************************************
@@ -353,25 +230,7 @@ ULONG FASTCALL WU32GetTopWindow(PVDMFRAME pFrame)
 }
 
 
-
-//**************************************************************************
-//  WU32GetWindow -
-//
-//**************************************************************************
-
-ULONG FASTCALL WU32GetWindow(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETWINDOW16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETWINDOW16), parg16);
-
-    ul = GETHWND16(GetWindow(HWND32(parg16->f1), WORD32(parg16->f2)));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
+char szTrayWnd[] = "Shell_TrayWnd";
 
 //**************************************************************************
 //  WU32GetWindowRect -
@@ -392,6 +251,77 @@ ULONG FASTCALL WU32GetWindowRect(PVDMFRAME pFrame)
      * rect.
      */
     if (GetWindowRect(HWND32(parg16->f1), &t2)) {
+
+        // Sierra on-line setup hack (expects tray rect to be Classic style)
+        // See bug #425058
+        // Unfortunately we can't cache the tray hwnd because if explorer dies
+        // while the VDM is still running, explorer will get a new hwnd when it
+        // is restarted that won't match our cached one.
+
+        // IMHO this could be a general fix and not under an app compat flag
+        // in BlackComb.
+        if(CURRENTPTD()->dwWOWCompatFlags2 & WOWCF2_FIXLUNATRAYRECT) {
+
+            char szClassName[20];
+
+            if(GetClassName((HWND)parg16->f1,
+                            szClassName,
+                            sizeof(szClassName))) {
+
+                if(!lstrcmp(szClassName, szTrayWnd)) {
+
+                    // these will only be 0 for the Luna theme
+                    if((t2.left == 0) || (t2.top == 0)) {
+
+                        // Find tray position on desktop. Leave the border that
+                        // is actually in the desktop alone so that the apps can
+                        // calculate their windows accurately.
+
+                        /*******************************************************
+                        * Note: IMHO the code that is commented out below could
+                        *       be uncommented for BlackComb as it more acurr-
+                        *       ately resembles what would be returned in
+                        *       Classic view.  Instead, since we are late in the
+                        *       cycle for Whistler (RC2), we adjust the bare
+                        *       minimum required to fix the known Sierra cases.
+                        *
+                        * // if tray is at the BOTTOM of the desktop window
+                        * if(t2.top > 0) {
+                        *     t2.left--;
+                        *     t2.right++;
+                        *     t2.bottom++;
+                        *
+                        * // else if the tray is at the RIGHT of desktop window
+                        * } else if(t2.left > 0) {
+                        *     t2.top--;
+                        *     t2.right++;
+                        *     t2.bottom++;
+                        *
+                        * // else if the tray is at the TOP of desktop window
+                        * } else if(t2.right > t2.bottom) {
+                        *     t2.top--;
+                        *     t2.left--;
+                        *     t2.right++;
+                        *
+                        * // else the tray must be at the LEFT of desktop window
+                        * } else {
+                        *     t2.top--;
+                        *     t2.left--;
+                        *     t2.bottom++;
+                        * }
+                        *******************************************************/
+
+                       // if tray is at the BOTTOM of the desktop window
+                       if(t2.top > 0)
+                           t2.bottom++;
+
+                       // else if the tray is at the TOP of the desktop window
+                       else if(t2.right > t2.bottom)
+                           t2.top--;
+                    }
+                }
+            }
+        }
         PUTRECT16(parg16->f2, &t2);
     }
 
@@ -408,16 +338,62 @@ ULONG FASTCALL WU32GetWindowRect(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32IsWindow(PVDMFRAME pFrame)
 {
-    ULONG ul;
+    ULONG  ul;
+    HWND   hWnd;
     register PISWINDOW16 parg16;
 
     GETARGPTR(pFrame, sizeof(ISWINDOW16), parg16);
 
-    ul = GETBOOL16(IsWindow( HWND32(parg16->f1) ));
+    hWnd = HWND32(parg16->f1);
+
+    ul = GETBOOL16(IsWindow(hWnd));
+
+    // For apps that get burned by recycled handles -- ie. the old handle they
+    // had has been destroyed & realloc'd to a different window -- not the one
+    // they were expecting.  This needs to be handled on an app by app basis.
+    if(ul && (CURRENTPTD()->dwWOWCompatFlagsEx & WOWCFEX_FAKENOTAWINDOW)) {
+
+        // NetScape 4.0x install (the bug is in InstallShield)
+        // Test the offset portion of the 16:16 return address to this call.
+        // Bug #132616 et al
+        switch(pFrame->vpCSIP & 0x0000FFFF) {
+
+            case 0x4880:  // (InstallShield 3.00.104.0)
+            case 0x44E4:  // (InstallShield 3.00.091.0)
+
+            {
+                ULONG  result;
+                LPVOID lp;
+
+                // we only want this to fail for calls during Int.Shld cleanup
+                // we probably shouldn't fail it if was created by a WOW process
+                result = GetWindowLong(hWnd, GWL_WNDPROC);
+                if(!IsWOWProc(result)) {
+                    goto IW_HACK;
+                }
+
+                // extra sanity check: InstallSheild calls GetWindowLong & uses
+                // the returned value as a 16:16 ptr
+                result = GetWindowLong(hWnd, DWL_MSGRESULT);
+                GETVDMPTR(result, sizeof(VPVOID), lp);
+                if(!lp) {
+                    goto IW_HACK;
+                }
+                break;
+                    
+            }
+        }
+    }
 
     FREEARGPTR(parg16);
     RETURN(ul);
+
+IW_HACK:
+    WOW32WARNMSG((0),"WOW32::IsWindow hack hit!\n");
+    RETURN(0);
+   
 }
+
 
 
 //**************************************************************************
@@ -568,9 +544,6 @@ ULONG FASTCALL WU32GetTickCount(PVDMFRAME pFrame)
 }
 
 
-#endif                 //  ALL THE ABOVE NOT INCLUDED FOR I386/PMODE32
-
-
 
 //**************************************************************************
 //  On I386 all these functions her handled on clientside. But conditionally
@@ -612,31 +585,11 @@ ULONG FASTCALL WU32DefHookProc(PVDMFRAME pFrame)
 
     if (ISVALIDHHOOK(hHook16)) {
         iHookCode = GETHHOOKINDEX(hHook16);
-        HkData.iIndex = iHookCode;
+        HkData.iIndex = (BYTE)iHookCode;
         if ( W32GetHookStateData( &HkData ) ) {
             ul = (ULONG)WU32StdDefHookProc(nCode, wParam, lParam, iHookCode);
         }
     }
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-//**************************************************************************
-//  WU32EnableMenuItem -
-//
-//**************************************************************************
-
-ULONG FASTCALL WU32EnableMenuItem(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PENABLEMENUITEM16 parg16;
-
-    GETARGPTR(pFrame, sizeof(ENABLEMENUITEM16), parg16);
-
-    ul = GETBOOL16(EnableMenuItem( HMENU32(parg16->f1), WORD32(parg16->f2),
-                                                     WORD32(parg16->f3) ));
 
     FREEARGPTR(parg16);
     RETURN(ul);
@@ -708,4 +661,3 @@ ULONG FASTCALL WU32GetKeyboardState(PVDMFRAME pFrame)
     FREEARGPTR(parg16);
     RETURN(0);
 }
-

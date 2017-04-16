@@ -57,57 +57,9 @@ ULONG FASTCALL WG32ExtTextOut(PVDMFRAME pFrame)
 }
 
 
-ULONG FASTCALL WG32GetTextAlign(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETTEXTALIGN16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETTEXTALIGN16), parg16);
-
-    ul = GETWORD16(GetTextAlign(
-                    HDC32(parg16->f1)
-                  ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32GetTextCharacterExtra(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETTEXTCHARACTEREXTRA16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETTEXTCHARACTEREXTRA16), parg16);
-
-    ul = GETINT16(GetTextCharacterExtra(
-                   HDC32(parg16->f1)
-                 ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32GetTextColor(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETTEXTCOLOR16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETTEXTCOLOR16), parg16);
-
-    ul = GETDWORD16(GetTextColor(
-                    HDC32(parg16->f1)
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
 ULONG FASTCALL WG32GetTextExtent(PVDMFRAME pFrame)
 {
-    ULONG ul;
+    ULONG ul = 0;
     PSTR pstr2;
     SIZE size4;
     register PGETTEXTEXTENT16 parg16;
@@ -122,50 +74,28 @@ ULONG FASTCALL WG32GetTextExtent(PVDMFRAME pFrame)
                     &size4
                    )))
     {
-    // check if either cx or cy are bigger than SHRT_MAX == 7fff
-    // but do it in ONE SINGLE check
+        // check if either cx or cy are bigger than SHRT_MAX == 7fff
+        // but do it in ONE SINGLE check
 
-	if ((size4.cx | size4.cy) & ~SHRT_MAX)
-	{
-	    if (size4.cx > SHRT_MAX)
-	       ul = SHRT_MAX;
-	    else
-	       ul = (ULONG)size4.cx;
+	    if ((size4.cx | size4.cy) & ~SHRT_MAX)
+	    {
+	        if (size4.cx > SHRT_MAX)
+	           ul = SHRT_MAX;
+	        else
+	           ul = (ULONG)size4.cx;
 
-	    if (size4.cy > SHRT_MAX)
-	       ul |= (SHRT_MAX << 16);
+	        if (size4.cy > SHRT_MAX)
+	           ul |= (SHRT_MAX << 16);
+	        else
+	           ul |= (ULONG)(size4.cy << 16);
+	    }
 	    else
-	       ul |= (ULONG)(size4.cy << 16);
-	}
-	else
-	{
-	    ul = (ULONG)(size4.cx | (size4.cy << 16));
-	}
+	    {
+	        ul = (ULONG)(size4.cx | (size4.cy << 16));
+	    }
 
     }
     FREESTRPTR(pstr2);
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32GetTextFace(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    PBYTE pb3;
-    register PGETTEXTFACE16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETTEXTFACE16), parg16);
-    ALLOCVDMPTR(parg16->f3, parg16->f2, pb3);
-
-    ul = GETINT16(GetTextFace(
-                    HDC32(parg16->f1),
-                    INT32(parg16->f2),
-                    pb3
-                 ));
-
-    FLUSHVDMPTR(parg16->f3, (USHORT)ul, pb3);
-    FREEVDMPTR(pb3);
     FREEARGPTR(parg16);
     RETURN(ul);
 }
@@ -184,111 +114,17 @@ ULONG FASTCALL WG32GetTextMetrics(PVDMFRAME pFrame)
                     &t2
                   ));
 
+#ifdef FE_SB
+    // original source code should be fixed
+    // If GetTextMetrics return value is FALSE, don't need set data to 16bit
+    // TEXTMETRICS STRUCTURE.
+    // kksuzuka #3759 BC++40J is not see return value and used TEXTMETRICS
+    // data.  1994.11.16 V-HIDEKK
+    if( ul )
+#endif // FE_SB
 
     PUTTEXTMETRIC16(parg16->f2, &t2);
 
     FREEARGPTR(parg16);
     RETURN(ul);
 }
-
-
-ULONG FASTCALL WG32SetTextAlign(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PSETTEXTALIGN16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETTEXTALIGN16), parg16);
-
-    ul = GETWORD16(SetTextAlign(
-                    HDC32(parg16->f1),
-                    WORD32(parg16->f2)
-                  ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32SetTextCharacterExtra(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PSETTEXTCHARACTEREXTRA16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETTEXTCHARACTEREXTRA16), parg16);
-
-    ul = GETINT16(SetTextCharacterExtra(
-                    HDC32(parg16->f1),
-                    INT32(parg16->f2)
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32SetTextColor(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PSETTEXTCOLOR16 parg16;
-    COLORREF    color;
-
-    GETARGPTR(pFrame, sizeof(SETTEXTCOLOR16), parg16);
-
-    color = DWORD32(parg16->f2);
-
-    if (((ULONG)color >= 0x03000000) &&
-        (HIWORD(color) != 0x10ff))
-    {
-        color &= 0xffffff;
-    }
-
-    ul = GETDWORD16(SetTextColor(
-        HDC32(parg16->f1),
-        color
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32SetTextJustification(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PSETTEXTJUSTIFICATION16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETTEXTJUSTIFICATION16), parg16);
-
-    ul = GETINT16(SetTextJustification(
-                    HDC32(parg16->f1),
-                    INT32(parg16->f2),
-                    INT32(parg16->f3)
-                  ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32TextOut(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    PSTR pstr4;
-    register PTEXTOUT16 parg16;
-
-    GETARGPTR(pFrame, sizeof(TEXTOUT16), parg16);
-    GETSTRPTR(parg16->f4, parg16->f5, pstr4);
-
-    ul = GETBOOL16(TextOut(
-                    HDC32(parg16->f1),
-                    INT32(parg16->f2),
-                    INT32(parg16->f3),
-                    pstr4,
-                    INT32(parg16->f5)
-                  ));
-
-    FREESTRPTR(pstr4);
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-

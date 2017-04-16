@@ -17,6 +17,9 @@
 #include "precomp.h"
 #pragma hdrstop
 #include "wowshlp.h"
+#ifdef FE_IME
+#include "ime.h"
+#endif // FE_IME
 
 MODNAME(wstruc.c);
 
@@ -39,10 +42,14 @@ VOID getstr16(VPSZ vpszSrc, LPSZ lpszDst, INT cb)
         GETVDMPTR(vpszSrc, cb, pszSrc);
     else {
         GETPSZPTR(vpszSrc, pszSrc);
-        cb = strlen(pszSrc)+1;
+        if(pszSrc) {
+            cb = strlen(pszSrc)+1;
+        }
     }
+    if(lpszDst && pszSrc) {
 
-    RtlCopyMemory(lpszDst, pszSrc, cb);
+        RtlCopyMemory(lpszDst, pszSrc, cb);
+    }
 
     FREEVDMPTR(pszSrc);
 
@@ -86,9 +93,14 @@ LPRECT getrect16(VPRECT16 vpRect, LPRECT lpRect)
         lpRect->bottom  = FETCHSHORT(pRect16->bottom);
 
         FREEVDMPTR(pRect16);
-        return lpRect;
+
+    } else {
+
+        lpRect = NULL;
+
     }
-    RETURN(NULL);
+
+    return lpRect;
 }
 
 
@@ -99,15 +111,15 @@ VOID putrect16(VPRECT16 vpRect, LPRECT lpRect)
     // Some APIs (ScrollDC may be the only one) have OPTIONAL output pointers
     if (vpRect) {
 
-    GETVDMPTR(vpRect, sizeof(RECT16), pRect16);
+        GETVDMPTR(vpRect, sizeof(RECT16), pRect16);
 
         STORESHORT(pRect16->left,   (SHORT)lpRect->left);
         STORESHORT(pRect16->top,    (SHORT)lpRect->top);
         STORESHORT(pRect16->right,  (SHORT)lpRect->right);
         STORESHORT(pRect16->bottom, (SHORT)lpRect->bottom);
 
-    FLUSHVDMPTR(vpRect, sizeof(RECT16), pRect16);
-    FREEVDMPTR(pRect16);
+        FLUSHVDMPTR(vpRect, sizeof(RECT16), pRect16);
+        FREEVDMPTR(pRect16);
     }
 }
 
@@ -128,7 +140,7 @@ VOID getpoint16(VPPOINT16 vpPoint, INT c, LPPOINT lpPoint)
         lpPoint->y  = pPoint16->y;
         lpPoint++;
         pPoint16++;     // ZOWIE Batman, you wouldn't be able to increment
-    }           // this pointer if FREEVDMPTR wasn't a no-op! -JTP
+    }                   // this pointer if FREEVDMPTR wasn't a no-op! -JTP
 
     FREEVDMPTR(pPoint16);
     }
@@ -217,11 +229,11 @@ VOID putintarray16(VPINT16 vpInt, INT c, LPINT lpInt)
     register INT16 *pInt16;
 
     if (lpInt && GETVDMPTR(vpInt, sizeof(INT16)*c, pInt16)) {
-	for (i=0; i < c; i++) {
-	    STOREWORD(pInt16[i], lpInt[i]);
-	}
-	FLUSHVDMPTR(vpInt, sizeof(INT16)*c, pInt16);
-	FREEVDMPTR(pInt16);
+        for (i=0; i < c; i++) {
+            STOREWORD(pInt16[i], lpInt[i]);
+        }
+        FLUSHVDMPTR(vpInt, sizeof(INT16)*c, pInt16);
+        FREEVDMPTR(pInt16);
     }
 }
 
@@ -276,8 +288,9 @@ VOID getdrawitem16(VPDRAWITEMSTRUCT16 vpDI16, LPDRAWITEMSTRUCT lpDI)
 
 
 // Fill in a 16 bit DRAWITEMSTRUCT from a 32 bit one
-VOID putdrawitem16(VPDRAWITEMSTRUCT16 vpDI16, LPDRAWITEMSTRUCT lpDI)
+HAND16 putdrawitem16(VPDRAWITEMSTRUCT16 vpDI16, LPDRAWITEMSTRUCT lpDI)
 {
+    HAND16 hdc16;
     register PDRAWITEMSTRUCT16 pDI16;
 
     GETVDMPTR(vpDI16, sizeof(DRAWITEMSTRUCT16), pDI16);
@@ -288,7 +301,8 @@ VOID putdrawitem16(VPDRAWITEMSTRUCT16 vpDI16, LPDRAWITEMSTRUCT lpDI)
     STOREWORD(pDI16->itemAction,  lpDI->itemAction);
     STOREWORD(pDI16->itemState,   lpDI->itemState);
     STOREWORD(pDI16->hwndItem, GETHWND16(lpDI->hwndItem));
-    STOREWORD(pDI16->hDC, GETHDC16(lpDI->hDC));
+    hdc16 = GETHDC16(lpDI->hDC);
+    STOREWORD(pDI16->hDC, hdc16);
     pDI16->rcItem.left   = (SHORT)lpDI->rcItem.left;
     pDI16->rcItem.top    = (SHORT)lpDI->rcItem.top;
     pDI16->rcItem.right  = (SHORT)lpDI->rcItem.right;
@@ -296,7 +310,7 @@ VOID putdrawitem16(VPDRAWITEMSTRUCT16 vpDI16, LPDRAWITEMSTRUCT lpDI)
     STOREDWORD(pDI16->itemData,  lpDI->itemData);
 
     FREEVDMPTR(pDI16);
-    return;
+    return(hdc16);
 }
 
 #ifdef NOTUSED
@@ -317,9 +331,9 @@ BOOL getdropfilestruct16(HAND16 hand16, PHANDLE phand32)
 
         GETMISCPTR(vp, lpdfs16);
 
-        *phand32 = GlobalAlloc(GMEM_DDESHARE,
-                               cb-sizeof(DROPFILESTRUCT16)+
-                               sizeof(DROPFILESTRUCT));
+        *phand32 = WOWGLOBALALLOC(GMEM_DDESHARE,
+                                  cb-sizeof(DROPFILESTRUCT16)+
+                                  sizeof(DROPFILESTRUCT));
 
         if (*phand32) {
 
@@ -406,7 +420,7 @@ INT GetBMI16Size(PVPVOID vpbmi16, WORD fuColorUse, LPDWORD lpdwClrUsed)
  *
  *  but due to the fact that many apps don't initialize the biBitCount &
  *  biClrUsed fields (especially biClrUsed) we have to do the following
- *  sanity checking instead.  a-craigj
+ *  sanity checking instead.  cmjones
  */
 
     if ( nBitCount <= 8 ) {
@@ -428,7 +442,7 @@ INT GetBMI16Size(PVPVOID vpbmi16, WORD fuColorUse, LPDWORD lpdwClrUsed)
     // Changed assert to warning at Craig's request - DaveHart
 #ifdef DEBUG
     if (!(nEntries > 1) && !(nBitCount == 24)) {
-        LOGDEBUG(LOG_ALWAYS, ("WOW::GetBMI16Size:bad BitCount:a-craigj\n"));
+        LOGDEBUG(LOG_ALWAYS, ("WOW::GetBMI16Size:bad BitCount:cmjones\n"));
     }
 #endif
 
@@ -483,7 +497,7 @@ INT GetBMI32Size(LPBITMAPINFO lpbmi32, WORD fuColorUse)
         }
         // if this asserts it's an app bug -- we'll try to salvage things
         WOW32ASSERTMSG((nEntries > 1),
-                       ("WOW::GetBMI32Size:bad BitCount:a-craigj\n"));
+                       ("WOW::GetBMI32Size:bad BitCount: cmjones\n"));
 
         // sanity check for apps (lots) that don't init the dwClrUsed field
         if(dwClrUsed) {
@@ -733,12 +747,20 @@ VOID getmsg16(VPMSG16 vpmsg16, LPMSG lpmsg, LPMSGPARAMEX lpmpex)
 
 #ifdef DEBUG
     if (HIWORD(wParam) &&
-        !(message==WM_TIMER || message==WM_COMMAND || message==WM_DROPFILES ||
-          (message >= WM_DDE_FIRST && message <= WM_DDE_LAST))) {
+       !((message == WM_TIMER       ||
+          message == WM_COMMAND     ||
+          message == WM_DROPFILES   ||
+          message == WM_HSCROLL     ||
+          message == WM_VSCROLL     ||
+          message == WM_MENUSELECT  ||
+          message == WM_MENUCHAR    ||
+          message == WM_ACTIVATEAPP ||
+          message == WM_ACTIVATE)   ||
+         (message >= WM_DDE_FIRST && message <= WM_DDE_LAST))) {
 
         LOGDEBUG(LOG_ALWAYS,("WOW: getmsg16 - losing HIWORD(wParam)!"));
         WOW32ASSERT(FALSE);
-        }
+    }
 #endif
 
     if ( message == WM_TIMER ) {
@@ -747,7 +769,7 @@ VOID getmsg16(VPMSG16 vpmsg16, LPMSG lpmsg, LPMSGPARAMEX lpmpex)
         WORD    wIDEvent;
 
         htask16  = CURRENTPTD()->htask16;
-        wIDEvent = wParam;
+        wIDEvent = (WORD)wParam;
 
         ptmr = FindTimer16( hwnd16, htask16, wIDEvent );
 
@@ -758,13 +780,21 @@ VOID getmsg16(VPMSG16 vpmsg16, LPMSG lpmsg, LPMSGPARAMEX lpmpex)
             lParam = ptmr->dwTimerProc32;   // 32-bit proc or NULL
         }
 
-    } else if (message == WM_SYSCOMMAND || message == WM_COMMAND || message == WM_DROPFILES ||
-                  ( message >= WM_DDE_FIRST && message <= WM_DDE_LAST )) {
+    } else if ((message == WM_SYSCOMMAND  ||
+                message == WM_COMMAND     ||
+                message == WM_DROPFILES   ||
+                message == WM_HSCROLL     ||
+                message == WM_VSCROLL     ||
+                message == WM_MENUSELECT  ||
+                message == WM_MENUCHAR    ||
+                message == WM_ACTIVATEAPP ||
+                message == WM_ACTIVATE)   ||
+               (message >= WM_DDE_FIRST && message <= WM_DDE_LAST)) {
         HWND hwnd32;
 
         lpmpex->Parm16.WndProc.hwnd = hwnd16;
-        lpmpex->Parm16.WndProc.wMsg = message;
-        lpmpex->Parm16.WndProc.wParam = wParam;
+        lpmpex->Parm16.WndProc.wMsg = (WORD)message;
+        lpmpex->Parm16.WndProc.wParam = (WORD)wParam;
         lpmpex->Parm16.WndProc.lParam = lParam;
         lpmpex->iMsgThunkClass = WOWCLASS_WIN16;
 
@@ -784,7 +814,38 @@ VOID getmsg16(VPMSG16 vpmsg16, LPMSG lpmsg, LPMSGPARAMEX lpmpex)
         }
         goto finish_up;
 
+    } else if (message == WM_SYSTIMER) {
+        uParam  = UINT32(wParam);        // un-sign extend this
+    } else if (message == WM_SETTEXT) {
+
+        LONG lParamMap;
+
+
+        LOGDEBUG(LOG_ALWAYS, ("WOW::Warning::getmsg16 processing WM_SETTEXT\n"));
+        LOGDEBUG(LOG_ALWAYS, ("WOW::Check for possible rogue PostMessage\n"));
+
+
+        // this is thy meaning: we have a message that comes from the 32-bit world
+        // yet carries 16-bit payload. We have an option of converting this
+        // to 32-bits at this very point via the param tracking mechanism
+
+        GETPSZPTR(lParam, (LPSZ)lParamMap);
+        lParam = (LPARAM)AddParamMap(lParamMap, lParam);
+        if (lParam != lParamMap) {
+           FREEPSZPTR((LPSZ)lParamMap);
+        }
+
+        //
+        // now lParam is a "normal" 32-bit lParam with a map entry and
+        // a ref count of "0" (meaning undead) so it could be deleted
+        // later (during the thunking)
+        //
+
+        SetParamRefCount(lParam, PARAM_32, 0);
     }
+
+
+
 
     lpmsg->hwnd      = HWND32(hwnd16);
     lpmsg->message   = message;
@@ -862,7 +923,7 @@ ULONG putmsg16(VPMSG16 vpmsg16, LPMSG lpmsg)
     WPARAM  wParam;
     LPARAM  lParam;
     WM32MSGPARAMEX wm32mpex;
-    ULONG ulReturn;
+    ULONG ulReturn = 0;
 
     message = lpmsg->message;
     wParam = lpmsg->wParam;
@@ -879,9 +940,15 @@ ULONG putmsg16(VPMSG16 vpmsg16, LPMSG lpmsg)
             lParam = ptmr->vpfnTimerProc;   // 16-bit address or NULL
         }
     }
-    else if ((message == WM_COMMAND) ||
-             (message >= WM_DDE_FIRST && message <= WM_DDE_LAST) ||
-             (message == WM_DROPFILES))  {
+    else if ((message == WM_COMMAND     ||
+              message == WM_DROPFILES   ||
+              message == WM_HSCROLL     ||
+              message == WM_VSCROLL     ||
+              message == WM_MENUSELECT  ||
+              message == WM_MENUCHAR    ||
+              message == WM_ACTIVATEAPP ||
+              message == WM_ACTIVATE)   ||
+             (message >= WM_DDE_FIRST && message <= WM_DDE_LAST)) {
 
         WORD wParamNew = (WORD)wParam;
         LONG lParamNew = (LONG)lParam;
@@ -910,6 +977,32 @@ ULONG putmsg16(VPMSG16 vpmsg16, LPMSG lpmsg)
         }
     } else if (message >= WM_KEYFIRST && message <= WM_KEYLAST) {
         UpdateInt16State();
+#ifdef FE_IME
+    // WM_IMEKEYDOWN & WM_IMEKEYUP  32 -> 16
+    // 32bit:wParam  HIWORD charactor code, LOWORD virtual key
+    // 16bit:wParam  HIBYTE charactor code, LOBYTE virtual key
+    // kksuzuka:#4281 1994.11.19 MSKK V-HIDEKK
+    } else if (message >= WM_IMEKEYDOWN && message <= WM_IMEKEYUP) {
+        LONG wParamNew = wParam;
+        wParamNew >>= 8;
+        wParamNew |= (0xffff & wParam);
+        wParam = wParamNew;
+#endif // FE_IME
+    } else if (message & WOWPRIVATEMSG) {
+
+       LOGDEBUG(LOG_ALWAYS, ("WOW::Warning::putmsg16 caught private message 0x%lx\n", message));
+
+       message &= ~WOWPRIVATEMSG; // clear the private bit...
+
+       /* If we had some special processing to do for private msgs sent with
+          a WOWPRIVATEMSG flag the code here would look like
+
+          if (WM_SETTEXT == message) {
+             //
+             // this message is already equipped with 16-bit lParam
+             //
+          }
+        */
     }
 
     GETVDMPTR(vpmsg16, sizeof(MSG16), pmsg16);
@@ -934,59 +1027,62 @@ VOID getlogfont16(VPLOGFONT16 vplf, LPLOGFONT lplf)
   //  PBYTE    p1, p2;
 
     // The assumption here is that no APIs have OPTIONAL LOGFONT pointers
-    WOW32ASSERT(vplf);
+    WOW32WARNMSG((vplf),("WOW:getlogfont16: NULL 16:16 logfont ptr\n"));
 
     GETVDMPTR(vplf, sizeof(LOGFONT16), plf16);
 
-    lplf->lfHeight         = FETCHSHORT(plf16->lfHeight);
-    lplf->lfWidth          = FETCHSHORT(plf16->lfWidth);
-    lplf->lfEscapement     = FETCHSHORT(plf16->lfEscapement);
-    lplf->lfOrientation    = FETCHSHORT(plf16->lfOrientation);
-    lplf->lfWeight         = FETCHSHORT(plf16->lfWeight);
-    lplf->lfItalic         = plf16->lfItalic;
-    lplf->lfUnderline      = plf16->lfUnderline;
-    lplf->lfStrikeOut      = plf16->lfStrikeOut;
-    lplf->lfCharSet        = plf16->lfCharSet;
-    lplf->lfOutPrecision   = plf16->lfOutPrecision;
-    lplf->lfClipPrecision  = plf16->lfClipPrecision;
-    lplf->lfQuality        = plf16->lfQuality;
-    lplf->lfPitchAndFamily = plf16->lfPitchAndFamily;
+    if(plf16) {
+        lplf->lfHeight         = FETCHSHORT(plf16->lfHeight);
+        lplf->lfWidth          = FETCHSHORT(plf16->lfWidth);
+        lplf->lfEscapement     = FETCHSHORT(plf16->lfEscapement);
+        lplf->lfOrientation    = FETCHSHORT(plf16->lfOrientation);
+        lplf->lfWeight         = FETCHSHORT(plf16->lfWeight);
+        lplf->lfItalic         = plf16->lfItalic;
+        lplf->lfUnderline      = plf16->lfUnderline;
+        lplf->lfStrikeOut      = plf16->lfStrikeOut;
+        lplf->lfCharSet        = plf16->lfCharSet;
+        lplf->lfOutPrecision   = plf16->lfOutPrecision;
+        lplf->lfClipPrecision  = plf16->lfClipPrecision;
+        lplf->lfQuality        = plf16->lfQuality;
+        lplf->lfPitchAndFamily = plf16->lfPitchAndFamily;
 
 #if 0
-    //
-    // can't do it this way, an app can have an unitialized lfFaceName
-    // that's a looong stream of non-null chars, in which case we blow
-    // out our stack.
-    //
+        //
+        // can't do it this way, an app can have an unitialized lfFaceName
+        // that's a looong stream of non-null chars, in which case we blow
+        // out our stack.
+        //
 
-    p1 = lplf->lfFaceName;
-    p2 = plf16->lfFaceName;
+        p1 = lplf->lfFaceName;
+        p2 = plf16->lfFaceName;
 
-    while (*p1++ = *p2++);
+        while (*p1++ = *p2++);
 #else
 
 #if (LF_FACESIZE != 32)
 #error Win16/Win32 LF_FACESIZE constants differ
 #endif
 
-    strncpy(lplf->lfFaceName, (const char *)plf16->lfFaceName, LF_FACESIZE);
+        WOW32_strncpy(lplf->lfFaceName, (const char *)plf16->lfFaceName, LF_FACESIZE);
+        lplf->lfFaceName[LF_FACESIZE-1] = '\0';
 
 #endif
 
 
-//  if (*p2) {
-//      i = 0;
-//      while ((i < LF_FACESIZE) && (*p2)) {
-//          *p1++ = *p2++;
-//          i++;
-//      }
-//      *p1 = *p2;
+//      if (*p2) {
+//          i = 0;
+//          while ((i < LF_FACESIZE) && (*p2)) {
+//              *p1++ = *p2++;
+//              i++;
+//          }
+//          *p1 = *p2;
 //
-//  } else {
-//      lstrcpy(lplf->lfFaceName, "System");
-//  }
+//      } else {
+//          lstrcpy(lplf->lfFaceName, "System");
+//      }
 
-    FREEVDMPTR(plf16);
+        FREEVDMPTR(plf16);
+    }
 }
 
 
@@ -998,54 +1094,56 @@ VOID putlogfont16(VPLOGFONT16 vplf, INT cb, LPLOGFONT lplf)
     INT      cbCopied;
 
     // The assumption here is that no APIs have OPTIONAL LOGFONT pointers
-    WOW32ASSERT(vplf);
+    WOW32WARNMSG((vplf),("WOW:putlogfont16: NULL 16:16 logfont ptr\n"));
 
     GETVDMPTR(vplf, sizeof(LOGFONT16), plf16);
 
-    switch (cb)
-    {
-    default:
-        plf16->lfPitchAndFamily   = lplf->lfPitchAndFamily;
-    case 17:
-        plf16->lfQuality          = lplf->lfQuality;
-    case 16:
-        plf16->lfClipPrecision    = lplf->lfClipPrecision;
-    case 15:
-        plf16->lfOutPrecision     = lplf->lfOutPrecision;
-    case 14:
-        plf16->lfCharSet          = lplf->lfCharSet;
-    case 13:
-        plf16->lfStrikeOut        = lplf->lfStrikeOut;
-    case 12:
-        plf16->lfUnderline        = lplf->lfUnderline;
-    case 11:
-        plf16->lfItalic           = lplf->lfItalic;
-    case 10:
-        STORESHORT(plf16->lfWeight,     lplf->lfWeight);
-    case 9:
-    case 8:
-        STORESHORT(plf16->lfOrientation,lplf->lfOrientation);
-    case 7:
-    case 6:
-        STORESHORT(plf16->lfEscapement, lplf->lfEscapement);
-    case 5:
-    case 4:
-        STORESHORT(plf16->lfWidth,      lplf->lfWidth);
-    case 3:
-    case 2:
-        STORESHORT(plf16->lfHeight,     lplf->lfHeight);
-    case 1:
-        break;
+    if(plf16) {
+        switch (cb)
+        {
+        default:
+            plf16->lfPitchAndFamily   = lplf->lfPitchAndFamily;
+        case 17:
+            plf16->lfQuality          = lplf->lfQuality;
+        case 16:
+            plf16->lfClipPrecision    = lplf->lfClipPrecision;
+        case 15:
+            plf16->lfOutPrecision     = lplf->lfOutPrecision;
+        case 14:
+            plf16->lfCharSet          = lplf->lfCharSet;
+        case 13:
+            plf16->lfStrikeOut        = lplf->lfStrikeOut;
+        case 12:
+            plf16->lfUnderline        = lplf->lfUnderline;
+        case 11:
+            plf16->lfItalic           = lplf->lfItalic;
+        case 10:
+            STORESHORT(plf16->lfWeight,     lplf->lfWeight);
+        case 9:
+        case 8:
+            STORESHORT(plf16->lfOrientation,lplf->lfOrientation);
+        case 7:
+        case 6:
+            STORESHORT(plf16->lfEscapement, lplf->lfEscapement);
+        case 5:
+        case 4:
+            STORESHORT(plf16->lfWidth,      lplf->lfWidth);
+        case 3:
+        case 2:
+            STORESHORT(plf16->lfHeight,     lplf->lfHeight);
+        case 1:
+            break;
+        }
+
+        p1 = lplf->lfFaceName;
+        p2 = (PBYTE)plf16->lfFaceName;
+        cbCopied = 18;
+
+        while ((++cbCopied <= cb) && (*p2++ = *p1++));
+
+        FLUSHVDMPTR(vplf, sizeof(LOGFONT16), plf16);
+        FREEVDMPTR(plf16);
     }
-
-    p1 = lplf->lfFaceName;
-    p2 = (PBYTE)plf16->lfFaceName;
-    cbCopied = 18;
-
-    while ((++cbCopied <= cb) && (*p2++ = *p1++));
-
-    FLUSHVDMPTR(vplf, sizeof(LOGFONT16), plf16);
-    FREEVDMPTR(plf16);
 }
 
 
@@ -1297,71 +1395,6 @@ VOID putoutlinetextmetric16(VPOUTLINETEXTMETRIC16 vpotm, INT cb, LPOUTLINETEXTME
     FREEVDMPTR(potm16);
 }
 
-VOID getlogpalette16(VPLOGPALETTE16 vplp, LPLOGPALETTE lplp)
-{
-    INT      i,j;
-    register PLOGPALETTE16 plp16;
-
-    GETVDMPTR(vplp, sizeof(LOGPALETTE16), plp16);
-
-    if( lplp ) {
-        lplp->palVersion    = FETCHWORD(plp16->palVersion);
-        lplp->palNumEntries = FETCHWORD(plp16->palNumEntries);
-        j = (INT) FETCHWORD(plp16->palNumEntries);
-
-        for (i=0; i<j; i++) {
-            lplp->palPalEntry[i].peRed   = plp16->palPalEntry[i].peRed;
-            lplp->palPalEntry[i].peGreen = plp16->palPalEntry[i].peGreen;
-            lplp->palPalEntry[i].peBlue  = plp16->palPalEntry[i].peBlue;
-            lplp->palPalEntry[i].peFlags = plp16->palPalEntry[i].peFlags;
-        }
-    }
-
-    FREEVDMPTR(plp16);
-}
-
-
-VOID getpaletteentry16(VPPALETTEENTRY16 vppe, INT c, LPPALETTEENTRY lpp)
-{
-    INT      i;
-    register PALETTEENTRY16 *pp16;
-
-    GETVDMPTR(vppe, sizeof(PALETTEENTRY16)*c, pp16);
-
-    if( lpp ) {
-        for (i=0; i < c; i++) {
-            lpp[i].peRed   = pp16[i].peRed;
-            lpp[i].peGreen = pp16[i].peGreen;
-            lpp[i].peBlue  = pp16[i].peBlue;
-            lpp[i].peFlags = pp16[i].peFlags;
-        }
-    }
-    FREEVDMPTR(pp16);
-}
-
-
-VOID putpaletteentry16(VPPALETTEENTRY16 vppe, INT c, LPPALETTEENTRY lpp)
-{
-    INT      i;
-    register PALETTEENTRY16 *pp16;
-
-    GETVDMPTR(vppe, sizeof(PALETTEENTRY16)*c, pp16);
-
-    if( pp16 ) {
-        for (i=0; i < c; i++) {
-            pp16[i].peRed = lpp[i].peRed;
-            pp16[i].peGreen = lpp[i].peGreen;
-            pp16[i].peBlue = lpp[i].peBlue;
-            pp16[i].peFlags = lpp[i].peFlags;
-        }
-    }
-
-    FLUSHVDMPTR(vppe, sizeof(PALETTEENTRY16)*c, pp16);
-    FREEVDMPTR(pp16);
-}
-
-
-
 // Converts a 16 bit handle table to 32 bit
 VOID gethandletable16(VPWORD vpht, UINT c, LPHANDLETABLE lpht)
 {
@@ -1478,7 +1511,7 @@ LPDEVMODE ThunkDevMode16to32(VPDEVMODE31 vpdm16)
         return(NULL);
     }
 
-    // note this might include the "extra" DriverExtra we added in 
+    // note this might include the "extra" DriverExtra we added in
     // ThunkDevMode32to16()
     nDriverExtra = FETCHWORD(pdm16->dmDriverExtra);
 
@@ -1493,18 +1526,26 @@ LPDEVMODE ThunkDevMode16to32(VPDEVMODE31 vpdm16)
         if(nSize == sizeof(DEVMODE31)) {
 
             // see if it has our "DM31" signature at the end of the DEVMODE
-            pWOWDM31  = (PWOWDM31)((PBYTE)lpdm32     + 
-                                   sizeof(DEVMODE31) + 
+            pWOWDM31  = (PWOWDM31)((PBYTE)lpdm32     +
+                                   sizeof(DEVMODE31) +
                                    nDriverExtra      -
                                    sizeof(WOWDM31));
- 
-            // if it does, adjust the dmSpecVersion, dmSize & dmDriverExtra 
+
+            // if it does, adjust the dmSpecVersion, dmSize & dmDriverExtra
             // back to the values we got from the driver
             if(pWOWDM31->dwWOWSig == WOW_DEVMODE31SIG) {
                 lpdm32->dmSpecVersion = pWOWDM31->dmSpecVersion;
                 lpdm32->dmSize        = pWOWDM31->dmSize;
                 lpdm32->dmDriverExtra = pWOWDM31->dmDriverExtra;
             }
+#ifdef DEBUG
+            // somehow the app got a DEVMODE and either lost our thunking info
+            // or threw it away (#205327)
+            else {
+                LOGDEBUG(LOG_ALWAYS, ("WOW::ThunkDevMode16to32: Signature missing from DEVMODE!!\n"));
+            }
+#endif
+
         }
     }
 
@@ -1521,7 +1562,7 @@ LPDEVMODE ThunkDevMode16to32(VPDEVMODE31 vpdm16)
 BOOL ThunkDevMode32to16(VPDEVMODE31 vpdm16, LPDEVMODE lpdm32, UINT nBytes)
 {
 
-    UINT nSize, nDriverExtra;
+    WORD nSize, nDriverExtra;
 
     PDEVMODE31 pdm16;
     PWOWDM31   pWOWDM31;
@@ -1535,7 +1576,7 @@ BOOL ThunkDevMode32to16(VPDEVMODE31 vpdm16, LPDEVMODE lpdm32, UINT nBytes)
 
     nSize = lpdm32->dmSize;
 
-    // We should only see DevModes of the current NT size because the spooler 
+    // We should only see DevModes of the current NT size because the spooler
     // converts all devmodes to the current version
     WOW32WARNMSGF((nSize==sizeof(DEVMODE)),
                   ("ThunkDevMode32to16: Unexpected devmode size = %d\n",nSize));
@@ -1543,9 +1584,9 @@ BOOL ThunkDevMode32to16(VPDEVMODE31 vpdm16, LPDEVMODE lpdm32, UINT nBytes)
     nDriverExtra = lpdm32->dmDriverExtra;
 
     // fill in the 16-bit devmode
-    RtlCopyMemory((VOID *)pdm16, 
-                  (CONST VOID *)lpdm32, 
-                  min((nSize + nDriverExtra), nBytes));
+    RtlCopyMemory((VOID *)pdm16,
+                  (CONST VOID *)lpdm32,
+                  min((nSize + nDriverExtra), (WORD)nBytes));
 
     // Convert NT sized devmodes to Win3.1 devmodes.
     // Note: Winfax.drv passes back an NT size DevMode with dmSpecVersion=0x300
@@ -1554,12 +1595,12 @@ BOOL ThunkDevMode32to16(VPDEVMODE31 vpdm16, LPDEVMODE lpdm32, UINT nBytes)
     //       If there is a buffer constraint, we'll just have to be satisfied
     //       with copying the nBytes worth of the devmode which should work
     //       in the case of WinFax.
-    if((nSize == sizeof(DEVMODE)) && ((nSize + nDriverExtra) <= nBytes)) {
+    if((nSize == sizeof(DEVMODE)) && ((nSize + nDriverExtra) <= (WORD)nBytes)) {
 
-        // save our signature along with the original dmSpecVersion, dmSize, 
+        // save our signature along with the original dmSpecVersion, dmSize,
         // and dmDriverExtra at the end of the DriverExtra memory
-        pWOWDM31  = (PWOWDM31)((PBYTE)pdm16    + 
-                               sizeof(DEVMODE) + 
+        pWOWDM31  = (PWOWDM31)((PBYTE)pdm16    +
+                               sizeof(DEVMODE) +
                                nDriverExtra);
         pWOWDM31->dwWOWSig      = WOW_DEVMODE31SIG;
         pWOWDM31->dmSpecVersion = lpdm32->dmSpecVersion;
@@ -1644,11 +1685,13 @@ VOID W32CopyMsgStruct(VPMSG16 vpmsg16, LPMSG lpmsg, BOOL fThunk16To32)
     return;
 }
 
-VOID getpaintstruct16(VPVOID vp, LPPAINTSTRUCT lp)
+HAND16 getpaintstruct16(VPVOID vp, LPPAINTSTRUCT lp)
 {
+    HAND16         hdc16;
     PPAINTSTRUCT16 pps16;
     GETVDMPTR(vp, sizeof(PAINTSTRUCT16), pps16);
-    (lp)->hdc       = HDC32(FETCHWORD(pps16->hdc));
+    hdc16 = FETCHWORD(pps16->hdc);
+    (lp)->hdc       = HDC32(hdc16);
     (lp)->fErase    = FETCHSHORT(pps16->fErase);
     (lp)->rcPaint.left  = FETCHSHORT(pps16->rcPaint.left);
     (lp)->rcPaint.top   = FETCHSHORT(pps16->rcPaint.top);
@@ -1659,14 +1702,17 @@ VOID getpaintstruct16(VPVOID vp, LPPAINTSTRUCT lp)
     RtlCopyMemory((lp)->rgbReserved,
        pps16->rgbReserved, sizeof(pps16->rgbReserved));
     FREEVDMPTR(pps16);
+    return(hdc16);
 }
 
 
-VOID putpaintstruct16(VPVOID vp, LPPAINTSTRUCT lp)
+HAND16 putpaintstruct16(VPVOID vp, LPPAINTSTRUCT lp)
 {
+    HAND16         hdc16;
     PPAINTSTRUCT16 pps16;
     GETVDMPTR(vp, sizeof(PAINTSTRUCT16), pps16);
-    STOREWORD(pps16->hdc,       GETHDC16((lp)->hdc));
+    hdc16 = GETHDC16((lp)->hdc);
+    STOREWORD(pps16->hdc, hdc16);
     STORESHORT(pps16->fErase,       (lp)->fErase);
     STORESHORT(pps16->rcPaint.left, (lp)->rcPaint.left);
     STORESHORT(pps16->rcPaint.top,  (lp)->rcPaint.top);
@@ -1678,4 +1724,106 @@ VOID putpaintstruct16(VPVOID vp, LPPAINTSTRUCT lp)
        (lp)->rgbReserved, sizeof(pps16->rgbReserved));
     FLUSHVDMPTR(vp, sizeof(PAINTSTRUCT16), pps16);
     FREEVDMPTR(pps16);
+    return(hdc16);
 }
+
+VOID FASTCALL getmenuiteminfo16(VPVOID vp, LPMENUITEMINFO pmii32)
+{
+    PMENUITEMINFO16 pmii16;
+
+    GETVDMPTR(vp, sizeof(*pmii16), pmii16);
+
+    pmii32->cbSize = sizeof(*pmii32);
+    pmii32->fMask = pmii16->fMask;
+
+    if (pmii32->fMask & MIIM_CHECKMARKS) {
+        pmii32->hbmpChecked = HBITMAP32(pmii16->hbmpChecked);
+        pmii32->hbmpUnchecked = HBITMAP32(pmii16->hbmpUnchecked);
+    } else {
+        pmii32->hbmpChecked = pmii32->hbmpUnchecked = NULL;
+    }
+
+    pmii32->dwItemData = (pmii32->fMask & MIIM_DATA)
+                             ? pmii16->dwItemData
+                             : 0;
+
+    pmii32->wID = (pmii32->fMask & MIIM_ID)
+                  ? pmii16->wID
+                  : 0;
+
+    pmii32->fState = (pmii32->fMask & MIIM_STATE)
+                         ? pmii16->fState
+                         : 0;
+
+    pmii32->hSubMenu = (pmii32->fMask & MIIM_SUBMENU)
+                           ? HMENU32(pmii16->hSubMenu)
+                           : NULL;
+
+    if (pmii32->fMask & MIIM_TYPE) {
+
+        pmii32->fType = pmii16->fType;
+
+        if (pmii32->fType & MFT_BITMAP) {
+            pmii32->dwTypeData = (LPTSTR) HBITMAP32(pmii16->dwTypeData);
+        } else if (!(pmii32->fType & MFT_NONSTRING)) {  // like (pmii32->fType & MFT_STRING) but MFT_STRING is zero
+            GETPSZPTR(pmii16->dwTypeData, pmii32->dwTypeData);
+            AddParamMap( (DWORD) pmii32->dwTypeData, pmii16->dwTypeData);
+        } else {
+            pmii32->dwTypeData = (LPTSTR) pmii16->dwTypeData;
+        }
+    } else {
+        pmii32->dwTypeData = (LPSTR) pmii32->fType = 0;
+    }
+
+    pmii32->cch = pmii16->cch;
+
+    FREEVDMPTR(pmii16);
+}
+
+
+VOID FASTCALL putmenuiteminfo16(VPVOID vp, LPMENUITEMINFO pmii32)
+{
+    PMENUITEMINFO16 pmii16;
+
+    GETVDMPTR(vp, sizeof(*pmii16), pmii16);
+
+    pmii16->cbSize = sizeof(*pmii16);
+    pmii16->fMask = (WORD) pmii32->fMask;
+
+    if (pmii32->fMask & MIIM_CHECKMARKS) {
+        pmii16->hbmpChecked = GETHBITMAP16(pmii32->hbmpChecked);
+        pmii16->hbmpUnchecked = GETHBITMAP16(pmii32->hbmpUnchecked);
+    }
+
+    if (pmii32->fMask & MIIM_DATA) {
+        pmii16->dwItemData =  pmii32->dwItemData;
+    }
+
+    if (pmii32->fMask & MIIM_ID) {
+        pmii16->wID = (WORD) pmii32->wID;
+    }
+
+    if (pmii32->fMask & MIIM_STATE) {
+        pmii16->fState = (WORD) pmii32->fState;
+    }
+
+    if (pmii32->fMask & MIIM_SUBMENU) {
+        pmii16->hSubMenu = GETHMENU16(pmii32->hSubMenu);
+    }
+
+    if (pmii32->fMask & MIIM_TYPE) {
+
+        pmii16->fType = (WORD) pmii32->fType;
+
+        if (pmii32->fType & MFT_BITMAP) {
+            pmii16->dwTypeData = GETHBITMAP16(pmii32->dwTypeData);
+        } else if (!(pmii32->fType & MFT_NONSTRING)) {  // like (pmii32->fType & MFT_STRING) but MFT_STRING is zero
+            pmii16->dwTypeData = GetParam16( (DWORD) pmii32->dwTypeData);
+        } else {
+            pmii16->dwTypeData = (VPSTR) pmii32->dwTypeData;
+        }
+    }
+
+    FREEVDMPTR(pmii16);
+}
+

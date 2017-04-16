@@ -26,6 +26,93 @@ extern PWORD16 pCurTDB, pCurDirOwner;
 LPSTR CurDirs[MAX_DOS_DRIVES] = {NULL};
 
 
+VOID DosWowUpdateTDBDir(UCHAR Drive, LPSTR pszDir);
+VOID DosWowUpdateCDSDir(UCHAR Drive, LPSTR pszDir);
+
+#ifdef DEBUG
+VOID __cdecl Dumpdir(LPSTR pszfn, LPSTR pszDir, ...);
+#else
+#define Dumpdir //
+#endif
+
+//
+// modify this to change all the current directory spew's logging level
+//
+#define CURDIR_LOGLEVEL 4
+
+/* First, a brief explanation on Windows and current directory
+ *
+ * 1. Windows keeps a single current directory (and drive off course) per
+ *    application. All the "other" drives are shared between the apps and
+ *    current dirs on them could change without further notice, such that
+ *    if app "Abra" has c as it's current drive and "c:\foo" is it's current
+ *    dir, and another app "Cadabra" has d as it's current drive and "d:\bar"
+ *    as it's current dir, then this is what apps get in return to the respective
+ *    system calls:
+ *    App     Call                 Param      result
+ *    Cadabra GetCurrentDirectory  c:         c:\foo
+ *    Abra    SetCurrentDirectory  c:\foobar
+ *    Cadabra GetCurrentDirectory  c:         c:\foobar
+ *    Abra    SetCurrentDirectory  d:\test
+ *    Abra    GetCurrentDirectory  d:         d:\test
+ *    Cadabra GetCurrentDirectory  d:         d:\bar   <- d is it's current drive!
+ *
+ * 2. Windows is a "non-preemptive" multitasking OS. Remember that for later.
+ *
+ * 3. Tasks are id'd by their respective TDB's which have these interesting
+ *    members (see tdb16.h for the complete list):
+ *
+ *    TDB_Drive
+ *    TDB_LFNDirectory
+ *
+ *    when the high bit of the TDB_Drive is set (TDB_DIR_VALID) -- TDB_LFNDirectory
+ *    is a valid current directory for the TDB_Drive (which is app's current
+ *    drive). The drive itself (0-based drive number) is stored in
+ *    TDB_Drive & ~TDB_DIR_VALID
+ *
+ * 4. Who touches TDB_Drive ?
+ *    SaveState code -- which is called when the task is being switched away *from*
+ *    it looks to see if info on current drive and directory in TDB is stale (via
+ *    the TDB_DIR_VALID bit) and calls GetDefaultDrive and GetCurrentDirectory to
+ *    make sure what's in TDB is valid
+ *
+ * 5. Task switching
+ *    When task resumes it's running due to explanation above -- it has valid
+ *    TDB_Drive in it. When the very first call to the relevant i21 is being
+ *    made -- kernel looks at the owner of the current drive (kernel variable)
+ *    and if some other task owns the current drive/directory -- it makes calls
+ *    to wow to set current drive/dir from the TDB (which is sure valid at
+ *    this point). Current Drive owner is set to the current task so that
+ *    the next time around this call is not performed -- and since windows does
+ *    not allow task preemptions -- any calls to set drive/directory are not
+ *    reflected upon tdb up until the task switch time.
+ *
+ * 6. WOW considerations
+ *    We in WOW have a great deal of hassle due to a number of APIs that are
+ *    not called from i21 handler but rather deal with file i/o and other
+ *    issues that depend upon Win32 current directory. Lo and behold we have
+ *    an UpdateDosCurrentDirectory call that we make before and after the call
+ *    to certain Win32 apis (which were found by trial and error)
+ *    The logic inside is that we always try to keep as much sync as possible
+ *    between TDB, CDS and Win32.
+ *
+ * 7. CurDirs
+ *    CDS can only accomodate current dirs which are up to 64 chars in length
+ *    hence there is an array of CurDirs which is filled on a per-need basis
+ *    for those drives that have curdir lengths > 64+3 chars
+ *
+ * 8. Belief
+ *    I profoundly believe that the above information is sufficient by large
+ *    to successfully troubleshoot all the "current directory" issues that may
+ *    arise :-)
+ *
+ * 9. Thanks
+ *    Goes to Neil and Dave for all the insight and patience that made all these
+ *    wonderful discoveries possible.
+ *
+ * -- VadimB, This day -- July, the 28th 1997
+ */
+
 /* GetCurrentDir - Updatess current dir in CDS structure
  *
  * Entry - pcds    = pointer to CDS
@@ -55,9 +142,24 @@ BOOL GetCurrentDir (PCDS pcds, UCHAR Drive)
 
     if (*(PUCHAR)DosWowData.lpSCS_ToSync) {
 
+#ifdef FE_SB
+        if (GetSystemDefaultLangID() == MAKELANGID(LANG_JAPANESE,SUBLANG_DEFAULT)) {
+            PCDS_JPN pcdstemp_jpn;
+
+            pcdstemp_jpn = (PCDS_JPN) DosWowData.lpCDSFixedTable;
+            for (i=0;i < (int)FixedCount; i++, pcdstemp_jpn++)
+                pcdstemp_jpn->CurDirJPN_Flags |= CURDIR_TOSYNC;
+        }
+        else {
+            pcdstemp = (PCDS) DosWowData.lpCDSFixedTable;
+            for (i=0;i < (int)FixedCount; i++, pcdstemp++)
+                pcdstemp->CurDir_Flags |= CURDIR_TOSYNC;
+        }
+#else
         pcdstemp = (PCDS) DosWowData.lpCDSFixedTable;
         for (i=0;i < (int)FixedCount; i++, pcdstemp++)
             pcdstemp->CurDir_Flags |= CURDIR_TOSYNC;
+#endif
 
         // Mark tosync in network drive as well
         pcdstemp = (PCDS)DosWowData.lpCDSBuffer;
@@ -76,7 +178,7 @@ BOOL GetCurrentDir (PCDS pcds, UCHAR Drive)
         if((EnvVarLen = GetEnvironmentVariableOem (EnvVar, (LPSTR)pcds,
                                                 MAXIMUM_VDM_CURRENT_DIR+3)) == 0){
 
-        // if its not in env then and drive exist then we have'nt
+        // if its not in env then and drive exist then we haven't
         // yet touched it.
 
             pcds->CurDir_Text[0] = EnvVar[1];
@@ -130,17 +232,28 @@ BOOL SetCurrentDir (LPSTR lpBuf, UCHAR Drive)
 {
     static CHAR EnvVar[] = "=?:";
     CHAR chDrive = Drive + 'A';
-    BOOL bRet = FALSE;
+    BOOL bRet;
 
-    if (SetCurrentDirectoryOem (lpBuf) == FALSE){
-        demClientErrorEx(INVALID_HANDLE_VALUE, chDrive, FALSE);
-    } else {
+    // ok -- we are setting the current directory ONLY if the drive
+    // is the current drive for the app
 
-        EnvVar[1] = chDrive;
-        if (SetEnvironmentVariableOem ((LPSTR)EnvVar,lpBuf) == TRUE) {
-            bRet = TRUE;
-        }
+    if (*(PUCHAR)DosWowData.lpCurDrv == Drive) { // if on the current drive--go win32
+       bRet = SetCurrentDirectoryOem(lpBuf);
     }
+    else {  // verify it's a valid dir
+       DWORD dwAttributes;
+
+       dwAttributes = GetFileAttributesOemSys(lpBuf, TRUE);
+       bRet = (0xffffffff != dwAttributes) && (dwAttributes & FILE_ATTRIBUTE_DIRECTORY);
+    }
+
+    if (!bRet) {
+       demClientErrorEx(INVALID_HANDLE_VALUE, chDrive, FALSE);
+       return(FALSE);
+    }
+
+    EnvVar[1] = chDrive;
+    bRet = SetEnvironmentVariableOem((LPSTR)EnvVar,lpBuf);
 
     return (bRet);
 }
@@ -172,7 +285,7 @@ BOOL QueryCurrentDir (PCDS pcds, UCHAR Drive)
     // validate media
     chDrive = Drive + 'A';
     pPath[0] = chDrive;
-    dw = GetFileAttributesOem(pPath);
+    dw = GetFileAttributesOemSys(pPath, TRUE);
     if (dw == 0xFFFFFFFF || !(dw & FILE_ATTRIBUTE_DIRECTORY))
       {
         demClientErrorEx(INVALID_HANDLE_VALUE, chDrive, FALSE);
@@ -181,10 +294,11 @@ BOOL QueryCurrentDir (PCDS pcds, UCHAR Drive)
 
     // if invalid path, set path to the root
     // reset CDS, and win32 env for win32
-    dw = GetFileAttributesOem(pcds->CurDir_Text);
+    dw = GetFileAttributesOemSys(pcds->CurDir_Text, TRUE);
     if (dw == 0xFFFFFFFF || !(dw & FILE_ATTRIBUTE_DIRECTORY))
       {
-        strcpy(pcds->CurDir_Text, pPath);
+        strncpy(pcds->CurDir_Text, pPath, DIRSTRLEN);
+        pcds->CurDir_Text[DIRSTRLEN-1] = '\0';
         pcds->CurDir_End = 2;
         EnvVar[1] = chDrive;
         SetEnvironmentVariableOem(EnvVar,pPath);
@@ -208,13 +322,43 @@ BOOL QueryCurrentDir (PCDS pcds, UCHAR Drive)
  */
 VOID strcpyCDS (PCDS source, LPSTR dest)
 {
+#ifdef FE_SB   // for DBCS Directory name by v-hidekk 1994.5.23
+    unsigned char ch;
+    unsigned char ch2;
+#else // !FE_SB
     char ch;
+#endif // !FE_SB
     int index;
 
     index = source->CurDir_End;
 
     if (source->CurDir_Text[index]=='\\')
         index++;
+#ifdef FE_SB  //for DBCS Directory by v-hidekk 1994.5.23
+
+// BUGBUG -- the code below is not equivalent to the code in Else clause
+// we need to check for 0x05 character preceded by '\\' and replace it
+// wth 0xE5
+
+    while (ch = source->CurDir_Text[index]) {
+        if (IsDBCSLeadByte(ch) ) {
+            if( ch2 = source->CurDir_Text[index+1] ) {
+                *dest++ = ch;
+                *dest++ = ch2;
+                index+=2;
+            }
+            else {
+                index++;
+            }
+        }
+        else {
+            *dest++ = (UCHAR)toupper(ch);
+            index++;
+        }
+    }
+
+
+#else // !FE_SB
 
     while (ch = source->CurDir_Text[index]) {
 
@@ -225,6 +369,7 @@ VOID strcpyCDS (PCDS source, LPSTR dest)
         *dest++ = toupper(ch);
         index++;
     }
+#endif // !FE_SB
 
     *dest = ch;                                 // trailing zero
 
@@ -284,9 +429,16 @@ PCDS GetCDSFromDrv (UCHAR Drive)
             //
 
             pCDS = (PCDS) DosWowData.lpCDSFixedTable;
-            pCDS = (PCDS)((ULONG)pCDS + (Drive*sizeof(CDS)));
+#ifdef FE_SB
+            if (GetSystemDefaultLangID() == MAKELANGID(LANG_JAPANESE,SUBLANG_DEFAULT)) {
+                pCDS = (PCDS)((ULONG)pCDS + (Drive*sizeof(CDS_JPN)));
             }
-
+            else
+                pCDS = (PCDS)((ULONG)pCDS + (Drive*sizeof(CDS)));
+#else
+            pCDS = (PCDS)((ULONG)pCDS + (Drive*sizeof(CDS)));
+#endif
+        }
     }
 
     return (pCDS);
@@ -316,15 +468,47 @@ ULONG DosWowSetDefaultDrive(UCHAR Drive)
                 // The upper bit in the TDB_Drive byte is used to indicate
                 // that the current drive and directory information in the
                 // TDB is stale. Turn it off here.
-                PTDB pTDB;
+
+                // what is the curdir for this drive ?
+                //
+
+                CHAR  szPath[MAX_PATH] = "?:\\";
+                PTDB  pTDB;
+
                 if (*pCurTDB) {
-                    pTDB = (PTDB)SEGPTR(*pCurTDB,0);
-                    if (TDB_SIGNATURE == pTDB->TDB_sig) {
-                        pTDB->TDB_Drive &= ~TDB_DIR_VALID;
-                    }
+                   pTDB = (PTDB)SEGPTR(*pCurTDB,0);
+                   if (TDB_SIGNATURE == pTDB->TDB_sig) {
+                      if ((pTDB->TDB_Drive & TDB_DIR_VALID) &&
+                          (Drive == (pTDB->TDB_Drive & ~TDB_DIR_VALID))) {
+                         // update cds with current stuff here
+
+                         szPath[0] = 'A' + Drive;
+                         strncpy(&szPath[2],pTDB->TDB_LFNDirectory,MAX_PATH-2);
+                         szPath[MAX_PATH-1] = '\0';
+                         // this call also updates the current dos drive
+                         DosWowUpdateCDSDir(Drive, szPath);
+                         Dumpdir("SetDefaultDrive(TDB->CDS): Drive %x", szPath, (UINT)Drive);
+                         return(Drive);
+                      }
+                   }
                 }
 
+                szPath[0] = Drive + 'A';
+
+                if ((Drive<MAX_DOS_DRIVES) && CurDirs[Drive]) {
+                   strncpy(&szPath[3], CurDirs[Drive], MAX_PATH-3);
+                   szPath[MAX_PATH-1] = '\0';
+                }
+                else { // grab one from CDS
+                   strcpyCDS(pCDS, &szPath[3]);
+                }
+
+                // update TDB to be in-sync with the cds
+
+                Dumpdir("SetDefaultDrive(CDS->TDB): Drive %x", szPath, (UINT)Drive);
                 *(PUCHAR)DosWowData.lpCurDrv = Drive;
+                DosWowUpdateTDBDir(Drive, szPath);
+
             }
 
         }
@@ -333,6 +517,95 @@ ULONG DosWowSetDefaultDrive(UCHAR Drive)
     return (*(PUCHAR)DosWowData.lpCurDrv);
 
 }
+
+
+#ifdef DEBUG
+
+VOID __cdecl
+Dumpdir(LPSTR pszfn, LPSTR pszDir, ...)
+{
+
+   PTDB pTDB;
+   char szMod[9];
+   char s[256];
+   va_list va;
+
+   if (NULL != WOW32_strchr(pszfn, '%')) {
+      va_start(va, pszDir);
+      wvsprintf(s, pszfn, va);
+      va_end(va);
+      pszfn = s;
+   }
+
+   LOGDEBUG(CURDIR_LOGLEVEL, ("%s: ", pszfn));
+
+   if (*pCurTDB) {
+
+      pTDB = (PTDB)SEGPTR(*pCurTDB,0);
+      if (NULL != pTDB && TDB_SIGNATURE == pTDB->TDB_sig) {
+
+         WOW32_strncpy(szMod, pTDB->TDB_ModName, 8);
+         szMod[8] = '\0';
+         LOGDEBUG(CURDIR_LOGLEVEL, ("CurTDB: %x (%s) ", (DWORD)*pCurTDB, szMod));
+         LOGDEBUG(CURDIR_LOGLEVEL, ("Drv %x Dir %s\n", (DWORD)pTDB->TDB_Drive, pTDB->TDB_LFNDirectory));
+
+      }
+   }
+   else {
+      LOGDEBUG(CURDIR_LOGLEVEL, ("CurTDB: NULL\n"));
+   }
+
+   LOGDEBUG(CURDIR_LOGLEVEL, ("%s: ", pszfn));
+
+   if (*pCurDirOwner) {
+
+      pTDB = (PTDB)SEGPTR(*pCurDirOwner,0);
+      if (NULL != pTDB && TDB_SIGNATURE == pTDB->TDB_sig) {
+
+         WOW32_strncpy(szMod, pTDB->TDB_ModName, 8);
+         szMod[8] = '\0';
+         LOGDEBUG(CURDIR_LOGLEVEL, ("CurDirOwn: %x (%s) ", (DWORD)*pCurDirOwner, szMod));
+         LOGDEBUG(CURDIR_LOGLEVEL, ("Drive %x Dir %s\n", (DWORD)pTDB->TDB_Drive, pTDB->TDB_LFNDirectory));
+
+      }
+
+   }
+   else {
+      LOGDEBUG(CURDIR_LOGLEVEL, ("CurDirOwn: NULL\n"));
+   }
+
+   if (NULL != pszDir) {
+      LOGDEBUG(CURDIR_LOGLEVEL, ("%s: %s\n", pszfn, pszDir));
+   }
+
+}
+#endif
+
+// returns: current directory as done from the root
+
+BOOL DosWowGetTDBDir(UCHAR Drive, LPSTR pCurrentDirectory)
+{
+   PTDB pTDB;
+
+   if (*pCurTDB) {
+      pTDB = (PTDB)SEGPTR(*pCurTDB,0);
+      if (TDB_SIGNATURE == pTDB->TDB_sig &&
+            (pTDB->TDB_Drive & TDB_DIR_VALID) &&
+            ((pTDB->TDB_Drive & ~TDB_DIR_VALID) == Drive)) {
+
+         // Note: Everyone that calls this function does so with a array of
+         //       MAX_PATH but pass the address as &psDirPath[3]
+         strcpy(pCurrentDirectory, &pTDB->TDB_LFNDirectory[1]);
+
+         // upper-case directory name
+         WOW32_strupr(pCurrentDirectory);
+         Dumpdir("DosWowGetTDBDir(CurTDB): Drive %x", pCurrentDirectory, (UINT)Drive);
+         return(TRUE);
+      }
+   }
+   return(FALSE);
+}
+
 
 
 /* DosWowGetCurrentDirectory - Emulate DOS Get current Directory call
@@ -360,9 +633,13 @@ ULONG DosWowGetCurrentDirectory(UCHAR Drive, LPSTR pszDir)
     //
 
     if (Drive == 0) {
-        Drive = *(PUCHAR)DosWowData.lpCurDrv;
+       Drive = *(PUCHAR)DosWowData.lpCurDrv;
     } else {
-        Drive--;
+       Drive--;
+    }
+
+    if (DosWowGetTDBDir(Drive, pszDir)) {
+       return(0);
     }
 
     //
@@ -371,6 +648,7 @@ ULONG DosWowGetCurrentDirectory(UCHAR Drive, LPSTR pszDir)
     //
     if ((Drive<MAX_DOS_DRIVES) && CurDirs[Drive]) {
         strcpy(pszDir, CurDirs[Drive]);
+        Dumpdir("GetCurrentDirectory(CurDirs): Drive %x", pszDir, (UINT)Drive);
         return 0;
     }
 
@@ -389,9 +667,78 @@ ULONG DosWowGetCurrentDirectory(UCHAR Drive, LPSTR pszDir)
         }
     }
 
+    Dumpdir("GetCurrentDirectory: Drive %x", pszDir, (UINT)Drive);
     return (dwRet);
 
 }
+
+// updates current directory in CDS for the specified drive
+//
+
+VOID DosWowUpdateCDSDir(UCHAR Drive, LPSTR pszDir)
+{
+   PCDS pCDS;
+
+   if (NULL != (pCDS = GetCDSFromDrv(Drive))) {
+      // cds retrieved successfully
+
+      // now for this drive -- validate
+
+      if (strlen(pszDir) > MAXIMUM_VDM_CURRENT_DIR+3) {
+         if ((!CurDirs[Drive]) &&
+              (NULL == (CurDirs[Drive] = malloc_w(MAX_PATH)))) {
+            return;
+         }
+
+         strncpy(CurDirs[Drive], &pszDir[3], MAX_PATH);
+         CurDirs[Drive][MAX_PATH-1] = '\0';
+         // put a valid directory in cds just for robustness' sake
+         WOW32_strncpy(&pCDS->CurDir_Text[0], pszDir, 3);
+         pCDS->CurDir_Text[3] = 0;
+      } else {
+         if (CurDirs[Drive]) {
+            free_w(CurDirs[Drive]);
+            CurDirs[Drive] = NULL;
+         }
+         strncpy(&pCDS->CurDir_Text[0], pszDir, DIRSTRLEN);
+         pCDS->CurDir_Text[DIRSTRLEN-1] = '\0';
+      }
+
+      *(PUCHAR)DosWowData.lpCurDrv = Drive;
+
+   }
+
+}
+
+// updates current task's tdb with the current drive and directory information
+//
+//
+
+VOID DosWowUpdateTDBDir(UCHAR Drive, LPSTR pszDir)
+{
+   PTDB pTDB;
+
+   if (*pCurTDB) {
+
+      pTDB = (PTDB)SEGPTR(*pCurTDB,0);
+      if (TDB_SIGNATURE == pTDB->TDB_sig) {
+
+         // So TDB should be updated IF the current drive is
+         // indeed the drive we're updating a directory for
+
+         if (*(PUCHAR)DosWowData.lpCurDrv == Drive) { // or valid and it's current drive
+
+            pTDB->TDB_Drive = Drive | TDB_DIR_VALID;
+            strncpy(pTDB->TDB_LFNDirectory, pszDir+2, LFN_DIR_LEN);
+            pTDB->TDB_LFNDirectory[LFN_DIR_LEN-1] = '\0';
+            *pCurDirOwner = *pCurTDB;
+         }
+
+      }
+
+   }
+}
+
 
 /* DosWowSetCurrentDirectory - Emulate DOS Set current Directory call
  *
@@ -407,6 +754,7 @@ ULONG DosWowGetCurrentDirectory(UCHAR Drive, LPSTR pszDir)
  *       system status code
  *
  */
+
 ULONG DosWowSetCurrentDirectory(LPSTR pszDir)
 {
     PCDS pCDS;
@@ -417,6 +765,7 @@ ULONG DosWowSetCurrentDirectory(LPSTR pszDir)
     DWORD dwRet = 0xFFFF0003;       // assume error
     static CHAR  EnvVar[] = "=?:";
     BOOL  ItsANamedPipe = FALSE;
+    BOOL  fSetDirectory = TRUE;       // try mapping directory from 9x special path to nt if false
 
     if (':' == pszDir[1]) {
         Drive = toupper(pszDir[0]) - 'A';
@@ -428,15 +777,32 @@ ULONG DosWowSetCurrentDirectory(LPSTR pszDir)
         Drive = *(PUCHAR)DosWowData.lpCurDrv;
     }
 
-
     if (NULL != (pCDS = GetCDSFromDrv (Drive))) {
 
         lpDirName = NormalizeDosPath(pszDir, Drive, &ItsANamedPipe);
 
-        GetFullPathNameOem(lpDirName, MAX_PATH, szPath, &pLast);
+        GetFullPathNameOemSys(lpDirName, MAX_PATH, szPath, &pLast, TRUE);
 
-        if (SetCurrentDir(szPath, Drive)) {
-            PTDB pTDB;
+        fSetDirectory = SetCurrentDir(szPath,Drive);
+
+        if (!fSetDirectory) {
+
+             //
+             // If set directory with the given path failed it might be one of the
+             // 9x special path, so try mapping it to NT special path
+             // i.e. c:\winnt\startm~1 becomes c:\docume~1\alluse~1\startm~1         
+             //
+
+             UCHAR szMappedPath[MAX_PATH];
+                                
+             if(W32Map9xSpecialPath(szPath,szMappedPath,sizeof(szMappedPath))) {
+                 strncpy(szPath, szMappedPath, MAX_PATH);
+                 szPath[MAX_PATH-1] = '\0';
+                 fSetDirectory = SetCurrentDir(szPath,Drive);
+             } 
+        }
+        
+        if (fSetDirectory) {
 
             //
             // If the directory is growing larger than the old MS-DOS max,
@@ -448,9 +814,9 @@ ULONG DosWowSetCurrentDirectory(LPSTR pszDir)
                     (NULL == (CurDirs[Drive] = malloc_w(MAX_PATH)))) {
                     return dwRet;
                 }
-                strcpy(CurDirs[Drive], &szPath[3]);
+                strncpy(CurDirs[Drive], &szPath[3], MAX_PATH);
                 // put a valid directory in cds just for robustness' sake
-                strncpy(&pCDS->CurDir_Text[0], szPath, 3);
+                WOW32_strncpy(&pCDS->CurDir_Text[0], szPath, 3);
                 pCDS->CurDir_Text[3] = 0;
             } else {
                 if (CurDirs[Drive]) {
@@ -464,23 +830,10 @@ ULONG DosWowSetCurrentDirectory(LPSTR pszDir)
 
             //
             // Update kernel16's "directory owner" with the current TDB.
-            // Also, if we are changing to a directory that is different than
-            // what is currently in the TDB, then mark it as invalid.
             //
-            if (*pCurTDB) {
-                pTDB = (PTDB)SEGPTR(*pCurTDB,0);
-                if (TDB_SIGNATURE == pTDB->TDB_sig) {
-                    *pCurDirOwner = *pCurTDB;
-                    if ((pTDB->TDB_Drive&TDB_DIR_VALID) &&
-                        (*(PUCHAR)DosWowData.lpCurDrv == Drive) &&
-                        ((Drive != (pTDB->TDB_Drive & ~TDB_DIR_VALID)) ||
-                            (strcmp(&szPath[2], pTDB->TDB_LFNDirectory)))) {
-                        pTDB->TDB_Drive &= ~TDB_DIR_VALID;
-                    }
-                }
-            }
+            Dumpdir("SetCurrentDirectory", szPath);
+            DosWowUpdateTDBDir(Drive, szPath);
         }
-
     }
 
     return (dwRet);
@@ -523,6 +876,7 @@ BOOL UpdateDosCurrentDirectory(UDCDFUNC fDir)
 
             WOW32ASSERT(DosWowData.lpCurDrv != (ULONG) NULL);
 
+            Dumpdir("UpdateDosCurrentDir DOS->NT", NULL);
             if ((*pCurTDB) && (*pCurDirOwner != *pCurTDB)) {
 
                 pTDB = (PTDB)SEGPTR(*pCurTDB,0);
@@ -531,9 +885,17 @@ BOOL UpdateDosCurrentDirectory(UDCDFUNC fDir)
                     (pTDB->TDB_Drive & TDB_DIR_VALID)) {
 
                     szPath[0] = 'A' + (pTDB->TDB_Drive & ~TDB_DIR_VALID);
-                    strcpy(&szPath[2], pTDB->TDB_LFNDirectory);
+                    strncpy(&szPath[2], pTDB->TDB_LFNDirectory, MAX_PATH-2);
+                    szPath[MAX_PATH-1] = '\0';
 
-                    SetCurrentDirectoryOem(szPath);
+                    LOGDEBUG(CURDIR_LOGLEVEL, ("UpdateDosCurrentDirectory: DOS->NT %s, case 1\n", szPath));
+                    if (SetCurrentDirectoryOem(szPath)) {
+                       // update cds and the current drive all at the same time
+                       DosWowUpdateCDSDir((UCHAR)(pTDB->TDB_Drive & ~TDB_DIR_VALID), szPath);
+
+                       // set the new curdir owner
+                       *pCurDirOwner = *pCurTDB;
+                    }
                     break;          // EXIT case
                 }
             }
@@ -542,6 +904,14 @@ BOOL UpdateDosCurrentDirectory(UDCDFUNC fDir)
             szPath[0] = *(PUCHAR)DosWowData.lpCurDrv + 'A';
 
             if (CurDirs[*(PUCHAR)DosWowData.lpCurDrv]) {
+
+                strncpy(&szPath[3], 
+                        CurDirs[*(PUCHAR)DosWowData.lpCurDrv],
+                        MAX_PATH-3);
+                szPath[MAX_PATH-1] = '\0';
+                LOGDEBUG(CURDIR_LOGLEVEL, ("UpdateDosCurrentDirectory: DOS->NT %s, case 2\n", szPath));
+                DosWowUpdateTDBDir(*(PUCHAR)DosWowData.lpCurDrv, szPath);
+
                 SetCurrentDirectoryOem(CurDirs[*(PUCHAR)DosWowData.lpCurDrv]);
                 lReturn = TRUE;
                 break;
@@ -550,6 +920,13 @@ BOOL UpdateDosCurrentDirectory(UDCDFUNC fDir)
             if (DosWowGetCurrentDirectory(0, &szPath[3])) {
                 LOGDEBUG(LOG_ERROR, ("DowWowGetCurrentDirectory failed\n"));
             } else {
+
+                // set the current directory owner so that when the
+                // task switch occurs -- i21 handler knows to set
+                // the current dir
+                LOGDEBUG(CURDIR_LOGLEVEL, ("UpdateDosCurrentDirectory: DOS->NT %s, case 3\n", szPath));
+                DosWowUpdateTDBDir(*(PUCHAR)DosWowData.lpCurDrv, szPath);
+
                 SetCurrentDirectoryOem(szPath);
                 lReturn = TRUE;
             }
@@ -566,9 +943,10 @@ BOOL UpdateDosCurrentDirectory(UDCDFUNC fDir)
 
             } else {
 
-                LOGDEBUG(LOG_WARNING, ("UpdateDosCurrentDirectory: %s\n", &szPath[0]));
+                Dumpdir("UpdateDosCurrentDirectory NT->DOS", szPath);
+                LOGDEBUG(LOG_WARNING, ("UpdateDosCurrentDirectory NT->DOS: %s\n", &szPath[0]));
                 if (szPath[1] == ':') {
-                    DosWowSetDefaultDrive((UCHAR) (szPath[0] - 'A'));
+                    DosWowSetDefaultDrive((UCHAR) (toupper(szPath[0]) - 'A'));
                     DosWowSetCurrentDirectory(szPath);
                     lReturn = TRUE;
                 }
@@ -806,7 +1184,7 @@ ULONG FASTCALL WK32DeviceIOCTL(PVDMFRAME pFrame)
     }
 
     pPath[0] = Drive + 'A';
-    uiDriveStatus = GetDriveType(pPath);
+    uiDriveStatus = DPM_GetDriveType(pPath);
 
     if ((uiDriveStatus == 0) || (uiDriveStatus == 1)) {
         return (0xFFFF000F);            // error invalid drive
@@ -821,3 +1199,15 @@ ULONG FASTCALL WK32DeviceIOCTL(PVDMFRAME pFrame)
     return (dwReturn);
 
 }
+
+
+BOOL DosWowDoDirectHDPopup(VOID)
+{
+   BOOL fNoPopupFlag;
+
+   fNoPopupFlag = !!(CURRENTPTD()->dwWOWCompatFlagsEx & WOWCFEX_NODIRECTHDPOPUP);
+   LOGDEBUG(0, ("direct hd access popup flag: %s\n", fNoPopupFlag ? "TRUE" : "FALSE"));
+   return(!fNoPopupFlag);
+}
+
+

@@ -148,3 +148,4 @@ VrBreakMacro(
 VOID VrNetServiceControl(
     VOID
     );
+

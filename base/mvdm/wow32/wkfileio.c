@@ -19,6 +19,7 @@
 #include "demexp.h"
 #include "nt_vdd.h"
 
+#define DOS_FLAG_EXEC_OPEN 1 // see dos\v86\inc\dossym.inc
 
 MODNAME(wkfileio.c);
 
@@ -65,7 +66,8 @@ IsNamedPipeName(
 PSTR
 TruncatePath83(
     IN OUT PSTR,
-    IN PSTR
+    IN PSTR,
+    IN int
     );
 
 CRITICAL_SECTION VdmLoadCritSec;
@@ -186,6 +188,8 @@ DefaultVrCancelPipeIo(
     IN DWORD Thread
     );
 
+
+
 VOID
 DefaultVrCancelPipeIo(
     IN DWORD Thread
@@ -237,7 +241,7 @@ Return Value:
 
     EnterCriticalSection(&VdmLoadCritSec);
     if (!VdmRedirLoaded) {
-        if ((hVdmRedir = LoadLibrary("VDMREDIR")) != NULL) {
+        if ((hVdmRedir = SafeLoadLibrary(L"VDMREDIR")) != NULL) {
             if ((VrReadNamedPipe = (VR_READ_NAMED_PIPE_FUNC)GetProcAddress(hVdmRedir, "VrReadNamedPipe")) == NULL) {
                 goto closeAndReturn;
             }
@@ -375,7 +379,7 @@ Return Value:
         // is [Pp][Ii][Pp][Ee][\\/]
         //
 
-        if (!_strnicmp(Name, "PIPE", 4)) {
+        if (!WOW32_strnicmp(Name, "PIPE", 4)) {
             Name += 4;
             if (IS_ASCII_PATH_SEPARATOR(*Name)) {
                 return TRUE;
@@ -385,7 +389,7 @@ Return Value:
     return FALSE;
 }
 
-/* WK32FileRead - Read a file
+/* WK32WOWFileRead - Read a file
  *
  *
  * Entry - fh       File Handle
@@ -402,28 +406,34 @@ Return Value:
  *
  */
 
-ULONG FASTCALL WK32FileRead (PVDMFRAME pFrame)
+ULONG FASTCALL WK32WOWFileRead (PVDMFRAME pFrame)
 {
-    PFILEIOREAD16 parg16;
+    PWOWFILEREAD16 parg16;
     LPBYTE pSrc;
     LPBYTE pDst;
     INT dwBytesRead;
-    DWORD bufsize, dwError, dwBytesLeft, dwHighDWord;
+    DWORD bufsize, dwError;
+    LARGE_INTEGER liBytesLeft, liFileSize, liFilePointer;
     HANDLE hFile;
     PHMAPPEDFILEALIAS pCache = 0;
+    PDOSSFT         pSFT;
 
-    GETARGPTR(pFrame, sizeof(MAPPEDFILEIOREAD16), parg16);
+    GETARGPTR(pFrame, sizeof(*parg16), parg16);
 
     bufsize = FETCHDWORD(parg16->bufsize);
     dwBytesRead = bufsize;
 
-    hFile = VDDRetrieveNtHandle(0, (SHORT) parg16->fh, NULL, NULL);
+    hFile = VDDRetrieveNtHandle(0, (SHORT) parg16->fh, (PVOID *)&pSFT, NULL);
 
     if (!hFile) {
         dwBytesRead = 0xffff0006;
-        FREEARGPTR(parg16);
-        return(dwBytesRead);
+        goto Return_dwBytesRead;
     }
+
+    if (pSFT->SFT_Flags & 0x80) {   // Is this a device handle?
+        dwBytesRead = 0xffffffff;             // Let DOS handle device handles.
+        goto Return_dwBytesRead;              // kernel QuickRead passes to DOS
+    }                                         // after any error (dx=ffff)
 
     //
     // It is legitimate to ask to read more bytes than are left in the
@@ -475,7 +485,7 @@ ULONG FASTCALL WK32FileRead (PVDMFRAME pFrame)
                 dwTotalCacheBytes += dwBytesRead;
                 dwTotalCacheAccess++;
            } except (TRUE) {
-                SetFilePointer( hFile, pCache->lFilePointer, NULL, FILE_BEGIN );
+                DPM_SetFilePointer( hFile, pCache->lFilePointer, NULL, FILE_BEGIN );
                 FREEMAPFILECACHE(pCache->hfile32);
                 pCache->hfile32 = hFile;
                 pCache->fAccess = FALSE;
@@ -495,31 +505,58 @@ ULONG FASTCALL WK32FileRead (PVDMFRAME pFrame)
              if (!VrReadNamedPipe(hFile, pDst, (DWORD)bufsize, &dwBytesRead, &error)) {
                  dwBytesRead = error | 0xffff0000;
              }
-        } else if (ReadFile (hFile, pDst, (DWORD)bufsize, &dwBytesRead,
+        } else if (DPM_ReadFile (hFile, pDst, (DWORD)bufsize, &dwBytesRead,
                                                           NULL) == FALSE){
-             // In Win3.1 it is not an error to hit EOF during a read
-             // AmiPro asks for more bytes than they allocated for the buffer
+
+             //
+             // In Win3.1 it is not an error to hit EOF during a read with buffer
+             // smaller than the requested read.
+             // AmiPro asks for more bytes than they allocated for the buffer.
+             //
+
              dwError = GetLastError();
              if(dwError == ERROR_NOACCESS) {
 
-                 // how far to end of file?
-                 dwBytesLeft = GetFileSize(hFile, &dwHighDWord) -
-                               SetFilePointer(hFile, 0L, NULL, FILE_CURRENT);
+                 liFileSize.LowPart = DPM_GetFileSize(hFile, &liFileSize.HighPart);
 
-                 // if there's tons left OR what was already tried - forget it
-                 if(dwHighDWord || (dwBytesLeft >= bufsize)) {
-                     dwBytesRead = dwError | 0xffff0000;
-                 }
+                 liFilePointer.HighPart = 0;
+                 liFilePointer.LowPart = DPM_SetFilePointer(hFile,
+                                                        0,
+                                                        &liFilePointer.HighPart,
+                                                        FILE_CURRENT
+                                                        );
 
-                 // else try again with the smaller request
-                 else if (ReadFile (hFile, pDst, dwBytesLeft, &dwBytesRead,
+                 if (liFileSize.QuadPart <= liFilePointer.QuadPart) {
+
+                     dwBytesRead = 0;
+
+                 } else {
+
+                     // how far to end of file?
+                     liBytesLeft.QuadPart = liFileSize.QuadPart - liFilePointer.QuadPart;
+
+                     //
+                     // If it should have worked, give up and assert
+                     //
+
+                     if (liBytesLeft.HighPart || liBytesLeft.LowPart >= bufsize) {
+                         WOW32ASSERTMSGF(
+                             FALSE,
+                             ("WK32WOWFileRead: ReadFile returned ERROR_NOACCESS but there is data to read,\n"
+                              "maybe invalid buffer %x:%4x size 0x%x (would fault on 3.1).  Hit 'g' to\n"
+                              "return ERROR_NOT_ENOUGH_MEMORY.\n",
+                              HIWORD(parg16->lpBuf), LOWORD(parg16->lpBuf), bufsize));
+
+                         dwBytesRead = ERROR_NOT_ENOUGH_MEMORY | 0xffff0000;
+                     }
+                     // else try again with the smaller request
+                     else if (DPM_ReadFile (hFile, pDst, liBytesLeft.LowPart, &dwBytesRead,
                                                               NULL) == FALSE){
 
-                     dwBytesRead = GetLastError() | 0xffff0000;
+                         dwBytesRead = GetLastError() | 0xffff0000;
+                     }
                  }
-
-             }
-             else {
+             } else {
                  dwBytesRead = dwError | 0xffff0000;
              }
         }
@@ -559,6 +596,8 @@ ULONG FASTCALL WK32FileRead (PVDMFRAME pFrame)
     }
 
     FREEVDMPTR(pDst);
+
+  Return_dwBytesRead:
 
     FREEARGPTR(parg16);
     return (dwBytesRead);
@@ -644,7 +683,7 @@ VOID FreeMapFileCache(HANDLE hFile)
             CloseHandle( pCache->hMappedFileObject );
         }
         if (pCache->fAccess) {
-            SetFilePointer( hFile, pCache->lFilePointer, NULL, FILE_BEGIN );
+            DPM_SetFilePointer( hFile, pCache->lFilePointer, NULL, FILE_BEGIN );
         }
         pCache->hfile32 = 0;
         pCache->hMappedFileObject = 0;
@@ -691,11 +730,12 @@ BOOL W32MapViewOfFile( PHMAPPEDFILEALIAS pCache, HANDLE hFile)
                                                     FILE_MAP_READ, 0, 0, 0);
 
         if (pCache->lpStartingAddressOfView != 0 ) {
-            pCache->lFilePointer = SetFilePointer( hFile, 0, 0, FILE_CURRENT );
-            pCache->dwFileSize   = GetFileSize(hFile, 0);
+            pCache->lFilePointer = DPM_SetFilePointer( hFile, 0, 0, FILE_CURRENT );
+            pCache->dwFileSize   = DPM_GetFileSize(hFile, 0);
             pCache->fAccess = TRUE;     // Assume Read Access
         } else {
             CloseHandle(pCache->hMappedFileObject);
+            pCache->hMappedFileObject = 0;  // so FreeMapFileCache doesn't double-close the handle
         }
     }
     return(pCache->fAccess);
@@ -731,7 +771,7 @@ VOID FlushMapFileCaches()
 }
 
 
-/* WK32FileWrite - Write to a file
+/* WK32WOWFileWrite - Write to a file
  *
  *
  * Entry - fh       File Handle
@@ -748,16 +788,17 @@ VOID FlushMapFileCaches()
  *
  */
 
-ULONG FASTCALL WK32FileWrite (PVDMFRAME pFrame)
+ULONG FASTCALL WK32WOWFileWrite (PVDMFRAME pFrame)
 {
-HANDLE  hFile;
-DWORD   dwBytesWritten;
-DWORD   bufsize;
-PBYTE pb1;
-register PFILEIOWRITE16 parg16;
-PHMAPPEDFILEALIAS pCache;
+    HANDLE  hFile;
+    DWORD   dwBytesWritten;
+    DWORD   bufsize;
+    PBYTE pb1;
+    register PWOWFILEWRITE16 parg16;
+    PHMAPPEDFILEALIAS pCache;
+    PDOSSFT         pSFT;
 
-    GETARGPTR(pFrame, sizeof(FILEIOWRITE16), parg16);
+    GETARGPTR(pFrame, sizeof(*parg16), parg16);
 
     bufsize = FETCHDWORD(parg16->bufsize);
 
@@ -767,18 +808,23 @@ PHMAPPEDFILEALIAS pCache;
         GETVDMPTR(parg16->lpBuf, bufsize, pb1);
     }
 
-    hFile = VDDRetrieveNtHandle(0, (SHORT) parg16->fh, NULL, NULL);
+    hFile = VDDRetrieveNtHandle(0, (SHORT) parg16->fh, (PVOID *)&pSFT, NULL);
 
     if (!hFile) {
         dwBytesWritten = 0xffff0006;            // DOS Invalid Handle Error
         goto Cleanup;
     }
 
+    if (pSFT->SFT_Flags & 0x80) {   // Is this a device handle?
+        dwBytesWritten = 0xffffffff;          // Let DOS handle device handles.
+        goto Cleanup;                         // kernel QuickWrite passes to DOS
+    }                                         // after any error (dx=ffff)
+
     // We don't Support Writing to Mapped Files
 
     if ( (pCache = FINDMAPFILECACHE(hFile)) && pCache->fAccess ) {
          if (pCache->lpStartingAddressOfView) {
-            SetFilePointer( hFile, pCache->lFilePointer, NULL, FILE_BEGIN );
+            DPM_SetFilePointer( hFile, pCache->lFilePointer, NULL, FILE_BEGIN );
             FREEMAPFILECACHE(hFile);
          }
          pCache->fAccess = FALSE;
@@ -787,7 +833,7 @@ PHMAPPEDFILEALIAS pCache;
 
     // In DOS CX=0 truncates or extends the file to current file pointer.
     if (bufsize == 0){
-        if (SetEndOfFile(hFile) == FALSE) {
+        if (DPM_SetEndOfFile(hFile) == FALSE) {
             dwBytesWritten = GetLastError() | 0xffff0000;
             LOGDEBUG(fileiolevel, ("IOFileWrite fh:%X fh32:%X SetEndOfFile failed pDsc %08X\n",
                                    FETCHWORD(parg16->fh),hFile,FETCHDWORD(parg16->lpBuf)));
@@ -803,7 +849,7 @@ PHMAPPEDFILEALIAS pCache;
                 dwBytesWritten = GetLastError() | 0xffff0000;
             }
         } else {
-            if (( WriteFile (hFile,
+            if (( DPM_WriteFile (hFile,
                  pb1,
                  (DWORD)bufsize,
                  &dwBytesWritten,
@@ -822,7 +868,7 @@ Cleanup:
 }
 
 
-/* WK32FileLSeek - Change File Pointer
+/* WK32WOWFileLSeek - Change File Pointer
  *
  *
  * Entry - fh       File Handle
@@ -841,12 +887,13 @@ Cleanup:
  *
  */
 
-ULONG FASTCALL WK32FileLSeek (PVDMFRAME pFrame)
+ULONG FASTCALL WK32WOWFileLSeek (PVDMFRAME pFrame)
 {
 HANDLE  hFile;
 ULONG   dwLoc;
 PHMAPPEDFILEALIAS pCache;
-register PFILEIOLSEEK16 parg16;
+register PWOWFILELSEEK16 parg16;
+PDOSSFT         pSFT;
 
 #if (FILE_BEGIN != 0 || FILE_CURRENT != 1 || FILE_END !=2)
     #error "Win32 values not DOS compatible"
@@ -854,14 +901,19 @@ register PFILEIOLSEEK16 parg16;
 
 #endif
 
-    GETARGPTR(pFrame, sizeof(FILEIOLSEEK16), parg16);
+    GETARGPTR(pFrame, sizeof(*parg16), parg16);
 
-    hFile = VDDRetrieveNtHandle(0, (SHORT) parg16->fh, NULL, NULL);
+    hFile = VDDRetrieveNtHandle(0, (SHORT) parg16->fh, (PVOID *)&pSFT, NULL);
 
     if (!hFile) {
         FREEARGPTR(parg16);
         return(0xffff0006);
     }
+
+    if (pSFT->SFT_Flags & 0x80) {   // Is this a device handle?
+        FREEARGPTR(parg16);             // Let DOS handle device handles.
+        return(0xffffffff);             // kernel QuickLSeek passes to DOS
+    }                                   // after any error (dx=ffff)
 
     if ( (vptopPDB == parg16->lpPDB) && (pCache = FINDMAPFILECACHE(hFile)) && pCache->fAccess ) {
 
@@ -889,7 +941,7 @@ register PFILEIOLSEEK16 parg16;
         DWORD dwLocHi = 0;
         // File is NOT in Cache so Just do normal Seek.
 
-        if (((dwLoc = SetFilePointer (hFile,
+        if (((dwLoc = DPM_SetFilePointer (hFile,
                                      FETCHDWORD(parg16->fileOffset),
                                      &dwLocHi,
                                     (DWORD)FETCHWORD(parg16->mode))) == -1L) &&
@@ -902,12 +954,12 @@ register PFILEIOLSEEK16 parg16;
         if (dwLocHi) {
             // file pointer has been moved > FFFFFFFF. Truncate it
             dwLocHi = 0;
-            if (((dwLoc = SetFilePointer (hFile,
+            if (((dwLoc = DPM_SetFilePointer (hFile,
                                          dwLoc,
                                          &dwLocHi,
                                          FILE_BEGIN)) == -1L) &&
                 (GetLastError() != NO_ERROR)) {
-           
+
                 dwLoc = GetLastError() | 0xffff0000;
                 return(dwLoc);
             }
@@ -932,7 +984,7 @@ BOOL IsDevice(PSTR pszFilePath)
 
     // Determine the start of the file part of the path.
 
-    if (pfile = strrchr(pszFilePath, '\\')) {
+    if (pfile = WOW32_strrchr(pszFilePath, '\\')) {
         pfile++;
     } else if (pszFilePath[0] && pszFilePath[1] == ':') {
         pfile = pszFilePath + 2;
@@ -960,7 +1012,7 @@ BOOL IsDevice(PSTR pszFilePath)
     RtlFillMemory(device_part + length, 8 - length, ' ');
     RtlCopyMemory(device_part, pfile, length);
     device_part[8] =  0;
-    _strupr(device_part);
+    WOW32_strupr(device_part);
 
 
     // Now go through the device chain comparing each entry with
@@ -970,19 +1022,12 @@ BOOL IsDevice(PSTR pszFilePath)
     for (;;) {
 
         p = pSys->sdevDevName;
-        if (device_part[0] == p[0] &&
-            device_part[1] == p[1] &&
-            device_part[2] == p[2] &&
-            device_part[3] == p[3] &&
-            device_part[4] == p[4] &&
-            device_part[5] == p[5] &&
-            device_part[6] == p[6] &&
-            device_part[7] == p[7]) {
 
+        if (RtlEqualMemory(device_part, p, 8)) {
             return TRUE;
         }
 
-        if (pSys->sdevNext & 0xFFFF == 0xFFFF) {
+        if (LOWORD(pSys->sdevNext) == 0xFFFF) {
             break;
         }
 
@@ -1017,7 +1062,7 @@ PSTR NormalizeDosPath(PSTR pszPath, WORD wCurrentDriveNumber, PBOOL ItsANamedPip
     // Win 32 createfile can't cope with the leading drive letter
     // so remove it as necessary.
 
-    if (strncmp(pszPath+1,":\\\\",3) == 0) {
+    if (WOW32_strncmp(pszPath+1,":\\\\",3) == 0) {
         pszPath++;
         pszPath++;
     }
@@ -1068,7 +1113,7 @@ PSTR NormalizeDosPath(PSTR pszPath, WORD wCurrentDriveNumber, PBOOL ItsANamedPip
         pszPath = NewPath;              //return this value
     }
 
-    return TruncatePath83(NewPath, pszPath);
+    return TruncatePath83(NewPath, pszPath, MAX_PATH);
 }
 
 
@@ -1088,7 +1133,7 @@ PSTR NormalizeDosPath(PSTR pszPath, WORD wCurrentDriveNumber, PBOOL ItsANamedPip
  *
  */
 
-PSTR TruncatePath83(PSTR NewPath, PSTR pszPath)
+PSTR TruncatePath83(PSTR NewPath, PSTR pszPath, int cbNewPath)
 {
     PSTR pPathName, pPathNameSlash, pPathExt;
 
@@ -1097,15 +1142,16 @@ PSTR TruncatePath83(PSTR NewPath, PSTR pszPath)
     //
 
     if (NewPath != pszPath) {
-        strcpy (NewPath, pszPath);
+        strncpy (NewPath, pszPath, cbNewPath);
+        NewPath[cbNewPath-1] = '\0';
     }
 
     //
     // make sure file name and extension are 8.3
     //
 
-    pPathName      = strrchr(NewPath, '\\');
-    pPathNameSlash = strrchr(NewPath, '/');
+    pPathName      = WOW32_strrchr(NewPath, '\\');
+    pPathNameSlash = WOW32_strrchr(NewPath, '/');
 
     if ((NULL == pPathName) && (NULL == pPathNameSlash)) {
         pPathName = &NewPath[2];                        // 1st char after '?:'
@@ -1116,7 +1162,7 @@ PSTR TruncatePath83(PSTR NewPath, PSTR pszPath)
         pPathName++;                                    // 1st char in name
     }
 
-    if (NULL != (pPathExt = strchr(pPathName, '.'))) {  // is there a period?
+    if (NULL != (pPathExt = WOW32_strchr(pPathName, '.'))) {  // is there a period?
 
         pPathExt++;                                     // 1st char in ext
 
@@ -1165,6 +1211,10 @@ PSTR ExpandDosPath(PSTR pszPathGiven)
     char *pFilePart;
 
 
+    if (!pszPathGiven ) {
+        return NULL;
+    }
+
     // There is a bug in this routine where it is ignoring /. DOS treats them
     // same as \. As matches for \ are spread all over this routine, its
     // much safer to take an entry pass over the string and covert / to \.
@@ -1190,7 +1240,7 @@ PSTR ExpandDosPath(PSTR pszPathGiven)
     //       ie. "*." is not the same as "*"
     //
 
-    if (strncmp(pszPath, "\\\\", 2)) {      // should be drive letter
+    if (WOW32_strncmp(pszPath, "\\\\", 2)) {      // should be drive letter
         ucDrive = *pszPath++;
         if ((*pszPath++ != ':') || (!isalpha(ucDrive))) {
             SetLastError(ERROR_PATH_NOT_FOUND);
@@ -1210,13 +1260,13 @@ PSTR ExpandDosPath(PSTR pszPathGiven)
                 return NULL;
             }
 
-            usNewPathIndex = strlen(NewPath);
+            usNewPathIndex = (USHORT)strlen(NewPath);
             if (usNewPathIndex > 3) {
                 NewPath[usNewPathIndex++] = '\\';
             }
         }
 
-        pFilePart = strrchr(pszPath, '\\');
+        pFilePart = WOW32_strrchr(pszPath, '\\');
         if (pFilePart) {
             pFilePart++;
         } else {
@@ -1228,7 +1278,7 @@ PSTR ExpandDosPath(PSTR pszPathGiven)
         NewPath[0] = NewPath[1] = '\\';
         pszPath += 2;
 
-        pFilePart = strrchr(pszPath, '\\');
+        pFilePart = WOW32_strrchr(pszPath, '\\');
         if (!pFilePart) {
             SetLastError(ERROR_PATH_NOT_FOUND);
             return NULL;
@@ -1326,6 +1376,7 @@ BOOL IsCdRomFile(PSTR pszPath)
                 }
             }
         }
+        i = min(i, MAX_PATH-2);
         memcpy(pszRootDir, pszPath, i);
         pszRootDir[i] = '\\';
         pszRootDir[i+1] = 0;
@@ -1335,7 +1386,7 @@ BOOL IsCdRomFile(PSTR pszPath)
 
     if (GetVolumeInformationOem(pszRootDir, NULL, 0, NULL, NULL, NULL,
                                 file_system, MAX_PATH) &&
-        !_stricmp(file_system, "CDFS")) {
+        !WOW32_stricmp(file_system, "CDFS")) {
 
         return TRUE;
     }
@@ -1343,7 +1394,7 @@ BOOL IsCdRomFile(PSTR pszPath)
     return FALSE;
 }
 
-/* WK32FileOpen - Open a file
+/* WK32WOWFileOpen - Open a file
  *
  *
  * Entry - pszPath  Path of file to open
@@ -1360,9 +1411,9 @@ BOOL IsCdRomFile(PSTR pszPath)
  *
  */
 
-ULONG FASTCALL WK32FileOpen(PVDMFRAME pFrame)
+ULONG FASTCALL WK32WOWFileOpen(PVDMFRAME pFrame)
 {
-    PFILEIOOPEN16   parg16;
+    PWOWFILEOPEN16  parg16;
     HANDLE          hFile;
     ULONG           ul;
     SHORT           iDosHandle;
@@ -1379,11 +1430,15 @@ ULONG FASTCALL WK32FileOpen(PVDMFRAME pFrame)
     PHMAPPEDFILEALIAS pTempCache;
     PTD             ptd;
 
+    PWCH    pwch;
+    BOOL    first = TRUE;
+    UNICODE_STRING UniFile;
+
     //
     // Get arguments.
     //
 
-    GETARGPTR(pFrame, sizeof(FILEIOOPEN16), parg16);
+    GETARGPTR(pFrame, sizeof(*parg16), parg16);
     pszPath = SEGPTR(FETCHWORD(parg16->pszPathSegment),
                      FETCHWORD(parg16->pszPathOffset));
     wAccess = FETCHWORD(parg16->wAccess);
@@ -1427,11 +1482,13 @@ ULONG FASTCALL WK32FileOpen(PVDMFRAME pFrame)
         goto Done;
     }
 
+    if (Dos_Flag_Addr && (*Dos_Flag_Addr & DOS_FLAG_EXEC_OPEN)) {
+        dwWinAccess |= GENERIC_EXECUTE;
+    }
+
     tmp = wAccess&0x70;
     dwWinShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
-    if (tmp == 0) {
-        dwWinShareMode |=  FILE_SHARE_DELETE;
-    } else if (tmp == 0x10) {
+    if (tmp == 0x10) {
         dwWinShareMode = 0;
     } else if (tmp == 0x20) {
         dwWinShareMode = FILE_SHARE_READ;
@@ -1468,47 +1525,114 @@ ULONG FASTCALL WK32FileOpen(PVDMFRAME pFrame)
         if ((dwWinShareMode == 0) &&
             ((ptd = CURRENTPTD())->dwWOWCompatFlagsEx & WOWCFEX_SAMETASKFILESHARE) &&
             (IsCdRomFile(lpFileName)) &&
-            (!_stricmp(pszPath, "install.txt"))) {
+            (!WOW32_stricmp(pszPath, "install.txt"))) {
             dwWinShareMode = FILE_SHARE_READ;
         }
 
         hFile = CreateFileOem(lpFileName,
                               dwWinAccess,
-                              dwWinShareMode,
+                              dwWinShareMode | FILE_SHARE_DELETE,
                               NULL,
                               OPEN_EXISTING,
                               ItsANamedPipe ? FILE_FLAG_OVERLAPPED : 0,
-                              INVALID_HANDLE_VALUE
+                              NULL
                               );
 
         // If the open failed, includes a request for WRITE, and was to
         // a CD-ROM then try again without the write request.  Since
         // this is how DOS does it.
 
-        if (hFile == INVALID_HANDLE_VALUE &&
-            dwWinAccess&GENERIC_WRITE &&
-            !ItsANamedPipe           &&
-            IsCdRomFile(lpFileName)) {
+        if (hFile == INVALID_HANDLE_VALUE) {
 
-            dwWinAccess &= ~GENERIC_WRITE;
+            if (dwWinAccess&GENERIC_WRITE &&
+                !ItsANamedPipe           &&
+                IsCdRomFile(lpFileName)) {
 
-            hFile = CreateFileOem(lpFileName,
-                                  dwWinAccess,
-                                  dwWinShareMode,
-                                  NULL,
-                                  OPEN_EXISTING,
-                                  ItsANamedPipe ? FILE_FLAG_OVERLAPPED : 0,
-                                  INVALID_HANDLE_VALUE
-                                  );
+                dwWinAccess &= ~GENERIC_WRITE;
+
+                hFile = CreateFileOem(lpFileName,
+                                      dwWinAccess,
+                                      dwWinShareMode | FILE_SHARE_DELETE,
+                                      NULL,
+                                      OPEN_EXISTING,
+                                      ItsANamedPipe ? FILE_FLAG_OVERLAPPED : 0,
+                                      NULL
+                                      );
+            }
+            // See if they are trying to open a .ini file, and if it doesn't exist,
+            // copy it to the user's home dir from the system dir
+            
+            else if (
+            // FIXME: Enable the following when we are ready.
+            //else if ((gpfnTermsrvCORIniFile != NULL) &&
+                     WOW32_strstr(lpFileName,".INI")) {
+                pwch = malloc_w((MAX_PATH + 1)*sizeof(WCHAR));
+                if (pwch) {
+
+                    UniFile.Buffer = pwch;
+                    UniFile.MaximumLength = (MAX_PATH+1)*sizeof(WCHAR);
+                    RtlMultiByteToUnicodeN(pwch,
+                                           (MAX_PATH+1)*sizeof(WCHAR),
+                                           NULL,
+                                           lpFileName,
+                                           strlen(lpFileName) + 1);
+
+
+                    if (RtlDosPathNameToNtPathName_U(pwch,
+                                                     &UniFile,
+                                                     NULL,
+                                                     NULL)) {
+
+                        // FIXME: Enable the following when we are ready.
+                        //gpfnTermsrvCORIniFile(&UniFile);
+                        RtlFreeHeap(RtlProcessHeap(), 0, UniFile.Buffer);
+                        hFile = CreateFileOem(lpFileName,
+                                              dwWinAccess,
+                                              dwWinShareMode,
+                                              NULL,
+                                              OPEN_EXISTING,
+                                              0,
+                                              INVALID_HANDLE_VALUE
+                                              );
+                    }
+                    free_w(pwch);
+                }
+            }
+            else {
+
+                 // If all attempts to open the file failed, it might be one of the
+                 // 9x special path, so try mapping it to NT special path
+                 // i.e. c:\winnt\startm~1 becomes c:\docume~1\alluse~1\startm~1
+
+                 UCHAR szMappedPath[MAX_PATH];
+
+                 if(!ItsANamedPipe && W32Map9xSpecialPath(lpFileName,szMappedPath,sizeof(szMappedPath))){
+
+                    lpFileName=&szMappedPath[0];
+
+                    hFile = CreateFileOem(lpFileName,
+                                          dwWinAccess,
+                                          dwWinShareMode | FILE_SHARE_DELETE,
+                                          NULL,
+                                          OPEN_EXISTING,
+                                          0,
+                                          NULL
+                                          );
+                 }
+            }
         }
+
     } else {
         hFile = INVALID_HANDLE_VALUE;
+        if (GetLastError() != ERROR_ACCESS_DENIED) {
+            SetLastError(ERROR_FILE_NOT_FOUND);
+        }
         SetLastError(ERROR_FILE_NOT_FOUND);
     }
 
     if (hFile == INVALID_HANDLE_VALUE) {
         ul = GetLastError() | 0xFFFF0000;
-        LOGDEBUG(fileoclevel,("WK32FileOpen: %s  mode:%02X failed error %d\n",pszPath, wAccess, GetLastError()));
+        LOGDEBUG(fileoclevel,("WK32WOWFileOpen: %s  mode:%02X failed error %d\n",pszPath, wAccess, GetLastError()));
         FREEARGPTR(parg16);
         if (ItsANamedPipe) {
             LocalFree(lpFileName);
@@ -1525,7 +1649,7 @@ ULONG FASTCALL WK32FileOpen(PVDMFRAME pFrame)
         VrAddOpenNamedPipeInfo(hFile, lpFileName);
     }
 
-    LOGDEBUG(fileoclevel,("WK32FileOpen: %s hFile:%08X fh:%04X mode:%02X\n",pszPath, hFile,(WORD)iDosHandle,wAccess));
+    LOGDEBUG(fileoclevel,("WK32WOWFileOpen: %s hFile:%08X fh:%04X mode:%02X\n",pszPath, hFile,(WORD)iDosHandle,wAccess));
 
     // Be defensive.   If the app has managed to close the file via DOSEmulation
     // then we need to make sure we don't have the old file handle in our cache.
@@ -1549,6 +1673,13 @@ ULONG FASTCALL WK32FileOpen(PVDMFRAME pFrame)
 
     VDDAssociateNtHandle(pSft, hFile, wAccess);
 
+    //
+    // Set the SFT flags appropriately for an open file
+    //
+    if (IsCharAlpha(lpFileName[0]) && (':' == lpFileName[1])) {
+        UCHAR ch = toupper(lpFileName[0]) - 'A';
+        pSft->SFT_Flags = (USHORT)(ch) | (pSft->SFT_Flags & 0xff00);
+    }
 
     FREEARGPTR(parg16);
 
@@ -1564,7 +1695,7 @@ Done:
 }
 
 
-/* WK32FileCreate - Create a file
+/* WK32WOWFileCreate - Create a file
  *
  *
  * Entry - pszPath  Path of file to create
@@ -1580,7 +1711,7 @@ Done:
  *
  */
 
-ULONG FASTCALL WK32FileCreate(PVDMFRAME pFrame)
+ULONG FASTCALL WK32WOWFileCreate(PVDMFRAME pFrame)
 {
     PWOWFILECREATE16 parg16;
     HANDLE          hFile;
@@ -1593,6 +1724,7 @@ ULONG FASTCALL WK32FileCreate(PVDMFRAME pFrame)
     ULONG           attributes;
     BOOL            ItsANamedPipe = FALSE;
     PTD             ptd;
+    BOOL            bFirstTry = TRUE;
 
     //
     // Get arguments.
@@ -1638,14 +1770,32 @@ ULONG FASTCALL WK32FileCreate(PVDMFRAME pFrame)
                                   &ItsANamedPipe);
 
     if (lpFileName) {
+Try_Create:
         hFile = CreateFileOem(lpFileName,
                               GENERIC_READ | GENERIC_WRITE,
                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                               NULL,
                               CREATE_ALWAYS,
                               ItsANamedPipe ? attributes | FILE_FLAG_OVERLAPPED : attributes,
-                              INVALID_HANDLE_VALUE
+                              NULL
                               );
+
+        if ((hFile == INVALID_HANDLE_VALUE) &&
+            (bFirstTry) &&
+            (GetLastError() == ERROR_USER_MAPPED_FILE)) {
+
+            // Some Windows Install Programs try to overwrite a .FON font file
+            // during installation - without calling RemoveFontResource();
+            // If the font is in GDI32's cache the create will fail.
+
+            if (RemoveFontResourceOem(lpFileName)) {
+                LOGDEBUG(0,("WK32FileCreate: RemoveFontResource on %s \n", lpFileName));
+                SendMessage(HWND_BROADCAST, WM_FONTCHANGE, 0, 0);
+            }
+
+            bFirstTry = FALSE;
+            goto Try_Create;
+        }
 
     } else {
         hFile = INVALID_HANDLE_VALUE;
@@ -1653,7 +1803,7 @@ ULONG FASTCALL WK32FileCreate(PVDMFRAME pFrame)
     }
 
     if (hFile == INVALID_HANDLE_VALUE) {
-        LOGDEBUG(fileoclevel,("WK32FileCreate: %s failed error %d\n",pszPath, GetLastError()));
+        LOGDEBUG(fileoclevel,("WK32WOWFileCreate: %s failed error %d\n",pszPath, GetLastError()));
         if (ItsANamedPipe) {
             LocalFree(lpFileName);
         }
@@ -1704,10 +1854,11 @@ ULONG FASTCALL WK32FileCreate(PVDMFRAME pFrame)
         if ((ptd = CURRENTPTD())->dwWOWCompatFlagsEx & WOWCFEX_RESTOREEXPLORER) {
 
             char szLowerPath[MAX_PATH];
-            strcpy(szLowerPath, pszPath);
-            _strlwr(szLowerPath);
+            strncpy(szLowerPath, pszPath, MAX_PATH);
+            szLowerPath[MAX_PATH-1] = '\0';
+            WOW32_strlwr(szLowerPath);
 
-            if (strstr(szLowerPath, szSystemDotIni)) {
+            if (WOW32_strstr(szLowerPath, szSystemDotIni)) {
                 if (IsModuleSymantecInstall(ptd->hMod16)) {
                     WritePrivateProfileString(szBoot, szShell, szExplorerDotExe, szSystemDotIni);
                     LOGDEBUG(LOG_ALWAYS, ("Restored shell=Explorer.exe for Symantec Install hack.\n"));
@@ -1718,13 +1869,21 @@ ULONG FASTCALL WK32FileCreate(PVDMFRAME pFrame)
 
     FREEARGPTR(parg16);
 
-    LOGDEBUG(fileoclevel,("WK32FileCreate: %s hFile:%08X fh:%04X\n",pszPath, hFile,(WORD)iDosHandle));
+    LOGDEBUG(fileoclevel,("WK32WOWFileCreate: %s hFile:%08X fh:%04X\n",pszPath, hFile,(WORD)iDosHandle));
 
     //
     // Fill in the SFT.
     //
 
     VDDAssociateNtHandle(pSft, hFile, 2);
+
+    //
+    // Set the SFT flags appropriately for an open file
+    //
+    if (IsCharAlpha(lpFileName[0]) && (':' == lpFileName[1])) {
+        UCHAR ch = toupper(lpFileName[0]) - 'A';
+        pSft->SFT_Flags = (USHORT)(ch) | (pSft->SFT_Flags & 0xff00);
+    }
 
     if (ItsANamedPipe) {
         LocalFree(lpFileName);
@@ -1738,7 +1897,7 @@ Done:
 }
 
 
-/* WK32FileClose - Close a file
+/* WK32WOWFileClose - Close a file
  *
  *
  * Entry - hFile    Handle of file to close
@@ -1753,15 +1912,15 @@ Done:
  *
  */
 
-ULONG FASTCALL WK32FileClose(PVDMFRAME pFrame)
+ULONG FASTCALL WK32WOWFileClose(PVDMFRAME pFrame)
 {
-    PFILEIOCLOSE16  parg16;
+    PWOWFILECLOSE16 parg16;
     PBYTE           pJFT;
     HANDLE          Handle;
     PDOSSFT         pSFT;
     ULONG           ul;
 
-    GETARGPTR(pFrame, sizeof(FILEIOCLOSE16), parg16);
+    GETARGPTR(pFrame, sizeof(*parg16), parg16);
 
     Handle = VDDRetrieveNtHandle(0, (SHORT) parg16->hFile, (PVOID *)&pSFT, &pJFT);
 
@@ -1790,9 +1949,9 @@ ULONG FASTCALL WK32FileClose(PVDMFRAME pFrame)
     if (!pSFT->SFT_Ref_Count) {
 
         FREEMAPFILECACHE(Handle);
-        LOGDEBUG(fileoclevel,("WK32FileClose: Close Handle:%X fh32:%X\n", parg16->hFile, Handle));
+        LOGDEBUG(fileoclevel,("WK32WOWFileClose: Close Handle:%X fh32:%X\n", parg16->hFile, Handle));
 
-        if (!CloseHandle(Handle)) {
+        if (!DPM_CloseHandle(Handle)) {
             ul = GetLastError() | 0xFFFF0000;
             goto Cleanup;
         }
@@ -1815,7 +1974,7 @@ Cleanup:
 }
 
 
-/* WK32FileGetAttributes - Get file attributes
+/* WK32WOWFileGetAttributes - Get file attributes
  *
  *
  * Entry - pszPath      File to get attributes from
@@ -1829,14 +1988,18 @@ Cleanup:
  *
  */
 
-ULONG FASTCALL WK32FileGetAttributes(PVDMFRAME pFrame)
+ULONG FASTCALL WK32WOWFileGetAttributes(PVDMFRAME pFrame)
 {
-    PFILEIOGETATTRIBUTES16  parg16;
+    PWOWFILEGETATTRIBUTES16 parg16;
     PSTR                    pszPath, lpFileName;
     ULONG                   attributes, l;
-    BOOL                    ItsANamedPipe;
+    BOOL                    ItsANamedPipe = FALSE;
+    PWCH    pwch;
+    BOOL    first = TRUE;
+    UNICODE_STRING UniFile;
 
-    GETARGPTR(pFrame, sizeof(FILEIOGETATTRIBUTES16), parg16);
+
+    GETARGPTR(pFrame, sizeof(*parg16), parg16);
 
     pszPath = SEGPTR(FETCHWORD(parg16->pszPathSegment),
                      FETCHWORD(parg16->pszPathOffset));
@@ -1849,7 +2012,35 @@ ULONG FASTCALL WK32FileGetAttributes(PVDMFRAME pFrame)
                                       (WORD) (*(PUCHAR)DosWowData.lpCurDrv),
                                       &ItsANamedPipe)) {
 
-        attributes = GetFileAttributesOem(lpFileName);
+        attributes = GetFileAttributesOemSys(lpFileName, FALSE);
+
+        // See if they are trying to chmod a .ini file, and if so see if we
+        // should copy it to the user's home dir
+        // FIXME: Enable the following when we are ready.
+        if ((attributes == 0xffffffff) && WOW32_strstr(lpFileName,".INI")) {
+        //if ((gpfnTermsrvCORIniFile != NULL) && (attributes == 0xffffffff) && WOW32_strstr(lpFileName,".INI")) {
+            pwch = malloc_w((MAX_PATH + 1)*sizeof(WCHAR));
+            if (pwch) {
+                UniFile.Buffer = pwch;
+                UniFile.MaximumLength = (MAX_PATH+1)*sizeof(WCHAR);
+                RtlMultiByteToUnicodeN(pwch,
+                                       (MAX_PATH+1)*sizeof(WCHAR),
+                                       NULL,
+                                       lpFileName,
+                                       strlen(lpFileName) + 1);
+                if (RtlDosPathNameToNtPathName_U(pwch,
+                                                 &UniFile,
+                                                 NULL,
+                                                 NULL)) {
+                    // FIXME: Enable the following when we are ready.
+                    //gpfnTermsrvCORIniFile(&UniFile);
+                    RtlFreeHeap(RtlProcessHeap(), 0, UniFile.Buffer);
+                    attributes = GetFileAttributesOemSys(lpFileName, FALSE);
+                }
+                free_w(pwch);
+            }
+        }
+
     } else {
         attributes = 0xFFFFFFFF;
     }
@@ -1876,13 +2067,30 @@ ULONG FASTCALL WK32FileGetAttributes(PVDMFRAME pFrame)
         return (0xFFFF0000 | ERROR_PATH_NOT_FOUND);
     }
 
-    return attributes == FILE_ATTRIBUTE_NORMAL
-                      ? 0
-                      : (attributes & DOS_ATTR_MASK);
+    if (attributes == FILE_ATTRIBUTE_NORMAL)
+        attributes = 0;
+    else
+        attributes &= DOS_ATTR_MASK;
+
+    // SudeepB - 28-Jul-1997
+    //
+    // For CDFS, Win3.1/DOS/Win95, only return FILE_ATTRIBUTE_DIRECTORY (10)
+    // for directories while WinNT returns
+    // FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_READONLY (11).
+    // Some VB controls that app setups use, depend on getting
+    // FILE_ATTRIBUTE_DIRECTORY (10) only or otherwise are broken.
+    // An example of this is Cliffs StudyWare series.
+
+    if (attributes == (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_READONLY)) {
+        if(IsCdRomFile(lpFileName))
+            attributes = FILE_ATTRIBUTE_DIRECTORY;
+    }
+
+    return attributes;
 }
 
 
-/* WK32FileSetAttributes - Set file attributes
+/* WK32WOWFileSetAttributes - Set file attributes
  *
  *
  * Entry - pszPath      File to get attributes from
@@ -1896,12 +2104,12 @@ ULONG FASTCALL WK32FileGetAttributes(PVDMFRAME pFrame)
  *
  */
 
-ULONG FASTCALL WK32FileSetAttributes(PVDMFRAME pFrame)
+ULONG FASTCALL WK32WOWFileSetAttributes(PVDMFRAME pFrame)
 {
     PWOWFILESETATTRIBUTES16 parg16;
     PSTR                    pszPath, lpFileName;
     ULONG                   attributes, l, dwReturn;
-    BOOL                    ItsANamedPipe;
+    BOOL                    ItsANamedPipe = FALSE;
 
     GETARGPTR(pFrame, sizeof(WOWFILESETATTRIBUTES16), parg16);
 
@@ -1934,7 +2142,7 @@ ULONG FASTCALL WK32FileSetAttributes(PVDMFRAME pFrame)
 
         attributes &= DOS_ATTR_MASK;
 
-        if (SetFileAttributesOem(lpFileName, attributes)) {
+        if (SetFileAttributesOemSys(lpFileName, attributes, FALSE)) {
             dwReturn = 0;
         } else {
             dwReturn = 0xFFFF0000 | GetLastError();
@@ -1949,7 +2157,7 @@ ULONG FASTCALL WK32FileSetAttributes(PVDMFRAME pFrame)
 }
 
 
-/* WK32FileGetDateTime - Get file date and time
+/* WK32WOWFileGetDateTime - Get file date and time
  *
  *
  * Entry - fh       DOS file handle
@@ -1963,31 +2171,31 @@ ULONG FASTCALL WK32FileSetAttributes(PVDMFRAME pFrame)
  *
  */
 
-ULONG FASTCALL WK32FileGetDateTime(PVDMFRAME pFrame)
+
+// this function lives in ntvdm.exe
+// see demlfn.c for details
+extern ULONG demGetFileTimeByHandle_WOW(HANDLE);
+
+ULONG FASTCALL WK32WOWFileGetDateTime(PVDMFRAME pFrame)
 {
-    PFILEIOGETDATETIME16    parg16;
+    PWOWFILEGETDATETIME16   parg16;
     HANDLE                  Handle;
-    FILETIME                LastWriteTime, LocalTime;
-    USHORT                  wDate, wTime;
+    PDOSSFT                 pSFT;
 
-    GETARGPTR(pFrame, sizeof(FILEIOGETDATETIME16), parg16);
+    GETARGPTR(pFrame, sizeof(*parg16), parg16);
 
-    Handle = VDDRetrieveNtHandle(0, (SHORT) parg16->fh, NULL, NULL);
+    Handle = VDDRetrieveNtHandle(0, (SHORT) parg16->fh, (PVOID *)&pSFT, NULL);
 
     FREEARGPTR(parg16);
 
-    if (!Handle ||
-        !GetFileTime(Handle, NULL, NULL, &LastWriteTime) ||
-        !FileTimeToLocalFileTime(&LastWriteTime, &LocalTime) ||
-        !FileTimeToDosDateTime(&LocalTime, &wDate, &wTime)) {
-
+    if (!Handle || (pSFT->SFT_Flags & 0x80)) {     // Let DOS handle device handles.
         return 0xFFFF;
     }
 
-    return (wTime | ((ULONG) wDate << 16));
+    return(demGetFileTimeByHandle_WOW(Handle));
 }
 
-/* WK32FileSetDateTime - Set file date and time
+/* WK32WOWFileSetDateTime - Set file date and time
  *
  *
  * Entry - fh       DOS file handle
@@ -2003,16 +2211,17 @@ ULONG FASTCALL WK32FileGetDateTime(PVDMFRAME pFrame)
  *
  */
 
-ULONG FASTCALL WK32FileSetDateTime(PVDMFRAME pFrame)
+ULONG FASTCALL WK32WOWFileSetDateTime(PVDMFRAME pFrame)
 {
     PWOWFILESETDATETIME16   parg16;
     HANDLE                  Handle;
     FILETIME                LastWriteTime, LocalTime;
     USHORT                  wDate, wTime;
+    PDOSSFT                 pSFT;
 
     GETARGPTR(pFrame, sizeof(WOWFILESETDATETIME16), parg16);
 
-    Handle = VDDRetrieveNtHandle(0, (SHORT) parg16->fh, NULL, NULL);
+    Handle = VDDRetrieveNtHandle(0, (SHORT) parg16->fh, (PVOID *)&pSFT, NULL);
 
     wDate = FETCHWORD(parg16->date);
     wTime = FETCHWORD(parg16->time);
@@ -2020,6 +2229,7 @@ ULONG FASTCALL WK32FileSetDateTime(PVDMFRAME pFrame)
     FREEARGPTR(parg16);
 
     if (!Handle ||
+        (pSFT->SFT_Flags & 0x80) ||      // Let DOS handle device handles.
         !DosDateTimeToFileTime(wDate, wTime, &LocalTime) ||
         !LocalFileTimeToFileTime(&LocalTime, &LastWriteTime) ||
         !SetFileTime(Handle, NULL, NULL, &LastWriteTime)) {
@@ -2031,7 +2241,7 @@ ULONG FASTCALL WK32FileSetDateTime(PVDMFRAME pFrame)
 }
 
 
-/* WK32FileLock - Locks or unlocks file data
+/* WK32WOWFileLock - Locks or unlocks file data
  *
  *
  * Entry - fh               DOS file handle
@@ -2048,17 +2258,23 @@ ULONG FASTCALL WK32FileSetDateTime(PVDMFRAME pFrame)
  *
  */
 
-ULONG FASTCALL WK32FileLock(PVDMFRAME pFrame)
+ULONG FASTCALL WK32WOWFileLock(PVDMFRAME pFrame)
 {
-    PFILEIOLOCK16   parg16;
+    PWOWFILELOCK16   parg16;
     HANDLE          Handle;
     UCHAR           al;
     DWORD           cbOffset;
     DWORD           cbLength;
+    PDOSSFT         pSFT;
 
-    GETARGPTR(pFrame, sizeof(FILEIOLOCK16), parg16);
+    GETARGPTR(pFrame, sizeof(*parg16), parg16);
 
-    Handle = VDDRetrieveNtHandle(0, (SHORT) parg16->fh, NULL, NULL);
+    Handle = VDDRetrieveNtHandle(0, (SHORT) parg16->fh, (PVOID *)&pSFT, NULL);
+
+    if (pSFT->SFT_Flags & 0x80) {   // Is this a device handle?
+        FREEARGPTR(parg16);             // Let DOS handle device handles.
+        return 0xffffffff;              // kernel QuickLock passes to DOS
+    }                                   // after any error except 21 (dx=ffff, ax!=21)
 
     al = FETCHWORD(parg16->ax) & 0xFF;
     cbOffset = FETCHDWORD(parg16->cbRegionOffset);
@@ -2072,12 +2288,12 @@ ULONG FASTCALL WK32FileLock(PVDMFRAME pFrame)
 
     if (al == 0) { // lock
 
-        if (!LockFile(Handle, cbOffset, 0, cbLength, 0)) {
+        if (!DPM_LockFile(Handle, cbOffset, 0, cbLength, 0)) {
             return (0xFFFF0000 | GetLastError());
         }
     } else if (al == 1) { // unlock
 
-        if (!UnlockFile(Handle, cbOffset, 0, cbLength, 0)) {
+        if (!DPM_UnlockFile(Handle, cbOffset, 0, cbLength, 0)) {
             return (0xFFFF0000 | GetLastError());
         }
     } else { // bad parameter
@@ -2088,7 +2304,7 @@ ULONG FASTCALL WK32FileLock(PVDMFRAME pFrame)
 }
 
 
-/* WK32FileFindFirst - Path-Style Find First File
+/* WK32WOWFindFirst - Path-Style Find First File
  *
  * Entry - lpDTA            pointer to app's DTA
  *         lpFile           sz to path
@@ -2103,7 +2319,12 @@ ULONG FASTCALL WK32FileLock(PVDMFRAME pFrame)
  *
  */
 
-ULONG FASTCALL WK32FileFindFirst(PVDMFRAME pFrame)
+// this function (sitting in DEMLFN.C) checks to see if the path name
+// passed as a parameter is a SHORT path name, never mind it's existance
+extern BOOL demIsShortPathName(LPSTR, BOOL);
+
+
+ULONG FASTCALL WK32WOWFindFirst(PVDMFRAME pFrame)
 {
     PWOWFINDFIRST16   parg16;
     USHORT usSearchAttr;
@@ -2135,12 +2356,33 @@ ULONG FASTCALL WK32FileFindFirst(PVDMFRAME pFrame)
     //
     ExpandName = ExpandDosPath (pFile);
 
+    if (NULL != ExpandName && !demIsShortPathName(ExpandName, TRUE)) {
+       ExpandName = NULL;
+       SetLastError(ERROR_INVALID_NAME);
+    }
+
+
 
     //
     // invoke dem to do the search
     //
     if (ExpandName) {
-        dwRet = demFileFindFirst (pDTA, ExpandName, usSearchAttr);
+
+        // return NO_MORE_FILES for quicktime install etc that barf on
+        // big directory or filenames that are longer than 64 bytes
+        // the magic number 50 is calculated from 64 - 12 (for 8.3) - 1 (backslash) -1
+        // (terminating zero)
+
+        LOGDEBUG(fileoclevel,("WK32WOWFindFirst: StrLen: %X\n", strlen(ExpandName)));
+
+        if ( (CURRENTPTD()->dwWOWCompatFlagsEx & WOWCFEX_LIMITFINDFIRSTLEN) &&
+             (strlen(ExpandName) > 50)) {
+              dwRet = -1;
+              SetLastError(ERROR_NO_MORE_FILES);
+        }
+        else {
+             dwRet = demFileFindFirst (pDTA, ExpandName, usSearchAttr);
+        }
     } else {
         dwRet = (DWORD)-1;
     }
@@ -2162,7 +2404,7 @@ ULONG FASTCALL WK32FileFindFirst(PVDMFRAME pFrame)
 }
 
 
-/* WK32FileFindNext - Path-Style Find Next File
+/* WK32WOWFindNext - Path-Style Find Next File
  *
  * Entry - lpDTA            pointer to app's DTA
  *
@@ -2174,7 +2416,7 @@ ULONG FASTCALL WK32FileFindFirst(PVDMFRAME pFrame)
  *       system status code
  *
  */
-ULONG FASTCALL WK32FileFindNext(PVDMFRAME pFrame)
+ULONG FASTCALL WK32WOWFindNext(PVDMFRAME pFrame)
 {
     PWOWFINDNEXT16   parg16;
     PVOID pDTA;
@@ -2198,17 +2440,128 @@ ULONG FASTCALL WK32FileFindNext(PVDMFRAME pFrame)
 
 BOOL FASTCALL IsModuleSymantecInstall(HAND16 hMod16)
 {
-    VPVOID vpFilename;
+    VPVOID vpFilename = 0;
     PSZ    pszFilename;
     CHAR   szName[32];
     CHAR   szVersion[16];
+    BOOL   bRet;
 
-    return (
-        (vpFilename = stackalloc16(MAX_PATH)) &&
-        GetModuleFileName16(hMod16, vpFilename, MAX_PATH) &&
-        (pszFilename = GetPModeVDMPointer(vpFilename, MAX_PATH)) &&
-        WowGetProductNameVersion(pszFilename, szName, sizeof szName, szVersion, sizeof szVersion) &&
-        ! _stricmp(szName, "Symantec Install for Windows") &&
-        RtlEqualMemory(szVersion, "3.1.0.", 6)
-        );
+    // be sure stackalloc16() size matches stackfree16() size below
+    bRet = ((vpFilename = stackalloc16(MAX_PATH)) &&
+            GetModuleFileName16(hMod16, vpFilename, MAX_PATH) &&
+            (pszFilename = GetPModeVDMPointer(vpFilename, MAX_PATH)) &&
+            WowGetProductNameVersion(pszFilename, szName, sizeof szName, szVersion, sizeof szVersion, NULL, NULL, 0) &&
+            ! WOW32_stricmp(szName, "Symantec Install for Windows") &&
+            RtlEqualMemory(szVersion, "3.1.0.", 6));
+
+    if(vpFilename) {
+        stackfree16(vpFilename, MAX_PATH);
+    }
+
+    return (bRet);
 }
+
+//
+// these 3 functions are located in dos/dem/demlfn.c and exported
+// out of ntvdm.exe
+//
+extern ULONG demWOWLFNAllocateSearchHandle(HANDLE hFind);
+extern HANDLE demWOWLFNGetSearchHandle(USHORT DosHandle);
+extern BOOL demWOWLFNCloseSearchHandle(USHORT DosHandle);
+
+ULONG FASTCALL WK32FindFirstFile(PVDMFRAME pFrame)
+{
+   // locate the handle which is a dword and a ptr to win32_find_data
+   // which is a dword too. The handle's valid part is a low word
+   // To avoid extra calls we check if the hi word of a handle is 0
+   // is it is -- then it's 16-bit handle and we retrieve 32-bit handle
+   // from DEMLFN
+
+   PFINDFIRSTFILE16 parg16;
+   WIN32_FIND_DATA UNALIGNED* pFindData16;
+   WIN32_FIND_DATA FindData32;
+   HANDLE hFind;
+   PSTR pszSearchFile;
+   ULONG DosHandle = (ULONG)INVALID_HANDLE_VALUE;
+
+   GETARGPTR(pFrame, sizeof(FINDFIRSTFILE16), parg16);
+
+   GETPSZPTR(parg16->lpszSearchFile, pszSearchFile);
+   GETVDMPTR(parg16->lpFindData, sizeof(WIN32_FIND_DATA), pFindData16);
+
+   hFind = DPM_FindFirstFile(pszSearchFile, &FindData32);
+   if (INVALID_HANDLE_VALUE != hFind) {
+      // copy FindData into 16-bit land. Keep in mind that if we do a copy
+      // of sizeof(WIN32_FIND_DATA) we may be writing over user's memory
+      // since the size of a structure is not the same in 16-bit code!
+      RtlCopyMemory(pFindData16,
+                    &FindData32,
+                    sizeof(DWORD)+       // dwFileAttributes
+                    sizeof(FILETIME)*3 + // FILETIME stuff
+                    sizeof(DWORD)*3 +    // FileSize Low and High
+                    sizeof(DWORD)*2 +    // dwReserved 0/1
+                    sizeof(FindData32.cFileName) +
+                    sizeof(FindData32.cAlternateFileName));
+
+
+      // and now map the handle
+
+      DosHandle = demWOWLFNAllocateSearchHandle(hFind);
+   }
+
+
+   FREEVDMPTR(pFindData16);
+   FREEPSZPTR(pszSearchFile);
+   FREEARGPTR(parg16);
+
+   return(DosHandle);
+}
+
+ULONG FASTCALL WK32FindNextFile(PVDMFRAME pFrame)
+{
+   PFINDNEXTFILE16 parg16;
+   WIN32_FIND_DATA UNALIGNED* pFindData16;
+   WIN32_FIND_DATA FindData32;
+   HANDLE hFindFile;
+   ULONG DosHandle;
+   BOOL bSuccess;
+
+   GETARGPTR(pFrame, sizeof(FINDNEXTFILE16), parg16);
+   DosHandle = FETCHDWORD(parg16->hFindFile);
+   GETVDMPTR(parg16->lpFindData, sizeof(WIN32_FIND_DATA), pFindData16);
+
+   hFindFile = demWOWLFNGetSearchHandle((USHORT)DosHandle);
+   bSuccess = DPM_FindNextFile(hFindFile, &FindData32);
+   if (bSuccess) {
+      RtlCopyMemory(pFindData16,
+                    &FindData32,
+                    sizeof(DWORD)+       // dwFileAttributes
+                    sizeof(FILETIME)*3 + // FILETIME stuff
+                    sizeof(DWORD)*3 +    // FileSize Low and High
+                    sizeof(DWORD)*2 +    // dwReserved 0/1
+                    sizeof(FindData32.cFileName) +
+                    sizeof(FindData32.cAlternateFileName));
+   }
+
+   FREEVDMPTR(pFindData16);
+   FREEARGPTR(parg16);
+
+   return((ULONG)bSuccess);
+}
+
+
+ULONG FASTCALL WK32FindClose(PVDMFRAME pFrame)
+{
+   PFINDCLOSE16 parg16;
+   ULONG DosHandle;
+
+   GETARGPTR(pFrame, sizeof(FINDCLOSE16), parg16);
+   DosHandle = FETCHDWORD(parg16->hFindFile);
+   FREEARGPTR(parg16);
+
+   // this also closes the real search handle via FindClose
+   return ((ULONG)demWOWLFNCloseSearchHandle((USHORT)DosHandle));
+
+}
+
+

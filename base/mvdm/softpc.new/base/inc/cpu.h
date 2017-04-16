@@ -2,9 +2,9 @@
 /*
  * SoftPC Revision 3.0
  *
- * Title	: Definitions for the CPU 
+ * Title	: Definitions for the CPU
  *
- * Description	: Structures, macros and definitions for access to the 
+ * Description	: Structures, macros and definitions for access to the
  *		  CPU registers
  *
  * Author	: Henry Nash
@@ -119,7 +119,7 @@ IMPORT half_word c_getAH	IPT0();
 IMPORT half_word c_getCH	IPT0();
 IMPORT half_word c_getDH	IPT0();
 IMPORT half_word c_getBH	IPT0();
-   
+
 IMPORT void c_setAL	IPT1(half_word, val);
 IMPORT void c_setCL	IPT1(half_word, val);
 IMPORT void c_setDL	IPT1(half_word, val);
@@ -948,6 +948,15 @@ IMPORT VOID		a3_p_setTR_LIMIT();
 #define setTR_LIMIT	a3_p_setTR_LIMIT
 
 #endif /* CPU_PRIVATE */
+#else
+extern IU8  getIOPL();
+extern IBOOL getNT();
+extern IBOOL getTS();
+extern IBOOL getEM();
+extern IBOOL getMP();
+extern word getCPL();
+extern IU32 getEFLAGS();
+extern IU32 getFLAGS();
 
 #endif /* A3CPU */
 
@@ -981,7 +990,7 @@ extern  void            (*(b_move_ptrs[]))();
 extern  void            (*(w_move_ptrs[]))();
 #endif /* EGATEST */
 extern  half_word       *haddr_of_src_string;
- 
+
 /*
  * ============================================================================
  * Structure/Data definitions
@@ -991,7 +1000,7 @@ extern  half_word       *haddr_of_src_string;
 /*
  * The cpu opcode sliding frame
  */
- 
+
 #ifdef BACK_M
 typedef struct
 {
@@ -1025,18 +1034,18 @@ typedef struct
                 signed_char FOURTH_BYTE;
 }  SIGNED_OPCODE_FRAME;
 #endif /* BACK_M */
- 
+
 /*
  * The new ICA uses the following for H/W ints:
  */
- 
+
 #define CPU_HW_INT		0
 #define CPU_HW_INT_MASK		(1 << CPU_HW_INT)
 
 /*
  * CPU software interrupt definitions
  */
- 
+
 #define CPU_SW_INT              8
 #define CPU_SW_INT_MASK         (1 << CPU_SW_INT)
 
@@ -1051,7 +1060,7 @@ extern OPCODE_FRAME *opcode_frame;	/* C CPU and dasm only		    */
 /*
  * External declarations for the 80286 registers
  */
- 
+
 extern reg A;           /* Accumulator          */
 extern reg B;           /* Base                 */
 extern reg C;           /* Count                */
@@ -1065,7 +1074,7 @@ extern reg CS;          /* Code Segment         */
 extern reg DS;          /* Data Segment         */
 extern reg SS;          /* Stack Segment        */
 extern reg ES;          /* Extra Segment        */
- 
+
 /*
  * External function declarations. These may be defined to other things.
  */
@@ -1128,9 +1137,9 @@ struct DESC_TABLE
 };
 
 #define CPU_SIGALRM_EXCEPTION           15              /* SIGALRM signal
-*/           
+*/
 #define CPU_SIGALRM_EXCEPTION_MASK      (1 << CPU_SIGALRM_EXCEPTION)
- 
+
 #define CPU_TRAP_EXCEPTION              11              /* TRAP FLAG
 */
 #define CPU_TRAP_EXCEPTION_MASK         (1 << CPU_TRAP_EXCEPTION)
@@ -1192,7 +1201,7 @@ extern word      SS_limit;
 extern half_word ES_AR;
 extern sys_addr  ES_base;
 extern word      ES_limit;
- 
+
 /* Local Descriptor Table Register (Private) */
 extern sys_addr LDTR_base;  /* Base Address */
 extern word     LDTR_limit; /* Segment 'size' */
@@ -1290,7 +1299,7 @@ extern int ALC_SS;
  * The Machine Status Word structure
  */
 typedef struct
-{ 
+{
      unsigned int :16;
      unsigned int reserved:12;
      unsigned int TS:1;
@@ -1298,11 +1307,11 @@ typedef struct
      unsigned int MP:1;
      unsigned int PE:1;
 } mreg;
- 
+
 extern sys_addr address_line_mask;
 
 extern int       CPL;   /* Current Privilege Level */
- 
+
 /* Global Descriptor Table Register */
 extern sys_addr GDTR_base;  /* Base Address */
 extern word     GDTR_limit; /* Segment 'size' */
@@ -1451,6 +1460,8 @@ extern	ext_load_SS();
 #define setPE(val)		(MSW.PE = (val))
 #define setNT(val)		(STATUS_NT = (val))
 #define setIOPL(val)	(STATUS_IOPL = (val))
+
+#else
 
 #endif	/* getAX - default CCPU register access macros */
 

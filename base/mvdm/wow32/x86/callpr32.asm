@@ -21,7 +21,6 @@
 .386p
 
 include callconv.inc
-;include wow.inc
 
 if DBG
 DEBUG   equ 1
@@ -33,6 +32,8 @@ endif
 ifdef WOWPROFILE
 DEBUG_OR_WOWPROFILE equ 1
 endif
+
+;include wow.inc
 
 _TEXT   SEGMENT PARA PUBLIC 'CODE'
         ASSUME  DS:FLAT, ES:FLAT, SS:FLAT, FS:NOTHING, GS:NOTHING
@@ -74,7 +75,6 @@ _TEXT   SEGMENT
 ;       pfn        procedure to call
 ;       cArgs      count of DWORDs
 ;       pArgs      Argument array
-;       fDestCDECL 1 if 32-bit routine is CDECL
 ;
 ;   Returns:
 ;
@@ -84,30 +84,31 @@ _TEXT   SEGMENT
         assume DS:_DATA,ES:Nothing,SS:_DATA
 ALIGN 16
 cPublicProc _WK32ICallProc32MakeCall,3
+.FPO (0,3,2,2,0,0)                ; 3 params, 2 byte prolog, 2 saved registers
 
         push    edi
         push    esi
 
-pfn     equ     [esp+0Ch]
-cArgs   equ     [esp+10h]
+pfn     equ     [esp+0ch]
+cbArgs  equ     [esp+10h]
 pArgs   equ     [esp+14h]
 
+        mov     ecx,cbArgs
         mov     edx,pfn
-        mov     ecx,cArgs
-        mov     eax,esp                ; Save ESP so routine can trash it
+        mov     edi,esp                ; Save ESP if no args
         or      ecx,ecx
-        mov     ebx,ecx
+        mov     eax,ecx
         jz      DoneArgs
-        shl     ebx,2                  ; convert dwords to bytes
+        shr     ecx,2                  ; convert bytes to dwords
 
-        cld                            ; "push" the arguments
         mov     esi,pArgs
-        sub     esp,ebx                ; parm macros are invalid
+        sub     esp,eax                ; parm macros are invalid
+        cld                            ; "push" the arguments
         mov     edi,esp
         rep movsd
+                                       ; edi is left at correct post-call ESP
 DoneArgs:
 
-        mov     edi,eax                ; Save ESP so routine can trash it
         call    edx
         mov     esp,edi
 

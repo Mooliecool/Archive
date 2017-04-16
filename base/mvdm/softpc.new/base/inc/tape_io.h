@@ -32,6 +32,12 @@
  */
 
 #define	INT15_INVALID			0x86
+#ifdef JAPAN
+#define INT15_GET_BIOS_TYPE		0x49
+#define INT15_KEYBOARD_INTERCEPT	0x4f
+#define INT15_GETSET_FONT_IMAGE		0x50
+#define INT15_EMS_MEMORY_SIZE		512
+#endif // JAPAN
 
 /*
  * Multi-tasking Extensions
@@ -109,3 +115,4 @@
  *	}
  */
 extern	void cassette_io();
+

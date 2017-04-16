@@ -45,12 +45,20 @@
 #define AT_CPU_MOUSE_INT      	HOST_AT_CPU_MOUSE_INT
 #define AT_CPU_MOUSE_ADAPTER	HOST_AT_CPU_MOUSE_ADAPTER
 #define	MOUSE_VEC		HOST_AT_MOUSE_INT_VEC
+#if defined(NEC_98)
+#define CPU_CRTV_INT            2
+#endif // NEC_98
 #define CPU_RS232_SEC_INT   	3
 #define CPU_RS232_PRI_INT   	4
 #define CPU_DISK_INT   		5
 #define CPU_DISKETTE_INT   	6
 #define CPU_PRINTER_INT   	7
- 
+
+#if defined(NEC_98)
+#define CPU_NO_DEVICE          -1
+#define CPU_RS232_THIRD_INT    12
+#endif
+
 /* Different lines for the AT */
 #define CPU_PRINTER2_INT	5
 
@@ -252,4 +260,4 @@ extern void Ica_enable_hooking IPT3(IUM8, line_number,
 extern void Ica_hook_bop IPT1(IUM8, line_number);
 
 #endif /* GISP_CPU */
-
+

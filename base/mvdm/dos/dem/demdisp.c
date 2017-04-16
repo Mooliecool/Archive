@@ -9,11 +9,12 @@
 #include "dem.h"
 #include <stdio.h>
 #include <softpc.h>
+#include <dbgsvc.h>
 
 
 #if DBG
 
-PCHAR	aSVCNames[] = {
+PCHAR   aSVCNames[] = {
      "demChgFilePtr",
      "demChMod",
      "demClose",
@@ -86,7 +87,9 @@ PCHAR	aSVCNames[] = {
      "DemSystemSymbolOp",
      "DemGetDpbList",
      "DemPipeFileDataEOF",
-     "DemPipeFileEOF"
+     "DemPipeFileEOF",
+     "DemLFNEntry",
+     "DemSetDosVarLocation"
 };
 
 #endif   // DBG
@@ -96,79 +99,81 @@ ULONG  CurrentISVC;
 
 
 PFNSVC  apfnSVC [] = {
-     demChgFilePtr,		//SVC_DEMCHGFILEPTR
-     demChMod,			//SVC_DEMCHMOD
-     demClose,			//SVC_DEMCLOSE
-     demCreate,			//SVC_DEMCREATE
-     demCreateDir,		//SVC_DEMCREATEDIR
-     demDelete,			//SVC_DEMDELETE
-     demDeleteDir,		//SVC_DEMDELETEDIR
-     demDeleteFCB,		//SVC_DEMDELETEFCB
-     demFileTimes,		//SVC_DEMFILETIMES
-     demFindFirst,		//SVC_DEMFINDFIRST
-     demFindFirstFCB,		//SVC_DEMFINDFIRSTFCB
-     demFindNext,		//SVC_DEMFINDNEXT
-     demFindNextFCB,		//SVC_DEMFINDNEXTFCB
-     demGetBootDrive,		//SVC_DEMGETBOOTDRIVE
-     demGetDriveFreeSpace,	//SVC_DEMGETDRIVEFREESPACE
-     demGetDrives,		//SVC_DEMGETDRIVES
-     demGSetMediaID,		//SVC_DEMGSETMEDIAID
-     demLoadDos,		//SVC_DEMLOADDOS
-     demOpen,			//SVC_DEMOPEN
-     demQueryCurrentDir,	//SVC_DEMQUERYCURRENTDIR
-     demQueryDate,		//SVC_DEMQUERYDATE
-     demQueryTime,		//SVC_DEMQUERYTIME
-     demRead,			//SVC_DEMREAD
-     demRename,			//SVC_DEMRENAME
-     demSetCurrentDir,		//SVC_DEMSETCURRENTDIR
-     demSetDate,		//SVC_DEMSETDATE
-     demSetDefaultDrive,	//SVC_DEMSETDEFAULTDRIVE
-     demSetDTALocation,		//SVC_DEMSETDTALOCATION
-     demSetTime,		//SVC_DEMSETTIME
-     demSetV86KernelAddr,	//SVC_DEMSETV86KERNELADDR
-     demWrite,			//SVC_DEMWRITE
-     demNotYetImplemented,	//SVC_GETDRIVEINFO
-     demRenameFCB,		//SVC_DEMRENAMEFCB
-     demIOCTL,			//SVC_DEMIOCTL
-     demCreateNew,		//SVC_DEMCREATENEW
-     demDiskReset,		//SVC_DEMDISKRESET
-     demNotYetImplemented,	//SVC_DEMSETDPB
-     demGetDPB,			//SVC_DEMGETDPB
-     demNotYetImplemented,	//SVC_DEMSLEAZEFUNC
-     demCommit,			//SVC_DEMCOMMIT
-     demNotYetImplemented,	//SVC_DEMEXTHANDLE
-     demAbsRead,		//SVC_DEMABSDRD
-     demAbsWrite,		//SVC_DEMABSDWRT
-     demNotYetImplemented,	//SVC_DEMGSETCDPG
-     demCreateFCB,		//SVC_DEMCREATEFCB
-     demOpenFCB,		//SVC_DEMOPENFCB
-     demCloseFCB,		//SVC_DEMCLOSEFCB
-     demFCBIO,			//SVC_FCBIO
-     demDate16, 		//SVC_DEMDATE16
-     demGetFileInfo,		//SVC_DEMGETFILEINFO
-     demSetHardErrorInfo,	//SVC_DEMSETHARDERRORINFO
-     demRetry,			//SVC_DEMRETRY
-     demLoadDosAppSym,		//SVC_DEMLOADDOSAPPSYM
+     demChgFilePtr,     //SVC_DEMCHGFILEPTR
+     demChMod,          //SVC_DEMCHMOD
+     demClose,          //SVC_DEMCLOSE
+     demCreate,         //SVC_DEMCREATE
+     demCreateDir,      //SVC_DEMCREATEDIR
+     demDelete,         //SVC_DEMDELETE
+     demDeleteDir,      //SVC_DEMDELETEDIR
+     demDeleteFCB,      //SVC_DEMDELETEFCB
+     demFileTimes,      //SVC_DEMFILETIMES
+     demFindFirst,      //SVC_DEMFINDFIRST
+     demFindFirstFCB,       //SVC_DEMFINDFIRSTFCB
+     demFindNext,       //SVC_DEMFINDNEXT
+     demFindNextFCB,        //SVC_DEMFINDNEXTFCB
+     demGetBootDrive,       //SVC_DEMGETBOOTDRIVE
+     demGetDriveFreeSpace,  //SVC_DEMGETDRIVEFREESPACE
+     demGetDrives,      //SVC_DEMGETDRIVES
+     demGSetMediaID,        //SVC_DEMGSETMEDIAID
+     demLoadDos,        //SVC_DEMLOADDOS
+     demOpen,           //SVC_DEMOPEN
+     demQueryCurrentDir,    //SVC_DEMQUERYCURRENTDIR
+     demQueryDate,      //SVC_DEMQUERYDATE
+     demQueryTime,      //SVC_DEMQUERYTIME
+     demRead,           //SVC_DEMREAD
+     demRename,         //SVC_DEMRENAME
+     demSetCurrentDir,      //SVC_DEMSETCURRENTDIR
+     demSetDate,        //SVC_DEMSETDATE
+     demSetDefaultDrive,    //SVC_DEMSETDEFAULTDRIVE
+     demSetDTALocation,     //SVC_DEMSETDTALOCATION
+     demSetTime,        //SVC_DEMSETTIME
+     demSetV86KernelAddr,   //SVC_DEMSETV86KERNELADDR
+     demWrite,          //SVC_DEMWRITE
+     demNotYetImplemented,  //SVC_GETDRIVEINFO
+     demRenameFCB,      //SVC_DEMRENAMEFCB
+     demIOCTL,          //SVC_DEMIOCTL
+     demCreateNew,      //SVC_DEMCREATENEW
+     demDiskReset,      //SVC_DEMDISKRESET
+     demNotYetImplemented,  //SVC_DEMSETDPB
+     demGetDPB,         //SVC_DEMGETDPB
+     demNotYetImplemented,  //SVC_DEMSLEAZEFUNC
+     demCommit,         //SVC_DEMCOMMIT
+     demNotYetImplemented,  //SVC_DEMEXTHANDLE
+     demAbsRead,        //SVC_DEMABSDRD
+     demAbsWrite,       //SVC_DEMABSDWRT
+     demNotYetImplemented,  //SVC_DEMGSETCDPG
+     demCreateFCB,      //SVC_DEMCREATEFCB
+     demOpenFCB,        //SVC_DEMOPENFCB
+     demCloseFCB,       //SVC_DEMCLOSEFCB
+     demFCBIO,          //SVC_FCBIO
+     demDate16,         //SVC_DEMDATE16
+     demGetFileInfo,        //SVC_DEMGETFILEINFO
+     demSetHardErrorInfo,   //SVC_DEMSETHARDERRORINFO
+     demRetry,          //SVC_DEMRETRY
+     demLoadDosAppSym,      //SVC_DEMLOADDOSAPPSYM
      demFreeDosAppSym,          //SVC_DEMFREEDOSAPPSYM
      demEntryDosApp,            //SVC_DEMENTRYDOSAPP
      demDOSDispCall,            //SVC_DEMDOSDISPCALL
      demDOSDispRet,             //SVC_DEMDOSDISPRET
      demOutputString,           //SVC_OUTPUT_STRING
-     demInputString,		//SVC_INPUT_STRING
-     demIsDebug,		//SVC_ISDEBUG
-     demTerminatePDB,		//SVC_PDBTERMINATE
-     demExitVDM,		//SVC_DEMEXITVDM
-     demWOWFiles,		//SVC_DEMWOWFILES
+     demInputString,        //SVC_INPUT_STRING
+     demIsDebug,        //SVC_ISDEBUG
+     demTerminatePDB,       //SVC_PDBTERMINATE
+     demExitVDM,        //SVC_DEMEXITVDM
+     demWOWFiles,       //SVC_DEMWOWFILES
      demLockOper,               //SVC_DEMLOCKOPER
-     demNotYetImplemented,      //SVC_DEMNOTYETIMPLEMENTED
+     demNotYetImplemented,      //SVC_DEMDRIVEFROMHANDLE
      demGetComputerName,        //SVC_DEMGETCOMPUTERNAME
      demNotYetImplemented,      //SVC_DEMFASTREAD
-     demNotYetImplemented,	//SVC_DEMFASTWRITE
-     demCheckPath,		//SVC_DEMCHECKPATH
-     demSystemSymbolOp,		//SVC_DEMSYSTEMSYMBOLOP
-     demGetDPBList,		//SVC_DEMBUILDDPBLIST
-     demPipeFileDataEOF,	//SVC_DEMPIPEFILEDATAEOF
-     demPipeFileEOF		//SVC_DEMPIPEFILEEOF
+     demNotYetImplemented,  //SVC_DEMFASTWRITE
+     demCheckPath,      //SVC_DEMCHECKPATH
+     demSystemSymbolOp,     //SVC_DEMSYSTEMSYMBOLOP
+     demGetDPBList,     //SVC_DEMBUILDDPBLIST
+     demPipeFileDataEOF,    //SVC_DEMPIPEFILEDATAEOF
+     demPipeFileEOF,     //SVC_DEMPIPEFILEEOF
+     demLFNEntry,               //SVC_DEMLFNENTRY
+     demSetDosVarLocation       //SVC_SETDOSVARLOCATION
 };
 
 
@@ -179,51 +184,34 @@ PFNSVC  apfnSVC [] = {
  * Exit  - None
  *
  * Note  - Some mechanism has to be worked out to let the emulator know
- *	   about DOSKRNL code segment and size. Using these it will figure
- *	   out whether SVCop (hlt for the moment) has to be passed to
- *	   DEM or to be handled as normal invalid opcode.
+ *     about DOSKRNL code segment and size. Using these it will figure
+ *     out whether SVCop (hlt for the moment) has to be passed to
+ *     DEM or to be handled as normal invalid opcode.
  */
 
 BOOL DemDispatch (ULONG iSvc)
 {
-#if DBG
-    if(iSvc < SVC_DEMLASTSVC && (fShowSVCMsg & DEMSVCTRACE) &&
-	 apfnSVC[iSvc] != demNotYetImplemented){
-	sprintf(demDebugBuffer,"DemDispatch: Entering %s\n\tAX=%.4x BX=%.4x CX=%.4x DX=%.4x DI=%.4x SI=%.4x\n",
-	       aSVCNames[iSvc],getAX(),getBX(),getCX(),getDX(),getDI(),getSI());
-        OutputDebugStringOem(demDebugBuffer);
-	sprintf(demDebugBuffer,"\tCS=%.4x IP=%.4x DS=%.4x ES=%.4x SS=%.4x SP=%.4x BP=%.4x\n",
-                getCS(),getIP(), getDS(),getES(),getSS(),getSP(),getBP());
-        OutputDebugStringOem(demDebugBuffer);
-    }
-#endif
+
+    DBGTRACE(VDMTR_TYPE_DEM + DEM_EVENT_DISPATCH, 0, iSvc);
 
     if (iSvc >= SVC_DEMLASTSVC){
 #if DBG
-	sprintf(demDebugBuffer,"Unimplemented SVC index %x\n",iSvc);
+        sprintf(demDebugBuffer,"Unimplemented SVC index %x\n",iSvc);
         OutputDebugStringOem(demDebugBuffer);
 #endif
-	setCF(1);
-	return FALSE;
+        setCF(1);
+        return FALSE;
     }
 
     if (pHardErrPacket) {
-	pHardErrPacket->vhe_fbInt24 = 0;
+        pHardErrPacket->vhe_fbInt24 = 0;
     }
+
     CurrentISVC = iSvc;
     (apfnSVC [iSvc])();
 
+    DBGTRACE(VDMTR_TYPE_DEM + DEM_EVENT_DISPATCH_EXIT, 0, iSvc);
 
-#if DBG
-    if((fShowSVCMsg & DEMSVCTRACE)){
-	sprintf(demDebugBuffer,"DemDispatch:On Leaving %s\n\tAX=%.4x BX=%.4x CX=%.4x DX=%.4x DI=%.4x SI=%.4x\n",
-               aSVCNames[iSvc],getAX(),getBX(),getCX(),getDX(),getDI(),getSI());
-        OutputDebugStringOem(demDebugBuffer);
-	sprintf(demDebugBuffer,"\tCS=%.4x IP=%.4x DS=%.4x ES=%.4x SS=%.4x SP=%.4x BP=%.4x CF=%x\n",
-                getCS(),getIP(), getDS(),getES(),getSS(),getSP(),getBP(),getCF());
-        OutputDebugStringOem(demDebugBuffer);
-    }
-#endif
     return TRUE;
 }
 

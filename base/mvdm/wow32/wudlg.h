@@ -15,7 +15,6 @@
 
 /* Function prototypes
  */
-LONG    W32DialogFunc(HWND hdlg, UINT uMsg, DWORD uParam, LONG lParam);
 
 ULONG FASTCALL   WU32CheckDlgButton(PVDMFRAME pFrame);
 ULONG FASTCALL   WU32CheckRadioButton(PVDMFRAME pFrame);
@@ -39,4 +38,3 @@ ULONG FASTCALL   WU32MessageBox(PVDMFRAME pFrame);
 ULONG FASTCALL   WU32SetDlgItemInt(PVDMFRAME pFrame);
 ULONG FASTCALL   WU32SetDlgItemText(PVDMFRAME pFrame);
 ULONG FASTCALL   WU32SysErrorBox(PVDMFRAME pFrame);
-

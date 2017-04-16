@@ -33,6 +33,12 @@ typedef struct {
     WORD    toolhelp;
     WORD    mmedia;
     WORD    commdlg;
+#ifdef FE_IME
+    WORD    winnls;
+#endif // FE_IME
+#ifdef FE_SB
+    WORD    wifeman;
+#endif // FE_SB
 } TABLEOFFSETS;
 typedef TABLEOFFSETS UNALIGNED *PTABLEOFFSETS;
 
@@ -40,6 +46,7 @@ typedef TABLEOFFSETS UNALIGNED *PTABLEOFFSETS;
 VOID InitThunkTableOffsets(VOID);
 
 extern TABLEOFFSETS tableoffsets;
+
 
 #ifdef DEBUG_OR_WOWPROFILE
 

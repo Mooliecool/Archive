@@ -816,7 +816,7 @@ Notes:
 --*/
 {
     ULONG FirstBlock, LastBlock, CurrentBlock;
-    NTSTATUS Status;
+    NTSTATUS Status =  STATUS_INVALID_PARAMETER;
     
     ASSERT_STEPTHROUGH;
 

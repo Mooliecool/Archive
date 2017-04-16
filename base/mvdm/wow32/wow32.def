@@ -1,7 +1,5 @@
 LIBRARY wow32
 
-;DESCRIPTION 'WOW32 DLL for MVDM'
-
 EXPORTS
 
     W32Init
@@ -41,3 +39,7 @@ EXPORTS
 
     CopyDropFilesFrom32
     CopyDropFilesFrom16
+
+    WOWUseMciavi16
+
+    WOWDelayTimeGetTime

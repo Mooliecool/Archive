@@ -32,12 +32,20 @@ BOOL CallBack16(INT iRetID, PPARM16 pParms, VPPROC vpfnProc, PVPVOID pvpReturn);
 
 
 VPVOID FASTCALL malloc16(UINT cb);
-BOOL FASTCALL free16(VPVOID vp);
+BOOL   FASTCALL free16(VPVOID vp);
 VPVOID FASTCALL stackalloc16(UINT cb);
-#define  stackfree16(vp)
+
+#ifdef DEBUG
+VOID   FASTCALL StackFree16(VPVOID vp, UINT cb);
+#define stackfree16(vp,cb) StackFree16(vp,cb)
+#else
+VOID   FASTCALL StackFree16(UINT cb);
+#define stackfree16(vp,cb) StackFree16(cb)
+#endif
 
 ULONG  GetDosPDB16(VOID);
 ULONG  GetDosSFT16(VOID);
+int WINAPI WOWlstrcmp16(LPCWSTR lpString1, LPCWSTR lpString2);
 
 /* Function prototypes for 16-bit Global memory functions are now in
  * \nt\public\sdk\inc\winntwow.h with slightly different names.  The

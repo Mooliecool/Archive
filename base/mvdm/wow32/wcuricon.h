@@ -74,6 +74,9 @@ HAND16 W32Create16BitCursorIconFrom32BitHandle(HANDLE h32, HAND16 hMod16,
                                                                  PUINT cbData);
 BOOL  InitStdCursorIconAlias(VOID);
 
+#if defined(FE_SB)
+BOOL FindCursorIconAliasInUse(ULONG hCI);
+#endif
 
 #define HCURSOR32(hobj16)       GetCursorIconAlias32((HAND16)(hobj16), HANDLE_TYPE_CURSOR)
 #define GETHCURSOR16(hobj32)    GetCursorIconAlias16((HAND32)(hobj32), HANDLE_TYPE_CURSOR)

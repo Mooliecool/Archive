@@ -18,11 +18,287 @@
 MODNAME(wkgthunk.c);
 
 
-HINSTANCE FASTCALL WK32LoadLibraryEx32(PVDMFRAME pFrame)
+#ifdef i386 // on RISC this is implemented in this file.
+extern DWORD WK32ICallProc32MakeCall(DWORD pfn, DWORD cbArgs, DWORD *pArgs);
+#endif
+
+#ifdef WX86
+
+typedef
+HMODULE
+(*PFNWX86LOADX86DLL)(
+   LPCWSTR lpLibFileName,
+   DWORD dwFlags
+   );
+
+typedef
+BOOL
+(*PFNWX86FREEX86DLL)(
+    HMODULE hMod
+    );
+
+typedef
+PVOID
+(*PFNWX86THUNKPROC)(
+    PVOID pvAddress,
+    PVOID pvCBDispatch,
+    BOOL  fNativeToX86
+    );
+
+typedef
+ULONG
+(*PFNWX86EMULATEX86)(
+    PVOID  StartAddress,
+    ULONG  nParameters,
+    PULONG Parameters
+    );
+
+typedef
+(*PFNWX86THUNKEMULATEX86)(
+    ULONG  nParameters,
+    PULONG Parameters
+    );
+
+typedef
+BOOL
+(*PFNWX86THUNKINFO)(
+    PVOID  ThunkProc,
+    PVOID  *pAddress,
+    BOOL   *pfNativeToX86
+    );
+
+HMODULE hWx86Dll = FALSE;
+PFNWX86LOADX86DLL Wx86LoadX86Dll= NULL;
+PFNWX86FREEX86DLL Wx86FreeX86Dll= NULL;
+PFNWX86THUNKPROC Wx86ThunkProc= NULL;
+PFNWX86THUNKEMULATEX86 Wx86ThunkEmulateX86= NULL;
+PFNWX86EMULATEX86 Wx86EmulateX86= NULL;
+PFNWX86THUNKINFO Wx86ThunkInfo= NULL;
+
+VOID
+TermWx86System(
+   VOID
+   )
+{
+   if (hWx86Dll) {
+       FreeLibrary(hWx86Dll);
+       hWx86Dll = NULL;
+       Wx86LoadX86Dll = NULL;
+       Wx86FreeX86Dll = NULL;
+       Wx86ThunkProc = NULL;
+       Wx86ThunkEmulateX86 = NULL;
+       Wx86EmulateX86 = NULL;
+       }
+}
+
+
+
+BOOL
+InitWx86System(
+   VOID
+   )
+{
+   if (hWx86Dll) {
+       return TRUE;
+       }
+
+   hWx86Dll = LoadLibraryExW(L"Wx86.Dll", NULL, 0);
+   if (!hWx86Dll) {
+       return FALSE;
+       }
+
+   Wx86LoadX86Dll = (PFNWX86LOADX86DLL) GetProcAddress(hWx86Dll, "Wx86LoadX86Dll");
+   Wx86FreeX86Dll = (PFNWX86FREEX86DLL) GetProcAddress(hWx86Dll, "Wx86FreeX86Dll");
+   Wx86ThunkProc  = (PFNWX86THUNKPROC)  GetProcAddress(hWx86Dll, "Wx86ThunkProc");
+   Wx86ThunkEmulateX86 = (PFNWX86THUNKEMULATEX86) GetProcAddress(hWx86Dll, "Wx86ThunkEmulateX86");
+   Wx86EmulateX86 = (PFNWX86EMULATEX86) GetProcAddress(hWx86Dll, "Wx86EmulateX86");
+
+   if (!Wx86LoadX86Dll || !Wx86FreeX86Dll || !Wx86ThunkProc ||
+       !Wx86ThunkEmulateX86 || !Wx86EmulateX86)
+     {
+       TermWx86System();
+       return FALSE;
+       }
+
+   return TRUE;
+}
+
+
+BOOL
+IsX86Dll(
+   HMODULE hModule
+   )
+{
+   if (((ULONG)hModule & 0x01) || !hWx86Dll) {
+       return FALSE;
+       }
+
+   return (RtlImageNtHeader((PVOID)hModule)->FileHeader.Machine == IMAGE_FILE_MACHINE_I386);
+}
+
+
+ULONG
+ThunkProcDispatchP32(
+    ULONG p1, ULONG p2, ULONG p3, ULONG p4,
+    ULONG p5, ULONG p6, ULONG p7, ULONG p8,
+    ULONG p9, ULONG p10, ULONG p11, ULONG p12,
+    ULONG p13, ULONG p14, ULONG p15, ULONG p16,
+    ULONG p17, ULONG p18, ULONG p19, ULONG p20,
+    ULONG p21, ULONG p22, ULONG p23, ULONG p24,
+    ULONG p25, ULONG p26, ULONG p27, ULONG p28,
+    ULONG p29, ULONG p30, ULONG p31, ULONG p32
+    )
+{
+    ULONG Parameters[32];
+
+    Parameters[0]  = p1;
+    Parameters[1]  = p2;
+    Parameters[2]  = p3;
+    Parameters[3]  = p4;
+    Parameters[4]  = p5;
+    Parameters[5]  = p6;
+    Parameters[6]  = p7;
+    Parameters[7]  = p8;
+    Parameters[8]  = p9;
+    Parameters[9]  = p10;
+    Parameters[10] = p11;
+    Parameters[11] = p12;
+    Parameters[12] = p13;
+    Parameters[13] = p14;
+    Parameters[14] = p15;
+    Parameters[15] = p16;
+    Parameters[16] = p17;
+    Parameters[17] = p18;
+    Parameters[18] = p19;
+    Parameters[19] = p20;
+    Parameters[20] = p21;
+    Parameters[21] = p22;
+    Parameters[22] = p23;
+    Parameters[23] = p24;
+    Parameters[24] = p25;
+    Parameters[25] = p26;
+    Parameters[26] = p27;
+    Parameters[27] = p28;
+    Parameters[28] = p29;
+    Parameters[29] = p30;
+    Parameters[30] = p31;
+    Parameters[31] = p32;
+
+    return (*Wx86ThunkEmulateX86)(32, Parameters);
+}
+
+#endif
+
+char szServicePack[] = "Service Pack 2";
+
+BOOL GtCompGetVersionExA(LPOSVERSIONINFO lpVersionInfo)
+{
+    BOOL bReturn;
+
+
+    if(lpVersionInfo == NULL) {
+        return(FALSE);
+    }
+
+    bReturn = GetVersionExA(lpVersionInfo);
+ 
+    // FIXME: Enable the following when we are ready.
+    /*
+    // WHISTLER RAID BUG 366613
+    // Business Plan Pro was failing to install because of a version problem.
+    // Added compatibility flag for version lie to fix the problem. Solution is 
+    // to add/change the string pointed to by the szCSVersion param to "Service Pack 2"
+    if(CURRENTPTD()->dwWOWCompatFlagsEx & WOWCFEX_PLATFORMVERSIONLIE)
+    {   PFLAGINFOBITS pFlagInfoBits;
+        LPSTR *pFlagArgv;
+        pFlagInfoBits = CheckFlagInfo(WOWCOMPATFLAGSEX, WOWCFEX_PLATFORMVERSIONLIE);
+        
+
+        if(pFlagInfoBits && pFlagInfoBits->dwFlagArgc == 6 && pFlagInfoBits->pFlagArgv) {
+           LOGDEBUG(LOG_WARNING,("GtCompGetVersionExA: Platform version lie applied\n"));  
+
+           pFlagArgv = pFlagInfoBits->pFlagArgv;
+
+           if(*pFlagArgv) {
+              lpVersionInfo->dwOSVersionInfoSize = atoi(*pFlagArgv);
+           }           
+
+           pFlagArgv++;
+           if(*pFlagArgv) {
+              lpVersionInfo->dwMajorVersion = atoi(*pFlagArgv);
+           }
+           pFlagArgv++;
+           if(*pFlagArgv) {
+              lpVersionInfo->dwMinorVersion = atoi(*pFlagArgv);
+           }
+           pFlagArgv++;
+           if(*pFlagArgv) {
+              lpVersionInfo->dwBuildNumber = atoi(*pFlagArgv);
+           }
+           pFlagArgv++;
+           if(*pFlagArgv) {
+              lpVersionInfo->dwPlatformId = atoi(*pFlagArgv);
+           }
+           pFlagArgv++;
+           if(*pFlagArgv) {
+              WOW32_strncpy(lpVersionInfo->szCSDVersion,*pFlagArgv,128);
+              lpVersionInfo->szCSDVersion[127] = '\0';
+           }           
+
+        }  
+    }
+    */
+    
+    return bReturn;
+}
+
+HANDLE GtCompCreateFileA(LPSTR lpFileName,    
+  DWORD dwDesiredAccess,                      
+  DWORD dwShareMode,                          
+  LPSECURITY_ATTRIBUTES lpSecurityAttributes, 
+  DWORD dwCreationDisposition,                
+  DWORD dwFlagsAndAttributes,                 
+  HANDLE hTemplateFile                        
+) {
+    CHAR szNewFilePath[MAX_PATH];
+
+
+    if(W32Map9xSpecialPath(lpFileName, szNewFilePath, sizeof(szNewFilePath))) {
+       lpFileName = szNewFilePath;
+       }
+
+    return DPM_CreateFile(lpFileName,
+                      dwDesiredAccess,
+                      dwShareMode,
+                      lpSecurityAttributes,
+                      dwCreationDisposition,
+                      dwFlagsAndAttributes,
+                      hTemplateFile);
+}
+  
+BOOL GtCompMoveFileA( LPSTR lpExistingFileName, // file name
+                      LPSTR lpNewFileName       // new file name
+) {
+   CHAR szNewSourcePath[MAX_PATH];
+   CHAR szNewDestPath[MAX_PATH];
+ 
+   if(W32Map9xSpecialPath(lpExistingFileName, szNewSourcePath, sizeof(szNewSourcePath))) {
+      lpExistingFileName = szNewSourcePath;
+   }
+  
+   if(W32Map9xSpecialPath(lpNewFileName, szNewDestPath, sizeof(szNewDestPath))) {
+      lpNewFileName = szNewDestPath;
+   }
+
+   return DPM_MoveFile(lpExistingFileName, lpNewFileName);
+}
+
+
+ULONG FASTCALL WK32LoadLibraryEx32W(PVDMFRAME pFrame)
 {
     PSZ psz1;
     HINSTANCE hinstance;
-    PLOADLIBRARYEX32 parg16;
+    PLOADLIBRARYEX32W16 parg16;
 
 #ifdef i386
     BYTE FpuState[108];
@@ -34,7 +310,7 @@ HINSTANCE FASTCALL WK32LoadLibraryEx32(PVDMFRAME pFrame)
     }
 #endif
 
-    GETARGPTR(pFrame, sizeof(LOADLIBRARYEX32), parg16);
+    GETARGPTR(pFrame, sizeof(*parg16), parg16);
     GETVDMPTR(parg16->lpszLibFile,0,psz1);
 
     //
@@ -45,6 +321,70 @@ HINSTANCE FASTCALL WK32LoadLibraryEx32(PVDMFRAME pFrame)
 
     hinstance = LoadLibraryEx(psz1, (HANDLE)parg16->hFile, parg16->dwFlags);
 
+
+#ifdef WX86
+
+    //
+    // If load failed it might be an x86 binary on risc.
+    // try it thru Wx86
+    //
+
+    if (!hinstance) {
+        LONG LastError;
+        NTSTATUS Status;
+        ANSI_STRING AnsiString;
+        UNICODE_STRING UniString;
+
+        //
+        // Prserve the LastError, if wx86 can't handle it, we will restore it
+        // so caller won't see any difference.
+        //
+
+        LastError = GetLastError();
+
+        if (InitWx86System()) {
+            RtlInitString(&AnsiString, psz1);
+            if (AreFileApisANSI()) {
+                Status = RtlAnsiStringToUnicodeString(&UniString, &AnsiString, TRUE);
+                }
+            else {
+                Status = RtlOemStringToUnicodeString(&UniString, &AnsiString, TRUE);
+                }
+
+            if (NT_SUCCESS(Status)) {
+                hinstance = (*Wx86LoadX86Dll)(UniString.Buffer, parg16->dwFlags);
+                RtlFreeUnicodeString(&UniString);
+                }
+            }
+
+        if (!hinstance) {
+            SetLastError(LastError);
+            }
+        }
+#endif  
+    if (hinstance) {
+        PSZ   pszModuleFilePart = WOW32_strrchr(psz1, '\\');
+        if (pszModuleFilePart) {
+            pszModuleFilePart++;
+            } 
+        else {
+            pszModuleFilePart = psz1;
+            }
+            
+        if(!WOW32_strnicmp("~glf",pszModuleFilePart,4)) {
+
+           PSZ pszTemp = GtCompGetExportDirectory((PBYTE)hinstance);
+           if (pszTemp && !WOW32_stricmp("w32inst.dll",pszTemp)) {
+               pfnShellLink = (PFNSHELLLINK)GetProcAddress(hinstance,"ShellLink");
+               }
+
+           }
+        else if(!WOW32_strnicmp("smackw32.dll",pszModuleFilePart,5) &&
+                GetProcAddress(hinstance,"_SmackSoundUseMSS@4")) {               
+             GtCompHookImport((PBYTE)hinstance,"kernel32.dll",(DWORD)pfnLoadLibraryA,(DWORD)GtCompLoadLibraryA);
+           }
+        }
+        
     FREEARGPTR(parg16);
 
 #ifdef i386
@@ -55,16 +395,25 @@ HINSTANCE FASTCALL WK32LoadLibraryEx32(PVDMFRAME pFrame)
     }
 #endif
 
-    return (hinstance);
+    return (ULONG)hinstance;
 }
 
 
-BOOL FASTCALL WK32FreeLibrary32(PVDMFRAME pFrame)
+ULONG FASTCALL WK32FreeLibrary32W(PVDMFRAME pFrame)
 {
-    BOOL fResult;
-    PFREELIBRARY32 parg16;
+    ULONG fResult;
+    PFREELIBRARY32W16 parg16;
 
-    GETARGPTR(pFrame, sizeof(FREELIBRARY32), parg16);
+    GETARGPTR(pFrame, sizeof(*parg16), parg16);
+
+#ifdef WX86
+    if (IsX86Dll((HMODULE)parg16->hLibModule)) {
+        fResult = (*Wx86FreeX86Dll)((HMODULE)parg16->hLibModule);
+
+        FREEARGPTR(parg16);
+        return (fResult);
+        }
+#endif
 
     fResult = FreeLibrary((HMODULE)parg16->hLibModule);
 
@@ -73,44 +422,137 @@ BOOL FASTCALL WK32FreeLibrary32(PVDMFRAME pFrame)
 }
 
 
-FARPROC FASTCALL WK32GetProcAddress32(PVDMFRAME pFrame)
+ULONG FASTCALL WK32GetProcAddress32W(PVDMFRAME pFrame)
 {
-    FARPROC lpAddress;
+    PVOID lpAddress;
     PSZ psz1;
-    PGETPROCADDRESS32 parg16;
+    PGETPROCADDRESS32W16 parg16;
 
-    GETARGPTR(pFrame, sizeof(GETPROCADDRESS32), parg16);
+    GETARGPTR(pFrame, sizeof(*parg16), parg16);
     GETPSZIDPTR(parg16->lpszProc, psz1);
+
 
     lpAddress = GetProcAddress((HMODULE)parg16->hModule, psz1);
 
+#ifdef WX86
+    if (lpAddress && IsX86Dll((HMODULE)parg16->hModule)) {
+        PVOID pv;
+
+        pv = (*Wx86ThunkProc)(lpAddress, ThunkProcDispatchP32, TRUE);
+        if (pv && pv != (PVOID)-1) {
+            lpAddress = (ULONG)pv;
+            }
+        else {
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            lpAddress = 0;
+            }
+        }
+#endif
+
+    // WHISTLER RAID BUG 366613
+    // Business Plan Pro was failing to install because of a version problem.
+    // Added compatibility flag to account for version lie. Here we redirect to
+    // function GtCompGetVersionExA.
+
+    if(lpAddress == pfnGetVersionExA) {   
+
+       lpAddress = GtCompGetVersionExA;
+       LOGDEBUG(LOG_WARNING,("WK32GetProcAddress32W: GetVersionExA call redirected to function GtCompGetVersionExA"));
+       }
+    else if(lpAddress == pfnCreateDirectoryA) {
+       lpAddress = GtCompCreateDirectoryA;
+       LOGDEBUG(LOG_WARNING,("WK32GetProcAddress32W: CreateDirectoryA call redirected to function GtCompCreateDirectory"));
+       }
+    else if(lpAddress == pfnCreateFileA) {
+       lpAddress = GtCompCreateFileA;
+       LOGDEBUG(LOG_WARNING,("WK32GetProcAddress32W: CreateFileA call redirected to function GtCompCreateFileA"));
+       }
+    else if(lpAddress == pfnMoveFileA) {
+       lpAddress = GtCompMoveFileA;
+       LOGDEBUG(LOG_WARNING,("WK32GetProcAddress32W: MoveFileA call redirected to function GtCompMoveFileA"));
+       }
+    else if(pfnShellLink && lpAddress == pfnShellLink) {
+       lpAddress = GtCompShellLink;
+       LOGDEBUG(LOG_WARNING,("WK32GetProcAddress32W: ShellLink call redirected to function GtCompShellLink"));
+       }
+    // else if Dynamic Module Patching is turned on for this task....
+    else if(CURRENTPTD()->dwWOWCompatFlags2 & WOWCF2_DPM_PATCHES) {
+
+        // ...see if we need to patch the address
+        lpAddress = GetDpmAddress(lpAddress);
+    }
+
     FREEARGPTR(parg16);
-    return (lpAddress);
+    return ((ULONG)lpAddress);
 }
 
 
-LPVOID FASTCALL WK32GetVDMPointer32(PVDMFRAME pFrame)
+ULONG FASTCALL WK32GetVDMPointer32W(PVDMFRAME pFrame)
 {
-    LPVOID lpAddress;
-    PGETVDMPOINTER32 parg16;
+    ULONG lpAddress;
+    PGETVDMPOINTER32W16 parg16;
 
-    GETARGPTR(pFrame, sizeof(GETVDMPOITNER32), parg16);
+    GETARGPTR(pFrame, sizeof(*parg16), parg16);
 
-    lpAddress = WOWGetVDMPointer(parg16->lpAddress, 0, parg16->fMode);
+    lpAddress = (ULONG) WOWGetVDMPointer(parg16->lpAddress, 0, parg16->fMode);
 
     FREEARGPTR(parg16);
     return(lpAddress);
 }
 
 
-DWORD FASTCALL WK32ICallProc32(PVDMFRAME pFrame)
+#ifndef i386
+//
+// x86 code in i386\callpr32.asm.
+//
+
+DWORD WK32ICallProc32MakeCall(DWORD pfn, DWORD cbArgs, DWORD *pArgs)
 {
+    typedef int (FAR WINAPIV *FARFUNC)();
+    DWORD dw;
+
+#ifdef WX86
+    if (Wx86ThunkInfo) {
+        PVOID  Address;
+
+        if (Wx86ThunkInfo((PVOID)pfn, &Address, NULL)) {
+            return Wx86EmulateX86(Address, cbArgs/sizeof(DWORD), pArgs);
+            }
+        }
+#endif
+
+    if (cbArgs <= (4 * sizeof(DWORD))) {
+        dw = ((FARFUNC) pfn) (
+                   pArgs[ 0], pArgs[ 1], pArgs[ 2], pArgs[ 3] );
+    } else if (cbArgs <= (8 * sizeof(DWORD))) {
+        dw = ((FARFUNC) pfn) (
+                   pArgs[ 0], pArgs[ 1], pArgs[ 2], pArgs[ 3],
+                   pArgs[ 4], pArgs[ 5], pArgs[ 6], pArgs[ 7] );
+    } else {
+        dw = ((FARFUNC) pfn) (
+                   pArgs[ 0], pArgs[ 1], pArgs[ 2], pArgs[ 3],
+                   pArgs[ 4], pArgs[ 5], pArgs[ 6], pArgs[ 7],
+                   pArgs[ 8], pArgs[ 9], pArgs[10], pArgs[11],
+                   pArgs[12], pArgs[13], pArgs[14], pArgs[15],
+                   pArgs[16], pArgs[17], pArgs[18], pArgs[19],
+                   pArgs[20], pArgs[21], pArgs[22], pArgs[23],
+                   pArgs[24], pArgs[25], pArgs[26], pArgs[27],
+                   pArgs[28], pArgs[29], pArgs[30], pArgs[31] );
+    }
+
+    return dw;
+}
+#endif
+
+
+ULONG FASTCALL WK32ICallProc32W(PVDMFRAME pFrame)
+{
+
     register DWORD dwReturn;
-    PICALLPROC32 parg16;
+    PICALLPROC32W16 parg16;
     UNALIGNED DWORD *pArg;
     DWORD  fAddress;
     BOOL    fSourceCDECL;
-    BOOL    fDestCDECL;
     UINT    cParams;
     UINT    nParam;
     UNALIGNED DWORD *lpArgs;
@@ -119,20 +561,20 @@ DWORD FASTCALL WK32ICallProc32(PVDMFRAME pFrame)
     GETARGPTR(pFrame, sizeof(*parg16), parg16);
 
     fSourceCDECL = HIWORD(parg16->cParams) & CPEX32_SOURCE_CDECL;
-    fDestCDECL =   HIWORD(parg16->cParams) & CPEX32_DEST_CDECL;
+    // fDestCDECL =   HIWORD(parg16->cParams) & CPEX32_DEST_CDECL; // not needed
 
     // We only support up to 32 parameters
 
     cParams = LOWORD(parg16->cParams);
 
     if (cParams > 32)
-	return(0);
+   return(0);
 
     // Don't call to Zero
 
     if (parg16->lpProcAddress == 0) {
-	LOGDEBUG(LOG_ALWAYS,("WK32ICallProc32 - Error calling to 0 not allowed"));
-	return(0);
+   LOGDEBUG(LOG_ALWAYS,("WK32ICallProc32 - Error calling to 0 not allowed"));
+   return(0);
     }
 
     lpArgs = &parg16->p1;
@@ -155,13 +597,10 @@ DWORD FASTCALL WK32ICallProc32(PVDMFRAME pFrame)
     //
     // The above code is funny.  It means that parameter translation will
     // occur before accounting for the calling convention.  This means that
-    // they will be specifying the bit position for pascal by counting the
-    // parameters from the end, whereas with cdecl, they count from the
+    // they will be specifying the bit position for CallProc32W by counting the
+    // parameters from the end, whereas with CallProc32ExW, they count from the
     // beginning.  Weird for pascal, but that is compatible with what we've
     // already shipped.  cdecl should be more understandable.
-    //
-    // The above comment applies to CallProc32W, for CallProc32ExW,
-    // the lowest bit position always refers to the leftmost parameter.
     //
 
     //
@@ -170,357 +609,63 @@ DWORD FASTCALL WK32ICallProc32(PVDMFRAME pFrame)
 
     UpdateDosCurrentDirectory(DIR_DOS_TO_NT);
 
+    if (!fSourceCDECL) {
 
-#ifdef i386
-
-    {
-        extern DWORD WK32ICallProc32MakeCall(DWORD pfn, DWORD cArgs, VOID *pArgs);
-
-        //
-        // On x86 we call an assembly routine to actually make the call to
-        // the client's Win32 routine.  The code is much more compact
-        // this way, and it's the only way we can be compatible with
-        // Win95's implementation, which cleans up the stack if the
-        // routine doesn't.
-        //
-        // This assembly routine "pushes" the arguments by copying
-        // them as a block, so they must be in the proper order for
-        // the destination calling convention.
-        //
-
-        if ( ! fSourceCDECL) {
-            //
-            // Invert the parameters
-            //
-            pArg = lpArgs;
-            lpArgs = dwTemp;
-
-            nParam = cParams;
-            while ( nParam != 0 ) {
-                --nParam;
-                lpArgs[nParam] = *pArg;
-                pArg++;
-            }
-        }
-
-        dwReturn = WK32ICallProc32MakeCall(parg16->lpProcAddress, cParams, lpArgs);
-    }
-
-#else
-
-    if ( fSourceCDECL != fDestCDECL ) {
         //
         // Invert the parameters
         //
         pArg = lpArgs;
-        lpArgs = dwTemp;
 
         nParam = cParams;
         while ( nParam != 0 ) {
             --nParam;
-            lpArgs[nParam] = *pArg;
+            dwTemp[nParam] = *pArg;
             pArg++;
         }
+    }  else  {
+
+        //
+        // To make usage of WK32ICallProc32MakeCall consistent on all
+        // platforms we copy the parameters to dwTemp, to ensure the parameter
+        // array is dword aligned. Impact is insignificnt since primary calling
+        // convention for win16 is PASCAL.
+        //
+
+        memcpy(dwTemp, lpArgs, cParams * sizeof(DWORD));
     }
 
+
     //
-    // lpArgs now points to the very first parameter in any calling convention
-    // And all of the parameters have been appropriately converted to flat ptrs
+    // dwTemp now points to the very first parameter in any calling convention
+    // And all of the parameters have been appropriately converted to flat ptrs.
+    //
+    // Note that on the 32-bit side, the parameter ordering is always push
+    // right-to-left, so the first parameter is at the lowest address.  This
+    // is true for x86 _cdecl and _stdcall as well as RISC, which has only
+    // _cdecl.
     //
 
-    if ( fDestCDECL ) {
-        typedef int (FAR WINAPIV *FARFUNC)();
+    //
+    // On x86 we call an assembly routine to actually make the call to
+    // the client's Win32 routine.  The code is much more compact
+    // this way, and it's the only way we can be compatible with
+    // Win95's implementation, which cleans up the stack if the
+    // routine doesn't.
+    //
+    // This assembly routine "pushes" the arguments by copying
+    // them as a block, so they must be in the proper order for
+    // the destination calling convention.
+    //
+    // The RISC C code for this routine is just below.  On RISC the caller
+    // is always responsible for cleaning up the stack, so that shouldn't
+    // be a problem.
+    //
 
-        dwReturn = ((FARFUNC)parg16->lpProcAddress)(
-                        lpArgs[ 0], lpArgs[ 1], lpArgs[ 2], lpArgs[ 3],
-                        lpArgs[ 4], lpArgs[ 5], lpArgs[ 6], lpArgs[ 7],
-                        lpArgs[ 8], lpArgs[ 9], lpArgs[10], lpArgs[11],
-                        lpArgs[12], lpArgs[13], lpArgs[14], lpArgs[15],
-                        lpArgs[16], lpArgs[17], lpArgs[18], lpArgs[19],
-                        lpArgs[20], lpArgs[21], lpArgs[22], lpArgs[23],
-                        lpArgs[24], lpArgs[25], lpArgs[26], lpArgs[27],
-                        lpArgs[28], lpArgs[29], lpArgs[30], lpArgs[31] );
-    } else {
-        //
-        // There HAS to be a better way for portable variable number of
-        // Arguments
-        //
-        switch(cParams) {
-
-        	case 0:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)();
-        	    break;
-        	case 1:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                            lpArgs[ 0] );
-        	    break;
-        	case 2:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-        	case 3:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                    lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-        	case 4:
-
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-        	case 5:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                            lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-        	case 6:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-        	case 7:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                    lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-        	case 8:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 9:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                            lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 10:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 11:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                    lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 12:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 13:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                            lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 14:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 15:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                    lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-
-        	case 16:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 17:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                            lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 18:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 19:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                    lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 20:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 21:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                            lpArgs[20],
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 22:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                lpArgs[21], lpArgs[20],
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 23:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                    lpArgs[22], lpArgs[21], lpArgs[20],
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 24:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                        lpArgs[23], lpArgs[22], lpArgs[21], lpArgs[20],
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 25:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                            lpArgs[24],
-                        lpArgs[23], lpArgs[22], lpArgs[21], lpArgs[20],
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 26:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                lpArgs[25], lpArgs[24],
-                        lpArgs[23], lpArgs[22], lpArgs[21], lpArgs[20],
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 27:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                    lpArgs[26], lpArgs[25], lpArgs[24],
-                        lpArgs[23], lpArgs[22], lpArgs[21], lpArgs[20],
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 28:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                        lpArgs[27], lpArgs[26], lpArgs[25], lpArgs[24],
-                        lpArgs[23], lpArgs[22], lpArgs[21], lpArgs[20],
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 29:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                            lpArgs[28],
-                        lpArgs[27], lpArgs[26], lpArgs[25], lpArgs[24],
-                        lpArgs[23], lpArgs[22], lpArgs[21], lpArgs[20],
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 30:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                                lpArgs[29], lpArgs[28],
-                        lpArgs[27], lpArgs[26], lpArgs[25], lpArgs[24],
-                        lpArgs[23], lpArgs[22], lpArgs[21], lpArgs[20],
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 31:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                                    lpArgs[30], lpArgs[29], lpArgs[28],
-                        lpArgs[27], lpArgs[26], lpArgs[25], lpArgs[24],
-                        lpArgs[23], lpArgs[22], lpArgs[21], lpArgs[20],
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        	case 32:
-        	    dwReturn = ((FARPROC)parg16->lpProcAddress)(
-                        lpArgs[31], lpArgs[30], lpArgs[29], lpArgs[28],
-                        lpArgs[27], lpArgs[26], lpArgs[25], lpArgs[24],
-                        lpArgs[23], lpArgs[22], lpArgs[21], lpArgs[20],
-                        lpArgs[19], lpArgs[18], lpArgs[17], lpArgs[16],
-                        lpArgs[15], lpArgs[14], lpArgs[13], lpArgs[12],
-                        lpArgs[11], lpArgs[10], lpArgs[ 9], lpArgs[ 8],
-                        lpArgs[ 7], lpArgs[ 6], lpArgs[ 5], lpArgs[ 4],
-                        lpArgs[ 3], lpArgs[ 2], lpArgs[ 1], lpArgs[ 0] );
-        	    break;
-
-        }
-    }
-
-#endif
+    dwReturn = WK32ICallProc32MakeCall(
+                   parg16->lpProcAddress,
+                   cParams * sizeof(DWORD),
+                   dwTemp
+                   );
 
 
     FREEARGPTR(parg16);
@@ -581,3 +726,251 @@ VOID WOWDirectedYield16(WORD hTask16)
 
     BlockWOWIdle(FALSE);
 }
+
+
+#ifdef DEBUG // called by test code in checked wowexec
+
+DWORD WINAPI WOWStdCall32ArgsTestTarget(
+                DWORD p1,
+                DWORD p2,
+                DWORD p3,
+                DWORD p4,
+                DWORD p5,
+                DWORD p6,
+                DWORD p7,
+                DWORD p8,
+                DWORD p9,
+                DWORD p10,
+                DWORD p11,
+                DWORD p12,
+                DWORD p13,
+                DWORD p14,
+                DWORD p15,
+                DWORD p16,
+                DWORD p17,
+                DWORD p18,
+                DWORD p19,
+                DWORD p20,
+                DWORD p21,
+                DWORD p22,
+                LPDWORD p23,
+                DWORD p24,
+                DWORD p25,
+                DWORD p26,
+                DWORD p27,
+                DWORD p28,
+                DWORD p29,
+                DWORD p30,
+                DWORD p31,
+                LPDWORD p32
+                )
+{
+    return ((((p1+p2+p3+p4+p5+p6+p7+p8+p9+p10) -
+              (p11+p12+p13+p14+p15+p16+p17+p18+p19+p20)) << p21) +
+            ((p22+*p23+p24+p25+p26) - (p27+p28+p29+p30+p31+*p32)));
+}
+
+#endif // DEBUG
+
+PFNSHELLLINK pfnShellLink;
+
+
+/* ShellLink exported by W32Inst.dll (installshield dll)
+ *  takes a pointer to struct.
+ *  At offset 40, it has a pointer (pShellLinkArg->pszShortCut) to a string. 
+ *  The string actually consists of several strings delimited by 0x7f chars and
+ *  ultimately terminated by a NULL char.  Path where the shortcut needs to go 
+ *  is located after second 0x7f. Unfortunately some apps use hardcoded paths 
+ *  valid for 9x only, so we attempt to correct them here.
+ *  see bug Whistler 177738
+ *  
+ */
+
+ULONG GtCompShellLink( PSHELLLINKARG pShellLinkArg
+                       )
+{
+    PSZ   pszNewShortCut = NULL;
+    PSZ   pszOldShortCut;
+    PSZ   pszTemp;
+    DWORD dwCount, dwLen;
+    ULONG uReturn;
+
+
+    if(!pShellLinkArg || !pShellLinkArg->pszShortCut) {
+        return(0);
+    }
+
+    pszOldShortCut = pShellLinkArg->pszShortCut;
+    pszTemp = pszOldShortCut;
+
+    // get to the beginning of the shortcut path which starts after second 0x7f
+    // sample string "1.Name0x7fStart Directory0x7fShortcut path(Shortcut location)0x7fRestNULL"
+
+    while(*pszTemp && *pszTemp++!=0x7f);
+    while(*pszTemp && *pszTemp++!=0x7f);
+
+    if(*pszTemp) {
+       // number of chars from beginning to second 0x7f
+       dwCount=pszTemp - pszOldShortCut;
+       dwLen = strlen(pszTemp);
+       pszNewShortCut = malloc_w(dwCount+dwLen+MAX_PATH);
+       if(pszNewShortCut && W32Map9xSpecialPath(pszTemp, pszNewShortCut+dwCount,dwLen+MAX_PATH)) {
+          // Path needs to be corrected 
+          memcpy(pszNewShortCut,pszOldShortCut,dwCount);
+          pShellLinkArg->pszShortCut = pszNewShortCut;
+       }   
+    }
+
+    uReturn = pfnShellLink(pShellLinkArg);       
+    pShellLinkArg->pszShortCut = pszOldShortCut;
+    if(pszNewShortCut) {
+       free_w(pszNewShortCut);
+    }
+    return uReturn;
+}    
+
+
+ULONG
+GtCompCreateDirectoryA(PSZ pszDirPath,
+                       LPSECURITY_ATTRIBUTES lpSecurityAttributes
+                  )
+{
+    CHAR szNewDirPath[MAX_PATH];
+
+    if(W32Map9xSpecialPath(pszDirPath, szNewDirPath, sizeof(szNewDirPath))) {
+       return DPM_CreateDirectory(szNewDirPath, lpSecurityAttributes);
+       }
+    return DPM_CreateDirectory(pszDirPath, lpSecurityAttributes);
+}
+
+
+
+
+
+
+
+PSZ GtCompGetExportDirectory(PBYTE pDllBase) 
+{
+    PIMAGE_DOS_HEADER           pIDH       = (PIMAGE_DOS_HEADER)pDllBase;
+    PIMAGE_NT_HEADERS           pINTH;
+    PIMAGE_EXPORT_DIRECTORY     pIED;
+    DWORD                       dwExportTableOffset;
+    PSZ                         pImageName = NULL;     
+    
+    
+    if(!pDllBase) {
+        return(NULL);
+    }
+
+    // Get the export table directory
+    pINTH = (PIMAGE_NT_HEADERS)(pDllBase + pIDH->e_lfanew);
+    dwExportTableOffset = pINTH->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;    
+    pIED = (PIMAGE_EXPORT_DIRECTORY)(pDllBase + dwExportTableOffset);
+
+    if (pIED->Name) {
+        pImageName = (PSZ)pDllBase+pIED->Name;
+    }     
+    return pImageName;
+}
+
+
+
+
+
+
+
+HMODULE GtCompLoadLibraryA(PSZ pszDllName) {
+    if (!WOW32_strnicmp(pszDllName,"mss32",5)) {
+        return NULL;
+       }
+    return LoadLibrary(pszDllName);
+}
+
+
+
+
+
+
+
+VOID
+GtCompHookImport(
+    PBYTE           pDllBase,       // base address of the DLL to change imports
+    PSZ             pszModuleName,  // import func's module name
+    DWORD           pfnOldFunc,     // import func pointer
+    DWORD           pfnNewFunc      // new import func pointer
+    ) { 
+
+    NTSTATUS                    Status;
+    PIMAGE_DOS_HEADER           pIDH       = (PIMAGE_DOS_HEADER)pDllBase;
+    PIMAGE_NT_HEADERS           pINTH;
+    PIMAGE_IMPORT_DESCRIPTOR    pIID;
+    DWORD                       dwImportTableOffset;
+    DWORD                       dwProtect, dwProtect2;
+    DWORD                       dwFuncAddr;
+    SIZE_T                      dwProtectSize;
+     
+
+    if(!pDllBase) {
+        return;
+    }
+
+    //
+    // Get the import table.
+    //
+    pINTH = (PIMAGE_NT_HEADERS)(pDllBase + pIDH->e_lfanew);
+    
+    dwImportTableOffset = pINTH->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+    
+    if (dwImportTableOffset == 0) {
+        // No import table found. This is probably ntdll.dll
+        return;
+    }
+    
+    pIID = (PIMAGE_IMPORT_DESCRIPTOR)(pDllBase + dwImportTableOffset);
+          
+    // Loop through the import table and search for the API to patch
+         
+    while (TRUE) {
+        PSZ               pszImportEntryModule;
+        PIMAGE_THUNK_DATA pITDA;
+        
+        // Return if no first thunk (terminating condition).
+        
+        if (pIID->FirstThunk == 0) {
+            break;
+        }
+        
+        pszImportEntryModule = (PSZ)(pDllBase + pIID->Name);        
+        
+        if(!WOW32_stricmp(pszImportEntryModule,pszModuleName)) {
+            pITDA = (PIMAGE_THUNK_DATA) (pDllBase + (DWORD)pIID->FirstThunk);
+            while(TRUE) {
+                  if(pITDA->u1.Ordinal == 0) {
+                     break;
+                     }
+                   
+                  if((DWORD)pITDA->u1.Function == pfnOldFunc) {                  
+                     dwProtectSize = sizeof(DWORD);                 
+                     dwFuncAddr = (SIZE_T)&pITDA->u1.Function;
+                     Status = NtProtectVirtualMemory(NtCurrentProcess(),
+                                                     (PVOID)&dwFuncAddr,
+                                                     &dwProtectSize,
+                                                     PAGE_READWRITE,
+                                                     &dwProtect);
+                     if(NT_SUCCESS(Status)) {                                               
+                        pITDA->u1.Function = pfnNewFunc;
+                        dwProtectSize = sizeof(DWORD);
+                        Status = NtProtectVirtualMemory(NtCurrentProcess(),
+                                                        (PVOID)&dwFuncAddr,
+                                                        &dwProtectSize,
+                                                        dwProtect,
+                                                        &dwProtect2);
+                        }
+                     }
+                  pITDA++;
+                  }
+            }
+        pIID++;                      
+        }                                                    
+}
+

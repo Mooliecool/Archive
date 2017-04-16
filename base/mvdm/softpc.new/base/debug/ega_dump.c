@@ -95,6 +95,7 @@ static	void	dump_graph_display_state();
 
 void	dump_EGA_GRAPH()
 {
+#ifndef NEC_98
 	/* char sym_name[80]; */
 
 	dump_display_bool(mode_change_required);
@@ -118,6 +119,7 @@ void	dump_EGA_GRAPH()
 	dump_graph_index_int(regen_ptr,3);
 	newline;
 	dump_graph_display_state();
+#endif // !NEC_98
 }
 
 #define	dump_graph_disp_bool(name)	printf("name = %s ", get_boolean_value(EGA_GRAPH.display_state.as_bfld.name) )
@@ -134,6 +136,26 @@ static	void	dump_graph_display_state()
 	dump_graph_disp_bool(screen_can_wrap);
 	newline;
 }
+
+#if defined(NEC_98)
+#define dump_disp_hex(name)             printf("name = %x ", NEC98Display.name) 
+#define dump_disp_int(name)             printf("name = %d ", NEC98Display.name) 
+#define dump_disp_bool(name)            printf("name = %s ", get_boolean_value(NEC98Display.name)) 
+#define dump_disp_9_bits(name)          printf("name = %d ", NEC98Display.name.as_word) 
+#define dump_disp_ptrs(name)            if ( NEC98Display.name == NULL ) \
+                                                printf("name = null "); \
+                                        else { \
+                                                host_find_symb_name(NEC98Display.name,sym_name);\
+                                                printf("name = %s ", sym_name ); \
+                                        }                       
+#define dump_disp_index_ptr(name,i)     if ( NEC98Display.name[i] == NULL ) {\
+                                                printf("name[%d] = null ", i); \
+                                        } \
+                                        else {\
+                                                host_find_symb_name(NEC98Display.name[i],sym_name);\
+                                                printf("name[%d] = %s ", i, sym_name); \
+                                        }                       
+#else  // !NEC_98
 
 #define	dump_disp_hex(name)		printf("name = %x ", PCDisplay.name)
 #define	dump_disp_int(name)		printf("name = %d ", PCDisplay.name)
@@ -152,6 +174,7 @@ static	void	dump_graph_display_state()
 						host_find_symb_name(PCDisplay.name[i],sym_name);\
 						printf("name[%d] = %s ", i, sym_name); \
 					}
+#endif // !NEC_98
 
 #define	dump_disp_int2(n1,n2)		dump_disp_int(n1);dump_disp_int(n2);newline
 #define	dump_disp_int3(n1,n2,n3)	dump_disp_int(n1);dump_disp_int(n2);dump_disp_int(n3);newline
@@ -178,6 +201,7 @@ void	dump_Display	IFN0()
 
 void	dump_EGA_CPU	IFN0()
 {
+#ifndef NEC_98
 	/* table to output planes nicely. */
 
 	static char bin_table[][5] = {
@@ -203,6 +227,7 @@ void	dump_EGA_CPU	IFN0()
 		getVideodata_xor_mask(),getVideolatch_xor_mask());
 
 	printf("handlers are of type %d\n", EGA_CPU.saved_mode_chain);
+#endif // !NEC_98
 }
 
 static	char	names[4][11] = {"plane0.dat",

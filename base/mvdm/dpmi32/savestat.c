@@ -63,6 +63,7 @@ Notes:
 
 --*/
 {
+    DECLARE_LocalVdmContext;
     PSAVEDCONTEXT SavedState;
 
     ASSERT((sizeof(SAVEDCONTEXT) < sizeof(VSAVEDSTATE)));
@@ -100,6 +101,7 @@ Return Value:
 
 --*/
 {
+    DECLARE_LocalVdmContext;
     PSAVEDCONTEXT SavedState;
 
 

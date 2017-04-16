@@ -56,6 +56,8 @@ ULONG size;
             return;
         }
     }
+    else
+	BaseAddress = 0;
 
     ASSERT((USHORT)(BaseAddress / 1024) < 65535);
     setAX((USHORT)(BaseAddress / 1024));
@@ -146,6 +148,10 @@ ULONG NewSize;
             return;
         }
     }
+    else
+    {
+	NewAddress = BaseAddress;
+    }
 
     ASSERT((NewAddress / 1024) < 65535);
     setCX((USHORT)(NewAddress / 1024));
@@ -199,7 +205,7 @@ ULONG	cbTransfer,SoftpcBase, DstSegOff;
 	   (PVOID)((ULONG)pSrc + SoftpcBase),
 	   cbTransfer);
     // if we touched the intel memory, tell the emulator to flush its cache
-    // WARNING!!!! Donot use Sim32FlushVDMPoiner unless you know the exact segment
+    // WARNING!!!! Do not use Sim32FlushVDMPoiner unless you know the exact segment
     // address. In this case, we have no idea what the segment value is, all we
     // know is its "linear address".
     // BUGBUG verify whether we can ignore the case with pDst > 0x110000
