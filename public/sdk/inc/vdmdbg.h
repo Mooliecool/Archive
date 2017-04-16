@@ -1,6 +1,6 @@
 /*++ BUILD Version: 0001    // Increment this if a change has global effects
 
-Copyright (c) 1985-1996, Microsoft Corporation
+Copyright (c) 1985-1999, Microsoft Corporation
 
 Module Name:
 
@@ -15,6 +15,10 @@ Abstract:
 
 #ifndef _VDMDBG_
 #define _VDMDBG_
+
+#if _MSC_VER > 1000
+#pragma once
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,7 +44,28 @@ extern "C" {
 #define DBG_DLLSTART    12
 #define DBG_DLLSTOP     13
 #define DBG_ATTACH      14
+#define DBG_TOOLHELP    15
+#define DBG_STACKFAULT  16
+#define DBG_WOWINIT     17
+#define DBG_TEMPBP      18
+#define DBG_MODMOVE     19
+#define DBG_INIT        20
+#define DBG_GPFAULT2    21
 #endif
+
+//
+// These flags are set in the same WORD as the DBG_ event id's (above).
+//
+#define VDMEVENT_NEEDS_INTERACTIVE  0x8000
+#define VDMEVENT_VERBOSE            0x4000
+#define VDMEVENT_PE                 0x2000
+#define VDMEVENT_ALLFLAGS           0xe000
+//
+// These flags are set in the second WORD of the exception event
+// parameters.
+//
+#define VDMEVENT_V86                0x0001
+#define VDMEVENT_PM16               0x0002
 
 //
 // The following flags control the contents of the CONTEXT structure.
@@ -54,6 +79,7 @@ extern "C" {
 #define VDMCONTEXT_SEGMENTS        (VDMCONTEXT_i386 | 0x00000004L) // DS, ES, FS, GS
 #define VDMCONTEXT_FLOATING_POINT  (VDMCONTEXT_i386 | 0x00000008L) // 387 state
 #define VDMCONTEXT_DEBUG_REGISTERS (VDMCONTEXT_i386 | 0x00000010L) // DB 0-3,6,7
+#define VDMCONTEXT_EXTENDED_REGISTERS  (VDMCONTEXT_i386 | 0x00000020L) // cpu specific extensions
 
 #define VDMCONTEXT_FULL (VDMCONTEXT_CONTROL | VDMCONTEXT_INTEGER |\
                       VDMCONTEXT_SEGMENTS)
@@ -201,7 +227,6 @@ typedef struct _VDMLDT_ENTRY {
     } HighWord;
 } VDMLDT_ENTRY;
 
-
 #endif // _X86_
 
 typedef VDMCONTEXT *LPVDMCONTEXT;
@@ -256,6 +281,26 @@ typedef struct {
     char    szExePath[MAX_PATH16+1];
     WORD    wNext;
 } MODULEENTRY, *LPMODULEENTRY;
+
+
+#define SN_CODE 0                           // Protect mode code segment
+#define SN_DATA 1                           // Protect mode data segment
+#define SN_V86  2                           // V86 mode segment
+
+typedef struct _TEMP_BP_NOTE {
+    WORD    Seg;                            // Dest. Segment or Selector
+    DWORD   Offset;                         // Dest. Offset
+    BOOL    bPM;                            // TRUE for PM, FALSE for V86
+} TEMP_BP_NOTE;
+
+typedef struct _VDM_SEGINFO {
+    WORD    Selector;                       // Selector or RM segment
+    WORD    SegNumber;                      // Logical segment number in executable
+    DWORD   Length;                         // Length of segment
+    WORD    Type;                           // Type (0=v86, 1=PM)
+    CHAR    ModuleName[MAX_MODULE_NAME];    // Module
+    CHAR    FileName[MAX_PATH16];           // Path to executable image
+} VDM_SEGINFO;
 
 /* GlobalFirst()/GlobalNext() flags */
 #define GLOBAL_ALL      0
@@ -321,6 +366,7 @@ typedef DWORD (CALLBACK* DEBUGEVENTPROC)( LPDEBUG_EVENT, LPVOID );
 
 #include <poppack.h>
 
+
 BOOL
 WINAPI
 VDMProcessException(
@@ -346,17 +392,21 @@ VDMGetPointer(
     BOOL            fProtMode
     );
 
+// VDMGetThreadContext, VDMSetThreadContext are obselete
+// Use VDMGetContext, VDMSetContext
 BOOL
 WINAPI
-VDMGetThreadContext(
-    LPDEBUG_EVENT   lpDebugEvent,
+VDMGetContext(
+    HANDLE          hProcess,
+    HANDLE          hThread,
     LPVDMCONTEXT    lpVDMContext
 );
 
 BOOL
 WINAPI
-VDMSetThreadContext(
-    LPDEBUG_EVENT   lpDebugEvent,
+VDMSetContext(
+    HANDLE          hProcess,
+    HANDLE          hThread,
     LPVDMCONTEXT    lpVDMContext
 );
 
@@ -489,6 +539,7 @@ VDMTerminateTaskWOW(
 //
 
 BOOL
+WINAPI
 VDMStartTaskInWOW(
     DWORD           dwProcessId,
     LPSTR           lpCommandLine,
@@ -521,6 +572,127 @@ VDMBreakThread(
     HANDLE          hProcess,
     HANDLE          hThread
 );
+
+DWORD
+WINAPI
+VDMGetDbgFlags(
+    HANDLE          hProcess
+    );
+
+BOOL
+WINAPI
+VDMSetDbgFlags(
+    HANDLE          hProcess,
+    DWORD           dwFlags
+    );
+
+#define VDMDBG_BREAK_DOSTASK    0x00000001
+#define VDMDBG_BREAK_WOWTASK    0x00000002
+#define VDMDBG_BREAK_LOADDLL    0x00000004
+#define VDMDBG_BREAK_EXCEPTIONS 0x00000008
+#define VDMDBG_BREAK_DEBUGGER   0x00000010
+#define VDMDBG_TRACE_HISTORY    0x00000080
+
+//
+// VDMIsModuleLoaded can be used to determine if the 16-bit
+// executable referenced by the full path name parameter is
+// loaded in ntvdm.
+//
+// Note that this function uses an internal table in vdmdbg.dll
+// to determine a module's existence. One important usage of this
+// function is to print a message when a particular module is
+// loaded for the first time. To accomplish this, call this
+// routine during a DBG_SEGLOAD notification BEFORE the entry
+// point VDMProcessException has been called. If it returns FALSE,
+// then the module has not yet been loaded.
+//
+BOOL
+WINAPI
+VDMIsModuleLoaded(
+    LPSTR szPath
+    );
+
+BOOL
+WINAPI
+VDMGetSegmentInfo(
+    WORD Selector,
+    ULONG Offset,
+    BOOL bProtectMode,
+    VDM_SEGINFO *pSegInfo
+    );
+
+//
+// VDMGetSymbol
+//
+// This routine reads the standard .SYM file format.
+//
+// szModule         - module name (max 9 chars)
+// SegNumber        - logical segment number of segment (see VDM_SEGINFO)
+// Offset           - offset in segment
+// bProtectMode     - TRUE for PM, FALSE for V86 mode
+// bNextSymbol      - FALSE to find nearest sym BEFORE offset, TRUE for AFTER
+// szSymbolName     - receives symbol name (must point to 256 byte buffer)
+// pDisplacement    - distance in bytes from nearest symbol
+//
+
+BOOL
+WINAPI
+VDMGetSymbol(
+    LPSTR szModule,
+    WORD SegNumber,
+    DWORD Offset,
+    BOOL bProtectMode,
+    BOOL bNextSymbol,
+    LPSTR szSymbolName,
+    PDWORD pDisplacement
+    );
+
+BOOL
+WINAPI
+VDMGetAddrExpression(
+    LPSTR  szModule,
+    LPSTR  szSymbol,
+    PWORD  Selector,
+    PDWORD Offset,
+    PWORD  Type
+    );
+
+#define VDMADDR_V86     2
+#define VDMADDR_PM16    4
+#define VDMADDR_PM32   16
+
+//
+// typedefs for main entry points
+//
+
+typedef BOOL  (WINAPI *VDMPROCESSEXCEPTIONPROC)(LPDEBUG_EVENT);
+typedef BOOL  (WINAPI *VDMGETTHREADSELECTORENTRYPROC)(HANDLE,HANDLE,DWORD,LPVDMLDT_ENTRY);
+typedef ULONG (WINAPI *VDMGETPOINTERPROC)(HANDLE,HANDLE,WORD,DWORD,BOOL);
+typedef BOOL  (WINAPI *VDMGETCONTEXTPROC)(HANDLE,HANDLE,LPVDMCONTEXT);
+typedef BOOL  (WINAPI *VDMSETCONTEXTPROC)(HANDLE,HANDLE,LPVDMCONTEXT);
+typedef BOOL  (WINAPI *VDMKILLWOWPROC)(VOID);
+typedef BOOL  (WINAPI *VDMDETECTWOWPROC)(VOID);
+typedef BOOL  (WINAPI *VDMBREAKTHREADPROC)(HANDLE);
+typedef BOOL  (WINAPI *VDMGETSELECTORMODULEPROC)(HANDLE,HANDLE,WORD,PUINT,LPSTR, UINT,LPSTR, UINT);
+typedef BOOL  (WINAPI *VDMGETMODULESELECTORPROC)(HANDLE,HANDLE,UINT,LPSTR,LPWORD);
+typedef BOOL  (WINAPI *VDMMODULEFIRSTPROC)(HANDLE,HANDLE,LPMODULEENTRY,DEBUGEVENTPROC,LPVOID);
+typedef BOOL  (WINAPI *VDMMODULENEXTPROC)(HANDLE,HANDLE,LPMODULEENTRY,DEBUGEVENTPROC,LPVOID);
+typedef BOOL  (WINAPI *VDMGLOBALFIRSTPROC)(HANDLE,HANDLE,LPGLOBALENTRY,WORD,DEBUGEVENTPROC,LPVOID);
+typedef BOOL  (WINAPI *VDMGLOBALNEXTPROC)(HANDLE,HANDLE,LPGLOBALENTRY,WORD,DEBUGEVENTPROC,LPVOID);
+
+typedef INT   (WINAPI *VDMENUMPROCESSWOWPROC)(PROCESSENUMPROC,LPARAM);
+typedef INT   (WINAPI *VDMENUMTASKWOWPROC)(DWORD,TASKENUMPROC,LPARAM);
+typedef INT   (WINAPI *VDMENUMTASKWOWEXPROC)(DWORD,TASKENUMPROCEX,LPARAM);
+typedef BOOL  (WINAPI *VDMTERMINATETASKINWOWPROC)(DWORD,WORD);
+typedef BOOL  (WINAPI *VDMSTARTTASKINWOWPROC)(DWORD,LPSTR,WORD);
+
+typedef DWORD (WINAPI *VDMGETDBGFLAGSPROC)(HANDLE);
+typedef BOOL  (WINAPI *VDMSETDBGFLAGSPROC)(HANDLE,DWORD);
+typedef BOOL  (WINAPI *VDMISMODULELOADEDPROC)(LPSTR);
+typedef BOOL  (WINAPI *VDMGETSEGMENTINFOPROC)(WORD,ULONG,BOOL,VDM_SEGINFO);
+typedef BOOL  (WINAPI *VDMGETSYMBOLPROC)(LPSTR, WORD, DWORD, BOOL, BOOL, LPSTR, PDWORD);
+typedef BOOL  (WINAPI *VDMGETADDREXPRESSIONPROC)(LPSTR, LPSTR, PWORD, PDWORD, PWORD);
+
 
 #ifdef __cplusplus
 }
