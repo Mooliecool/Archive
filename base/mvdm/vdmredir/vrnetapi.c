@@ -496,7 +496,7 @@ Return Value:
 #ifdef DBCS /*fix for DBCS char sets*/
         len = (DWORD)NetpUnicodeToDBCSLen(pInfo->wkui0_username);
 #else // !DBCS
-        len = (DWORD)wcslen(pInfo->wkui0_username);
+        len = (DWORD)wcslen((LPCWSTR)pInfo->wkui0_username);
 #endif // !DBCS
         if (getBX()) {
             itFits = (len) <= (DWORD)getCX()-1;
@@ -513,7 +513,7 @@ Return Value:
             NetpCopyWStrToStrDBCS(LPSTR_FROM_WORDS(getES(), getDI()),
                                    pInfo->wkui0_username);
 #else // !DBCS
-            NetpCopyWStrToStr(LPSTR_FROM_WORDS(getES(), getDI()), pInfo->wkui0_username);
+            NetpCopyWStrToStr(LPSTR_FROM_WORDS(getES(), getDI()), (LPWSTR)pInfo->wkui0_username);
 #endif // !DBCS
         }
         NetApiBufferFree(buffer);

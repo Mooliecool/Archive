@@ -22,14 +22,15 @@ TARGETPATH=obj
 TARGETTYPE=DYNLINK
 TARGETLIBS=$(SDK_LIB_PATH)\advapi32.lib \
            $(SDK_LIB_PATH)\kernel32.lib \
+           $(SDK_LIB_PATH)\netapi32.lib \
            $(SDK_LIB_PATH)\rxapi.lib \
            $(SDK_LIB_PATH)\rxcommon.lib \
            $(SDK_LIB_PATH)\netlib.lib \
-           $(DS_LIB_PATH)\netapi32p.lib \
            $(SDK_LIB_PATH)\ntvdm.lib \
            $(SDK_LIB_PATH)\xactsrv.lib \
            $(SDK_LIB_PATH)\netrap.lib \
-           $(SDK_LIB_PATH)\rpcrt4.lib \
+           $(SDK_LIB_PATH)\rpcrt4.lib
+#          $(DS_LIB_PATH)\netapi32p.lib \
 	
 DLLENTRY=VrDllInitialize
 DLLBASE=0x03000000
@@ -64,3 +65,12 @@ SOURCES=..\vdmredir.rc \
 MSC_WARNING_LEVEL=/W3 /WX
 
 C_DEFINES=-DVDMREDIR_DLL -DUNALIGNED_VDM_POINTERS $(C_DEFINES)
+
+NO_SAFESEH=1
+
+#
+# HACKHACK: We are forcing it to link with multiply symbols because we do not have netapi32p.lib
+#           at the moment.
+#
+
+LINKER_FLAGS=$(LINKER_FLAGS) /FORCE
