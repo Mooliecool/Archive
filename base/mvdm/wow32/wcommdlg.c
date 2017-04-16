@@ -122,11 +122,14 @@ typedef BOOL (APIENTRY* FILENAMEPROC)(LPOPENFILENAME);
 typedef HWND (APIENTRY* FINDREPLACEPROC)(LPFINDREPLACE);
 
 
+// FIXME: Enable the following when we are ready.
+/*
 // exported by comdlg32.dll to allow us to ultimately keep 16-bit common dialog
 // structs in sync with the UNICODE version maintained by comdlg32.
 extern VOID Ssync_ANSI_UNICODE_Struct_For_WOW(HWND  hDlg,
                                               BOOL  fANSI_To_UNICODE,
                                               DWORD dwID);
+*/
 
 // private function prototypes
 VOID
@@ -3389,13 +3392,13 @@ ThunkCDStruct16to32(IN HWND         hDlg,
 
             case sizeof(CHOOSECOLORDATA16):
                 ThunkCHOOSECOLOR16to32(p32, p16);
-                Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, TRUE, WOW_CHOOSECOLOR);
+                //Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, TRUE, WOW_CHOOSECOLOR);
                 break;
 
             case sizeof(CHOOSEFONTDATA16):
                 ThunkCHOOSEFONT16to32((CHOOSEFONT *) p32,
                                       (PCHOOSEFONTDATA16) p16);
-                Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, TRUE, WOW_CHOOSEFONT);
+                //Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, TRUE, WOW_CHOOSEFONT);
                 break;
 
             case sizeof(FINDREPLACE16):
@@ -3408,12 +3411,12 @@ ThunkCDStruct16to32(IN HWND         hDlg,
             case sizeof(OPENFILENAME16):
                 ThunkOPENFILENAME16to32((OPENFILENAME *) p32,
                                         (POPENFILENAME16) p16);
-                Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, TRUE, WOW_OPENFILENAME);
+                //Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, TRUE, WOW_OPENFILENAME);
                 break;
 
             case sizeof(PRINTDLGDATA16):
                 ThunkPRINTDLG16to32((PRINTDLG *) p32, (PPRINTDLGDATA16) p16);
-                Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, TRUE, WOW_PRINTDLG);
+                //Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, TRUE, WOW_PRINTDLG);
                 break;
 
         }
@@ -3442,12 +3445,12 @@ ThunkCDStruct32to16(IN HWND         hDlg,
         switch(p16->lStructSize) {
 
             case sizeof(CHOOSECOLORDATA16):
-                Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, FALSE, WOW_CHOOSECOLOR);
+                //Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, FALSE, WOW_CHOOSECOLOR);
                 ThunkCHOOSECOLOR32to16(p16, p32);
                 break;
 
             case sizeof(CHOOSEFONTDATA16):
-                Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, FALSE, WOW_CHOOSEFONT);
+                //Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, FALSE, WOW_CHOOSEFONT);
                 ThunkCHOOSEFONT32to16((PCHOOSEFONTDATA16) p16,
                                       (CHOOSEFONT *) p32);
                 break;
@@ -3460,14 +3463,14 @@ ThunkCDStruct32to16(IN HWND         hDlg,
                 break;
 
             case sizeof(OPENFILENAME16):
-                Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, FALSE, WOW_OPENFILENAME);
+                //Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, FALSE, WOW_OPENFILENAME);
                 ThunkOPENFILENAME32to16((POPENFILENAME16) p16,
                                         (OPENFILENAME *) p32,
                                         TRUE);
                 break;
 
             case sizeof(PRINTDLGDATA16):
-                Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, FALSE, WOW_PRINTDLG);
+                //Ssync_ANSI_UNICODE_Struct_For_WOW(hDlg, FALSE, WOW_PRINTDLG);
                 ThunkPRINTDLG32to16(vp, (PRINTDLG *) p32);
                 break;
 

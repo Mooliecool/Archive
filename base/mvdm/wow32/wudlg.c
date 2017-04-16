@@ -603,8 +603,11 @@ ULONG FASTCALL WU32EndDialog(PVDMFRAME pFrame)
 
     if(!EndDialog(hwnd, INT32(parg16->f2)) && IsWindow(hwnd)){
        CHAR szType[8];
-       if(GetLastError() == ERROR_WINDOW_NOT_DIALOG ||
-         (RealGetWindowClass(hwnd,szType,8) && WOW32_strnicmp(szType,"#32770",6))) {
+       
+       // FIXME: Enable the following when we are ready.
+       /*if(GetLastError() == ERROR_WINDOW_NOT_DIALOG ||
+         (RealGetWindowClass(hwnd,szType,8) && WOW32_strnicmp(szType,"#32770",6))) {*/
+       if(GetLastError() == ERROR_WINDOW_NOT_DIALOG || WOW32_strnicmp(szType,"#32770",6)) {
           // jarbats
           // App is trying to close window created by CreateWindow
           // via EndDialog! whistler bug #231059

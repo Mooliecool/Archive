@@ -1583,7 +1583,8 @@ ULONG FASTCALL WK32WOWFileOpen(PVDMFRAME pFrame)
                                                      NULL,
                                                      NULL)) {
 
-                        gpfnTermsrvCORIniFile(&UniFile);
+                        // FIXME: Enable the following when we are ready.
+                        //gpfnTermsrvCORIniFile(&UniFile);
                         RtlFreeHeap(RtlProcessHeap(), 0, UniFile.Buffer);
                         hFile = CreateFileOem(lpFileName,
                                               dwWinAccess,
@@ -2015,7 +2016,9 @@ ULONG FASTCALL WK32WOWFileGetAttributes(PVDMFRAME pFrame)
 
         // See if they are trying to chmod a .ini file, and if so see if we
         // should copy it to the user's home dir
-        if ((gpfnTermsrvCORIniFile != NULL) && (attributes == 0xffffffff) && WOW32_strstr(lpFileName,".INI")) {
+        // FIXME: Enable the following when we are ready.
+        if ((attributes == 0xffffffff) && WOW32_strstr(lpFileName,".INI")) {
+        //if ((gpfnTermsrvCORIniFile != NULL) && (attributes == 0xffffffff) && WOW32_strstr(lpFileName,".INI")) {
             pwch = malloc_w((MAX_PATH + 1)*sizeof(WCHAR));
             if (pwch) {
                 UniFile.Buffer = pwch;
@@ -2029,7 +2032,8 @@ ULONG FASTCALL WK32WOWFileGetAttributes(PVDMFRAME pFrame)
                                                  &UniFile,
                                                  NULL,
                                                  NULL)) {
-                    gpfnTermsrvCORIniFile(&UniFile);
+                    // FIXME: Enable the following when we are ready.
+                    //gpfnTermsrvCORIniFile(&UniFile);
                     RtlFreeHeap(RtlProcessHeap(), 0, UniFile.Buffer);
                     attributes = GetFileAttributesOemSys(lpFileName, FALSE);
                 }

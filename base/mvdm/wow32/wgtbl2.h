@@ -560,11 +560,16 @@
     {W32FUN(UNIMPLEMENTEDAPI,               "",                         MOD_GDI,   0)},
     {W32FUN(UNIMPLEMENTEDAPI,               "",                         MOD_GDI,   0)},
     {W32FUN(UNIMPLEMENTEDAPI,               "",                         MOD_GDI,   0)},
+
+    // FIXME: Enable the following when we are ready.
+    /*
 #ifdef FE_SB //add GetFontAssocStatus(), pisuih, 10/6/94'
     {W32FUN(WG32GetFontAssocStatus,         "GETFONTASSOCSTATUS",       MOD_GDI,   sizeof(GETFONTASSOCSTATUS16))},
 #else   // FE_SB
     {W32FUN(UNIMPLEMENTEDAPI,               "",                         MOD_GDI,   0)},
 #endif  // FE_SB
+    */
+    {W32FUN(UNIMPLEMENTEDAPI,               "",                         MOD_GDI,   0)}, // WG32GetFontAssocStatus
 
   /*** 0460 ***/
     {W32FUN(UNIMPLEMENTEDAPI,               "GDITASKTERMINATION",       MOD_GDI,   0)},

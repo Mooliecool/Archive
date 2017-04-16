@@ -261,7 +261,9 @@
     {W32FUN(IT(GetSystemDefaultLangID),     "GetSystemDefaultLangID",     MOD_KERNEL, 0)},
     #endif
     {W32FUN(WK32TermsrvGetWindowsDir,       "TermsrvGetWindowsDir",       MOD_KERNEL,sizeof(TERMSRVGETWINDIR16))},
-    {W32FUN(WK32WowPassEnvironment,         "WowPassEnvironment",         MOD_KERNEL,sizeof(WOWPASSENVIRONMENT16))},
+    // FIXME: Enable the following when we are ready.
+    //{W32FUN(WK32WowPassEnvironment,         "WowPassEnvironment",         MOD_KERNEL,sizeof(WOWPASSENVIRONMENT16))},
+    {W32FUN(UNIMPLEMENTEDAPI,               "DUMMYENTRY",                 MOD_KERNEL, 0)}, // WK32WoWPassEnvironment
 
   /*** 0210 ***/
     {W32FUN(WK32WowSyncTask,                "WowSyncTask",                MOD_KERNEL, 0)},

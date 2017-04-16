@@ -3604,6 +3604,9 @@ void RemoveFormFeedHack(HDC hdc)
         FreeFormFeedHackNode(pNode);
     }
 }
+
+// FIXME: Enable the following when we are ready.
+/*
 #ifdef FE_SB //GetFontAssocStatus, pisuih, 10/5/94'
 int GetFontAssocStatus(HDC hdc);                      //Modified by bklee. 02/01/95
 ULONG FASTCALL WG32GetFontAssocStatus(PVDMFRAME pFrame)
@@ -3619,6 +3622,7 @@ ULONG FASTCALL WG32GetFontAssocStatus(PVDMFRAME pFrame)
     RETURN (ul);
 }
 #endif  //FE_SB
+*/
 
 
 

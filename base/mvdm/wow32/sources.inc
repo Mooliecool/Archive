@@ -129,7 +129,8 @@ SOURCES= \
     ..\wnman.c     \
     ..\wwmman.c    \
     ..\wow32.rc    \
-    ..\wdpm.c
+    ..\wdpm.c      \
+    ..\hack.c
 #   ..\wshimdb.c   \
 
 !IFNDEF MSC_WARNING_LEVEL

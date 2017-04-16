@@ -333,6 +333,7 @@ standard:
 
     GlobalUnlock(hIME32);
 
+    /*
     // For win31 compatibility, since win31 didn't check the first
     // parm, check it here and fill in a dummy (WOW) hwnd if its bogus
     // so that NT doesn't reject the call
@@ -340,6 +341,7 @@ standard:
     ul = SendIMEMessageEx(
         ((parg16->hwnd) ? HWND32(parg16->hwnd) : (HWND)0xffff0000),
         (LPARAM)hIME32);
+    */
 
     LOGDEBUG(1,("WINNLS: Ret == %x\n", ul ));
 
@@ -630,6 +632,7 @@ standard:
 
     GlobalUnlock(hIME32);
 
+    /*
     // For win31 compatibility, since win31 didn't check the first
     // parm, check it here and fill in a dummy (WOW) hwnd if its bogus
     // so that NT doesn't reject the call
@@ -637,6 +640,7 @@ standard:
     ul = SendIMEMessageEx(
         ((parg16->hwnd) ? HWND32(parg16->hwnd) : (HWND)0xffff0000),
         (LPARAM)hIME32);
+    */
 
     LOGDEBUG(1,("WINNLS: Ret == %x\n", ul ));
 
@@ -708,6 +712,9 @@ eee:
 
 ULONG FASTCALL  WN32WINNLSGetIMEHotkey(PVDMFRAME pFrame)
 {
+    // FIXME: Enable the following when WINNLSGetIMEHotkey is exported by USER32.
+    
+    /*
     ULONG ul;
     register PWINNLSGETIMEHOTKEY16 parg16;
 
@@ -722,11 +729,17 @@ ULONG FASTCALL  WN32WINNLSGetIMEHotkey(PVDMFRAME pFrame)
     FREEARGPTR(parg16);
 
     RETURN(ul);
+    */
+    
+    return -1;
 }
 
 
 ULONG FASTCALL  WN32WINNLSEnableIME(PVDMFRAME pFrame)
 {
+    // FIXME: Enable the following when WINNLSEnableIME is exported by USER32.
+    
+    /*
     ULONG ul;
     register PWINNLSENABLEIME16 parg16;
 
@@ -747,11 +760,17 @@ ULONG FASTCALL  WN32WINNLSEnableIME(PVDMFRAME pFrame)
     FREEARGPTR(parg16);
 
     RETURN(ul);
+    */
+    
+    return -1;
 }
 
 
 ULONG FASTCALL  WN32WINNLSGetEnableStatus(PVDMFRAME pFrame)
 {
+    // FIXME: Enable the following when WINNLSGetEnableStatus is exported by USER32.
+    
+    /*
     ULONG ul;
     register PWINNLSGETENABLESTATUS16 parg16;
 
@@ -768,11 +787,17 @@ ULONG FASTCALL  WN32WINNLSGetEnableStatus(PVDMFRAME pFrame)
     FREEARGPTR(parg16);
 
     RETURN(ul);
+    */
+    
+    return -1;
 }
 
 
 ULONG FASTCALL  WN32IMPQueryIME(PVDMFRAME pFrame)
 {
+    // FIXME: Enable the following when IMPQueryIME is exported by USER32.
+    
+    /*
     ULONG ul=0;
     PIMPQUERYIME16 parg16;
     register PIMEPRO16 pime16;
@@ -809,11 +834,17 @@ fff:
     FREEVDMPTR(pime16);
     FREEARGPTR(parg16);
     return (ul);
+    */
+    
+    return -1;
 }
 
 
 ULONG FASTCALL  WN32IMPGetIME(PVDMFRAME pFrame)
 {
+    // FIXME: Enable the following when IMPGetIME is exported by USER32.
+    
+    /*
     ULONG ul = 0;
     PIMPGETIME16 parg16;
     register PIMEPRO16 pime16;
@@ -846,11 +877,17 @@ fff:
     FREEVDMPTR(pime16);
     FREEARGPTR(parg16);
     return (ul);
+    */
+    
+    return -1;
 }
 
 
 ULONG FASTCALL  WN32IMPSetIME(PVDMFRAME pFrame)
 {
+    // FIXME: Enable the following when IMPSetIME is exported by USER32.
+    
+    /*
     ULONG ul = 0;
     PIMPSETIME16 parg16;
     register PIMEPRO16 pime16;
@@ -887,6 +924,9 @@ fff:
     FREEVDMPTR(pime16);
     FREEARGPTR(parg16);
     return (ul);
+    */
+    
+    return -1;
 }
 
 
@@ -963,7 +1003,7 @@ VOID WN32WINNLSSImeNotifyTaskExit()
     if ( (imestruct32 = GlobalLock(hIME32) ) != NULL ) {
         imestruct32->fnc = IME_NOTIFYWOWTASKEXIT;
         GlobalUnlock(hIME32);
-        SendIMEMessageEx( NULL, (LPARAM)hIME32 );
+        //SendIMEMessageEx( NULL, (LPARAM)hIME32 );
     }
     GlobalFree(hIME32);
 #endif

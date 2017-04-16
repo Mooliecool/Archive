@@ -1502,7 +1502,10 @@ DWORD W32Thread(LPVOID vpInitialSSSP)
         // Initialize WOW compatibility flags from the database
         //
         //
-        gfTaskContinue = CheckAppHelpInfo(&td,szFilePath,szModName);
+        
+        // FIXME: Enable the following when we are ready.
+        gfTaskContinue = TRUE;
+        //gfTaskContinue = CheckAppHelpInfo(&td,szFilePath,szModName);
 
         //
         // We now inherit the WOW compatibility flags from the parent's TDB. Right
@@ -1961,6 +1964,8 @@ VOID W32FreeTask( PTD ptd )
     }
 
     // Free compat flag parameters if any
+    // FIXME: Enable the following when we are ready.
+    /*
     if(ptd->pWOWCompatFlagsEx_Info) {
        FreeFlagInfo(ptd->pWOWCompatFlagsEx_Info);
     }
@@ -1968,6 +1973,7 @@ VOID W32FreeTask( PTD ptd )
     if(ptd->pWOWCompatFlags2_Info) {
        FreeFlagInfo(ptd->pWOWCompatFlags2_Info);
     }
+    */
 
 
     // Free all DCs owned by the current task
@@ -2781,7 +2787,6 @@ PSZ WOWCreateEnvBlock(PSZ pszEnvWowApp, PSZ pszEnv, PSZ pszProcessHistoryVal)
 
 #endif // 0
 
-
 ULONG FASTCALL WK32WowPassEnvironment(PVDMFRAME pFrame)
 {
    PWOWPASSENVIRONMENT16 parg16;
@@ -2971,7 +2976,6 @@ exit_passenv:
    FREEARGPTR(parg16);
    return(MAKELONG(hMemEnv, uCmdLineStart));
 }
-
 
 
 
@@ -6087,10 +6091,12 @@ VOID W32Init9xSpecialPath(
                                     );
              }
          else
-         if (WOWCSIDL_AllUsers == pMatchMapPath->dwCLSID) {
+         
+        // FIXME: Enable the following when we are ready.
+        /*if (WOWCSIDL_AllUsers == pMatchMapPath->dwCLSID) {
              cb = sizeof(szBuf);
              GetAllUsersProfileDirectory(szBuf, &cb);
-             }
+             }*/
 
          if(pMatchMapPath->fIsShortPath) {
             DPM_GetShortPathName(szBuf,szBuf,sizeof(szBuf));
