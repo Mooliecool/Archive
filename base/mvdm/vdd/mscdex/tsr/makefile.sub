@@ -8,7 +8,7 @@ BUILDMSG=
 # in a directory that is greater than 128 chars down the path, even if
 # rc 3.1 is running as an OS/2 app.
 
-PATH    = $(BASEDIR)\tools\tools16;$(PATH)
+#PATH    = $(BASEDIR)\tools\tools16;$(PATH)
 
 .SUFFIXES:
 .SUFFIXES: .c .obj .lst .exe .exc .exs .com .sal .cod .sil .inc .skl .cla .cl1 .ctl .asm .idx .msg
@@ -17,7 +17,7 @@ MAKE    =nmake
 asm     =masm386
 awarn   =-W1
 aflags  =-Mx -t $(awarn) $(extasw)
-ainc    =-Imessages\$(ALT_PROJECT) -I. -I$(SDK_INC_PATH) -I$(BASEDIR)\base\mvdm\inc
+ainc    =-Imessages\$(ALT_PROJECT) -I. -I$(SDK_INC_PATH) -I$(PROJECT_ROOT)\mvdm\inc
 
 DEST=$(ALT_PROJECT)\$(O)
 
