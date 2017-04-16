@@ -105,8 +105,8 @@ NTSTATUS
 PushPmInterrupt(
     PKTRAP_FRAME TrapFrame,
     ULONG IretHookAddress,
-    PVDM_INTERRUPTHANDLER pInterruptHandler,
-    PVDM_PMSTACKINFO pPmStackInfo
+    PVDM_TIB VdmTib,
+    ULONG InterruptNumber
     );
 
 VOID
@@ -627,8 +627,8 @@ VDIretry:
           Status = PushPmInterrupt(
                           TrapFrame,
                           IretHookAddress,
-                          &VdmTib->VdmInterruptHandlers[InterruptNumber],
-                          &VdmTib->PmStackInfo
+                          VdmTib,
+                          InterruptNumber
                           );
 
           if (!NT_SUCCESS(Status)) {
@@ -996,15 +996,12 @@ Return Value:
     TrapFrame->SegCs       = *pIvtEntry;
 }
 
-
-
-
 NTSTATUS
 PushPmInterrupt(
     PKTRAP_FRAME TrapFrame,
     ULONG IretHookAddress,
-    PVDM_INTERRUPTHANDLER pInterruptHandler,
-    PVDM_PMSTACKINFO pPmStackInfo
+    PVDM_TIB VdmTib,
+    ULONG InterruptNumber
     )
 /*++
 
@@ -1016,8 +1013,9 @@ Routine Description:
 Arguments:
 
     TrapFrame       - address of current trapframe
-    InterruptNumber - Interrupt Number
     IretHookAddress - address of Iret Hook, 0 if none
+    VdmTib          - address of current vdm tib
+    InterruptNumber - interrupt number to reflect
 
 Return Value:
 
@@ -1028,8 +1026,9 @@ Return Value:
     ULONG   Flags,Base,Limit;
     ULONG   VdmSp, VdmSpOrg;
     PUSHORT VdmStackPointer;
-    ULONG   StackOffset;
-    BOOLEAN Frame32 = (BOOLEAN) pPmStackInfo->Flags;
+    BOOLEAN Frame32 = (BOOLEAN) VdmTib->DpmiInfo.Flags;
+    PVDM_INTERRUPTHANDLER IntHandler;
+    USHORT  NewCS;
 
     PAGED_CODE();
 
@@ -1038,30 +1037,33 @@ Return Value:
     // This emulates the win3.1 Begin_Use_Locked_PM_Stack function.
     //
 
-    if (!pPmStackInfo->LockCount++) {
-        pPmStackInfo->SaveEsp        = TrapFrame->HardwareEsp;
-        pPmStackInfo->SaveEip        = TrapFrame->Eip;
-        pPmStackInfo->SaveSsSelector = (USHORT) TrapFrame->HardwareSegSs;
-        TrapFrame->HardwareEsp       = 0x1000;
-        TrapFrame->HardwareSegSs     = (ULONG) pPmStackInfo->SsSelector;
+    try {
+        if (!VdmTib->DpmiInfo.LockCount++) {
+            VdmTib->DpmiInfo.SaveEsp        = TrapFrame->HardwareEsp;
+            VdmTib->DpmiInfo.SaveEip        = TrapFrame->Eip;
+            VdmTib->DpmiInfo.SaveSsSelector = (USHORT) TrapFrame->HardwareSegSs;
+            TrapFrame->HardwareEsp       = 0x1000;
+            TrapFrame->HardwareSegSs     = (ULONG) VdmTib->DpmiInfo.SsSelector | 0x7;
+        }
+    } except (EXCEPTION_EXECUTE_HANDLER) {
+        return GetExceptionCode ();
     }
 
     //
     // Use Sp or Esp ?
     //
     if (!Ki386GetSelectorParameters((USHORT)TrapFrame->HardwareSegSs,
-                                   &Flags, &Base, &Limit))
-       {
+                                    &Flags, &Base, &Limit)) {
         return STATUS_ACCESS_VIOLATION;
-        }
+    }
 
     //
     // Adjust the limit for page granularity
     //
-    Limit++;
     if (Flags & SEL_TYPE_2GIG) {
         Limit = (Limit << 12) | 0xfff;
         }
+    if (Limit != 0xffffffff) Limit++;
 
     VdmSp = (Flags & SEL_TYPE_BIG) ? TrapFrame->HardwareEsp
                                    : (USHORT)TrapFrame->HardwareEsp;
@@ -1091,7 +1093,7 @@ Return Value:
     if (Frame32) {
         VdmSp -= 6*sizeof(ULONG);
     } else {
-        VdmSp -= 6*sizeof(USHORT); 
+        VdmSp -= 6*sizeof(USHORT);
     }
 
     //
@@ -1100,10 +1102,9 @@ Return Value:
     //
     if (Flags & SEL_TYPE_BIG) {
         TrapFrame->HardwareEsp = VdmSp;
-        }
-    else {
-        (USHORT)TrapFrame->HardwareEsp = (USHORT)VdmSp;
-        }
+    } else {
+        TrapFrame->HardwareEsp = (USHORT)VdmSp;
+    }
 
 
     //
@@ -1117,43 +1118,89 @@ Return Value:
     //
     if ( VdmSp >= VdmSpOrg ||
          !(Flags & SEL_TYPE_ED) && VdmSpOrg > Limit ||
-         (Flags & SEL_TYPE_ED) && VdmSp < Limit )
-       {
+         (Flags & SEL_TYPE_ED) && VdmSp < Limit ) {
         return STATUS_ACCESS_VIOLATION;
-        }
+    }
 
     //
     // Build the Hw Int iret frame
     //
 
-    if (Frame32) {
+    try {
+        if (Frame32) {
+            //
+            // Probe the stack pointer to make sure its good. We probe for read here
+            // as we are faster. The code is going to write the addresses anyway.
+            //
+            ProbeForReadSmallStructure (VdmStackPointer - 6 * sizeof (ULONG),
+                                        6 * sizeof (ULONG),
+                                        sizeof (UCHAR));
 
-       *(--(PULONG)VdmStackPointer)          = TrapFrame->EFlags;
-       *(PUSHORT)(--(PULONG)VdmStackPointer) = (USHORT)TrapFrame->SegCs;
-       *(--(PULONG)VdmStackPointer)          = TrapFrame->Eip;
-       *(--(PULONG)VdmStackPointer)          = TrapFrame->EFlags & ~EFLAGS_TF_MASK;
-       *(--(PULONG)VdmStackPointer)          = pPmStackInfo->DosxIntIretD >> 16;
-       *(--(PULONG)VdmStackPointer)          = pPmStackInfo->DosxIntIretD & 0xffff;
+            VdmStackPointer -= 2;
+            *(PULONG)VdmStackPointer = TrapFrame->EFlags;
 
-    } else {
+            VdmStackPointer -= 2;
+            *(PUSHORT)VdmStackPointer = (USHORT)TrapFrame->SegCs;
 
-       *(--(PUSHORT)VdmStackPointer) = (USHORT)TrapFrame->EFlags;
-       *(--(PUSHORT)VdmStackPointer) = (USHORT)TrapFrame->SegCs;
-       *(--(PUSHORT)VdmStackPointer) = (USHORT)TrapFrame->Eip;
-       *(--(PUSHORT)VdmStackPointer) = (USHORT)(TrapFrame->EFlags & ~EFLAGS_TF_MASK);
-       *(--(PULONG)VdmStackPointer)          = pPmStackInfo->DosxIntIret;
+            VdmStackPointer -= 2;
+            *(PULONG)VdmStackPointer = TrapFrame->Eip;
 
+            VdmStackPointer -= 2;
+            *(PULONG)VdmStackPointer = TrapFrame->EFlags & ~EFLAGS_TF_MASK;
+
+            VdmStackPointer -= 2;
+            *(PULONG)VdmStackPointer = VdmTib->DpmiInfo.DosxIntIretD >> 16;
+
+            VdmStackPointer -= 2;
+            *(PULONG)VdmStackPointer = VdmTib->DpmiInfo.DosxIntIretD & 0xffff;
+
+        } else {
+            ProbeForReadSmallStructure (VdmStackPointer - 6 * sizeof (USHORT),
+                                        6 * sizeof (USHORT),
+                                        sizeof (UCHAR));
+
+            VdmStackPointer -= 1;
+            *VdmStackPointer = (USHORT)TrapFrame->EFlags;
+
+            VdmStackPointer -= 1;
+            *VdmStackPointer = (USHORT)TrapFrame->SegCs;
+
+            VdmStackPointer -= 1;
+            *VdmStackPointer = (USHORT)TrapFrame->Eip;
+
+            VdmStackPointer -= 1;
+            *VdmStackPointer = (USHORT)(TrapFrame->EFlags & ~EFLAGS_TF_MASK);
+
+            VdmStackPointer -= 2;
+            *(PULONG)VdmStackPointer = VdmTib->DpmiInfo.DosxIntIret;
+        }
+
+        //
+        // Point cs and ip at interrupt handler
+        //
+        IntHandler = &VdmTib->VdmInterruptTable[InterruptNumber];
+        ProbeForReadSmallStructure (&IntHandler[InterruptNumber],
+                                    sizeof (VDM_INTERRUPTHANDLER),
+                                    sizeof (UCHAR));
+        NewCS = IntHandler->CsSelector | 0x7;
+        if ((TrapFrame->EFlags & EFLAGS_V86_MASK) == 0) {
+            NewCS = SANITIZE_SEG (NewCS, UserMode);
+            if (NewCS < 8) {
+                NewCS = KGDT_R3_CODE | RPL_MASK;
+            }
+        }
+        TrapFrame->SegCs = NewCS;
+        TrapFrame->Eip   = IntHandler->Eip;
+
+    } except (EXCEPTION_EXECUTE_HANDLER) {
+        return GetExceptionCode ();
     }
-
-    //
-    // Point cs and ip at interrupt handler
-    //
-    TrapFrame->SegCs = pInterruptHandler->CsSelector;
-    TrapFrame->Eip   = pInterruptHandler->Eip;
 
     //
     // Turn off trace bit so we don't trace the iret hook
     //
+    ASSERT (KeGetCurrentIrql () >= APC_LEVEL);
+
     TrapFrame->EFlags &= ~EFLAGS_TF_MASK;
 
     //
@@ -1169,18 +1216,41 @@ Return Value:
         SegCs = IretHookAddress >> 16;
         Eip   = IretHookAddress & 0xFFFF;
 
-        if (Frame32) {
-    
-           *(--(PULONG)VdmStackPointer)          = TrapFrame->EFlags;
-           *(PUSHORT)(--(PULONG)VdmStackPointer) = (USHORT)SegCs;
-           *(--(PULONG)VdmStackPointer)          = Eip;
-    
-        } else {
-    
-           *(--(PUSHORT)VdmStackPointer) = (USHORT)TrapFrame->EFlags;
-           *(--(PUSHORT)VdmStackPointer) = (USHORT)SegCs;
-           *(--(PUSHORT)VdmStackPointer) = (USHORT)Eip;
-    
+
+        try {
+            if (Frame32) {
+
+                ProbeForReadSmallStructure (VdmStackPointer - 3 * sizeof (ULONG),
+                                            3 * sizeof (ULONG),
+                                            sizeof (UCHAR));
+
+                VdmStackPointer -= 2;
+                *(PULONG)VdmStackPointer = TrapFrame->EFlags;
+
+                VdmStackPointer -= 2;
+                *VdmStackPointer = (USHORT)SegCs;
+
+                VdmStackPointer -= 2;
+                *(PULONG)VdmStackPointer = Eip;
+
+            } else {
+
+                ProbeForReadSmallStructure (VdmStackPointer - 3 * sizeof (USHORT),
+                                            3 * sizeof (USHORT),
+                                            sizeof (UCHAR));
+
+                VdmStackPointer -= 1;
+                *VdmStackPointer = (USHORT)TrapFrame->EFlags;
+
+                VdmStackPointer -= 1;
+                *VdmStackPointer = (USHORT)SegCs;
+
+                VdmStackPointer -= 1;
+                *VdmStackPointer = (USHORT)Eip;
+
+            }
+        } except (EXCEPTION_EXECUTE_HANDLER) {
+            return GetExceptionCode ();
         }
     }
     return STATUS_SUCCESS;
