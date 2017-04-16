@@ -44,7 +44,6 @@
 #include CpuH
 #include "sas.h"
 
-
 #ifdef SEGMENTATION
 /*
  * The following #include specifies the code segment into which this
@@ -106,6 +105,7 @@ Output:
 GLOBAL VOID
 v7vga_func_6f()
 {
+#ifndef NEC_98
 	byte al;
 
 	note_entrance0("v7vga_func_6f");
@@ -115,6 +115,7 @@ v7vga_func_6f()
 	else
 		setAH(2);
 		/* setCF(1) ?? */
+#endif  //NEC_98
 }
 
 /*(
@@ -138,10 +139,12 @@ Output:
 GLOBAL VOID
 v7vga_inquire()
 {
+#ifndef NEC_98
 	note_entrance0("v7vga_inquire");
 
 	setAX(0x6f6f);
 	setBX(0x5637);
+#endif  //NEC_98
 }
 
 /*(
@@ -166,12 +169,14 @@ Output:
 GLOBAL VOID
 v7vga_get_info()
 {
+#ifndef NEC_98
 	note_entrance0("v7vga_get_info");
 
 	/* Reserved */
 	setAL(0x10); /* This is what our V7VGA puts there */
 	/* Status register information */
 	setAH(0x04); /* Bit 5 = 0 -> colour. Bit 4 = 0 -> hi-res. Bit 0 = 0 -> display enabled. */
+#endif  //NEC_98
 }
 
 /*(
@@ -221,6 +226,7 @@ Output:
 GLOBAL VOID
 v7vga_get_mode_and_screen_res()
 {
+#ifndef NEC_98
 	half_word video_mode;
 
 	note_entrance0("v7vga_get_mode_and_screen_res");
@@ -246,6 +252,7 @@ v7vga_get_mode_and_screen_res()
 		else
 			setCX(get_screen_height()/get_pc_pix_height());
 	}
+#endif  //NEC_98
 }
 
 /*(
@@ -269,6 +276,7 @@ Output:
 GLOBAL VOID
 v7vga_extended_set_mode()
 {
+#ifndef NEC_98
 	UTINY pag;
 	sys_addr save_addr,font_addr;
 	half_word temp_word;
@@ -456,6 +464,7 @@ v7vga_extended_set_mode()
 #ifndef PROD
     trace("end of video set mode", DUMP_NONE);
 #endif
+#endif  //NEC_98
 }
 
 /*(
@@ -480,12 +489,14 @@ Output:
 GLOBAL VOID
 v7vga_select_autoswitch_mode()
 {
+#ifndef NEC_98
 	note_entrance0("v7vga_select_autoswitch_mode");
 
 /***
 	I reckon we shouldn't support this
 ***/
 	setAH(0x2);
+#endif  //NEC_98
 }
 
 /*(
@@ -513,11 +524,13 @@ Output:
 GLOBAL VOID
 v7vga_get_memory_configuration()
 {
+#ifndef NEC_98
 	note_entrance0("v7vga_get_memory_configuration");
 
 	setAX(0x826f);
 	setBX(0x7070);
 	setCX(0x0);
+#endif  //NEC_98
 }
 
 #endif /* V7VGA */

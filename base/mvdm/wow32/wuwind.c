@@ -23,6 +23,9 @@ extern HWND hdlgSDIMCached ;
 // From wuman.c [Identify thunked system class WndProcs]
 extern WORD gUser16CS;
 
+// From wkman.c [hinst/hmod for user32]
+extern HANDLE ghInstanceUser32;
+
 // dwExStyle is used by the CreateWindow and CreateWindowEx thunks
 // so that they can use a common procedure (don't worry, the current
 // task cannot be preempted during its use)
@@ -75,10 +78,10 @@ ULONG FASTCALL WU32AdjustWindowRect(PVDMFRAME pFrame)
     WOW32VERIFY(GETRECT16(parg16->f1, &t1));
 
     AdjustWindowRect(
-    &t1,
-    LONG32(parg16->f2),
-    BOOL32(parg16->f3)
-    );
+        &t1,
+        LONG32(parg16->f2),
+        BOOL32(parg16->f3)
+        );
 
     PUTRECT16(parg16->f1, &t1);
     FREEARGPTR(parg16);
@@ -133,150 +136,16 @@ ULONG FASTCALL WU32AdjustWindowRectEx(PVDMFRAME pFrame)
     WOW32VERIFY(GETRECT16(parg16->f1, &t1));
 
     AdjustWindowRectEx(
-    &t1,
-    LONG32(parg16->f2),
-    BOOL32(parg16->f3),
-    DWORD32(parg16->f4)
-    );
+        &t1,
+        LONG32(parg16->f2),
+        BOOL32(parg16->f3),
+        DWORD32(parg16->f4)
+        );
 
     PUTRECT16(parg16->f1, &t1);
     FREEARGPTR(parg16);
     RETURN(0);
 }
-
-
-/*++
-    BOOL AnyPopup(VOID)
-
-    The %AnyPopup% function indicates whether a pop-up window exists on the
-    screen. It searches the entire Windows screen, not just the caller's client
-    area. The %AnyPopup% function returns TRUE even if a pop-up window is
-    completely covered by another window.
-
-    This function has no parameters.
-
-    The return value is TRUE if a pop-up window exists. Otherwise, it is
-    FALSE.
---*/
-
-ULONG FASTCALL WU32AnyPopup(PVDMFRAME pFrame)
-{
-    ULONG ul;
-
-    UNREFERENCED_PARAMETER(pFrame);
-
-    ul = GETBOOL16(AnyPopup());
-
-    RETURN(ul);
-}
-
-
-/*++
-    WORD ArrangeIconicWindows(<hwnd>)
-    HWND <hwnd>;
-
-    The %ArrangeIconicWindows% function arranges all the minimized (iconic)
-    child windows of the window specified by the <hwnd> parameter.
-
-    <hwnd>
-        Identifies the window.
-
-    The return value is the height of one row of icons, or zero if there were no
-    icons.
-
-    Applications that maintain their own iconic child windows call this function
-    to arrange icons in a client window. This function also arranges icons on
-    the desktop window, which covers the entire screen. The %GetDesktopWindow%
-    function retrieves the window handle of the desktop window.
-
-    To arrange iconic MDI child windows in an MDI client window, an application
-    sends the WM_MDIICONARRANGE message to the MDI client window.
---*/
-
-ULONG FASTCALL WU32ArrangeIconicWindows(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PARRANGEICONICWINDOWS16 parg16;
-
-    GETARGPTR(pFrame, sizeof(ARRANGEICONICWINDOWS16), parg16);
-
-    ul = GETWORD16(ArrangeIconicWindows(
-    HWND32(parg16->hwnd)
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    HANDLE BeginDeferWindowPos(<nNumWindows>)
-    int <nNumWindows>;
-
-    The %BeginDeferWindowPos% function allocates memory to contain a multiple
-    window-position data structure and returns a handle to the structure. The
-    %DeferWindowPos% function fills this structure with information about the
-    target position for a window that is about to be moved. The
-    %EndDeferWindowPos% function accepts this structure and instantaneously
-    repositions the windows using the information stored in the structure.
-
-    <nNumWindows>
-        Specifies the initial number of windows for which position information
-        is to be stored in the structure. The %DeferWindowPos% function
-        increases the size of the structure if needed.
-
-    The return value identifies the multiple window-position structure. The
-    return value is NULL if system resources are not available to allocate the
-    structure.
---*/
-
-ULONG FASTCALL WU32BeginDeferWindowPos(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PBEGINDEFERWINDOWPOS16 parg16;
-
-    GETARGPTR(pFrame, sizeof(BEGINDEFERWINDOWPOS16), parg16);
-
-    ul = GETHDWP16(BeginDeferWindowPos(
-    INT32(parg16->f1)
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    BOOL BringWindowToTop(<hwnd>)
-    HWND <hwnd>;
-
-    The %BringWindowToTop% function brings a pop-up or child window to the top
-    of a stack of overlapping windows. In addition, it activates pop-up and
-    top-level windows. The %BringWindowToTop% function should be used to uncover
-    any window that is partially or completely obscured by any overlapping
-    windows.
-
-    <hwnd>
-        Identifies the pop-up or child window that is to be brought to the top.
-
-    The return value is nonzero if the function is successful. Otherwise it is
-    zero.  (updated for Win3.1 compatability -- this returned void for Win3.0)
---*/
-
-ULONG FASTCALL WU32BringWindowToTop(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PBRINGWINDOWTOTOP16 parg16;
-
-    GETARGPTR(pFrame, sizeof(BRINGWINDOWTOTOP16), parg16);
-
-    ul = GETBOOL16(BringWindowToTop(HWND32(parg16->f1)));
-
-    FREEARGPTR(parg16);
-
-    RETURN(ul);
-}
-
 
 /*++
     HWND ChildWindowFromPoint(<hwndParent>, <Point>)
@@ -315,37 +184,43 @@ ULONG FASTCALL WU32ChildWindowFromPoint(PVDMFRAME pFrame)
 
 
 /*++
-    void CloseWindow(<hwnd>)
-    HWND <hwnd>;
+    HWND ChildWindowFromPointEx(<hwndParent>, <Point>, <Flags>)
+    HWND <hwndParent>;
+    POINT <Point>;
+    UINT <Flags>;
 
-    The %CloseWindow% function minimizes the specified window. If the window is
-    an overlapped window, it is minimized by removing the client area and
-    caption of the open window from the display screen and moving the window's
-    icon into the icon area of the screen.
+    The %ChildWindowFromPointEx% function determines which, if any, of the child
+    windows belonging to the given parent window contains the specified point.
 
-    <hwnd>
-        Identifies the window to be minimized.
+    <hwndParent>
+        Identifies the parent window.
 
-    This function does not return a value.
+    <Point>
+        Specifies the client coordinates of the point to be tested.
+        
+    <Flags>
+        Skipping flags
 
-    This function has no effect if the <hwnd> parameter is a handle to a pop-up
-    or child window.
+    The return value identifies the child window that contains the point. It is
+    NULL if the given point lies outside the parent window. If the point is
+    within the parent window but is not contained within any child window, the
+    handle of the parent window is returned.
 --*/
 
-ULONG FASTCALL WU32CloseWindow(PVDMFRAME pFrame)
+ULONG FASTCALL WU32ChildWindowFromPointEx(PVDMFRAME pFrame)
 {
-    register PCLOSEWINDOW16 parg16;
+    ULONG ul;
+    POINT pt32;
+    register PCHILDWINDOWFROMPOINTEX16 parg16;
 
-    GETARGPTR(pFrame, sizeof(CLOSEWINDOW16), parg16);
+    GETARGPTR(pFrame, sizeof(CHILDWINDOWFROMPOINTEX16), parg16);
+    COPYPOINT16(parg16->pt, pt32);
 
-    CloseWindow(
-    HWND32(parg16->f1)
-    );
+    ul = GETHWND16(ChildWindowFromPointEx(HWND32(parg16->hwnd), pt32, DWORD32(parg16->wFlags)));
 
     FREEARGPTR(parg16);
-    RETURN(0);
+    RETURN(ul);
 }
-
 
 /*++
     HWND CreateWindow(<lpClassName>, <lpWindowName>, <dwStyle>, <X>, <Y>,
@@ -668,7 +543,18 @@ ULONG FASTCALL WU32CloseWindow(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32CreateWindow(PVDMFRAME pFrame)
 {
+
     dwExStyle = 0;
+
+    // this is a hack for MS Explorapedia -- see bug #189004 -- handle recycling
+    // the app destroys this 1st hwnd it squirreled away -- which is the problem
+    if(CURRENTPTD()->dwWOWCompatFlagsEx & WOWCF_CREATEBOGUSHWND) {
+
+        // we detect this version by the offset of the return address
+        if((pFrame->vpCSIP & 0x0000FFFF) == 0x8DBB)
+            W32CreateWindow(pFrame);
+    }
+
     return W32CreateWindow(pFrame);
 }
 
@@ -773,10 +659,25 @@ ULONG FASTCALL WU32CreateWindowEx(PVDMFRAME pFrame)
     register PCREATEWINDOWEX16 parg16;
 
     GETARGPTR(pFrame, sizeof(CREATEWINDOWEX16), parg16);
-    dwExStyle = DWORD32(parg16->f1);
+    /*
+     * We've had problems with apps setting new (Win 5.0) bits, like WS_EX_LAYERED.
+     * This causes Real Bad Problems with thos apps.  Keep Wow apps from doing that.
+     *  FritzS
+     */
+    dwExStyle = DWORD32(parg16->f1) & WS_EX_VALID40;
+
     FREEARGPTR(parg16);
     RETURN(W32CreateWindow(pFrame));
 }
+#ifdef FE_SB
+// HACK for Director 4.0J
+#define MAXNUMOFSTR 20
+typedef struct _DIRECTOR {
+    HWND   hwnd;            // handle of director window
+    UCHAR  orgstr[2];       // application oreginal string
+} DIRECTOR, *PDIRECTOR;
+DIRECTOR  director[MAXNUMOFSTR];
+#endif // FE_SB
 
 ULONG FASTCALL W32CreateWindow(PVDMFRAME pFrame)
 {
@@ -785,14 +686,15 @@ ULONG FASTCALL W32CreateWindow(PVDMFRAME pFrame)
     PSZ     psz2;
     HWND    hwnd32;
     HMENU   hmenu32;
-    PWC     pwc;
-    WW      ww;
     register PCREATEWINDOW16 parg16;
     CLIENTCREATESTRUCT  clientcreatestruct;
     LPVOID  vpparam;
     CHAR    szAtomName[WOWCLASS_ATOM_NAME];
     DWORD   dwStyle;
-    INT     iClass;
+#ifdef FE_SB
+    PDIRECTOR pdirector;
+    unsigned char * pszTmp;
+#endif // FE_SB
 
     GETARGPTR(pFrame, sizeof(CREATEWINDOW16), parg16);
     GETPSZIDPTR(parg16->vpszClass, psz1);
@@ -817,7 +719,7 @@ ULONG FASTCALL W32CreateWindow(PVDMFRAME pFrame)
     else
         hmenu32 = (HMENU32(parg16->hMenu));
 
-    if (_stricmp(pszClass, "MDIClient")) {
+    if (WOW32_stricmp(pszClass, "MDIClient")) {
         vpparam = (LPVOID)DWORD32(parg16->vpParam);
     } else {
         GETCLIENTCREATESTRUCT16(parg16->vpParam, &clientcreatestruct );
@@ -825,65 +727,56 @@ ULONG FASTCALL W32CreateWindow(PVDMFRAME pFrame)
     }
 
     dwStyle = DWORD32(parg16->dwStyle);
+#ifdef FE_SB
+        if (CURRENTPTD()->dwWOWCompatFlagsFE & WOWCF_FE_DIRECTOR_START && psz2) {
 
-    //
-    // Fill in the WOW WORDs (WW) structure. This contains all the
-    // handle aliasing information in it.
-    //
-    pwc = FindClass16(pszClass, parg16->hInstance);
+            pdirector = director;
+            while (pdirector->hwnd)
+                   pdirector++;
 
-    if (pwc) {
-
-        if (iClass = GetStdClassNumber(pszClass)) {
-            ww.iClass       = iClass;
-            ww.vpfnWndProc  = 0;
-        }
-        else {
-            // Look to see if the 16:16 proc is a thunk for a 32-bit proc.
-            // QUICKEN: registers wow class with 16bit listboxwndproc
-            //          We treat this window as a WOWCLASS and therfore all
-            //          LB_* messages remain unthunked (they remained > WM_USER).
-            //
-            //          The following code checks for such a wndproc and
-            //          sets the system class appropriately.
-
-            if (HIWORD(pwc->vpfnWndProc) == gUser16CS) {
-                LOGDEBUG(LOG_WARNING,("Creating Private Class window with System WndProc\n"));
-                IsThunkWindowProc((DWORD)pwc->vpfnWndProc, &iClass);
-                ww.iClass       = iClass;
+            for ((PSZ)pszTmp = psz2; *pszTmp; pszTmp++) {
+                if (IsDBCSLeadByte(*pszTmp)) {
+                    if (*(pszTmp+1) < 0x40 || *(pszTmp+1) > 0xfc) {
+                        pdirector->orgstr[0] = *pszTmp;
+                        pdirector->orgstr[1] = *(pszTmp+1);
+                        *(pszTmp+1) = *pszTmp = 0x7c;
+                        pdirector++;
+                    }
+                    pszTmp++;
+                }
             }
-            else {
-                ww.iClass       = WOWCLASS_WIN16;
-            }
-
-            ww.vpfnWndProc  = pwc->vpfnWndProc;
         }
-        ww.vpfnDlgProc  = 0;
-        ww.flState      = WWSTATE_ICLASSISSET;
+#endif // FE_SB
 
+    hwnd32 = (pfnOut.pfnCsCreateWindowEx)(
+               dwExStyle,
+               pszClass,
+               psz2,
+               dwStyle,
+               INT32DEFAULT(parg16->x),
+               INT32DEFAULT(parg16->y),
+               INT32DEFAULT(parg16->cx),
+               INT32DEFAULT(parg16->cy),
+               HWND32(parg16->hwndParent),
+               hmenu32,
+               HMODINST32(parg16->hInstance),
+               vpparam,
+               CW_FLAGS_ANSI);
+#ifdef FE_SB
+    if (CURRENTPTD()->dwWOWCompatFlagsFE & WOWCF_FE_DIRECTOR_START) {
 
+        pdirector = director;
 
-        hwnd32 = (pfnOut.pfnCsCreateWindowEx)(
-                   dwExStyle,
-                   pszClass,
-                   psz2,
-                   dwStyle,
-                   INT32DEFAULT(parg16->x),
-                   INT32DEFAULT(parg16->y),
-                   INT32DEFAULT(parg16->cx),
-                   INT32DEFAULT(parg16->cy),
-                   HWND32(parg16->hwndParent),
-                   hmenu32,
-                   HMODINST32(parg16->hInstance),
-                   vpparam,
-                   CW_FLAGS_ANSI,
-                   (LPDWORD)&ww);
-
-    } else {        // The class doesn't exist.
-
-        hwnd32 = NULL;
-
+        for (; pdirector->orgstr[0]; pdirector++) {
+            if (hwnd32)
+                if (!pdirector->hwnd)
+                    pdirector->hwnd = hwnd32;
+            else
+                if (!pdirector->hwnd)
+                    pdirector->orgstr[1] = pdirector->orgstr[0] = 0;
+        }
     }
+#endif // FE_SB
 
 #ifdef DEBUG
     if (hwnd32) {
@@ -926,7 +819,7 @@ ULONG FASTCALL W32CreateWindow(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32DeferWindowPos(PVDMFRAME pFrame)
 {
-    ULONG ul;
+    ULONG ul = 0;
     HDWP  h32;
     register PDEFERWINDOWPOS16 parg16;
 
@@ -934,18 +827,24 @@ ULONG FASTCALL WU32DeferWindowPos(PVDMFRAME pFrame)
 
     h32 = HDWP32(parg16->f1);
 
-    ul = (ULONG) DeferWindowPos(
-    h32,
-    HWND32(parg16->f2),
-    HWNDIA32(parg16->f3),
-    INT32(parg16->f4),
-    INT32(parg16->f5),
-    INT32(parg16->f6),
-    INT32(parg16->f7),
-    WORD32(parg16->f8) & SWP_VALID
-    );
+    if ( h32 ) {
+      ul = (ULONG) DeferWindowPos(
+                     h32,
+                     HWND32(parg16->f2),
+                     HWNDIA32(parg16->f3),
+                     INT32(parg16->f4),
+                     INT32(parg16->f5),
+                     INT32(parg16->f6),
+                     INT32(parg16->f7),
+                     WORD32(parg16->f8) & SWP_VALID
+                     );
+    }
+    else {
+        goto WDWP_error;
+    }
 
     if (ul != (ULONG) h32) {
+        FREEHDWP16(parg16->f1);
         ul = GETHDWP16(ul);
         LOGDEBUG (12, ("WOW::DeferWindowsPos: ul = %08x, h32 = %08x\n", ul, h32));
     }
@@ -953,8 +852,7 @@ ULONG FASTCALL WU32DeferWindowPos(PVDMFRAME pFrame)
         ul = parg16->f1;
         LOGDEBUG (12, ("WOW::DeferWindowsPos: ul = %08x, parg = %08x\n", ul, parg16->f1));
     }
-
-
+WDWP_error:
     FREEARGPTR(parg16);
     RETURN(ul);
 }
@@ -1005,59 +903,28 @@ ULONG FASTCALL WU32DestroyWindow(PVDMFRAME pFrame)
 
     // Invalidate SendDlgItemMessage cache
     hdlgSDIMCached = NULL ;
+#ifdef FE_SB
+    if (CURRENTPTD()->dwWOWCompatFlagsFE & WOWCF_FE_DIRECTOR_START) {
 
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
+        PDIRECTOR pdirector = director;
 
+        for (; pdirector->hwnd; ) {
+            if (parg16->f1 == (WORD)pdirector->hwnd) {
 
-/*++
-    BOOL EnableWindow(<hwnd>, <bEnable>)
-    HWND <hwnd>;
-    BOOL <bEnable>;
+                PDIRECTOR ptmp = pdirector;
 
-    The %EnableWindow% function enables or disables mouse and keyboard input to
-    the specified window or control. When input is disabled, input such as mouse
-    clicks and key presses are ignored by the window. When input is enabled, all
-    input is processed.
-
-    The %EnableWindow% function enables mouse and keyboard input to a window if
-    the <bEnable> parameter is TRUE, and disables it if <bEnable> is FALSE.
-
-    <hwnd>
-        Identifies the window to be enabled or disabled.
-
-    <bEnable>
-        Specifies whether the given window is to be enabled or disabled.
-
-    The return value indicates the state of the window before the %EnableWindow%
-    function was called. A return value of TRUE indicates mouse and keyboard was
-    originally disabled. A return value of FALSE indicates it was enabled. A
-    return value of FALSE is also returned if the window handle specified by
-    the <hwnd> parameter is invalid.
-
-    A window must be enabled before it can be activated. For example, if an
-    application is displaying a modeless dialog box and has disabled its main
-    window, the main window must be enabled before the dialog box is destroyed.
-    Otherwise, another window will get the input focus and be activated. If a
-    child window is disabled, it is ignored when Windows tries to determine
-    which window should get mouse messages.
-
-    Initially, all windows are enabled by default. %EnableWindow% must be used
-    to disable a window explicitly.
---*/
-
-ULONG FASTCALL WU32EnableWindow(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PENABLEWINDOW16 parg16;
-
-    GETARGPTR(pFrame, sizeof(ENABLEWINDOW16), parg16);
-
-    ul = GETBOOL16(EnableWindow(
-    HWND32(parg16->f1),
-    BOOL32(parg16->f2)
-    ));
+                do {
+                    ptmp->hwnd = (ptmp+1)->hwnd;
+                    ptmp->orgstr[0] = (ptmp+1)->orgstr[0];
+                    ptmp->orgstr[1] = (ptmp+1)->orgstr[1];
+                    ptmp++;
+                } while (ptmp->hwnd);
+            }
+            else
+                pdirector++;
+        }
+    }
+#endif // FE_SB
 
     FREEARGPTR(parg16);
     RETURN(ul);
@@ -1404,8 +1271,8 @@ ULONG FASTCALL WU32FindWindow(PVDMFRAME pFrame)
     // with the shift key down to get it to save its settings.  They do
     // this by 1st finding the program manager window...
 
-    if ((pszClass && !_stricmp (pszClass, "progman")) ||
-        (psz2 && !_stricmp (psz2, "program manager"))) {
+    if ((pszClass && !WOW32_stricmp (pszClass, "progman")) ||
+        (psz2 && !WOW32_stricmp (psz2, "program manager"))) {
 
         ul = GETHWND16(FindWindow("progman", NULL));
 
@@ -1421,63 +1288,6 @@ ULONG FASTCALL WU32FindWindow(PVDMFRAME pFrame)
 
     FREEPSZPTR(psz1);
     FREEPSZPTR(psz2);
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    BOOL FlashWindow(<hwnd>, <bInvert>)
-    HWND <hwnd>;
-    BOOL <bInvert>;
-
-    The %FlashWindow% function flashes the given window once. Flashing a window
-    means changing the appearance of its caption bar as if the window were
-    changing from inactive to active status, or vice versa. (An inactive caption
-    bar changes to an active caption bar; an active caption bar changes to an
-    inactive caption bar.)
-
-    Typically, a window is flashed to inform the user that the window requires
-    attention, but that it does not currently have the input focus.
-
-    <hwnd>
-        Identifies the window to be flashed. The window can be either open or
-        iconic.
-
-    <bInvert>
-        Specifies whether the window is to be flashed or returned to its
-        original state. The window is flashed from one state to the other if the
-        <bInvert> parameter is TRUE. If the <bInvert> parameter is FALSE, the
-        window is returned to its original state (either active or inactive).
-
-    The return value specifies the window's state before call to the
-    %FlashWindow% function. It is TRUE if the window was active before the
-    call. Otherwise, it is FALSE.
-
-    The %FlashWindow% function flashes the window only once; for successive
-    flashing, the application should create a system timer.
-
-    The <bInvert> parameter should be FALSE only when the window is getting the
-    input focus and will no longer be flashing; it should be TRUE on
-    successive calls while waiting to get the input focus.
-
-    This function always returns TRUE for iconic windows. If the window is
-    iconic, %FlashWindow% will simply flash the icon; <bInvert> is ignored for
-    iconic windows.
---*/
-
-ULONG FASTCALL WU32FlashWindow(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PFLASHWINDOW16 parg16;
-
-    GETARGPTR(pFrame, sizeof(FLASHWINDOW16), parg16);
-
-    ul = GETBOOL16(FlashWindow(
-    HWND32(parg16->f1),
-    BOOL32(parg16->f2)
-    ));
-
     FREEARGPTR(parg16);
     RETURN(ul);
 }
@@ -1640,7 +1450,7 @@ ULONG FASTCALL WU32GetWindowLong(PVDMFRAME pFrame)
 
     // Make sure Win32 didn't change offsets for GWL constants
 
-#if (GWL_WNDPROC != (-4) || GWL_STYLE != (-16) || GWL_EXSTYLE != (-20))
+#if (GWL_WNDPROC != (-4) || GWL_STYLE != (-16) || GWL_EXSTYLE != (-20) || DWL_MSGRESULT != (0))
 #error Win16/Win32 GWL constants differ
 #endif
 
@@ -1663,47 +1473,16 @@ ULONG FASTCALL WU32GetWindowLong(PVDMFRAME pFrame)
     ul = 0;
     switch( iOffset ) {
         case DWL_DLGPROC:
-            if (pww = FindPWW(HWND32(parg16->f1), WOWCLASS_UNKNOWN)) {
-
-                //
-                // if vpfnDlgProc exists then assume this is a dialog
-                //
-
-                if (pww->vpfnDlgProc) {
-                    ul = pww->vpfnDlgProc;
-                }
-                else if (pww->iClass == WOWCLASS_DIALOG ||
-                            (pww->flState & WWSTATE_FAKEDIALOGCLASS)) {
-
-                    //
-                    // this is some dialog we don't know about, like
-                    // the window created by a call to MessageBox().
-                    //
-
-                    DWORD dwDlgProc32Cur;
-                    dwDlgProc32Cur = GetWindowLong(HWND32(parg16->f1), DWL_DLGPROC);
-
-                    if (dwDlgProc32Cur) {
-                        ul = GetThunkWindowProc(dwDlgProc32Cur, 0, pww, HWND32(parg16->f1));
-                    } else {
-                        ul = 0;
-                    }
-                }
-                else {
-                    // not a dialog.  default processing
-
-                    goto defgwl;
-                }
-            }
-            break;
-
         case GWL_WNDPROC:
-            if (pww = FindPWW(HWND32(parg16->f1), WOWCLASS_UNKNOWN)) {
+            if (pww = FindPWW(HWND32(parg16->f1))) {
                 DWORD dwWndProc32Cur;
 
-                dwWndProc32Cur = GetWindowLong(HWND32(parg16->f1), GWL_WNDPROC);
+                if ((iOffset == DWL_DLGPROC) && !(pww->state & WF_DIALOG_WINDOW)) {
+                    goto defgwl;
+                }
+                dwWndProc32Cur = GetWindowLong(HWND32(parg16->f1), iOffset);
 
-                if ( dwWndProc32Cur & WNDPROC_WOW ) {
+                if (IsWOWProc (dwWndProc32Cur)) {
                     if ( HIWORD(dwWndProc32Cur) == WNDPROC_HANDLE ) {
                         /*
                         ** Has a 32-bit WindowProc that is a handle-based value
@@ -1715,21 +1494,17 @@ ULONG FASTCALL WU32GetWindowLong(PVDMFRAME pFrame)
                         /*
                         ** Has a WOW WindowProc
                         */
-                        ul = dwWndProc32Cur & WNDPROC_MASK;
 
-                        //
-                        // if the actual selector had the high bit on then we turned off
-                        // bit 2 of the selector (the LDT bit, which will always be on)
-                        //
-                        if (!(ul & WOWCLASS_VIRTUAL_NOT_BIT31)) {
-                            ul |= (WNDPROC_WOW | WOWCLASS_VIRTUAL_NOT_BIT31);
-                        }
+                        //Unmark the proc and restore the high bits from rpl field
+                        UnMarkWOWProc (dwWndProc32Cur,ul);
                     }
                 } else {
                     /*
                     ** Has a 32-bit WindowProc
                     */
-                    ul = GetThunkWindowProc( dwWndProc32Cur, NULL, pww, HWND32(parg16->f1) );
+                    if (dwWndProc32Cur) {
+                        ul = GetThunkWindowProc( dwWndProc32Cur, NULL, pww, HWND32(parg16->f1) );
+                    }
                 }
             }
             break;
@@ -1742,7 +1517,7 @@ ULONG FASTCALL WU32GetWindowLong(PVDMFRAME pFrame)
                 char szBuf[40];
 
                 if (GetClassName(HWND32(parg16->f1), szBuf, sizeof(szBuf))) {
-                    if (!_stricmp(szBuf, "NDDEAgnt")) {
+                    if (!WOW32_stricmp(szBuf, "NDDEAgnt")) {
                         ul &= !WS_EX_TOPMOST;
                     }
                 }
@@ -1766,7 +1541,7 @@ defgwl:
                     char Buffer[40];
 
                     if (GetClassName (HWND32(parg16->f1), Buffer, sizeof(Buffer))) {
-                        if (!_stricmp (Buffer, "PaList")) {
+                        if (!WOW32_stricmp (Buffer, "PaList")) {
                             iOffset = 4;
                         }
                     }
@@ -1781,9 +1556,9 @@ defgwl:
             ** We might need to set the high 16-bits to
             ** some mysterious value (See Win 3.1 WND structure)
             */
-            ul = (ULONG)((WORD)GetWindowLong(HWND32(parg16->f1),
-                                                          GWL_HINSTANCE));
+            ul = GetGWW_HINSTANCE(HWND32(parg16->f1));
             break;
+
         case WIN16_GWW_HWNDPARENT:
             /*
             ** We might need to set the high 16-bits to
@@ -1850,6 +1625,9 @@ ULONG FASTCALL WU32GetWindowTask(PVDMFRAME pFrame)
 }
 
 
+
+
+
 /*++
     int GetWindowText(<hwnd>, <lpString>, <nMaxCount>)
     HWND <hwnd>;
@@ -1882,17 +1660,18 @@ ULONG FASTCALL WU32GetWindowTask(PVDMFRAME pFrame)
 ULONG FASTCALL WU32GetWindowText(PVDMFRAME pFrame)
 {
     ULONG ul;
+    VPVOID vp;
     PSZ psz2;
     register PGETWINDOWTEXT16 parg16;
 
     GETARGPTR(pFrame, sizeof(GETWINDOWTEXT16), parg16);
     ALLOCVDMPTR(parg16->f2, parg16->f3, psz2);
+    vp = parg16->f2;
 
-    ul = GETINT16(GetWindowText(
-        HWND32(parg16->f1),
-        psz2,
-        WORD32(parg16->f3)
-    ));
+    ul = GETINT16(GetWindowText(HWND32(parg16->f1), psz2, WORD32(parg16->f3)));
+
+    // special case to keep common dialog structs in sync (see wcommdlg.c)
+    Check_ComDlg_pszptr(CURRENTPTD()->CommDlgTd, vp);
 
     FLUSHVDMPTR(parg16->f2, (USHORT)ul+1, psz2);
     FREEVDMPTR(psz2);
@@ -1901,36 +1680,6 @@ ULONG FASTCALL WU32GetWindowText(PVDMFRAME pFrame)
 }
 
 
-/*++
-    int GetWindowTextLength(<hwnd>)
-    HWND <hwnd>;
-
-    The %GetWindowTextLength% function returns the length of the given window's
-    caption title. If the <hwnd> parameter identifies a control, the
-    %GetWindowTextLength% function returns the length of the text within the
-    control instead of the caption.
-
-    <hwnd>
-        Identifies the window or control.
-
-    The return value specifies the text length. It is zero if no such text
-    exists.
---*/
-
-ULONG FASTCALL WU32GetWindowTextLength(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETWINDOWTEXTLENGTH16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETWINDOWTEXTLENGTH16), parg16);
-
-    ul = GETINT16(GetWindowTextLength(
-    HWND32(parg16->f1)
-    ));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
 
 
 /*++
@@ -1975,10 +1724,6 @@ ULONG FASTCALL WU32GetWindowWord(PVDMFRAME pFrame)
     INT iOffset;
     PWW pww;
     PGETWINDOWWORD16 parg16;
-    DWORD dwThreadID32, dwProcessID32;
-    HTASK16 htask16;
-    PWOAINST pWOA;
-    PTD ptd;
 
     GETARGPTR(pFrame, sizeof(GETWINDOWWORD16), parg16);
 
@@ -2005,66 +1750,7 @@ ULONG FASTCALL WU32GetWindowWord(PVDMFRAME pFrame)
         break;
 
     case GWL_HINSTANCE:
-        ul = (ULONG)GetWindowLong(hwnd, iOffset);
-
-        //
-        // Special hack for OLE 2.0 busy dialog, see WOLE2.C for long
-        // comment.
-        //
-        // The below if does not exclude window's whose HINSTANCE is zero.
-        // This is because some 32-bit applications put 0 in the HINSTANCE
-        // stuff for their window (its optional for 32-bit windows).
-        //
-        if ( !ISINST16(ul) ) {
-            // here if ul = NULL or ul = 0xZZZZ0000
-            //
-            // if (ul is 0xZZZZ0000) return 16bit user.exe instance.
-            // PowerBuilder 3.0 does
-            //     hInst =  GetWindowWord(Dialog, GWL_HINSTANCE)
-            //     hIcon =  CreateIcon(... hInst ...);
-            // CreateIcon will fail if hInst is invalid (say BOGUSGDT). So
-            // we return 16bit user.exe hinstance in all such cases.
-            //
-
-            dwProcessID32 = (DWORD)-1;
-            dwThreadID32 = GetWindowThreadProcessId( hwnd, &dwProcessID32 );
-
-            //
-            // Check if this window belongs to a task we spawned via
-            // WinOldAp, if so, return WinOldAp's hmodule.
-            //
-
-            ptd = CURRENTPTD();
-            pWOA = ptd->pWOAList;
-            while (pWOA && pWOA->dwChildProcessID != dwProcessID32) {
-                pWOA = pWOA->pNext;
-            }
-
-            if (pWOA) {
-                ul = pWOA->ptdWOA->hInst16;
-                LOGDEBUG(LOG_ALWAYS, ("WOW32 GetWindowWord(0x%x, GWW_HINSTANCE) returning 0x%04x\n",
-                                      hwnd, ul));
-            } else {
-
-                ul = (ul) ? gUser16hInstance : ul;
-
-                if (cHtaskAliasCount != 0 ) {
-
-                    //
-                    // Must be some 32-bit process, not a wow app's window
-                    //
-
-                    if ( dwThreadID32 != 0 ) {
-
-                        htask16 = FindHtaskAlias( dwThreadID32 );
-
-                        if ( htask16 != 0 ) {
-                            ul = (ULONG)htask16;
-                        }
-                    }
-                }
-            }
-        }
+        ul = GetGWW_HINSTANCE(hwnd);
         break;
 
     case GWL_HWNDPARENT:
@@ -2080,9 +1766,10 @@ ULONG FASTCALL WU32GetWindowWord(PVDMFRAME pFrame)
 
     // Under Windows index 4 of a static control could be the icon
     case 4:
-        pww = FindPWW(hwnd, WOWCLASS_UNKNOWN);
+        pww = FindPWW(hwnd);
         if (pww) {
-            if ((GetWindowLong(hwnd, GWL_STYLE) & SS_ICON) && (pww->iClass == WOWCLASS_STATIC)) {
+            if (((pww->style & SS_TYPEMASK) == SS_ICON)    && 
+                (GETICLASS(pww, hwnd) == WOWCLASS_STATIC)) {
                 ul = SendMessage(hwnd, STM_GETICON, 0, 0);
                 return GETHICON16(ul);
             }
@@ -2099,7 +1786,7 @@ ULONG FASTCALL WU32GetWindowWord(PVDMFRAME pFrame)
         //
         // Gross app hack for Adonis' Clip-Art Window Shopper online
         // clipart software that comes with CA-Cricket Presents.
-        // These bozos SetWindowWord(hwnd, 3, wWhatever), thereby
+        // These people SetWindowWord(hwnd, 3, wWhatever), thereby
         // overwriting the 4th and 5th bytes of per-window data.
         // The edit control itself only uses the first 2 bytes
         // on 3.1, and has 6 bytes reserved, so this works.  On
@@ -2117,7 +1804,7 @@ ULONG FASTCALL WU32GetWindowWord(PVDMFRAME pFrame)
             char szClassName[30];
 
             if (GetClassName(hwnd, szClassName, sizeof(szClassName)) &&
-                !strcmp(szClassName, "SuperPassEdit")) {
+                !WOW32_strcmp(szClassName, "SuperPassEdit")) {
 
                 iOffset = 4;
 
@@ -2135,6 +1822,131 @@ ULONG FASTCALL WU32GetWindowWord(PVDMFRAME pFrame)
     RETURN(ul);
 }
 
+//
+// GetGWW_HINSTANCE is a common implementation for GetWindowWord(GWW_HINSTANCE)
+// and GetWindowLong(GWW_HINSTANCE).
+//
+
+ULONG FASTCALL GetGWW_HINSTANCE(HWND hwnd)
+{
+    DWORD dwProcessID32, dwThreadID32;
+    ULONG ul;
+    PWOAINST pWOA;
+    PTD ptd;
+    HTASK16 htask16;
+
+    dwProcessID32 = (DWORD)-1;
+    dwThreadID32 = GetWindowThreadProcessId( hwnd, &dwProcessID32 );
+
+    ul = (ULONG)GetWindowLong(hwnd, GWL_HINSTANCE);
+
+    if ( ISINST16(ul) ) {
+
+        //
+        // This could be a valid HINST in another WOW VDM,
+        // in which case we need to hide it from this VDM.
+        //
+
+        if (dwProcessID32 != GetCurrentProcessId() &&
+            dwProcessID32 != (DWORD)-1) {
+
+            ul = (ULONG)ghInstanceUser32;
+            goto ElseClause;
+        }
+    }
+    else
+    {
+      ElseClause:
+        // here if ul = NULL or ul = 0xZZZZ0000
+        //
+        // if (ul is 0xZZZZ0000) return 16bit user.exe instance.
+        // PowerBuilder 3.0 does
+        //     hInst =  GetWindowWord(Dialog, GWL_HINSTANCE)
+        //     hIcon =  CreateIcon(... hInst ...);
+        // CreateIcon will fail if hInst is invalid (say BOGUSGDT). So
+        // we return 16bit user.exe hinstance in all such cases.
+        //
+        // Some 32-bit applications put 0 in the HINSTANCE
+        // stuff for their window (its optional for 32-bit windows).
+        //
+
+        //
+        // Check if this window belongs to a task we spawned via
+        // WinOldAp, if so, return WinOldAp's hmodule.
+        //
+
+        ptd = CURRENTPTD();
+        EnterCriticalSection(&ptd->csTD);
+        pWOA = ptd->pWOAList;
+        while (pWOA && pWOA->dwChildProcessID != dwProcessID32) {
+            pWOA = pWOA->pNext;
+        }
+
+        if (pWOA) {
+            ul = pWOA->ptdWOA->hInst16;
+            LOGDEBUG(LOG_ALWAYS, ("WOW32 GetWindowWord(0x%x, GWW_HINSTANCE) returning 0x%04x\n",
+                                  hwnd, ul));
+        } else {
+
+            ul = (ul) ? gUser16hInstance : ul;
+
+            if (cHtaskAliasCount != 0 ) {
+
+                //
+                // Must be some 32-bit process, not a wow app's window
+                //
+
+                if ( dwThreadID32 != 0 ) {
+
+                    htask16 = FindHtaskAlias( dwThreadID32 );
+
+                    if ( htask16 != 0 ) {
+                        ul = (ULONG)htask16;
+                    }
+                }
+            }
+        }
+        LeaveCriticalSection(&ptd->csTD);
+    }
+
+    return ul;
+}
+
+/*++
+    UINT MenuItemFromPoint(<hwndParent>, <Menu>, <Point>)
+    HWND <hwndParent>;
+    HMENU <Menu>;
+    POINT <Point>;
+
+    The %MenuItemFromPoint% function determines which, if any, of the menu
+    items belonging to the given parent window contains the specified point.
+
+    <hwndParent>
+        Identifies the parent window.
+
+    <Point>
+        Specifies the client coordinates of the point to be tested.
+
+    The return value identifies the menu item that contains the point. It is
+    -1 if the given point lies outside the parent window. If the point is
+    within the parent window but is not contained within any menu item, -1
+    is returned.
+--*/
+
+ULONG FASTCALL WU32MenuItemFromPoint(PVDMFRAME pFrame)
+{
+    ULONG ul;
+    POINT pt32;
+    register PMENUITEMFROMPOINT16 parg16;
+
+    GETARGPTR(pFrame, sizeof(MENUITEMFROMPOINT16), parg16);
+    COPYPOINT16(parg16->ptScreen, pt32);
+
+    ul = MenuItemFromPoint(HWND32(parg16->hwnd), HMENU32(parg16->hmenu), pt32);
+
+    FREEARGPTR(parg16);
+    RETURN(ul);
+}
 
 /*++
     BOOL MoveWindow(<hwnd>, <left>, <top>, <width>, <height>, <fRepaint>)
@@ -2297,80 +2109,16 @@ ULONG FASTCALL WU32ScrollWindow(PVDMFRAME pFrame)
     p5 = GETRECT16(parg16->f5, &t5);
 
     ScrollWindow(
-    HWND32(parg16->f1),
-    INT32(parg16->f2),
-    INT32(parg16->f3),
-    p4,
-    p5
-    );
+        HWND32(parg16->f1),
+        INT32(parg16->f2),
+        INT32(parg16->f3),
+        p4,
+        p5
+        );
 
     FREEARGPTR(parg16);
     RETURN(0);
 }
-
-
-/*++
-    HWND SetActiveWindow(<hwnd>)
-    HWND <hwnd>;
-
-    The %SetActiveWindow% function makes a top-level window the active window.
-
-    <hwnd>
-        Identifies the top-level window to be activated.
-
-    The return value identifies the window that was previously active. The
-    %SetActiveWindow% function should be used with care since it allows an
-    application to arbitrarily take over the active window and input focus.
-    Normally, Windows takes care of all activation.
---*/
-
-ULONG FASTCALL WU32SetActiveWindow(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PSETACTIVEWINDOW16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETACTIVEWINDOW16), parg16);
-
-    ul = GETHWND16(SetActiveWindow(HWND32(parg16->f1)));
-
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    HWND SetParent(<hwndChild>, <hwndNewParent>)
-    HWND <hwndChild>;
-    HWND <hwndNewParent>;
-
-    The %SetParent% function changes the parent window of a child window. If the
-    window identified by the <hwndChild> parameter is visible, Windows performs
-    the appropriate redrawing and repainting.
-
-    <hwndChild>
-        Identifies the child window.
-
-    <hwndNewParent>
-        Identifies the new parent window.
-
-    The return value identifies the previous parent window.
---*/
-
-ULONG FASTCALL WU32SetParent(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PSETPARENT16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETPARENT16), parg16);
-
-    ul = GETHWND16(SetParent(HWND32(parg16->f1),
-                             HWND32(parg16->f2)));
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
 
 
 /*++
@@ -2443,12 +2191,15 @@ ULONG FASTCALL WU32SetWindowLong(PVDMFRAME pFrame)
         iOffset == GWL_STYLE || iOffset == GWL_EXSTYLE);
 
     ul = 0;
-    if (iOffset == GWL_WNDPROC) {
+    if ((iOffset == GWL_WNDPROC) || (iOffset == DWL_DLGPROC)) {
 
-        if (pww = FindPWW(HWND32(parg16->f1), WOWCLASS_UNKNOWN)) {
+        if (pww = FindPWW(HWND32(parg16->f1))) {
             DWORD dwWndProc32Old;
             DWORD dwWndProc32New;
 
+            if ((iOffset == DWL_DLGPROC) && !(pww->state & WF_DIALOG_WINDOW)) {
+                goto defswp;
+            }
             // Look to see if the new 16:16 proc is a thunk for a 32-bit proc.
             dwWndProc32New = IsThunkWindowProc(LONG32(parg16->f3), &iClass );
 
@@ -2458,16 +2209,13 @@ ULONG FASTCALL WU32SetWindowLong(PVDMFRAME pFrame)
                 // 16-bit thunk that is really just a thunk for a 32-bit
                 // routine.  We can just set it back to the 32-bit routine.
                 //
-                dwWndProc32Old = SetWindowLong(HWND32(parg16->f1), GWL_WNDPROC, dwWndProc32New);
+                dwWndProc32Old = SetWindowLong(HWND32(parg16->f1), iOffset, dwWndProc32New);
 
                 // If the 32 bit set failed, perhaps because its another process,
                 // then we want to fail too
                 if (!dwWndProc32Old)
                     goto SWL_Cleanup;
 
-                SETWL(HWND32(parg16->f1), GWL_WOWvpfnWndProc, 0 );
-                SETWL(HWND32(parg16->f1), GWL_WOWiClassAndflState,
-                      MAKECLASSANDSTATE(iClass, pww->flState | WWSTATE_ICLASSISSET));
             } else {
                 //
                 // They are attempting to set it to a real 16:16 proc.
@@ -2476,31 +2224,27 @@ ULONG FASTCALL WU32SetWindowLong(PVDMFRAME pFrame)
 
                 l = LONG32(parg16->f3);
 
+                // mark the proc as WOW proc and save the high bits in the RPL
                 //
-                // FEATURE-O-RAMA
+                // Don't mark a NULL proc since USER32 DefWindowProcWorker
+                // looks specifically for NULL. WOW used to do this correctly
+                // but was broken by a performance enhancement checkin. This
+                // fixes VC1.52 debugging.
                 //
-                // if the selector already has the high bit on then turn off
-                // bit 2 of the selector (the LDT bit, which should always be
-                // on).  we need a way to not blindly strip off the high bit
-                // in our wndproc.
-                //
-
-                if (l & WNDPROC_WOW) {
-                    WOW32ASSERT(l & WOWCLASS_VIRTUAL_NOT_BIT31);
-                    l &= ~WOWCLASS_VIRTUAL_NOT_BIT31;
+                if (l) {
+                    MarkWOWProc (l,l);
                 }
 
-                dwWndProc32Old = SetWindowLong(HWND32(parg16->f1), GWL_WNDPROC, l | WNDPROC_WOW);
+                dwWndProc32Old = SetWindowLong(HWND32(parg16->f1), iOffset, l);
 
                 // If the 32 bit set failed, perhaps because its another process,
                 // then we want to fail too
                 if (!dwWndProc32Old)
                     goto SWL_Cleanup;
 
-                SETWL(HWND32(parg16->f1), GWL_WOWvpfnWndProc, LONG32(parg16->f3));
             }
 
-            if ( dwWndProc32Old & WNDPROC_WOW ) {
+            if ( IsWOWProc (dwWndProc32Old)) {
                 if ( HIWORD(dwWndProc32Old) == WNDPROC_HANDLE ) {
                     //
                     // If the return value was a handle to a proc (due to
@@ -2512,16 +2256,8 @@ ULONG FASTCALL WU32SetWindowLong(PVDMFRAME pFrame)
                     //
                     // Previous proc was a 16:16 proc
                     //
-                    ul = dwWndProc32Old & WNDPROC_MASK;
-
-                    //
-                    // if the actual selector had the high bit on then we turned off
-                    // bit 2 of the selector (the LDT bit, which will always be on)
-                    //
-
-                    if (!(ul & WOWCLASS_VIRTUAL_NOT_BIT31)) {
-                        ul |= (WNDPROC_WOW | WOWCLASS_VIRTUAL_NOT_BIT31);
-                    }
+                    //Unmark the proc and restore the high bits from rpl field
+                    UnMarkWOWProc (dwWndProc32Old,ul);
                 }
             } else {
                 //
@@ -2532,57 +2268,20 @@ ULONG FASTCALL WU32SetWindowLong(PVDMFRAME pFrame)
         }
 
     }
-    else if (iOffset == DWL_DLGPROC) {
-        if (pww = FindPWW(HWND32(parg16->f1), WOWCLASS_UNKNOWN)) {
-            DWORD dwDlgProc32Old;
-            DWORD dwDlgProc32New;
-
-            //
-            // first see if this is a dialog or not
-            //
-
-            if (!(pww->vpfnDlgProc || pww->iClass == WOWCLASS_DIALOG ||
-                (pww->flState & WWSTATE_FAKEDIALOGCLASS))) {
-
-                goto defswp;    // not a dialog
-            }
-
-            // Look to see if the new 16:16 proc is a thunk for a 32-bit proc.
-            dwDlgProc32New = IsThunkWindowProc(LONG32(parg16->f3), NULL);
-
-            if ( dwDlgProc32New != 0 ) {
-                //
-                // They want to set the dialog proc to an existing
-                // 16-bit thunk that is really just a thunk for a 32-bit
-                // routine.  We can just set it back to the 32-bit routine.
-                // assume they had already changed the dlgproc once and
-                // return the old vpfnDlgProc.
-                //
-                SetWindowLong(HWND32(parg16->f1), DWL_DLGPROC, dwDlgProc32New);
-                ul = pww->vpfnDlgProc;
-                SETWL(HWND32(parg16->f1), GWL_WOWvpfnDlgProc, 0);
-
-            } else { // subclass this dialogproc
-
-                dwDlgProc32Old = SetWindowLong(HWND32(parg16->f1), iOffset,
-                                    (parg16->f3) ? (LONG)W32DialogFunc : 0);
-
-                if (dwDlgProc32Old == (DWORD)W32DialogFunc) {
-                    ul = pww->vpfnDlgProc;
-
-                } else if (dwDlgProc32Old) {
-                    ul = GetThunkWindowProc(dwDlgProc32Old, 0, pww, HWND32(parg16->f1));
-
-                } else {
-                    ul = 0;
-                }
-
-                SETWL(HWND32(parg16->f1), GWL_WOWvpfnDlgProc, LONG32(parg16->f3));
-            }
-        }
-    }
     else {    // not GWL_WNDPROC or GWL_DLGPROC
+        LONG new;
 defswp:
+        new = LONG32(parg16->f3);
+    /*
+     * We need to keep Wow apps from putting garbage in post-4.0 bits in
+     * the extended style DWORD.  Kiplinger's TaxCut 97 sets the WS_EX_LAYERED
+     * bit on their help window, which is quite unfortunate.
+     */
+
+        if (iOffset == GWL_EXSTYLE) {
+            new &= WS_EX_VALID40;
+            new |= (GetWindowLong(HWND32(parg16->f1), GWL_EXSTYLE) & ~WS_EX_VALID40);
+    }
 
     // This is a real HACK for PowerBuild 3.0. Before we change the offset
     // from 2 to 4, we nneed to make sure that we are doing it for this
@@ -2597,20 +2296,120 @@ defswp:
                 char Buffer[40];
 
                 if (GetClassName (HWND32(parg16->f1), Buffer, sizeof(Buffer))) {
-                    if (!_stricmp (Buffer, "PaList")) {
+                    if (!WOW32_stricmp (Buffer, "PaList")) {
                         iOffset = 4;
                     }
                 }
             }
         }
 
-        ul = SetWindowLong(HWND32(parg16->f1), iOffset, LONG32(parg16->f3));
+        ul = SetWindowLong(HWND32(parg16->f1), iOffset, new);
     }
 
 SWL_Cleanup:
     FREEARGPTR(parg16);
     RETURN(ul);
 }
+
+
+/*++
+    BOOL ShowWindow(<hWnd>, <nCmdShow>)
+    HWND <hWnd>;
+    int <nCmdShow>;
+
+    The %ShowWindow% function sets the specified windows show state.
+
+    <hWnd>
+        Handle to the window.
+
+    <nCmdShow>
+        Specifies how the window is to be shown. This value can have any of the
+        following values:
+
+    SW_FORCEMINIMIZE
+        Minimizes a window, even if the thread that owns the window is hung.
+        This flag should only be used when minimizing windows from a different
+        thread.
+
+    SW_HIDE
+        Hides the window and activiates another window.
+
+    SW_MINIMIZE
+        Minimizes the specified window and activates the next top-level window
+        in the Z order.
+
+    SW_RESTORE
+        Activates and displays the window. If the window is minimized or maximized,
+        the system restores it to its original size and position. An application 
+        should specify this flag when restoring a minimized window.
+
+    SW_SHOW
+        Activiates the window and displays it in its current size and position.
+
+    SW_SHOWDEFAULT
+        Sets the show state based on the SW_ value specified in the STARTUPINFO
+        structure passed to the CreateProcess() function by the program that started
+        the application.
+
+    SW_SHOWMAXIMIZED
+        Activates the window and displays it as a minimized window.
+
+    SW_SHOWMINNOACTIVE
+        Displays the window as a minimized window. This value is similar to 
+        SW_SHOWMINIMIZED, except the window is not activated.
+ 
+    SW_SHOWNA
+        Displays the window in its current size and position. This value is similar
+        to SW_SHOW, except the window is not activated.
+
+    SW_SHOWNOACTIVATE
+        Displays a window in its most recent size and position. This value is similar
+        to SW_SHOWNORMAL, except the window is not activated.
+
+    SW_SHOWNORMAL
+        Activates and displays a window. If the window is minimized or maximized,
+        the system restores it to its orignial size and position. An application 
+        should specify this flag when displaying the window for the first time.
+
+
+    This function returns nonzero if the window if the window was previously visible. 
+    It returns zero if the window was previously hidden.
+
+    The first time an application calls ShowWindow(), it should use the WinMain
+    function's <nCmdShow> parameter as its <nCmdShow> parameter. Subsequent calls to
+    ShowWindow() must use one of the values in the given list, instead of the one
+    specified by the WinMain function's <nCmdShow> parameter.
+
+--*/        
+ULONG FASTCALL WU32ShowWindow(PVDMFRAME pFrame)
+{
+    BOOL bReturn = FALSE;
+    register PSHOWWINDOW16 parg16;
+   
+    GETARGPTR(pFrame, sizeof(SHOWWINDOW16), parg16);
+
+    bReturn = ShowWindow(HWND32(parg16->f1), INT32(parg16->f2));
+    
+    // WHISTLER RAID BUG #348251
+    // The artgalry.exe window would remain behind autosketches window after it was
+    // invoked. This hack works in conjuction with the GACF2_GIVEUPFOREGROUND
+    // compatibility flag, applied to the app that will not give up the foreground.
+    // In order to move the 16bit window to the top, we have to call 
+    // SetForegroundWindow() on the hwnd. We only want to call this if the windows
+    // show bit is set and the window is active.
+    if((INT32(parg16->f2) | SW_SHOW) && (bReturn == 0) && (CURRENTPTD()->dwWOWCompatFlags2 & WOWCF2_SETFOREGROUND))
+    {
+        SetForegroundWindow(HWND32(parg16->f1));
+        
+        LOGDEBUG(LOG_WARNING, ("WU32ShowWindow: SetForegroundWindow called. HWND=%x STYLE=%x\n",
+                 HWND32(parg16->f1),
+                 INT32(parg16->f2)));
+    }
+
+    FREEARGPTR(parg16);
+    RETURN((ULONG)bReturn);
+}
+
 
 /*++
     BOOL SetWindowPos(<hwnd>, <hwndInsertAfter>, <X>, <Y>, <cx>, <cy>, <wFlags>)
@@ -2700,7 +2499,18 @@ ULONG FASTCALL WU32SetWindowPos(PVDMFRAME pFrame)
     register PSETWINDOWPOS16 parg16;
 
     GETARGPTR(pFrame, sizeof(SETWINDOWPOS16), parg16);
-
+#ifdef FE_IME	
+    // MSKKBUG:3866  HWND_IMETOPMOST for MS-DRAW
+    if ( (HWND)INT32(parg16->f2) == (HWND)-3 )
+        ul = GETBOOL16(SetWindowPos(HWND32(parg16->f1),
+                                    HWND_TOPMOST,
+                                    INT32(parg16->f3),
+                                    INT32(parg16->f4),
+                                    INT32(parg16->f5),
+                                    INT32(parg16->f6),
+                                    WORD32(parg16->f7) & SWP_VALID));
+    else
+#endif // FE_IME
     ul = GETBOOL16(SetWindowPos(HWND32(parg16->f1),
                                 HWNDIA32(parg16->f2),
                                 INT32(parg16->f3),
@@ -2708,7 +2518,6 @@ ULONG FASTCALL WU32SetWindowPos(PVDMFRAME pFrame)
                                 INT32(parg16->f5),
                                 INT32(parg16->f6),
                                 WORD32(parg16->f7) & SWP_VALID));
-
     FREEARGPTR(parg16);
 
     RETURN(ul);
@@ -2855,9 +2664,10 @@ ULONG FASTCALL WU32SetWindowWord(PVDMFRAME pFrame)
 
         // Under Windows index 4 of a static control could be the icon
         case 4:
-            pww = FindPWW(hwnd, WOWCLASS_UNKNOWN);
+            pww = FindPWW(hwnd);
             if (pww) {
-                if ((GetWindowLong(hwnd, GWL_STYLE) & SS_ICON) && (pww->iClass == WOWCLASS_STATIC)) {
+                if (((pww->style & SS_TYPEMASK) == SS_ICON)    && 
+                    (GETICLASS(pww, hwnd) == WOWCLASS_STATIC)) {
                     ul = SendMessage(hwnd, STM_SETICON, (WPARAM)HICON32(ul), 0);
                     return GETHICON16(ul);
                 }
@@ -2873,7 +2683,7 @@ ULONG FASTCALL WU32SetWindowWord(PVDMFRAME pFrame)
             //
             // Gross app hack for Adonis' Clip-Art Window Shopper online
             // clipart software that comes with CA-Cricket Presents.
-            // These bozos SetWindowWord(hwnd, 3, wWhatever), thereby
+            // These people SetWindowWord(hwnd, 3, wWhatever), thereby
             // overwriting the 4th and 5th bytes of per-window data.
             // The edit control itself only uses the first 2 bytes
             // on 3.1, and has 6 bytes reserved, so this works.  On
@@ -2890,7 +2700,7 @@ ULONG FASTCALL WU32SetWindowWord(PVDMFRAME pFrame)
                 char szClassName[30];
 
                 if (GetClassName(hwnd, szClassName, sizeof(szClassName)) &&
-                    !strcmp(szClassName, "SuperPassEdit")) {
+                    !WOW32_strcmp(szClassName, "SuperPassEdit")) {
 
                     iOffset = 4;
 
@@ -2901,132 +2711,6 @@ ULONG FASTCALL WU32SetWindowWord(PVDMFRAME pFrame)
             ul = SetWindowWord(hwnd, iOffset, (WORD)ul);
             break;
     }
-
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-/*++
-    void ShowScrollBar(<hwnd>, <wBar>, <bShow>)
-
-    The %ShowScrollBar% function displays or hides a scroll bar, depending on
-    the value of the <bShow> parameter. If <bShow> is TRUE, the scroll bar is
-    displayed; if <bShow> is FALSE, the scroll bar is hidden.
-
-    <hwnd>
-        Identifies a window that contains a scroll bar in its nonclient area if
-        the wBar parameter is SB_HORZ, SB_VERT, or SB_BOTH. If wBar is SB_CTL,
-        hwnd identifies a scroll-bar control.
-
-    <wBar>
-        %WORD% Specifies whether the scroll bar is a control or part of a
-        window's nonclient area. If it is part of the nonclient area, <wBar>
-        also indicates whether the scroll bar is positioned horizontally,
-        vertically, or both. It must be one of the following values:
-
-    SB_BOTH  Specifies the window's horizontal and vertical scroll bars.
-    SB_CTL   Specifies that the scroll bar is a control.
-    SB_HORZ  Specifies the window's horizontal scroll bar.
-    SB_VERT  Specifies the window's vertical scroll bar.
-
-    <bShow>
-        Specifies whether or not Windows hides the scroll bar. If <bShow> is
-        FALSE, the scroll bar is hidden. Otherwise, the scroll bar is
-        displayed.
-
-    This function does not return a value.
-
-    An application should not call this function to hide a scroll bar while
-    processing a scroll-bar notification message.
---*/
-
-ULONG FASTCALL WU32ShowScrollBar(PVDMFRAME pFrame)
-{
-    register PSHOWSCROLLBAR16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SHOWSCROLLBAR16), parg16);
-
-    ShowScrollBar(
-    HWND32(parg16->f1),
-    WORD32(parg16->f2),
-    BOOL32(parg16->f3)
-    );
-
-    FREEARGPTR(parg16);
-    RETURN(0);
-}
-
-
-/*++
-    BOOL ShowWindow(<hwnd>, <nCmdShow>)
-
-    The %ShowWindow% function displays or removes the given window, as specified
-    by the <nCmdShow> parameter.
-
-    <hwnd>
-        Identifies the window.
-
-    <nCmdShow>
-        Specifies how the window is to be shown. It must be one of the
-        following values:
-
-    SW_HIDE
-        Hides the window and passes activation to another window.
-
-    SW_MINIMIZE
-        Minimizes the specified window and activates the top-level window in the
-        window-manager's list.
-
-    SW_RESTORE
-        Same as SW_SHOWNORMAL.
-
-    SW_SHOW
-        Activates a window and displays it in its current size and position.
-
-    SW_SHOWMAXIMIZED
-        Activates the window and displays it as a maximized window.
-
-    SW_SHOWMINIMIZED
-        Activates the window and displays it as iconic.
-
-    SW_SHOWMINNOACTIVE
-        Displays the window as iconic. The window that is currently active
-        remains active.
-
-    SW_SHOWNA
-        Displays the window in its current state. The window that is currently
-        active remains active.
-
-    SW_SHOWNOACTIVATE
-        Displays a window in its most recent size and position. The window that
-        is currently active remains active.
-
-    SW_SHOWNORMAL
-        Activates and displays a window. If the window is minimized or
-        maximized, Windows restores it to its original size and position.
-
-    The return value specifies the previous state of the window. It is TRUE
-    if the window was previously visible. It is FALSE if the window was
-    previously hidden.
-
-    The %ShowWindow% function must be called only once per program with the
-    <nCmdShow> parameter from the WinMain function. Subsequent calls to
-    %ShowWindow% must use one of the values listed above, instead of one
-    specified by the <nCmdShow> parameter from the WinMain function.
---*/
-
-ULONG FASTCALL WU32ShowWindow(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PSHOWWINDOW16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SHOWWINDOW16), parg16);
-
-    ul = GETBOOL16(ShowWindow(
-    HWND32(parg16->f1),
-    INT32(parg16->f2)
-    ));
 
     FREEARGPTR(parg16);
     RETURN(ul);
@@ -3055,8 +2739,8 @@ ULONG FASTCALL WU32UpdateWindow(PVDMFRAME pFrame)
     GETARGPTR(pFrame, sizeof(UPDATEWINDOW16), parg16);
 
     UpdateWindow(
-    HWND32(parg16->f1)
-    );
+        HWND32(parg16->f1)
+        );
 
     FREEARGPTR(parg16);
     RETURN(0xcdef);         // ack!     same as win31

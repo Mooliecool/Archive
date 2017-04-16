@@ -43,7 +43,7 @@ TARGETTYPE=PROGRAM
 
 TARGETLIBS=
 
-INCLUDES=$(_NTDRIVE)\nt\private\mvdm\softpc.new\host\inc;$(_NTDRIVE)\nt\private\mvdm\softpc.new\base\inc
+INCLUDES=$(BASEDIR)\private\mvdm\softpc.new\host\inc;$(BASEDIR)\private\mvdm\softpc.new\base\inc
 
 SOURCES=dat2obj.c
 

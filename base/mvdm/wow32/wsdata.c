@@ -187,7 +187,7 @@ ULONG FASTCALL WWS32gethostbyname(PVDMFRAME pFrame)
 {
     ULONG ul;
     register PGETHOSTBYNAME16 parg16;
-    PHOSTENT hostent32;
+    PHOSTENT hostent32 = NULL;
     PHOSTENT16 hostent16;
     PSZ name32 = NULL;
     PSZ name16;
@@ -204,19 +204,19 @@ ULONG FASTCALL WWS32gethostbyname(PVDMFRAME pFrame)
     
     if(name16) {
         name32 = malloc_w(strlen(name16)+1);
-        strcpy(name32, name16);
+        if ( name32 ) {
+          strcpy(name32, name16);
+          hostent32 = (PHOSTENT) (*wsockapis[WOW_GETHOSTBYNAME].lpfn)( name32 );
+          free_w(name32);
+        }
     }
 
-    hostent32 = (PHOSTENT) (*wsockapis[WOW_GETHOSTBYNAME].lpfn)( name32 );
 
     // Note: 16-bit callbacks resulting from above function
     //       call may have caused 16-bit memory movement
     FREEVDMPTR(name16);
     FREEARGPTR(parg16);
 
-    if(name32) {
-        free_w(name32);
-    }
 
     if ( hostent32 != NULL ) {
 
@@ -238,15 +238,13 @@ ULONG FASTCALL WWS32gethostbyname(PVDMFRAME pFrame)
         ul = 0;
     }
 
-    FREEVDMPTR( name32 );
-    FREEARGPTR(parg16);
-
     RETURN(ul);
 
 } // WWS32gethostbyname
 
 ULONG FASTCALL WWS32gethostname(PVDMFRAME pFrame)
 {
+    int   len;
     ULONG ul;
     register PGETHOSTNAME16 parg16;
     PCHAR name32 = NULL;
@@ -277,7 +275,10 @@ ULONG FASTCALL WWS32gethostname(PVDMFRAME pFrame)
 
     GETVDMPTR( vpszName, NameLength, name16 );
     if(name16 && name32) {
-        strcpy(name16, name32);
+        len = strlen(name32) + 1;
+        len = min(len, NameLength);
+        strncpy(name16, name32, len);
+        name16[len-1] = '\0';
     }
     FLUSHVDMPTR( vpszName, NameLength, name16 );
 
@@ -505,12 +506,16 @@ WWS32PostAsyncGetHost (
     )
 {
     PWINSOCK_ASYNC_CONTEXT_BLOCK context;
-    BOOL ret;
+    BOOL ret = FALSE;
     PVOID buffer16;
     DWORD bytesRequired;
 
     context = WWS32FindAndRemoveAsyncContext( (HANDLE)wParam );
-    ASSERT( context != NULL );
+
+    if ( NULL == context || NULL == context->Buffer32 ) {
+        ASSERT( context && context->Buffer32 );
+        return FALSE;
+    }
 
     //
     // If the call was successful, copy the 32-bit buffer to the
@@ -752,7 +757,7 @@ ULONG FASTCALL WWS32getprotobyname(PVDMFRAME pFrame)
 {
     ULONG ul;
     register PGETPROTOBYNAME16 parg16;
-    PPROTOENT protoent32;
+    PPROTOENT protoent32 = NULL;
     PPROTOENT16 protoent16;
     PSZ name32 = NULL;
     PBYTE name16;
@@ -768,19 +773,19 @@ ULONG FASTCALL WWS32getprotobyname(PVDMFRAME pFrame)
 
     if(name16) {
         name32 = malloc_w(strlen(name16)+1);
-        strcpy(name32, name16);
+        if ( name32 ) {
+             strcpy(name32, name16);
+             protoent32 = (PPROTOENT) (*wsockapis[WOW_GETPROTOBYNAME].lpfn)( name32 );
+             free_w( name32 );
+        }
     }
 
-    protoent32 = (PPROTOENT) (*wsockapis[WOW_GETPROTOBYNAME].lpfn)( name32 );
+    
 
     // Note: 16-bit callbacks resulting from above function
     //       call may have caused 16-bit memory movement
     FREEVDMPTR(name16);
     FREEARGPTR(parg16);
-
-    if(name32) {
-        free_w( name32 );
-    }
 
     if ( protoent32 != NULL ) {
 
@@ -801,9 +806,6 @@ ULONG FASTCALL WWS32getprotobyname(PVDMFRAME pFrame)
 
         ul = 0;
     }
-
-    FREEVDMPTR(name16);
-    FREEARGPTR(parg16);
 
     RETURN(ul);
 
@@ -1070,7 +1072,11 @@ WWS32PostAsyncGetProto (
     DWORD bytesRequired;
 
     context = WWS32FindAndRemoveAsyncContext( (HANDLE)wParam );
-    ASSERT( context != NULL );
+
+    if( NULL == context ) {
+        ASSERT( context != NULL );
+        return FALSE;
+    }
 
     //
     // If the call was successful, copy the 32-bit buffer to the
@@ -1116,7 +1122,6 @@ WWS32PostAsyncGetProto (
     //
     // Free resources and return.
     //
-
     free_w( context->Buffer32 );
     free_w( (PVOID)context );
 
@@ -1125,6 +1130,9 @@ WWS32PostAsyncGetProto (
 } // WWS32PostAsyncGetProto
 
 
+/* 
+    NOTE:  This assumes that Protoent16 & Protoent32 are not null.
+*/
 DWORD
 CopyProtoent32To16 (
     PPROTOENT16 Protoent16,
@@ -1573,7 +1581,10 @@ WWS32PostAsyncGetServ (
     DWORD bytesRequired;
 
     context = WWS32FindAndRemoveAsyncContext( (HANDLE)wParam );
-    ASSERT( context != NULL );
+    if( NULL == context ) {
+        ASSERT( context != NULL );
+        return FALSE;
+    }
 
     //
     // If the call was successful, copy the 32-bit buffer to the
@@ -1628,6 +1639,9 @@ WWS32PostAsyncGetServ (
 } // WWS32PostAsyncGetServ
 
 
+/* 
+    NOTE: both Servent16 & Servent32 are assumed to be non-NULL
+*/
 DWORD
 CopyServent32To16 (
     PSERVENT16 Servent16,
@@ -1820,7 +1834,7 @@ WWS32FindAndRemoveAsyncContext (
                       ContextBlockListEntry
                       );
 
-        if ( context->AsyncTaskHandle32 == AsyncTaskHandle32 ) {
+        if ( context &&  context->AsyncTaskHandle32 == AsyncTaskHandle32 ) {
 
             //
             // Found a match.  Remove it from the global list, leave

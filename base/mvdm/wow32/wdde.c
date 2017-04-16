@@ -193,34 +193,33 @@ BOOL DDEIsTargetMSDraw(HAND16 To_hwnd)
     //       EXPENSIVE CALL.  HOWEVER THIS CALL IS RARELY MADE.
     //
 
-    if (
-        (hInst = (HANDLE)GetWindowLong((HWND)HWND32(To_hwnd),GWL_HINSTANCE))
-        && (LOWORD(hInst) != 0 )
-        && (vp = GlobalAllocLock16(GMEM_MOVEABLE, cchModuleName, &hModuleName))
-       ) {
+    if ((hInst = (HANDLE)GetWindowLong((HWND)HWND32(To_hwnd),GWL_HINSTANCE))
+        && (LOWORD(hInst) != 0 )) {
 
-        //
-        // Callback 16 to get the module name of the current hInst
-        //
+        if(vp = GlobalAllocLock16(GMEM_MOVEABLE, cchModuleName, &hModuleName)) {
 
-        if (cchModuleName = GetModuleFileName16( LOWORD(hInst), vp, cchModuleName )) {
-            GETMISCPTR(vp, lpszModuleName16);
-            fStatus = (cchModuleName >= cchMsDraw)
-                      && !_stricmp( lpszModuleName16 + (cchModuleName - cchMsDraw), lpszMsDraw )
-                      && (Status = RegOpenKeyEx( HKEY_CLASSES_ROOT, lpszNewMsDrawKey, 0, KEY_READ, &hKey)) != ERROR_SUCCESS;
+            //
+            // Callback 16 to get the module name of the current hInst
+            //
 
-            if (hKey) {
-                RegCloseKey( hKey );
+            if (cchModuleName = GetModuleFileName16( LOWORD(hInst), 
+                                                     vp, 
+                                                     cchModuleName )) {
+                GETMISCPTR(vp, lpszModuleName16);
+
+                fStatus = (cchModuleName >= cchMsDraw) &&  !WOW32_stricmp( lpszModuleName16 +  (cchModuleName - cchMsDraw),  lpszMsDraw ) && (Status = RegOpenKeyEx( HKEY_CLASSES_ROOT, lpszNewMsDrawKey, 0, KEY_READ, &hKey)) != ERROR_SUCCESS;
+
+                if (hKey) {
+                    RegCloseKey( hKey );
+                }
+                FREEMISCPTR(lpszModuleName16);
             }
-            FREEMISCPTR(lpszModuleName16);
+
+            // Cleanup
+            GlobalUnlockFree16(vp);
         }
-
-        //
-        // Cleanup
-        //
-
-        GlobalUnlockFree16(vp);
     }
+
     return ( fStatus );
 }
 
@@ -252,188 +251,197 @@ HAND16 DDECopyhData16(HAND16 To_hwnd, HAND16 From_hwnd, HANDLE h32, PDDEINFO pDd
 
     cb = GlobalSize(h32);
     lpMem32 = GlobalLock(h32);
-    LOGDEBUG(12, ("WOW::DDECopyhData16(): CF_FORMAT is %04x\n", lpMem32->cfFormat));
 
-    switch (lpMem32->cfFormat) {
+    if(lpMem32) {
+        LOGDEBUG(12, 
+                 ("WOW::DDECopyhData16(): CF_FORMAT is %04x\n", 
+                 lpMem32->cfFormat));
 
-        default:
+        switch (lpMem32->cfFormat) {
 
-        // This is intentional to let it thru to "case statements".
-        // ChandanC 5/11/92.
+            default:
 
-        case CF_TEXT:
-        case CF_DSPTEXT:
-        case CF_SYLK:
-        case CF_DIF:
-        case CF_TIFF:
-        case CF_OEMTEXT:
-        case CF_PENDATA:
-        case CF_RIFF:
-        case CF_WAVE:
-        case CF_OWNERDISPLAY:
-            h16 = Copyh32Toh16 (cb, (LPBYTE) lpMem32);
+            // This is intentional to let it thru to "case statements".
+            // ChandanC 5/11/92.
 
-            pDdeInfo->Format = lpMem32->cfFormat;
-            break;
+            case CF_TEXT:
+            case CF_DSPTEXT:
+            case CF_SYLK:
+            case CF_DIF:
+            case CF_TIFF:
+            case CF_OEMTEXT:
+            case CF_PENDATA:
+            case CF_RIFF:
+            case CF_WAVE:
+            case CF_OWNERDISPLAY:
+                h16 = Copyh32Toh16 (cb, (LPBYTE) lpMem32);
 
-        case CF_BITMAP:
-        case CF_DSPBITMAP:
-            vp1 = GlobalAllocLock16(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HAND16)), &h16);
-            if (vp1) {
                 pDdeInfo->Format = lpMem32->cfFormat;
-                GETMISCPTR(vp1, lpMem16);
-                RtlCopyMemory(lpMem16, lpMem32, 4);
-                STOREWORD(lpMem16->Value, GETHBITMAP16(*((HANDLE *)lpMem32->Value)));
-                FLUSHVDMPTR(vp1, (sizeof(DDEDATA)-1+sizeof(HAND16)), lpMem16);
-                FREEMISCPTR(lpMem16);
-                GlobalUnlock16(h16);
-            }
-            break;
+                break;
 
-        case CF_PALETTE:
-            vp1 = GlobalAllocLock16(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HAND16)), &h16);
-            if (vp1) {
-                pDdeInfo->Format = lpMem32->cfFormat;
-                GETMISCPTR(vp1, lpMem16);
-                RtlCopyMemory(lpMem16, lpMem32, 4);
-                STOREWORD(lpMem16->Value, GETHPALETTE16(*((HANDLE *)lpMem32->Value)));
-                FLUSHVDMPTR(vp1, (sizeof(DDEDATA)-1+sizeof(HAND16)), lpMem16);
-                FREEMISCPTR(lpMem16);
-                GlobalUnlock16(h16);
-            }
-            break;
-
-        case CF_DIB:
-        {
-            LPBYTE lpMemDib32;
-            HAND16 hDib16 = 0;
-            HANDLE hDib32;
-
-            vp1 = GlobalAllocLock16(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HAND16)), &h16);
-            if (vp1) {
-
-                GETMISCPTR(vp1, lpMem16);
-                RtlCopyMemory(lpMem16, lpMem32, 4);
-                FREEMISCPTR(lpMem16);
-
-                hDib32 = (*((HANDLE *)lpMem32->Value));
-                if (hDib32) {
-                    lpMemDib32 = GlobalLock(hDib32);
-                    cb = GlobalSize(hDib32);
-                    hDib16 = Copyh32Toh16 (cb, (LPBYTE) lpMemDib32);
-                    GlobalUnlock(hDib32);
+            case CF_BITMAP:
+            case CF_DSPBITMAP:
+                vp1 = GlobalAllocLock16(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HAND16)), &h16);
+                if (vp1) {
                     pDdeInfo->Format = lpMem32->cfFormat;
-                    pDdeInfo->Flags = 0;
-                    pDdeInfo->h16 = 0;
-                    DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hDib16, hDib32, pDdeInfo);
-
+                    GETMISCPTR(vp1, lpMem16);
+                    RtlCopyMemory(lpMem16, lpMem32, 4);
+                    STOREWORD(lpMem16->Value, GETHBITMAP16(*((HANDLE *)lpMem32->Value)));
+                    FLUSHVDMPTR(vp1,(sizeof(DDEDATA)-1+sizeof(HAND16)),lpMem16);
+                    FREEMISCPTR(lpMem16);
+                    GlobalUnlock16(h16);
                 }
+                break;
 
-                GETMISCPTR(vp1, lpMem16);
-                STOREWORD(lpMem16->Value, hDib16);
-                GlobalUnlock16(h16);
-                FLUSHVDMPTR(vp1, (sizeof(DDEDATA)-1+sizeof(HAND16)), lpMem16);
-                FREEMISCPTR(lpMem16);
-            }
-        }
-        break;
-
-        case CF_METAFILEPICT:
-        case CF_DSPMETAFILEPICT:
-        {
-            HANDLE hMeta32, hMF32 = NULL;
-            HAND16 hMeta16 = 0, hMF16 = 0;
-            LPMETAFILEPICT lpMemMeta32;
-            LPMETAFILEPICT16 lpMemMeta16;
-            BOOL IsMSDRAWPoke;
-
-            //
-            // We need to find out if the to_handle is MSDRAW, in which case
-            // we should copy the METAFILEPICT data to the DDEPOKE instead
-            // of a handle to the METAFILEPICT.
-
-            if( IsMSDRAWPoke = ((pDdeInfo->Msg == WM_DDE_POKE) && DDEIsTargetMSDraw(To_hwnd)) ) {
-                cb  = sizeof(DDEPOKE)-1+sizeof(METAFILEPICT16);
-            }
-            else {
-                cb  = sizeof(DDEDATA)-1+sizeof(HAND16);
-            }
-            vp1 = GlobalAllocLock16(GMEM_DDESHARE, cb, &h16);
-
-
-            if (vp1) {
-                GETMISCPTR(vp1, lpMem16);
-                RtlCopyMemory(lpMem16, lpMem32, 4);
-                hMeta32 = (*((HANDLE *)lpMem32->Value));
-
-                if ( IsMSDRAWPoke ) {
-
-                    lpMemMeta16 = (LPMETAFILEPICT16)((PBYTE)lpMem16 + sizeof(DDEPOKE) - 1);
-                    RtlZeroMemory( (PVOID)lpMemMeta16, sizeof (METAFILEPICT16) );
-                    if (hMeta32) {
-                        lpMemMeta32 = GlobalLock(hMeta32);
-                        FixMetafile32To16 (lpMemMeta32, lpMemMeta16);
-                        FREEMISCPTR(lpMem16);
-
-                        hMF32 = lpMemMeta32->hMF;
-                        if (hMF32) {
-                            hMF16 = WinMetaFileFromHMF(hMF32, FALSE);
-                            pDdeInfo->Format = lpMem32->cfFormat;
-                            pDdeInfo->h16 = 0;
-                            pDdeInfo->Flags = DDE_METAFILE;
-                            DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hMF16, hMF32, pDdeInfo);
-                        }
-
-                        GETMISCPTR(vp1, lpMem16);
-                        lpMemMeta16 = (LPMETAFILEPICT16)((PBYTE)lpMem16 + sizeof(DDEPOKE) - 1);
-                        STOREWORD(lpMemMeta16->hMF, hMF16);
-                        GlobalUnlock(hMeta32);
-                    }
-
+            case CF_PALETTE:
+                vp1 = GlobalAllocLock16(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HAND16)), &h16);
+                if (vp1) {
+                    pDdeInfo->Format = lpMem32->cfFormat;
+                    GETMISCPTR(vp1, lpMem16);
+                    RtlCopyMemory(lpMem16, lpMem32, 4);
+                    STOREWORD(lpMem16->Value, GETHPALETTE16(*((HANDLE *)lpMem32->Value)));
+                    FLUSHVDMPTR(vp1,(sizeof(DDEDATA)-1+sizeof(HAND16)),lpMem16);
+                    FREEMISCPTR(lpMem16);
+                    GlobalUnlock16(h16);
                 }
-                else {
-                    if (hMeta32) {
-                        lpMemMeta32 = GlobalLock(hMeta32);
-                        FREEMISCPTR(lpMem16);
-                        vp2 = GlobalAllocLock16(GMEM_DDESHARE, sizeof(METAFILEPICT16), &hMeta16);
-                        WOW32ASSERT(vp2);
-                        if (vp2) {
-                            GETMISCPTR(vp2, lpMemMeta16);
-                            FixMetafile32To16 (lpMemMeta32, lpMemMeta16);
-                            FREEMISCPTR(lpMemMeta16);
-
+                break;
+    
+            case CF_DIB:
+            {
+                LPBYTE lpMemDib32;
+                HAND16 hDib16 = 0;
+                HANDLE hDib32;
+    
+                vp1 = GlobalAllocLock16(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HAND16)), &h16);
+                if (vp1) {
+    
+                    GETMISCPTR(vp1, lpMem16);
+                    RtlCopyMemory(lpMem16, lpMem32, 4);
+                    FREEMISCPTR(lpMem16);
+    
+                    hDib32 = (*((HANDLE *)lpMem32->Value));
+                    if (hDib32) {
+                        lpMemDib32 = GlobalLock(hDib32);
+                        if(lpMemDib32) {
+                            cb = GlobalSize(hDib32);
+                            hDib16 = Copyh32Toh16 (cb, (LPBYTE) lpMemDib32);
+                            GlobalUnlock(hDib32);
                             pDdeInfo->Format = lpMem32->cfFormat;
                             pDdeInfo->Flags = 0;
                             pDdeInfo->h16 = 0;
-                            DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hMeta16, hMeta32, pDdeInfo);
-                            hMF32 = lpMemMeta32->hMF;
-                            if (hMF32) {
-                                hMF16 = WinMetaFileFromHMF(hMF32, FALSE);
-                                pDdeInfo->Flags = DDE_METAFILE;
-                                DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hMF16, hMF32, pDdeInfo);
-                            }
-
-                            GETMISCPTR(vp2, lpMemMeta16);
-                            STOREWORD(lpMemMeta16->hMF, hMF16);
-                            GlobalUnlock16(hMeta16);
-                            FLUSHVDMPTR(vp2, 8, lpMemMeta16);
-                            FREEMISCPTR(lpMemMeta16);
+                            DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hDib16, hDib32, pDdeInfo);
                         }
-                        GlobalUnlock(hMeta32);
                     }
                     GETMISCPTR(vp1, lpMem16);
-                    STOREWORD(lpMem16->Value, hMeta16);
+                    STOREWORD(lpMem16->Value, hDib16);
+                    GlobalUnlock16(h16);
+                    FLUSHVDMPTR(vp1,(sizeof(DDEDATA)-1+sizeof(HAND16)),lpMem16);
+                    FREEMISCPTR(lpMem16);
                 }
-
-                GlobalUnlock16(h16);
-                FLUSHVDMPTR(vp1, cb, lpMem16);
-                FREEMISCPTR(lpMem16);
             }
+            break;
+    
+            case CF_METAFILEPICT:
+            case CF_DSPMETAFILEPICT:
+            {
+                HANDLE hMeta32, hMF32 = NULL;
+                HAND16 hMeta16 = 0, hMF16 = 0;
+                LPMETAFILEPICT lpMemMeta32;
+                LPMETAFILEPICT16 lpMemMeta16;
+                BOOL IsMSDRAWPoke;
+    
+                //
+                // We need to find out if the to_handle is MSDRAW, in which case
+                // we should copy the METAFILEPICT data to the DDEPOKE instead
+                // of a handle to the METAFILEPICT.
+    
+                if( IsMSDRAWPoke = ((pDdeInfo->Msg == WM_DDE_POKE) && DDEIsTargetMSDraw(To_hwnd)) ) {
+                    cb  = sizeof(DDEPOKE)-1+sizeof(METAFILEPICT16);
+                }
+                else {
+                    cb  = sizeof(DDEDATA)-1+sizeof(HAND16);
+                }
+                vp1 = GlobalAllocLock16(GMEM_DDESHARE, cb, &h16);
+    
+    
+                if (vp1) {
+                    GETMISCPTR(vp1, lpMem16);
+                    RtlCopyMemory(lpMem16, lpMem32, 4);
+                    hMeta32 = (*((HANDLE *)lpMem32->Value));
+    
+                    if ( IsMSDRAWPoke ) {
+    
+                        lpMemMeta16 = (LPMETAFILEPICT16)((PBYTE)lpMem16 + sizeof(DDEPOKE) - 1);
+                        RtlZeroMemory( (PVOID)lpMemMeta16, sizeof (METAFILEPICT16) );
+                        if (hMeta32) {
+                            lpMemMeta32 = GlobalLock(hMeta32);
+                            if(lpMemMeta32) {
+                                FixMetafile32To16 (lpMemMeta32, lpMemMeta16);
+                                FREEMISCPTR(lpMem16);
+    
+                                hMF32 = lpMemMeta32->hMF;
+                                if (hMF32) {
+                                    hMF16 = WinMetaFileFromHMF(hMF32, FALSE);
+                                    pDdeInfo->Format = lpMem32->cfFormat;
+                                    pDdeInfo->h16 = 0;
+                                    pDdeInfo->Flags = DDE_METAFILE;
+                                    DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hMF16, hMF32, pDdeInfo);
+                                }
+                            }
+                            GETMISCPTR(vp1, lpMem16);
+                            lpMemMeta16 = (LPMETAFILEPICT16)((PBYTE)lpMem16 + sizeof(DDEPOKE) - 1);
+                            STOREWORD(lpMemMeta16->hMF, hMF16);
+                            GlobalUnlock(hMeta32);
+                        }
+    
+                    }
+                    else {
+                        if (hMeta32) {
+                            lpMemMeta32 = GlobalLock(hMeta32);
+                            if(lpMemMeta32) {
+                                // 16-bit memory may move -- invalidate ptr
+                                FREEMISCPTR(lpMem16);
+                                vp2 = GlobalAllocLock16(GMEM_DDESHARE, sizeof(METAFILEPICT16), &hMeta16);
+                                WOW32ASSERT(vp2);
+                                if (vp2) {
+                                    GETMISCPTR(vp2, lpMemMeta16);
+                                    FixMetafile32To16(lpMemMeta32, lpMemMeta16);
+                                    FREEMISCPTR(lpMemMeta16);
+    
+                                    pDdeInfo->Format = lpMem32->cfFormat;
+                                    pDdeInfo->Flags = 0;
+                                    pDdeInfo->h16 = 0;
+                                    DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hMeta16, hMeta32, pDdeInfo);
+                                    hMF32 = lpMemMeta32->hMF;
+                                    if (hMF32) {
+                                        hMF16 = WinMetaFileFromHMF(hMF32,FALSE);
+                                        pDdeInfo->Flags = DDE_METAFILE;
+                                        DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hMF16, hMF32, pDdeInfo);
+                                    }
+    
+                                    GETMISCPTR(vp2, lpMemMeta16);
+                                    STOREWORD(lpMemMeta16->hMF, hMF16);
+                                    GlobalUnlock16(hMeta16);
+                                    FLUSHVDMPTR(vp2, 8, lpMemMeta16);
+                                    FREEMISCPTR(lpMemMeta16);
+                                }
+                                GlobalUnlock(hMeta32);
+                            }
+                        }
+                        GETMISCPTR(vp1, lpMem16);
+                        STOREWORD(lpMem16->Value, hMeta16);
+                    }
+    
+                    GlobalUnlock16(h16);
+                    FLUSHVDMPTR(vp1, cb, lpMem16);
+                    FREEMISCPTR(lpMem16);
+                }
+            }
+            break;
         }
-        break;
-    }
 
-    GlobalUnlock(h32);
+        GlobalUnlock(h32);
+    }
 
     return (h16);
 }
@@ -459,7 +467,7 @@ HANDLE  DDECopyhData32(HAND16 To_hwnd, HAND16 From_hwnd, HAND16 h16, PDDEINFO pD
     //
 
     if (!h16) {
-        LOGDEBUG(12, ("WOW::DDECopyhData16(): h16 is %04x\n", h16));
+        LOGDEBUG(12, ("WOW::DDECopyhData32(): h16 is %04x\n", h16));
         return (HANDLE) NULL;
     }
 
@@ -491,24 +499,28 @@ HANDLE  DDECopyhData32(HAND16 To_hwnd, HAND16 From_hwnd, HAND16 h16, PDDEINFO pD
 
         case CF_BITMAP:
         case CF_DSPBITMAP:
-            h32 = GlobalAlloc(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HANDLE)));
+            h32 = WOWGLOBALALLOC(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HANDLE)));
             if (h32) {
                 pDdeInfo->Format = lpMem16->cfFormat;
                 lpMem32 = GlobalLock(h32);
-                RtlCopyMemory(lpMem32, lpMem16, 4);
-                lpMem32->Value = HBITMAP32(FETCHWORD(*((WORD *)lpMem16->Value)));
-                GlobalUnlock(h32);
+                if(lpMem32) {
+                    RtlCopyMemory(lpMem32, lpMem16, 4);
+                    lpMem32->Value = HBITMAP32(FETCHWORD(*((WORD *)lpMem16->Value)));
+                    GlobalUnlock(h32);
+                }
             }
             break;
 
         case CF_PALETTE:
-            h32 = GlobalAlloc(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HANDLE)));
+            h32 = WOWGLOBALALLOC(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HANDLE)));
             if (h32) {
                 pDdeInfo->Format = lpMem16->cfFormat;
                 lpMem32 = GlobalLock(h32);
-                RtlCopyMemory(lpMem32, lpMem16, 4);
-                lpMem32->Value = HPALETTE32(FETCHWORD(*((WORD *)lpMem16->Value)));
-                GlobalUnlock(h32);
+                if(lpMem32) {
+                    RtlCopyMemory(lpMem32, lpMem16, 4);
+                    lpMem32->Value = HPALETTE32(FETCHWORD(*((WORD *)lpMem16->Value)));
+                    GlobalUnlock(h32);
+                }
             }
             break;
 
@@ -518,27 +530,29 @@ HANDLE  DDECopyhData32(HAND16 To_hwnd, HAND16 From_hwnd, HAND16 h16, PDDEINFO pD
             HAND16 hDib16;
             HANDLE hDib32 = NULL;
 
-            h32 = GlobalAlloc(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HANDLE)));
+            h32 = WOWGLOBALALLOC(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HANDLE)));
             if (h32) {
                 lpMem32 = GlobalLock(h32);
-                RtlCopyMemory(lpMem32, lpMem16, 4);
+                if(lpMem32) {
+                    RtlCopyMemory(lpMem32, lpMem16, 4);
 
-                hDib16 = FETCHWORD(*((WORD *)lpMem16->Value));
-                if (hDib16) {
-                    vp = GlobalLock16(hDib16, &cb);
-                    GETMISCPTR(vp, lpMemDib16);
-                    hDib32 = Copyh16Toh32 (cb, (LPBYTE) lpMemDib16);
+                    hDib16 = FETCHWORD(*((WORD *)lpMem16->Value));
+                    if (hDib16) {
+                        vp = GlobalLock16(hDib16, &cb);
+                        GETMISCPTR(vp, lpMemDib16);
+                        hDib32 = Copyh16Toh32 (cb, (LPBYTE) lpMemDib16);
 
-                    pDdeInfo->Format = lpMem16->cfFormat;
-                    pDdeInfo->Flags = 0;
-                    pDdeInfo->h16 = 0;
-                    DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hDib16, hDib32, pDdeInfo);
+                        pDdeInfo->Format = lpMem16->cfFormat;
+                        pDdeInfo->Flags = 0;
+                        pDdeInfo->h16 = 0;
+                        DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hDib16, hDib32, pDdeInfo);
 
-                    GlobalUnlock16(hDib16);
-                    FREEMISCPTR(lpMemDib16);
+                        GlobalUnlock16(hDib16);
+                        FREEMISCPTR(lpMemDib16);
+                    }
+                    lpMem32->Value = hDib32;
+                    GlobalUnlock(h32);
                 }
-                lpMem32->Value = hDib32;
-                GlobalUnlock(h32);
             }
         }
         break;
@@ -551,60 +565,64 @@ HANDLE  DDECopyhData32(HAND16 To_hwnd, HAND16 From_hwnd, HAND16 h16, PDDEINFO pD
             LPMETAFILEPICT lpMemMeta32;
             LPMETAFILEPICT16 lpMemMeta16;
 
-            h32 = GlobalAlloc(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HANDLE)));
+            h32 = WOWGLOBALALLOC(GMEM_DDESHARE, (sizeof(DDEDATA)-1+sizeof(HANDLE)));
             if (h32) {
                 lpMem32 = GlobalLock(h32);
-                RtlCopyMemory(lpMem32, lpMem16, 4);
-
-                //
-                // MSDRAW has the METAFILEPICT in the DDEPOKE block instead of
-                // a handle to the METAFILEPICT.  So we need to find out if the
-                // to handle belongs to MSDRAW.  Since MSDRAW is a 16 bit
-                // server we needn't thunk the metafilepict at all, we will just
-                // use NULL as the 32 bit handle to the metafilepict.
-                //
-
-                hMeta32 = NULL;
-                if( !((pDdeInfo->Msg == WM_DDE_POKE) && DDEIsTargetMSDraw(To_hwnd)) ) {
-
-                    hMeta16 = FETCHWORD(*((WORD *)lpMem16->Value));
+                if(lpMem32) {
+                    RtlCopyMemory(lpMem32, lpMem16, 4);
 
                     //
-                    // Make sure that a valid metafile pict handle has been
-                    // passed in otherwise use NULL again as the hMeta32.
+                    // MSDRAW has the METAFILEPICT in the DDEPOKE block instead
+                    // of a handle to the METAFILEPICT.  So we need to find out 
+                    // if the to handle belongs to MSDRAW.  Since MSDRAW is a 16
+                    // bit server we needn't thunk the metafilepict at all, we
+                    // just use NULL as the 32 bit handle to the metafilepict.
                     //
 
-                    if (hMeta16 && (vp = GlobalLock16(hMeta16, &cb))) {
-                        GETMISCPTR(vp, lpMemMeta16);
-                        hMeta32 = GlobalAlloc(GMEM_DDESHARE, sizeof(METAFILEPICT));
-                        WOW32ASSERT(hMeta32);
-                        if (hMeta32) {
-                            lpMemMeta32 = GlobalLock(hMeta32);
-                            lpMemMeta32->mm = (LONG) FETCHSHORT(lpMemMeta16->mm);
-                            lpMemMeta32->xExt = (LONG) FETCHSHORT(lpMemMeta16->xExt);
-                            lpMemMeta32->yExt = (LONG) FETCHSHORT(lpMemMeta16->yExt);
-                            pDdeInfo->Format = lpMem16->cfFormat;
-                            pDdeInfo->Flags = 0;
-                            pDdeInfo->h16 = 0;
-                            DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hMeta16, hMeta32, pDdeInfo);
+                    hMeta32 = NULL;
+                    if( !((pDdeInfo->Msg == WM_DDE_POKE) && DDEIsTargetMSDraw(To_hwnd)) ) {
 
-                            hMF16 = FETCHWORD(lpMemMeta16->hMF);
+                        hMeta16 = FETCHWORD(*((WORD *)lpMem16->Value));
 
-                            if (hMF16) {
-                                hMF32 = (HMETAFILE) HMFFromWinMetaFile(hMF16, FALSE);
-                                pDdeInfo->Flags = DDE_METAFILE;
-                                DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hMF16, hMF32, pDdeInfo);
+                        //
+                        // Make sure that a valid metafile pict handle has been
+                        // passed in otherwise use NULL again as the hMeta32.
+                        //
+        
+                        if (hMeta16 && (vp = GlobalLock16(hMeta16, &cb))) {
+                            GETMISCPTR(vp, lpMemMeta16);
+                            hMeta32 = WOWGLOBALALLOC(GMEM_DDESHARE, sizeof(METAFILEPICT));
+                            WOW32ASSERT(hMeta32);
+                            if (hMeta32) {
+                                lpMemMeta32 = GlobalLock(hMeta32);
+                                if(lpMemMeta32) {
+                                    lpMemMeta32->mm = (LONG) FETCHSHORT(lpMemMeta16->mm);
+                                    lpMemMeta32->xExt = (LONG) FETCHSHORT(lpMemMeta16->xExt);
+                                    lpMemMeta32->yExt = (LONG) FETCHSHORT(lpMemMeta16->yExt);
+                                    pDdeInfo->Format = lpMem16->cfFormat;
+                                    pDdeInfo->Flags = 0;
+                                    pDdeInfo->h16 = 0;
+                                    DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hMeta16, hMeta32, pDdeInfo);
+
+                                    hMF16 = FETCHWORD(lpMemMeta16->hMF);
+    
+                                    if (hMF16) {
+                                        hMF32 = (HMETAFILE) HMFFromWinMetaFile(hMF16, FALSE);
+                                        pDdeInfo->Flags = DDE_METAFILE;
+                                        DDEAddhandle(To_hwnd, From_hwnd, (HAND16) hMF16, hMF32, pDdeInfo);
+                                    }
+
+                                    lpMemMeta32->hMF = (HMETAFILE) hMF32;
+                                    GlobalUnlock(hMeta32);
+                                }
                             }
-
-                            lpMemMeta32->hMF = (HMETAFILE) hMF32;
-                            GlobalUnlock(hMeta32);
+                            GlobalUnlock16(hMeta16);
+                            FREEMISCPTR(lpMemMeta16);
                         }
-                        GlobalUnlock16(hMeta16);
-                        FREEMISCPTR(lpMemMeta16);
                     }
+                    lpMem32->Value = hMeta32;
+                    GlobalUnlock(h32);
                 }
-                lpMem32->Value = hMeta32;
-                GlobalUnlock(h32);
             }
         }
         break;
@@ -694,12 +712,13 @@ BOOL DDEDeletehandle(HAND16 h16, HANDLE h32)
             phTemp1 = phTemp1->pDDENext;
         }
 
-        LOGDEBUG (2, ("WOW::DDEDeleteHandle : Can't find a 16-32 memory pair\n"));
-//        WOW32ASSERT (FALSE);
+        LOGDEBUG(2,("WOW::DDEDeleteHandle : Can't find a 16-32 memory pair\n"));
 
         return (FALSE);
     }
 }
+
+
 
 
 // This routine finds a hMem16 for a DDE conversation, if one exists.
@@ -867,7 +886,7 @@ BOOL W32DDEFreeGlobalMem32 (HANDLE h32)
         }
     }
     else {
-        WOW32ASSERTMSG(FALSE, "WOW32: W32DDEFreeGlobalMem32: h32 is NULL to Win32 GlobalFree\n");
+        WOW32WARNMSG(FALSE, "WOW32: W32DDEFreeGlobalMem32: h32 is NULL to Win32 GlobalFree\n");
         /*
          * since in this case the Failure and Success return values from
          * GlobalFree are NULL, just return false so things are faster
@@ -885,7 +904,7 @@ BOOL W32DDEFreeGlobalMem32 (HANDLE h32)
 // notification of this fact.  So free the corresponding 32 bit memory.
 //
 
-BOOL FASTCALL W32WowDdeFreeHandle (PVDMFRAME pFrame)
+ULONG FASTCALL WK32WowDdeFreeHandle (PVDMFRAME pFrame)
 {
     ULONG  ul;
     HAND16 h16;
@@ -909,6 +928,11 @@ BOOL W32DdeFreeHandle16 (HAND16 h16)
 
     if (!(pDdeNode = DDEFindNode16(h16))) {
         LOGDEBUG (12, ("WOW::W32DdeFreeHandle16 : Not found h16 -> %04x\n", h16));
+
+        // in this case look for a 16:32 pair in the list of hdrop handles
+        // see file wshell.c for comments
+        FindAndReleaseHDrop16(h16);
+
         return (TRUE);
     }
 
@@ -933,7 +957,7 @@ BOOL W32DdeFreeHandle16 (HAND16 h16)
                  * the call.
                  */
                 DDEDeletehandle(h16, h32);
-                GlobalFree(h32);
+                WOWGLOBALFREE(h32);
             }
 
             pDdeNode = DDEFindNode16(h16);
@@ -1088,12 +1112,14 @@ HANDLE  Copyh16Toh32 (int cb, LPBYTE lpMem16)
     HANDLE hMem32;
     LPBYTE  lpMem32;
 
-    hMem32 = GlobalAlloc(GMEM_DDESHARE | GMEM_MOVEABLE, cb);
+    hMem32 = WOWGLOBALALLOC(GMEM_DDESHARE | GMEM_MOVEABLE, cb);
     WOW32ASSERT(hMem32);
     if (hMem32) {
         lpMem32 = GlobalLock(hMem32);
-        RtlCopyMemory (lpMem32, lpMem16, cb);
-        GlobalUnlock(hMem32);
+        if(lpMem32) {
+            RtlCopyMemory (lpMem32, lpMem16, cb);
+            GlobalUnlock(hMem32);
+        }
     }
 
     return (hMem32);

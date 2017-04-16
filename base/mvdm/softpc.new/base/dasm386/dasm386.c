@@ -473,7 +473,7 @@ LOCAL CHAR arg_preface[] = { ' ', ',', ',' };
  */
 LOCAL CHAR *Rb_name[] =
    {
-   "AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH" 
+   "AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH"
    };
 
 /*
@@ -481,7 +481,7 @@ LOCAL CHAR *Rb_name[] =
  */
 LOCAL CHAR *Rw_name[] =
    {
-   "AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI" 
+   "AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI"
    };
 
 /*
@@ -489,7 +489,7 @@ LOCAL CHAR *Rw_name[] =
  */
 LOCAL CHAR *Rd_name[] =
    {
-   "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI" 
+   "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI"
    };
 
 /*
@@ -506,7 +506,7 @@ LOCAL CHAR *Sw_name[] =
 LOCAL CHAR *Cd_name[] =
    {
    "CR0",        "CR1(UNDEF)", "CR2",        "CR3",
-   "CR4(UNDEF)", "CR5(UNDEF)", "CR6(UNDEF)", "CR7(UNDEF)" 
+   "CR4(UNDEF)", "CR5(UNDEF)", "CR6(UNDEF)", "CR7(UNDEF)"
    };
 
 /*
@@ -514,7 +514,7 @@ LOCAL CHAR *Cd_name[] =
  */
 LOCAL CHAR *Dd_name[] =
    {
-   "DR0", "DR1", "DR2", "DR3", "DR4(UNDEF)", "DR5(UNDEF)", "DR6", "DR7" 
+   "DR0", "DR1", "DR2", "DR3", "DR4(UNDEF)", "DR5(UNDEF)", "DR6", "DR7"
    };
 
 /*
@@ -523,7 +523,7 @@ LOCAL CHAR *Dd_name[] =
 LOCAL CHAR *Td_name[] =
    {
    "TR0(UNDEF)", "TR1(UNDEF)", "TR2(UNDEF)", "TR3",
-   "TR4",        "TR5",        "TR6",        "TR7" 
+   "TR4",        "TR5",        "TR6",        "TR7"
    };
 
 /*
@@ -695,7 +695,7 @@ dasm IFN4(char *, txt, IU16, seg, LIN_ADDR, off, SIZE_SPECIFIER, default_size)
    /* default_size	16BIT or 32BIT */
 
    char *fmt, *newline;
-	   
+	
    /* format for seg:off */
    if ( off & 0xffff0000 )
    {
@@ -717,6 +717,8 @@ dasm IFN4(char *, txt, IU16, seg, LIN_ADDR, off, SIZE_SPECIFIER, default_size)
 		     fmt,
 		     newline));
 }
+
+#pragma warning(disable:4146)       // unary minus operator applied to unsigned type
 
 extern IU16 dasm_internal IFN8(
    char *, txt,	/* Buffer to hold dis-assembly text (-1 means not required) */
@@ -768,7 +770,7 @@ extern IU16 dasm_internal IFN8(
 		while (i > 0)
 		{
 			if (byte_at(i) >= 0)
-				return (i);
+				return ((IU16)i);
 		}
 		return 0;
 	}
@@ -854,7 +856,7 @@ extern IU16 dasm_internal IFN8(
 
 	 } /* end for */
       } /* end if d_inst.prefix_sz */
-   
+
       prefix_width = strlen(prefix_buf);
       if ( newline != NULL )
 	 {
@@ -1215,7 +1217,7 @@ extern IU16 dasm_internal IFN8(
 
    if (d_inst.inst_id == I_ZBOP)
      {
-     IU8 num = DCD_IMMED1(&d_inst.args[0]);
+     IU8 num = (IU8)DCD_IMMED1(&d_inst.args[0]);
      extern char *bop_name IPT1(IU8, num);
      char *name = bop_name(num);
      if (name != NULL)

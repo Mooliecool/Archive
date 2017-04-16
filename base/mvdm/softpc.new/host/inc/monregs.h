@@ -1,5 +1,5 @@
-extern CONTEXT IntelRegisters;
-extern ULONG IntelMSW;
+//extern CONTEXT IntelRegisters;
+//extern ULONG IntelMSW;
 // Flag Register constants
 
 #define FLG_CARRY           0x00000001
@@ -113,5 +113,4 @@ VOID cpu_init(VOID);
 VOID cpu_terminate(VOID);
 VOID host_unsimulate(VOID);
 VOID host_simulate(VOID);
-VOID cpu_createthread(HANDLE Thread);
 VOID cpu_exitthread(VOID);

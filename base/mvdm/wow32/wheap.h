@@ -18,9 +18,11 @@
 //
 
 PVOID FASTCALL malloc_w(ULONG size);
+DWORD FASTCALL size_w (PVOID pv);
 PVOID FASTCALL malloc_w_zero (ULONG size);
 PVOID FASTCALL realloc_w (PVOID p, ULONG size, DWORD dwFlags);
 VOID  FASTCALL free_w(PVOID p);
+LPSTR malloc_w_strcpy_vp16to32(VPVOID vpstr16, BOOL fMulti, INT cMax);
 
 PVOID FASTCALL malloc_w_or_die(ULONG size);
 

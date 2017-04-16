@@ -21,15 +21,24 @@ CreateFileOem(
 
 BOOL
 APIENTRY
-SetFileAttributesOem(
+SetVolumeLabelOem(
+    LPSTR  pszRootPath,
+    LPSTR  pszVolumeName
+    );
+
+BOOL
+APIENTRY
+SetFileAttributesOemSys(
     LPSTR lpFileName,
-    DWORD dwFileAttributes
+    DWORD dwFileAttributes,
+    BOOL  fSysCall
     );
 
 DWORD
 APIENTRY
-GetFileAttributesOem(
-    LPSTR lpFileName
+GetFileAttributesOemSys(
+    LPSTR lpFileName,
+    BOOL  fSysCall
     );
 
 BOOL
@@ -69,11 +78,12 @@ FindNextFileOem(
 
 DWORD
 APIENTRY
-GetFullPathNameOem(
+GetFullPathNameOemSys(
     LPCSTR lpFileName,
     DWORD nBufferLength,
     LPSTR lpBuffer,
-    LPSTR *lpFilePart
+    LPSTR *lpFilePart,
+    BOOL  fSysCall
     );
 
 DWORD

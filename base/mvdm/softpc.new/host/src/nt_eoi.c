@@ -1,13 +1,13 @@
 /*
  * SoftPC Revision 3.0
  *
- * Title	:	Host EOI hook controller
+ * Title        :       Host EOI hook controller
  *
  * Description  :       This module handles host specific ica code
  *                      - EOI hook
  *                      - ICA lock
  *
- * Author	:	D.A.Bartlett
+ * Author       :       D.A.Bartlett
  *
  * Notes        :   30-Oct-1993 Jonle , Rewrote it
  */
@@ -42,9 +42,18 @@ extern PVOID CurrentMonitorTeb;
 
 // from nt_timer.c
 extern ULONG GetPerfCounter(VOID);
+extern BOOLEAN HandshakeInProgress;
 
 
 RTL_CRITICAL_SECTION IcaLock;   // ICA critical section lock
+
+//
+// IcaLockTimeout is used by VDM kernel component to wait on IcaLock. It is One second
+// timeout in 100 nanosecond units.  For User mode NTVDM, the timeout is controlled by
+// RTL critical section timeout value.
+//
+LARGE_INTEGER IcaLockTimeout = {(ULONG)(-1 * 1000 * 1000 * 10), -1};
+
 ULONG UndelayIrqLine=0;
 ULONG DelayIrqLine=0xffffffff;  // all ints are blocked until, spckbd loaded
 
@@ -355,6 +364,20 @@ void DelayIrqQuickEvent(long param)
 
 void host_ica_lock(void)
 {
+
+    if (HandshakeInProgress && CurrentMonitorTeb == NtCurrentTeb()) {
+        HANDLE Thread;
+        //
+        // If the current thread is the MainThread and  does NOT already own
+        // the ICA critical section, then we will try to suspend the thread
+        // to do fullscreen/windowed handshake.
+        //
+
+        Thread = NtCurrentTeb()->ClientId.UniqueThread;
+        if (Thread != IcaLock.OwningThread) {  // No synchronization needed
+            CheckScreenSwitchRequest(hMainThreadSuspended);
+        }
+    }
     RtlEnterCriticalSection(&IcaLock);
 }
 
@@ -466,30 +489,6 @@ void ica_reset_interrupt_state(void)
     host_ica_unlock();
 }
 
-
-/*
- * Handle callout from DPMI to say that an app has asked DPMI to switch it
- * to protected mode. We use this as an indicator that a protected mode app
- * will work with the Iret Hook system. If an app does it's own thing with
- * selectors et al, the BOP table will be hidden, swallowed and generally
- * lost. Attempts then to transfer control to it will fault.
- * Known examples of such unfriendliness are the DOS Lotus 123 r3 series.
- */
-VOID EnableEmulatorIretHooks(void)
-{
-   ; // obsolete
-}
-
-/*
- * The app is closing - turn off the Iret Hooks in case the next app is
- * iret hook unfriendly. If it's a friendly app, we'll be called again
- * via the Enable... routine above.
- */
-VOID DisableEmulatorIretHooks(void)
-{
-   ; // obsolete
-}
-
 //
 // Retry DelayInts (not iret hooks!)
 //
@@ -532,12 +531,12 @@ IU32 host_iret_bop_table_addr(IU32 line)
         }
 
     if (getMSW() & 1) {
-	AddrBopTable = (VDM_PM_IRETBOPSEG << 16) | VDM_PM_IRETBOPOFF;
-	IretBopSize = VDM_PM_IRETBOPSIZE;
+        AddrBopTable = (VDM_PM_IRETBOPSEG << 16) | VDM_PM_IRETBOPOFF;
+        IretBopSize = VDM_PM_IRETBOPSIZE;
     }
     else {
-	AddrBopTable = AddrIretBopTable;
-	IretBopSize = VDM_RM_IRETBOPSIZE;
+        AddrBopTable = AddrIretBopTable;
+        IretBopSize = VDM_RM_IRETBOPSIZE;
     }
     return AddrBopTable + IretBopSize * line;
 

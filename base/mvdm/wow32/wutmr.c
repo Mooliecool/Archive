@@ -29,7 +29,9 @@ STATIC PTMR aptmrWOWTimers[] = {
                                  NULL, NULL, NULL, NULL,
                                  NULL, NULL, NULL, NULL,
                                  NULL, NULL, NULL, NULL,
-                                 NULL, NULL, NULL, NULL
+                                 NULL, NULL, NULL, NULL,
+                                 NULL, NULL, NULL, NULL,
+                                 NULL, NULL, NULL
                                };
 
 
@@ -40,7 +42,9 @@ STATIC TIMERPROC afnTimerFuncs[] = {
                         W32Timer12, W32Timer13, W32Timer14, W32Timer15,
                         W32Timer16, W32Timer17, W32Timer18, W32Timer19,
                         W32Timer20, W32Timer21, W32Timer22, W32Timer23,
-                        W32Timer24, W32Timer25, W32Timer26, W32Timer27
+                        W32Timer24, W32Timer25, W32Timer26, W32Timer27,
+                        W32Timer28, W32Timer29, W32Timer30, W32Timer31,
+                        W32Timer32, W32Timer33, W32Timer34
                         };
 
 
@@ -86,6 +90,44 @@ PTMR IsDuplicateTimer16(HWND16 hwnd16, HTASK16 htask16, WORD wIDEvent)
 
     return NULL;
 }
+
+
+
+//
+// This is called to free *ALL* timers created with a given hwnd16
+// ie. All timers created by SetTimer(hwnd != NULL, id, duration)
+// This should only be called when the hwnd is being destroyed: DestroyWindow()
+//
+VOID FreeWindowTimers16(HWND hwnd32)
+{
+    register PTMR ptmr;
+    register INT iTimer;
+    HAND16 htask16;
+
+    htask16 = CURRENTPTD()->htask16;
+
+    for (iTimer=1; iTimer<NUMEL(aptmrWOWTimers); iTimer++) {
+
+        ptmr = aptmrWOWTimers[iTimer];
+
+        if (ptmr) {
+            if (ptmr->htask16 == htask16 && GETHWND16(hwnd32) == ptmr->hwnd16) {
+
+                // we can't wait for Win32 to kill the timer for us during its
+                // normal DestroyWindow() handling because it might send another
+                // WM_TIMER message which we are now not ready to handle.
+                KillTimer(ptmr->hwnd32, ptmr->dwEventID);
+
+                // now free our WOW structures supporting this timer
+                FreeTimer16(ptmr);
+            }
+        }
+    }
+}
+
+
+
+
 
 //
 // Search for a timer by its 32-bit information.  Looks in the list of
@@ -683,4 +725,46 @@ VOID CALLBACK W32Timer27(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime)
 {
     WOW32ASSERT(msg == WM_TIMER);
     W32TimerFunc(27, hwnd, idEvent, dwTime);
+}
+
+VOID CALLBACK W32Timer28(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime)
+{
+    WOW32ASSERT(msg == WM_TIMER);
+    W32TimerFunc(28, hwnd, idEvent, dwTime);
+}
+
+VOID CALLBACK W32Timer29(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime)
+{
+    WOW32ASSERT(msg == WM_TIMER);
+    W32TimerFunc(29, hwnd, idEvent, dwTime);
+}
+
+VOID CALLBACK W32Timer30(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime)
+{
+    WOW32ASSERT(msg == WM_TIMER);
+    W32TimerFunc(30, hwnd, idEvent, dwTime);
+}
+
+VOID CALLBACK W32Timer31(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime)
+{
+    WOW32ASSERT(msg == WM_TIMER);
+    W32TimerFunc(31, hwnd, idEvent, dwTime);
+}
+
+VOID CALLBACK W32Timer32(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime)
+{
+    WOW32ASSERT(msg == WM_TIMER);
+    W32TimerFunc(32, hwnd, idEvent, dwTime);
+}
+
+VOID CALLBACK W32Timer33(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime)
+{
+    WOW32ASSERT(msg == WM_TIMER);
+    W32TimerFunc(33, hwnd, idEvent, dwTime);
+}
+
+VOID CALLBACK W32Timer34(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime)
+{
+    WOW32ASSERT(msg == WM_TIMER);
+    W32TimerFunc(34, hwnd, idEvent, dwTime);
 }

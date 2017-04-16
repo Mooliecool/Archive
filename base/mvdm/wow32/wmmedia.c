@@ -232,6 +232,8 @@ BOOL APIENTRY WOW32ResolveHandle( UINT uHandleType, UINT uMappingDirection,
         case WOW32_MIDIIN_HANDLE:
             (*mmAPI)( uHandleType, uMappingDirection, wHandle16_In,
                       lpwHandle16_Out, dwHandle32_In, lpdwHandle32_Out );
+            dwHandle32 = 0;
+            fReturn = TRUE;
             break;
         }
 
@@ -240,11 +242,15 @@ BOOL APIENTRY WOW32ResolveHandle( UINT uHandleType, UINT uMappingDirection,
         */
         try {
 
-            if ( *lpdwHandle32_Out = dwHandle32 ) {
-                fReturn = TRUE;
-            }
-            else {
-                fReturn = FALSE;
+            if ( dwHandle32 ) {
+
+                if ( *lpdwHandle32_Out = dwHandle32 ) {
+                    fReturn = TRUE;
+                }
+                else {
+                    fReturn = FALSE;
+                }
+
             }
 
         } except( EXCEPTION_EXECUTE_HANDLER ) {
@@ -271,6 +277,8 @@ BOOL APIENTRY WOW32ResolveHandle( UINT uHandleType, UINT uMappingDirection,
         case WOW32_MIDIIN_HANDLE:
             (*mmAPI)( uHandleType, uMappingDirection, wHandle16_In,
                       lpwHandle16_Out, dwHandle32_In, lpdwHandle32_Out );
+            wHandle16 = 0;
+            fReturn = TRUE;
             break;
         }
 
@@ -278,11 +286,13 @@ BOOL APIENTRY WOW32ResolveHandle( UINT uHandleType, UINT uMappingDirection,
         ** Protect ourself from being given a duff pointer.
         */
         try {
-            if ( *lpwHandle16_Out = wHandle16 ) {
-                fReturn = TRUE;
-            }
-            else {
-                fReturn = FALSE;
+            if ( wHandle16 ) {
+                if ( *lpwHandle16_Out = wHandle16 ) {
+                    fReturn = TRUE;
+                }
+                else {
+                    fReturn = FALSE;
+                }
             }
 
         } except( EXCEPTION_EXECUTE_HANDLER ) {
@@ -341,7 +351,7 @@ FARPROC Get_MultiMedia_ProcAddress( LPSTR lpstrProcName )
     if ( hWinmm == NULL ) {
 
         // dprintf2(( "Attempting to load WINMM.DLL" ));
-        hWinmm = SafeLoadLibrary( "WINMM.DLL" );
+        hWinmm = SafeLoadLibrary( L"WINMM.DLL" );
 
         if ( hWinmm == NULL ) {
 
@@ -354,4 +364,24 @@ FARPROC Get_MultiMedia_ProcAddress( LPSTR lpstrProcName )
 
     return GetProcAddress( hWinmm, lpstrProcName );
 
+}
+
+/**********************************************************************\
+*
+* WOWDelayTimeGetTime
+*
+*  on faster machines timeGetTime can return the same value
+*  and some apps will take diff (0) to divide and fault
+*  to prevent that check if it is one
+*  of the known apps that do that and sleep if necessary
+* 
+*
+\**********************************************************************/
+BOOL APIENTRY WOWDelayTimeGetTime(void)
+{
+    if(CURRENTPTD()->dwWOWCompatFlags2 & WOWCF2_DELAYTIMEGETTIME) {
+       Sleep(1);
+       return 1;
+    }
+    return 0;
 }

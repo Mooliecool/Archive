@@ -16,7 +16,7 @@ int ConvertFileName(char *NameToConvert);
 
 /*:::::::::::::::::::::::::::::::::::::::::::::::::::::: Main entry point */
 
-_CRTAPI1 main(int argc, char *argv[])
+__cdecl main(int argc, char *argv[])
 {
     int index;
 

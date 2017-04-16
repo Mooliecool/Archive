@@ -1,5 +1,14 @@
+#if defined(NEC_98)
+#include <nt.h>
+#include <ntrtl.h>
+#include <nturtl.h>
+#include <windows.h>
+#endif // NEC_98
 #include "insignia.h"
 #include "host_def.h"
+
+extern void host_simulate();
+
 /*
  * SoftPC Revision 3.0
  *
@@ -45,7 +54,7 @@
  *
  *
  * Notes	: For a detailed description of the IBM Floppy Disk Adaptor,
- *		  and the INTEL Controller chips refer to the following 
+ *		  and the INTEL Controller chips refer to the following
  *		  documents:
  *
  *		  - IBM PC/XT Technical Reference Manual
@@ -56,7 +65,7 @@
  *				(Section 6-478 FDC 8272A)
  *
  * Mods:
- *      Tim September 1991. nec_term() changed two error code returns. 
+ *      Tim September 1991. nec_term() changed two error code returns.
  * 	Helps Dos give correct error messages when no floppy in drive.
  */
 
@@ -109,6 +118,9 @@
 #endif
 
 #include <stdio.h>
+#if defined(NEC_98)
+#include <stdlib.h>
+#endif //NEC_98
 #include TypesH
 
 #include "xt.h"
@@ -129,10 +141,90 @@
 #include "cmosbios.h"
 #include "rtc_bios.h"
 
+#if defined(NEC_98)
+#include <ntdddisk.h>
+
+/*
+**      DA/UA table definition
+**      WARNING!! keep the following defines synchronized with floppy_i.c
+*/
+typedef struct {
+        CHAR    DeviceName[29];
+        UCHAR   Daua;
+        UINT    FloppyNum;
+        UINT    FdiskNum;
+} DAUATBL;
+
+extern DAUATBL  DauaTable[];
+
+/*
+**      Last accessed Track Number Table
+**      WARNING!! keep the following defines synchronized with floppy_i.c
+*/
+typedef struct {
+        UCHAR   cylinder;
+        UCHAR   head;
+} ACCESSTRACK;
+
+extern ACCESSTRACK LastAccess[];
+
+/*
+**      Definition function
+*/
+MEDIA_TYPE GetFormatMedia IPT2( BYTE, daua, WORD, PhyBytesPerSec );
+NTSTATUS FloppyOpenHandle IPT3( int, drive, PIO_STATUS_BLOCK, io_status_block, PHANDLE, fd);
+NTSTATUS GetGeometry IPT3( HANDLE, fd, PIO_STATUS_BLOCK, io_status_block, PDISK_GEOMETRY, disk_geometry);
+ULONG CalcActualLength IPT4( ULONG, RestCylLen, ULONG, RestTrkLen, BOOL*, fOverData, int, LogDrv);
+void SetErrorCode IPT1( NTSTATUS, status );
+void fl_disk_recal IPT1(int, drive);
+void fl_disk_sense IPT1(int, drive);
+void fl_disk_read_id IPT1(int, drive);
+void SetSenseStatusHi IPT2( UCHAR, st3, PBYTE, ah_status);
+void GetFdcStatus IPT2( HANDLE, fd, UCHAR, *st3 );
+BOOL CheckDmaBoundary IPT3( UINT, segment, UINT, offset, UINT, length);
+BOOL CheckDriveMode IPT1( HANDLE, fd );
+BOOL Check144Mode IPT1( HANDLE, fd );
+BOOL Check1MbInterface IPT1( int, drive );
+
+extern int ConvToLogical IPT1( UINT, daua );
+extern void SetDiskBiosCarryFlag IPT1( UINT, flag);
+
+#endif // NEC_98
+
 /*
  *	Definition of the diskette operation function jump table
  */
 
+#if defined(NEC_98)
+void ((*(fl_fnc_tab[FL_JUMP_TABLE_SIZE])) IPT1(int, drive)) =
+{
+        fl_fnc_err,
+        fl_disk_verify,         // ah=x1h       verify sectors on a floppy diskette
+        fl_fnc_err,
+        fl_fnc_err,
+        fl_disk_sense,          // ah=x4h       sense condition of floppy drive
+        fl_disk_write,          // ah=x5h       write sectors to a floppy diskette
+        fl_disk_read,           // ah=x6h       read sectors from a floppy diskette
+        fl_disk_recal,          // ah=x7h       recalibrate floppy head
+        fl_fnc_err,
+        fl_fnc_err,
+        fl_disk_read_id,        // ah=xAh       read id information from a floppy diskette
+        fl_fnc_err,
+        fl_fnc_err,
+        fl_disk_format,         // ah=xDh       format a track on a floppy diskette
+        fl_fnc_err,
+        fl_fnc_err,
+        fl_fnc_err,
+        fl_fnc_err,
+        fl_fnc_err,
+        fl_fnc_err,
+        fl_fnc_err,
+        fl_fnc_err,
+        fl_fnc_err,
+        fl_fnc_err,
+        fl_fnc_err,
+};
+#else  // !NEC_98
 void ((*(fl_fnc_tab[FL_JUMP_TABLE_SIZE])) IPT1(int, drive)) =
 {
 	fl_disk_reset,
@@ -161,6 +253,7 @@ void ((*(fl_fnc_tab[FL_JUMP_TABLE_SIZE])) IPT1(int, drive)) =
 	fl_format_set,
 	fl_set_media,
 };
+#endif // !NEC_98
 
 #ifdef NTVDM
 extern UTINY number_of_floppy;
@@ -169,7 +262,7 @@ extern UTINY number_of_floppy;
 /*
  *	Functions defined later
  */
- 
+
 LOCAL half_word get_parm IPT1(int, index);
 LOCAL cmos_type IPT2(int, drive, half_word *, type);
 LOCAL wait_int IPT0();
@@ -204,6 +297,53 @@ LOCAL void waitf IPT1(long, time);
 LOCAL recal IPT1(int, drive);
 LOCAL chk_stat_2 IPT0();
 
+#if defined(NEC_98)
+#define FLS_NORMAL_END          0x00
+#define FLS_READY               0x00
+#define FLS_WRITE_PROTECTED     0x10
+#define FLS_DMA_BOUNDARY        0x20
+#define FLS_END_OF_CYLINDER     0x30
+#define FLS_EQUIPMENT_CHECK     0x40
+#define FLS_OVER_RUN            0x50
+#define FLS_NOT_READY           0x60
+#define FLS_ERROR               0x80
+#define FLS_TIME_OUT            0x90
+#define FLS_DATA_ERROR          0xA0
+#define FLS_BAD_CYLINDER        0xD0
+#define FLS_MISSING_ID          0xE0
+
+#define FLS_DOUBLE_SIDE         (1 << 0)
+#define FLS_DETECTION_AI        (1 << 1)
+#define FLS_HIGH_DENSITY        (1 << 2)
+#define FLS_2MODE               (1 << 3)
+#define FLS_AVAILABLE_1PT44MB   ((1 << 3)|(1 << 2))
+
+#define FLP_VERIFY      0x01
+#define FLP_SENSE       0x04
+#define FLP_WRITE       0x05
+#define FLP_READ        0x06
+#define FLP_RECALIBRATE 0x07
+#define FLP_READ_ID     0x0A
+#define FLP_FORMAT      0x0D
+
+#define MEDIA_IS_FLOPPY (1 << 4)
+#define OP_MULTI_TRACK  (1 << 7)
+#define OP_SEEK         (1 << 4)
+#define OP_MFM_MODE     (1 << 6)
+#define OP_NEW_SENSE    (1 << 7)
+#define OP_SENSE2       ((1 << 7)|(1 << 6))
+
+#define ST3_READY               (1 << 5)
+#define ST3_WRITE_PROTECT       (1 << 6)
+#define ST3_DOUBLE_SIDE         (1 << 3)
+
+#define MEDIA_2D_DA     0x50
+
+//----- Add-Start <93.12.28> Bug-Fix -----------------------------------
+#define DEFAULT_PATTERN 0xe5
+//----- Add-End --------------------------------------------------------
+
+#endif // NEC_98
 /*
  *	This macro defines the normal behaviour of the FDC after a reset.
  *	Sending a series of sense interrupt status commands following a
@@ -249,6 +389,7 @@ LOCAL BOOL high_density IFN1(int, drive)
 
 void fl_disk_reset IFN1(int, drive)
 {
+#ifndef NEC_98
 	/*
 	 *	Reset the FDC and all drives. "drive" is not significant
 	 *
@@ -339,6 +480,7 @@ void fl_disk_reset IFN1(int, drive)
 	 */
 
 	setup_end(IGNORE_SECTORS_TRANSFERRED);
+#endif // !NEC_98
 }
 
 void fl_disk_status IFN1(int, drive)
@@ -361,6 +503,449 @@ void fl_disk_status IFN1(int, drive)
 
 void fl_disk_read IFN1(int, drive)
 {
+#if defined(NEC_98)
+        /*
+         *      Read sectors from the diskette in "drive"
+         *
+         *      Register inputs:
+         *              AH      command code & operation mode
+         *              AL      DA/UA
+         *              BX      data length in bytes
+         *              DH      head number
+         *              DL      sector number
+         *              CH      sector length (N)
+         *              CL      cylinder number
+         *              ES:BP   buffer address
+         *      Register outputs:
+         *              AH      diskette status
+         *              CF      status flag
+         */
+        HANDLE  fd;
+        DISK_GEOMETRY   disk_geometry;
+        NTSTATUS    status;
+        IO_STATUS_BLOCK io_status_block;
+        UINT ReqSectors;
+        int LogDrv;
+        ULONG TrackLength,RestCylLen,RestTrkLen,ActReadLen,ActReadSec,RemainReadLen;
+        BOOL fOverRead;
+        BYTE fHeadChng;
+        host_addr inbuf;
+        sys_addr pdata;
+        UCHAR st3;
+        LARGE_INTEGER StartOffset,LItemp;
+
+        /*
+        **      check drive number validation
+        */
+        if( drive > MAX_FLOPPY )
+        {
+                setAH(FLS_EQUIPMENT_CHECK);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+        /*
+        **      check DMA boundary
+        */
+        if( !CheckDmaBoundary( getES(), getBP(), getBX() ) )
+        {
+                setAH(FLS_DMA_BOUNDARY);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+        status = FloppyOpenHandle(drive,&io_status_block,&fd);
+
+        if(!NT_SUCCESS(status))
+        {
+                SetErrorCode(status);
+                return;
+        }
+
+        status = GetGeometry(fd,&io_status_block,&disk_geometry);
+
+        if(!NT_SUCCESS(status))
+        {
+                NtClose(fd);
+                SetErrorCode(status);
+                return;
+        }
+
+//----- Add-Start <94.01.15> Bug-Fix -----------------------------------
+        /*
+        **      convert from DA/UA to logical drive number (0 based)
+        */
+        LogDrv = ConvToLogical( getAL() );
+
+        /*
+        **      check whether the specified sector length is valid.
+        **      If specified sector length is not equal to actual sector
+        **      length, then error returned.
+        */
+        if( (WORD)(128l << getCH()) != (WORD)disk_geometry.BytesPerSector )
+        {
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = getDH() & 0x01;
+                }
+                NtClose(fd);
+                SetErrorCode((NTSTATUS)STATUS_NONEXISTENT_SECTOR);
+                return;
+        }
+//----- Add-End --------------------------------------------------------
+
+        /*
+        **      get read sectors
+        */
+        if( getBX() != 0 )
+                ReqSectors = getBX() / (128 << getCH());
+        else
+                ReqSectors = (UINT)(0x10000l / (LONG)(128 << getCH()));
+
+//----- Del-Start <94.01.15> Bug-Fix -----------------------------------
+//      /*
+//      **      convert from DA/UA to logical drive number (0 based)
+//      */
+//      LogDrv = ConvToLogical( getAL() );
+//----- Del-End --------------------------------------------------------
+
+        /*
+        **      check read size
+        */
+        if( ReqSectors == 0 )
+        {
+                /*
+                **      If request length is less than physical bytes/sector,
+                **      then we do not perform to read.
+                */
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = getDH() & 0x01;
+                }
+                NtClose(fd);
+                setAH(FLS_NORMAL_END);
+                SetDiskBiosCarryFlag(0);
+                return;
+        }
+
+        /*
+        **      check sector range
+        */
+        if( (getDL() < 1) || (getDL() > (int)disk_geometry.SectorsPerTrack) )
+        {
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = getDH() & 0x01;
+                }
+                NtClose(fd);
+                SetErrorCode((NTSTATUS)STATUS_NONEXISTENT_SECTOR);
+                return;
+        }
+
+        TrackLength = disk_geometry.SectorsPerTrack * disk_geometry.BytesPerSector;
+
+        //      RestTrkLen = TrackLength - (SectorNo.(DL) - 1) * BytesPerSector
+        RestTrkLen = (disk_geometry.SectorsPerTrack - (ULONG)getDL() + 1) * disk_geometry.BytesPerSector;
+
+        //      case HeadNo = 0:        RestCylLen = RestTrkLen + TrackLength
+        //      case HeadNo = 1:        RestCylLen = RestTrkLen
+//----- Chg-Start <93.12.27> Bug-Fix -----------------------------------
+//      if( getAH() & OP_SEEK )
+//              RestCylLen = RestTrkLen + ( !(getDH() & 0x01) ? 1l : 0l ) * TrackLength;
+//      else
+//              RestCylLen = RestTrkLen + ( (LastAccess[LogDrv].head == 0) ? 1l : 0l ) * TrackLength;
+//----------------------------------------------------------------------
+        if( !( getDH() & 0x01 ) )
+                RestCylLen = RestTrkLen + TrackLength;
+        else
+                RestCylLen = RestTrkLen;
+//----- Chg-End --------------------------------------------------------
+
+        /*
+        **      calcurate length which is read actually
+        */
+        ActReadLen = CalcActualLength( RestCylLen, RestTrkLen, &fOverRead, LogDrv);
+        ActReadSec = ActReadLen / disk_geometry.BytesPerSector;
+
+        /*
+        **      check multi track read
+        */
+        if( getAH() & OP_MULTI_TRACK )
+        {
+//----- Chg-Start <93.12.27> Bug-Fix -----------------------------------
+//              if( getAH() & OP_SEEK )
+//              {
+//                      if( (getDH() & 0x01) == 0 )
+//                      {
+//                              if( ActReadLen > RestTrkLen )
+//                              {
+//                                      RemainReadLen = ActReadLen - RestTrkLen;
+//                                      ActReadLen = RestTrkLen;
+//                                      fHeadChng = 1;
+//                              }
+//                              else
+//                              {
+//                                      RemainReadLen = 0;
+//                                      fHeadChng = 0;
+//                              }
+//                      }
+//                      else
+//                      {
+//                              RemainReadLen = 0;
+//                              fHeadChng = 0;
+//                      }
+//              }
+//              else
+//              {
+//                      if( LastAccess[LogDrv].head == 0 )
+//                      {
+//                              if( ActReadLen > RestTrkLen )
+//                              {
+//                                      RemainReadLen = ActReadLen - RestTrkLen;
+//                                      ActReadLen = RestTrkLen;
+//                                      fHeadChng = 1;
+//                              }
+//                              else
+//                              {
+//                                      RemainReadLen = 0;
+//                                      fHeadChng = 0;
+//                              }
+//                      }
+//                      else
+//                      {
+//                              RemainReadLen = 0;
+//                              fHeadChng = 0;
+//                      }
+//              }
+//----------------------------------------------------------------------
+                if( (getDH() & 0x01) == 0 )
+                {
+                        if( ActReadLen > RestTrkLen )
+                        {
+                                RemainReadLen = ActReadLen - RestTrkLen;
+                                ActReadLen = RestTrkLen;
+                                fHeadChng = 1;
+                        }
+                        else
+                        {
+                                RemainReadLen = 0;
+                                fHeadChng = 0;
+                        }
+                }
+                else
+                {
+                        RemainReadLen = 0;
+                        fHeadChng = 0;
+                }
+//----- Chg-End --------------------------------------------------------
+        }
+        else
+        {
+                RemainReadLen = 0;
+                fHeadChng = 0;
+        }
+
+        /* read to where ? */
+        pdata = effective_addr ( getES (), getBP () );
+
+        if ( !(inbuf = (host_addr)sas_transbuf_address (pdata, ActReadLen)) )
+        {
+                NtClose(fd);
+                SetErrorCode((NTSTATUS)STATUS_UNSUCCESSFUL);
+                return;
+        }
+
+        /*
+        **      calculate reading start offset on "drive".
+        **
+        **      StartOffset = ( ( CylinderNo. * TracksPerCylinder + HeadNo. ) * SectorsPerTrack
+        **                      + SectorNo. ) * BytesPerSector
+        */
+        if( getAH() & OP_SEEK )
+        {
+                //      temp = CylinderNo. * TracksPerCylinder
+                LItemp = RtlConvertUlongToLargeInteger( (ULONG)getCL() );
+                StartOffset = RtlExtendedIntegerMultiply( LItemp, (ULONG)disk_geometry.TracksPerCylinder);
+//----- Del-Start <93.12.27> Bug-Fix -----------------------------------
+//              //      temp += HeadNo.
+//              LItemp = RtlConvertUlongToLargeInteger( (ULONG)(getDH() & 0x01) );
+//              StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Del-End --------------------------------------------------------
+        }
+        else
+        {
+                //      temp = CylinderNo. * TracksPerCylinder
+                LItemp = RtlConvertUlongToLargeInteger( (ULONG)LastAccess[LogDrv].cylinder );
+                StartOffset = RtlExtendedIntegerMultiply( LItemp, (ULONG)disk_geometry.TracksPerCylinder);
+//----- Del-Start <93.12.27> Bug-Fix -----------------------------------
+//              //      temp += HeadNo.
+//              LItemp = RtlConvertUlongToLargeInteger( (ULONG)LastAccess[LogDrv].head );
+//              StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Del-End --------------------------------------------------------
+        }
+//----- Add-Start <93.12.27> Bug-Fix -----------------------------------
+        //      temp += HeadNo.
+        LItemp = RtlConvertUlongToLargeInteger( (ULONG)(getDH() & 0x01) );
+        StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Add-End --------------------------------------------------------
+        //      temp *= SectorsPerTrack
+        StartOffset = RtlExtendedIntegerMultiply( StartOffset, (ULONG)disk_geometry.SectorsPerTrack);
+        //      temp += SectorNo.
+        LItemp = RtlConvertUlongToLargeInteger( (ULONG)(getDL() - 1) );
+        StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+        //      StartOffset = temp * BytesPerSector
+        StartOffset = RtlExtendedIntegerMultiply( StartOffset, (ULONG)disk_geometry.BytesPerSector);
+
+        /*
+        **      now, go reading
+        */
+        status = NtReadFile(    fd,
+                                0,
+                                NULL,
+                                NULL,
+                                &io_status_block,
+                                (PVOID)inbuf,
+                                ActReadLen,
+                                &StartOffset,
+                                NULL
+                                );
+
+        /*
+        **      save track number
+        */
+        if( getAH() & OP_SEEK )
+        {
+                LastAccess[LogDrv].cylinder = getCL();
+                LastAccess[LogDrv].head = getDH() & 0x01;
+        }
+
+        if (!NT_SUCCESS(status))
+        {
+                NtClose(fd);
+                SetErrorCode(status);
+                return;
+        }
+
+        /* now store what we read */
+        sas_stores_from_transbuf (pdata, inbuf, ActReadLen);
+
+        /*
+        **      if specified reading data from head 0 to 1,
+        **      then perform to read remaining data.
+        */
+        if( fHeadChng )
+        {
+                /*
+                **      read to where ?
+                **      note: It has been already proved that buffer is not round
+                **            dma boundary.
+                */
+                pdata = effective_addr ( getES(), (WORD)(getBP()+(WORD)ActReadLen) );
+
+                if ( !(inbuf = (host_addr)sas_transbuf_address (pdata, RemainReadLen)) )
+                {
+                        NtClose(fd);
+                        SetErrorCode((NTSTATUS)STATUS_UNSUCCESSFUL);
+                        return;
+                }
+
+                /*
+                **      calculate start offset to read remaining data on "drive".
+                **
+                **      StartOffset = ( ( CylinderNo. * TracksPerCylinder + HeadNo. ) * SectorsPerTrack
+                **                      + SectorNo. ) * BytesPerSector
+                **
+                **      note: It is to be reading operation from head 1 & sector 1
+                **            that remaining data exist.
+                */
+                if( getAH() & OP_SEEK )
+                {
+                        //      temp = CylinderNo. * TracksPerCylinder
+                        LItemp = RtlConvertUlongToLargeInteger( (ULONG)getCL() );
+                        StartOffset = RtlExtendedIntegerMultiply( LItemp, (ULONG)disk_geometry.TracksPerCylinder);
+//----- Del-Start <93.12.27> Bug-Fix -----------------------------------
+//                      //      temp += HeadNo.( = 1 )
+//                      LItemp = RtlConvertUlongToLargeInteger( 1l );
+//                      StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Del-End --------------------------------------------------------
+                }
+                else
+                {
+                        //      temp = CylinderNo. * TracksPerCylinder
+                        LItemp = RtlConvertUlongToLargeInteger( (ULONG)LastAccess[LogDrv].cylinder );
+                        StartOffset = RtlExtendedIntegerMultiply( LItemp, (ULONG)disk_geometry.TracksPerCylinder);
+//----- Del-Start <93.12.27> Bug-Fix -----------------------------------
+//                      //      temp += HeadNo.( = 1 )
+//                      LItemp = RtlConvertUlongToLargeInteger( 1l );
+//                      StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Del-End --------------------------------------------------------
+                }
+//----- Add-Start <93.12.27> Bug-Fix -----------------------------------
+                //      temp += HeadNo.( = 1 )
+                LItemp = RtlConvertUlongToLargeInteger( 1l );
+                StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Add-End --------------------------------------------------------
+                //      temp *= SectorsPerTrack
+                StartOffset = RtlExtendedIntegerMultiply( StartOffset, (ULONG)disk_geometry.SectorsPerTrack);
+                //      temp += SectorNo.( = 0 )
+                LItemp = RtlConvertUlongToLargeInteger( 0l );
+                StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+                //      StartOffset = temp * BytesPerSector
+                StartOffset = RtlExtendedIntegerMultiply( StartOffset, (ULONG)disk_geometry.BytesPerSector);
+
+                /*
+                **      now, read remaining data
+                */
+                status = NtReadFile(    fd,
+                                        0,
+                                        NULL,
+                                        NULL,
+                                        &io_status_block,
+                                        (PVOID)inbuf,
+                                        RemainReadLen,
+                                        &StartOffset,
+                                        NULL
+                                        );
+
+                /*
+                **      save current head number
+                */
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = (getDH() & 0x01) + fHeadChng;
+                }
+                else
+                        LastAccess[LogDrv].head += fHeadChng;
+
+                if (!NT_SUCCESS(status))
+                {
+                        NtClose(fd);
+                        SetErrorCode(status);
+                        return;
+                }
+
+                /* now store what we read */
+                sas_stores_from_transbuf (pdata, inbuf, RemainReadLen);
+        }
+
+        NtClose( fd );
+
+        if( !fOverRead )
+        {
+                setAH(FLS_NORMAL_END);
+                SetDiskBiosCarryFlag(0);
+        }
+        else
+        {
+                setAH(FLS_END_OF_CYLINDER);
+                SetDiskBiosCarryFlag(1);
+        }
+
+#else  // !NEC_98
 	/*
 	 *	Read sectors from the diskette in "drive"
 	 *
@@ -397,10 +982,455 @@ void fl_disk_read IFN1(int, drive)
         put_c0_MFM(fdc_cmd_block, 1);
         put_c0_MT(fdc_cmd_block, 1);
 	rd_wr_vf(drive, fdc_cmd_block, BIOS_DMA_READ);
+#endif // !NEC_98
 }
 
 void fl_disk_write IFN1(int, drive)
 {
+#if defined(NEC_98)
+        /*
+         *      Write sectors to the diskette in "drive"
+         *
+         *      Register inputs:
+         *              AH      command code & operation mode
+         *              AL      DA/UA
+         *              BX      data length in bytes
+         *              DH      head number
+         *              DL      sector number
+         *              CH      sector length (N)
+         *              CL      cylinder number
+         *              ES:BP   buffer address
+         *      Register outputs:
+         *              AH      diskette status
+         *              CF      status flag
+         */
+        HANDLE  fd;
+        DISK_GEOMETRY   disk_geometry;
+        NTSTATUS    status;
+        IO_STATUS_BLOCK io_status_block;
+        UINT ReqSectors;
+        int LogDrv;
+        ULONG TrackLength,RestCylLen,RestTrkLen,ActWriteLen,ActWriteSec,RemainWriteLen;
+        BOOL fOverWrite;
+        BYTE fHeadChng;
+        host_addr outbuf;
+        sys_addr pdata;
+        UCHAR st3;
+        LARGE_INTEGER StartOffset,LItemp;
+
+        /*
+        **      check drive number validation
+        */
+        if( drive > MAX_FLOPPY )
+        {
+                setAH(FLS_EQUIPMENT_CHECK);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+        /*
+        **      check DMA boundary
+        */
+        if( !CheckDmaBoundary( getES(), getBP(), getBX()) )
+        {
+                setAH(FLS_DMA_BOUNDARY);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+        status = FloppyOpenHandle(drive,&io_status_block,&fd);
+
+        if(!NT_SUCCESS(status))
+        {
+                SetErrorCode(status);
+                return;
+        }
+
+        status = GetGeometry(fd,&io_status_block,&disk_geometry);
+
+        if(!NT_SUCCESS(status))
+        {
+                NtClose(fd);
+                SetErrorCode(status);
+                return;
+        }
+
+//----- Add-Start <94.01.15> Bug-Fix -----------------------------------
+        /*
+        **      convert from DA/UA to logical drive number (0 based)
+        */
+        LogDrv = ConvToLogical( getAL() );
+
+        /*
+        **      check whether the specified sector length is valid.
+        **      If specified sector length is not equal to actual sector
+        **      length, then error returned.
+        */
+        if( (WORD)(128l << getCH()) != (WORD)disk_geometry.BytesPerSector )
+        {
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = getDH() & 0x01;
+                }
+                NtClose(fd);
+                SetErrorCode((NTSTATUS)STATUS_NONEXISTENT_SECTOR);
+                return;
+        }
+//----- Add-End --------------------------------------------------------
+
+        /*
+        **      get write sectors
+        */
+        if( getBX() != 0 )
+                ReqSectors = getBX() / (128 << getCH());
+        else
+                ReqSectors = (UINT)(0x10000l / (LONG)(128 << getCH()));
+
+//----- Del-Start <94.01.15> Bug-Fix ------------------------------------
+//      /*
+//      **      convert from DA/UA to logical drive number (0 based)
+//      */
+//      LogDrv = ConvToLogical( getAL() );
+//----- Del-End ---------------------------------------------------------
+
+        /*
+        **      check write size
+        */
+        if( ReqSectors == 0 )
+        {
+                /*
+                **      If request length is less than physical bytes/sector,
+                **      then we do not perform to read.
+                */
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = getDH() & 0x01;
+                }
+                NtClose(fd);
+                setAH(FLS_NORMAL_END);
+                SetDiskBiosCarryFlag(0);
+                return;
+        }
+
+        /*
+        **      check sector range
+        */
+        if( (getDL() < 1) || (getDL() > (int)(disk_geometry.SectorsPerTrack)) )
+        {
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = getDH() & 0x01;
+                }
+                NtClose(fd);
+                SetErrorCode((NTSTATUS)STATUS_NONEXISTENT_SECTOR);
+                return;
+        }
+
+        TrackLength = disk_geometry.SectorsPerTrack * disk_geometry.BytesPerSector;
+
+        //      RestTrkLen = TrackLength - (SectorNo.(DL) - 1) * BytesPerSector
+        RestTrkLen = (disk_geometry.SectorsPerTrack - (ULONG)getDL() + 1) * disk_geometry.BytesPerSector;
+
+        //      case HeadNo = 0:        ResCylLen = ResTrkLen + TrkLength
+        //      case HeadNo = 1:        ResCylLen = RestTrkLen
+//----- Chg-Start <93.12.27> Bug-Fix -----------------------------------
+//      if( getAH() & OP_SEEK )
+//              RestCylLen = RestTrkLen + ( !(getDH() & 0x01) ? 1l : 0l ) * TrackLength;
+//      else
+//              RestCylLen = RestTrkLen + ( (LastAccess[LogDrv].head == 0) ? 1l : 0l ) * TrackLength;
+//----------------------------------------------------------------------
+        if( !( getDH() & 0x01 ) )
+                RestCylLen = RestTrkLen + TrackLength;
+        else
+                RestCylLen = RestTrkLen;
+//----- Chg-End --------------------------------------------------------
+
+        /*
+        **      calcurate length which is written actually
+        */
+        ActWriteLen = CalcActualLength( RestCylLen, RestTrkLen, &fOverWrite, LogDrv);
+        ActWriteSec = ActWriteLen / disk_geometry.BytesPerSector;
+
+        /*
+        **      check multi track write
+        */
+        if( getAH() & OP_MULTI_TRACK )
+        {
+//----- Chg-Start <93.12.27> Bug-Fix -----------------------------------
+//              if( getAH() & OP_SEEK )
+//              {
+//                      if( (getDH() & 0x01) == 0 )
+//                      {
+//                              if( ActWriteLen > RestTrkLen )
+//                              {
+//                                      RemainWriteLen = ActWriteLen - RestTrkLen;
+//                                      ActWriteLen = RestTrkLen;
+//                                      fHeadChng = 1;
+//                              }
+//                              else
+//                              {
+//                                      RemainWriteLen = 0;
+//                                      fHeadChng = 0;
+//                              }
+//                      }
+//                      else
+//                      {
+//                              RemainWriteLen = 0;
+//                              fHeadChng = 0;
+//                      }
+//              }
+//              else
+//              {
+//                      if( LastAccess[LogDrv].head == 0 )
+//                      {
+//                              if( ActWriteLen > RestTrkLen )
+//                              {
+//                                      RemainWriteLen = ActWriteLen - RestTrkLen;
+//                                      ActWriteLen = RestTrkLen;
+//                                      fHeadChng = 1;
+//                              }
+//                              else
+//                              {
+//                                      RemainWriteLen = 0;
+//                                      fHeadChng = 0;
+//                              }
+//                      }
+//                      else
+//                      {
+//                              RemainWriteLen = 0;
+//                              fHeadChng = 0;
+//                      }
+//              }
+//----------------------------------------------------------------------
+                if( (getDH() & 0x01) == 0 )
+                {
+                        if( ActWriteLen > RestTrkLen )
+                        {
+                                RemainWriteLen = ActWriteLen - RestTrkLen;
+                                ActWriteLen = RestTrkLen;
+                                fHeadChng = 1;
+                        }
+                        else
+                        {
+                                RemainWriteLen = 0;
+                                fHeadChng = 0;
+                        }
+                }
+                else
+                {
+                        RemainWriteLen = 0;
+                        fHeadChng = 0;
+                }
+//----- Chg-End --------------------------------------------------------
+        }
+        else
+        {
+                RemainWriteLen = 0;
+                fHeadChng = 0;
+        }
+
+        /* write from where ? */
+        pdata = effective_addr (getES (), getBP ());
+
+        if (!(outbuf = (host_addr)sas_transbuf_address (pdata, ActWriteLen)))
+        {
+                NtClose(fd);
+                SetErrorCode((NTSTATUS)STATUS_UNSUCCESSFUL);
+                return;
+        }
+
+        /* load our stuff to the transfer buffer */
+        sas_loads_to_transbuf (pdata, outbuf, ActWriteLen);
+
+        /*
+        **      calculate writing start offset on "drive".
+        **
+        **      StartOffset = ( ( CylinderNo. * TracksPerCylinder + HeadNo. ) * SectorsPerTrack
+        **                      + SectorNo. ) * BytesPerSector
+        */
+        if( getAH() & OP_SEEK )
+        {
+                //      temp = CylinderNo. * TracksPerCylinder
+                LItemp = RtlConvertUlongToLargeInteger( (ULONG)getCL() );
+                StartOffset = RtlExtendedIntegerMultiply( LItemp, (ULONG)disk_geometry.TracksPerCylinder);
+//----- Del-Start <93.12.27> Bug-Fix -----------------------------------
+//              //      temp += HeadNo.
+//              LItemp = RtlConvertUlongToLargeInteger( (ULONG)(getDH() & 0x01) );
+//              StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Del-End --------------------------------------------------------
+        }
+        else
+        {
+                //      temp = CylinderNo. * TracksPerCylinder
+                LItemp = RtlConvertUlongToLargeInteger( (ULONG)LastAccess[LogDrv].cylinder);
+                StartOffset = RtlExtendedIntegerMultiply( LItemp, (ULONG)disk_geometry.TracksPerCylinder);
+//----- Del-Start <93.12.27> Bug-Fix -----------------------------------
+//              //      temp += HeadNo.
+//              LItemp = RtlConvertUlongToLargeInteger( (ULONG)LastAccess[LogDrv].head );
+//              StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Del-end --------------------------------------------------------
+        }
+//----- Add-Start <93.12.27> Bug-Fix -----------------------------------
+        //      temp += HeadNo.
+        LItemp = RtlConvertUlongToLargeInteger( (ULONG)(getDH() & 0x01) );
+        StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Add-End --------------------------------------------------------
+        //      temp *= SectorsPerTrack
+        StartOffset = RtlExtendedIntegerMultiply( StartOffset, (ULONG)disk_geometry.SectorsPerTrack);
+        //      temp += SectorNo.
+        LItemp = RtlConvertUlongToLargeInteger( (ULONG)(getDL() - 1) );
+        StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+        //      StartOffset = temp * BytesPerSector
+        StartOffset = RtlExtendedIntegerMultiply( StartOffset, (ULONG)disk_geometry.BytesPerSector);
+
+        /*
+        **      now, go writing
+        */
+        status = NtWriteFile(   fd,
+                                0,
+                                NULL,
+                                NULL,
+                                &io_status_block,
+                                (PVOID)outbuf,
+                                ActWriteLen,
+                                &StartOffset,
+                                NULL
+                                );
+
+        /*
+        **      save track number
+        */
+        if( getAH() & OP_SEEK )
+        {
+                LastAccess[LogDrv].cylinder = getCL();
+                LastAccess[LogDrv].head = getDH() & 0x01;
+        }
+
+        if (!NT_SUCCESS(status))
+        {
+                NtClose(fd);
+                SetErrorCode(status);
+                return;
+        }
+
+        /*
+        **      if specified writing data from head 0 to 1,
+        **      then perform to write remaining data.
+        */
+        if( fHeadChng )
+        {
+                /*
+                **      write from where ?
+                **      note: It has been already proved that buffer is not round
+                **            dma boundary.
+                */
+                pdata = effective_addr ( getES(), (WORD)(getBP()+(WORD)ActWriteLen) );
+
+                if (!(outbuf = (host_addr)sas_transbuf_address (pdata, RemainWriteLen)))
+                {
+                        NtClose(fd);
+                        SetErrorCode((NTSTATUS)STATUS_UNSUCCESSFUL);
+                        return;
+                }
+
+                /* load our stuff to the transfer buffer */
+                sas_loads_to_transbuf (pdata, outbuf, RemainWriteLen);
+
+                /*
+                **      calculate start offset to write remaining data on "drive".
+                **
+                **      StartOffset = ( ( CylinderNo. * TracksPerCylinder + HeadNo. ) * SectorsPerTrack
+                **                      + SectorNo. ) * BytesPerSector
+                **
+                **      note: It is to be writing operation from head 1 & sector 1
+                **            that remaining data exist.
+                */
+                if( getAH() & OP_SEEK )
+                {
+                        //      temp = CylinderNo. * TracksPerCylinder
+                        LItemp = RtlConvertUlongToLargeInteger( (ULONG)getCL() );
+                        StartOffset = RtlExtendedIntegerMultiply( LItemp, (ULONG)disk_geometry.TracksPerCylinder);
+//----- Del-Start <93.12.27> Bug-Fix -----------------------------------
+//                      //      temp += HeadNo.( = 1 )
+//                      LItemp = RtlConvertUlongToLargeInteger( 1l );
+//                      StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Del-End --------------------------------------------------------
+                }
+                else
+                {
+                        //      temp = CylinderNo. * TracksPerCylinder
+                        LItemp = RtlConvertUlongToLargeInteger( (ULONG)LastAccess[LogDrv].cylinder );
+                        StartOffset = RtlExtendedIntegerMultiply( LItemp, (ULONG)disk_geometry.TracksPerCylinder);
+//----- Del-Start <93.12.27> Bug-Fix -----------------------------------
+//                      //      temp += HeadNo.( = 1 )
+//                      LItemp = RtlConvertUlongToLargeInteger( 1l );
+//                      StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Del-End --------------------------------------------------------
+                }
+//----- Add-Start <93.12.27> Bug-Fix -----------------------------------
+                //      temp += HeadNo.( = 1 )
+                LItemp = RtlConvertUlongToLargeInteger( 1l );
+                StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Add-End --------------------------------------------------------
+                //      temp *= SectorsPerTrack
+                StartOffset = RtlExtendedIntegerMultiply( StartOffset, (ULONG)disk_geometry.SectorsPerTrack);
+                //      temp += SectorNo.( = 0 )
+                LItemp = RtlConvertUlongToLargeInteger( 0l );
+                StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+                //      StartOffset = temp * BytesPerSector
+                StartOffset = RtlExtendedIntegerMultiply( StartOffset, (ULONG)disk_geometry.BytesPerSector);
+
+                /*
+                **      now, write remaining data
+                */
+                status = NtWriteFile(   fd,
+                                        0,
+                                        NULL,
+                                        NULL,
+                                        &io_status_block,
+                                        (PVOID)outbuf,
+                                        RemainWriteLen,
+                                        &StartOffset,
+                                        NULL
+                                        );
+
+                /*
+                **      save current head number
+                */
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = (getDH() & 0x01) + fHeadChng;
+                }
+                else
+                        LastAccess[LogDrv].head += fHeadChng;
+
+                if (!NT_SUCCESS(status))
+                {
+                        NtClose(fd);
+                        SetErrorCode(status);
+                        return;
+                }
+
+        }
+
+        NtClose( fd );
+
+        if( !fOverWrite )
+        {
+                setAH(FLS_NORMAL_END);
+                SetDiskBiosCarryFlag(0);
+        }
+        else
+        {
+                setAH(FLS_END_OF_CYLINDER);
+                SetDiskBiosCarryFlag(1);
+        }
+
+#else  // !NEC_98
 	/*
 	 *	Write sectors to the diskette in "drive"
 	 *
@@ -437,10 +1467,452 @@ void fl_disk_write IFN1(int, drive)
 	put_c1_MFM(fdc_cmd_block, 1);
 	put_c1_MT(fdc_cmd_block, 1);
 	rd_wr_vf(drive, fdc_cmd_block, BIOS_DMA_WRITE);
+#endif // !NEC_98
 }
 
 void fl_disk_verify IFN1(int, drive)
 {
+#if defined(NEC_98)
+        /*
+         *      Verify sectors in the diskette in "drive"
+         *
+         *      Register inputs:
+         *              AH      command code & operation mode
+         *              AL      DA/UA
+         *              BX      data length in bytes
+         *              DH      head number
+         *              DL      sector number
+         *              CH      sector length (N)
+         *              CL      cylinder number
+         *              ES:BP   buffer address
+         *      Register outputs:
+         *              AH      diskette status
+         *              CF      status flag
+         */
+        HANDLE  fd;
+        DISK_GEOMETRY   disk_geometry;
+        NTSTATUS    status;
+        IO_STATUS_BLOCK io_status_block;
+        UINT ReqSectors;
+        int LogDrv;
+        ULONG TrackLength,RestCylLen,RestTrkLen,ActVerifyLen,ActVerifySec,RemainVerifyLen;
+        BOOL fOverVerify;
+        BYTE fHeadChng;
+        UCHAR st3;
+        PVOID temp_buffer;
+        LARGE_INTEGER StartOffset, LItemp;
+
+        /*
+        **      check drive number validation
+        */
+        if( drive > MAX_FLOPPY )
+        {
+                setAH(FLS_EQUIPMENT_CHECK);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+        /*
+        **      check DMA boundary
+        */
+        if( !CheckDmaBoundary( getES(), getBP(), getBX()) )
+        {
+                setAH(FLS_DMA_BOUNDARY);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+        status = FloppyOpenHandle(drive,&io_status_block,&fd);
+
+        if(!NT_SUCCESS(status))
+        {
+                SetErrorCode(status);
+                return;
+        }
+
+        status = GetGeometry(fd,&io_status_block,&disk_geometry);
+
+        if(!NT_SUCCESS(status))
+        {
+                NtClose(fd);
+                SetErrorCode(status);
+                return;
+        }
+
+//----- Add-Start <94.01.15> Bug-Fix -----------------------------------
+        /*
+        **      convert from DA/UA to logical drive number (0 based)
+        */
+        LogDrv = ConvToLogical( getAL() );
+
+        /*
+        **      check whether the specified sector length is valid.
+        **      If specified sector length is not equal to actual sector
+        **      length, then error returned.
+        */
+        if( (WORD)(128l << getCH()) != (WORD)disk_geometry.BytesPerSector )
+        {
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = getDH() & 0x01;
+                }
+                NtClose(fd);
+                SetErrorCode((NTSTATUS)STATUS_NONEXISTENT_SECTOR);
+                return;
+        }
+//----- Add-End --------------------------------------------------------
+
+        /*
+        **      get verify sectors
+        */
+        if( getBX() != 0 )
+                ReqSectors = getBX() / (128 << getCH());
+        else
+                ReqSectors = (UINT)(0x10000l / (LONG)(128 << getCH()));
+
+//----- Del-Start <94.01.15> Bug-Fix -----------------------------------
+//      /*
+//      **      convert from DA/UA to logical drive number (0 based)
+//      */
+//      LogDrv = ConvToLogical( getAL() );
+//----- Del-End --------------------------------------------------------
+
+        /*
+        **      check verify size
+        */
+        if( ReqSectors == 0 )
+        {
+                /*
+                **      If request length is less than physical bytes/sector,
+                **      then we do not perform to read.
+                */
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = getDH() & 0x01;
+                }
+                NtClose(fd);
+                setAH(FLS_NORMAL_END);
+                SetDiskBiosCarryFlag(0);
+                return;
+        }
+
+        /*
+        **      check sector range
+        */
+        if( (getDL() < 1) || (getDL() > (int)(disk_geometry.SectorsPerTrack)) )
+        {
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = getDH() & 0x01;
+                }
+                NtClose(fd);
+                SetErrorCode((NTSTATUS)STATUS_NONEXISTENT_SECTOR);
+                return;
+        }
+
+        TrackLength = disk_geometry.SectorsPerTrack * disk_geometry.BytesPerSector;
+
+        //      RestTrkLen = TrackLength - (SectorNo.(DL) - 1) * BytesPerSector
+        RestTrkLen = (disk_geometry.SectorsPerTrack - (ULONG)getDL() + 1) * disk_geometry.BytesPerSector;
+
+        //      case HeadNo = 0:        ResCylLen = ResTrkLen + TrkLength
+        //      case HeadNo = 1:        ResCylLen = RestTrkLen
+//----- Chg-Start <93.12.27> Bug-Fix -----------------------------------
+//      if( getAH() & OP_SEEK )
+//              RestCylLen = RestTrkLen + ( !(getDH() & 0x01) ? 1l : 0l ) * TrackLength;
+//      else
+//              RestCylLen = RestTrkLen + ( (LastAccess[LogDrv].head == 0) ? 1l : 0l ) * TrackLength;
+//----------------------------------------------------------------------
+        if( !( getDH() & 0x01 ) )
+                RestCylLen = RestTrkLen + TrackLength;
+        else
+                RestCylLen = RestTrkLen;
+//----- Chg-End --------------------------------------------------------
+
+        /*
+        **      calcurate length which is verified actually
+        */
+        ActVerifyLen = CalcActualLength( RestCylLen, RestTrkLen, &fOverVerify, LogDrv);
+        ActVerifySec = ActVerifyLen / disk_geometry.BytesPerSector;
+
+        /*
+        **      check multi track verify
+        */
+        if( getAH() & OP_MULTI_TRACK )
+        {
+//----- Chg-Start <93.12.27> Bug-Fix -----------------------------------
+//              if( getAH() & OP_SEEK )
+//              {
+//                      if( (getDH() & 0x01) == 0 )
+//                      {
+//                              if( ActVerifyLen > RestTrkLen )
+//                              {
+//                                      RemainVerifyLen = ActVerifyLen - RestTrkLen;
+//                                      ActVerifyLen = RestTrkLen;
+//                                      fHeadChng = 1;
+//                              }
+//                              else
+//                              {
+//                                      RemainVerifyLen = 0;
+//                                      fHeadChng = 0;
+//                              }
+//                      }
+//                      else
+//                      {
+//                              RemainVerifyLen = 0;
+//                              fHeadChng = 0;
+//                      }
+//              }
+//              else
+//              {
+//                      if( LastAccess[LogDrv].head == 0 )
+//                      {
+//                              if( ActVerifyLen > RestTrkLen )
+//                              {
+//                                      RemainVerifyLen = ActVerifyLen - RestTrkLen;
+//                                      ActVerifyLen = RestTrkLen;
+//                                      fHeadChng = 1;
+//                              }
+//                              else
+//                              {
+//                                      RemainVerifyLen = 0;
+//                                      fHeadChng = 0;
+//                              }
+//                      }
+//                      else
+//                      {
+//                              RemainVerifyLen = 0;
+//                              fHeadChng = 0;
+//                      }
+//              }
+//----------------------------------------------------------------------
+                if( (getDH() & 0x01) == 0 )
+                {
+                        if( ActVerifyLen > RestTrkLen )
+                        {
+                                RemainVerifyLen = ActVerifyLen - RestTrkLen;
+                                ActVerifyLen = RestTrkLen;
+                                fHeadChng = 1;
+                        }
+                        else
+                        {
+                                RemainVerifyLen = 0;
+                                fHeadChng = 0;
+                        }
+                }
+                else
+                {
+                        RemainVerifyLen = 0;
+                        fHeadChng = 0;
+                }
+//----- Chg-End --------------------------------------------------------
+        }
+        else
+        {
+                RemainVerifyLen = 0;
+                fHeadChng = 0;
+        }
+
+        /*
+        **      allocate temporary buffer for verify operation
+        */
+        if( (temp_buffer=malloc( ActVerifyLen )) == NULL )
+        {
+                NtClose(fd);
+                SetErrorCode((NTSTATUS)STATUS_UNSUCCESSFUL);
+                return;
+        }
+
+        /*
+        **      calculate verifying start offset on "drive".
+        **
+        **      StartOffset = ( ( CylinderNo. * TracksPerCylinder + HeadNo. ) * SectorsPerTrack
+        **                      + SectorNo. ) * BytesPerSector
+        */
+        if( getAH() & OP_SEEK )
+        {
+                //      temp = CylinderNo. * TracksPerCylinder
+                LItemp = RtlConvertUlongToLargeInteger( (ULONG)getCL() );
+                StartOffset = RtlExtendedIntegerMultiply( LItemp, (ULONG)disk_geometry.TracksPerCylinder);
+//----- Del-Start <93.12.27> Bug-Fix -----------------------------------
+//              //      temp += HeadNo.
+//              LItemp = RtlConvertUlongToLargeInteger( (ULONG)(getDH() & 0x01) );
+//              StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Del-End --------------------------------------------------------
+        }
+        else
+        {
+                //      temp = CylinderNo. * TracksPerCylinder
+                LItemp = RtlConvertUlongToLargeInteger( (ULONG)LastAccess[LogDrv].cylinder );
+                StartOffset = RtlExtendedIntegerMultiply( LItemp, (ULONG)disk_geometry.TracksPerCylinder);
+//----- Del-Start <93.12.27> Bug-Fix -----------------------------------
+//              //      temp += HeadNo.
+//              LItemp = RtlConvertUlongToLargeInteger( (ULONG)LastAccess[LogDrv].head );
+//              StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Del-End --------------------------------------------------------
+        }
+//----- Add-Start <93.12.27> Bug-Fix -----------------------------------
+        //      temp += HeadNo.
+        LItemp = RtlConvertUlongToLargeInteger( (ULONG)(getDH() & 0x01) );
+        StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Add-End --------------------------------------------------------
+        //      temp *= SectorsPerTrack
+        StartOffset = RtlExtendedIntegerMultiply( StartOffset, (ULONG)disk_geometry.SectorsPerTrack);
+        //      temp += SectorNo.
+        LItemp = RtlConvertUlongToLargeInteger( (ULONG)(getDL() - 1) );
+        StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+        //      StartOffset = temp * BytesPerSector
+        StartOffset = RtlExtendedIntegerMultiply( StartOffset, (ULONG)disk_geometry.BytesPerSector);
+
+        /*
+        **      now, go reading for verify
+        */
+        status = NtReadFile(    fd,
+                                0,
+                                NULL,
+                                NULL,
+                                &io_status_block,
+                                (PVOID)temp_buffer,
+                                ActVerifyLen,
+                                &StartOffset,
+                                NULL
+                                );
+
+        /*
+        **      save track number
+        */
+        if( getAH() & OP_SEEK )
+        {
+                LastAccess[LogDrv].cylinder = getCL();
+                LastAccess[LogDrv].head = getDH() & 0x01;
+        }
+
+        if (!NT_SUCCESS(status))
+        {
+                free(temp_buffer);
+                NtClose(fd);
+                SetErrorCode(status);
+                return;
+        }
+
+        free(temp_buffer);
+
+        /*
+        **      if specified verifying data from head 0 to 1,
+        **      then perform to verify remaining data.
+        */
+        if( fHeadChng )
+        {
+                /*
+                **      read to where ?
+                **      allocate temporary buffer for verify operation
+                **      note: It has been already proved that buffer is not round
+                **            dma boundary.
+                */
+                if( (temp_buffer=malloc( RemainVerifyLen )) == NULL )
+                {
+                        NtClose(fd);
+                        SetErrorCode((NTSTATUS)STATUS_UNSUCCESSFUL);
+                        return;
+                }
+
+                /*
+                **      calculate start offset to verify remaining data on "drive".
+                **
+                **      StartOffset = ( ( CylinderNo. * TracksPerCylinder + HeadNo. ) * SectorsPerTrack
+                **                      + SectorNo. ) * BytesPerSector
+                **
+                **      note: It is to be verifying operation from head 1 & sector 1
+                **            that remaining data exist.
+                */
+                if( getAH() & OP_SEEK )
+                {
+                        //      temp = CylinderNo. * TracksPerCylinder
+                        LItemp = RtlConvertUlongToLargeInteger( (ULONG)getCL() );
+                        StartOffset = RtlExtendedIntegerMultiply( LItemp, (ULONG)disk_geometry.TracksPerCylinder);
+//----- Del-Start <93.12.27> Bug-Fix -----------------------------------
+//                      //      temp += HeadNo.( = 1 )
+//                      LItemp = RtlConvertUlongToLargeInteger( 1l );
+//                      StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Del-End --------------------------------------------------------
+                }
+                else
+                {
+                        //      temp = CylinderNo. * TracksPerCylinder
+                        LItemp = RtlConvertUlongToLargeInteger( (ULONG)LastAccess[LogDrv].cylinder );
+                        StartOffset = RtlExtendedIntegerMultiply( LItemp, (ULONG)disk_geometry.TracksPerCylinder);
+//----- Del-Start <93.12.27> Bug-Fix -----------------------------------
+//                      //      temp += HeadNo.( = 1 )
+//                      LItemp = RtlConvertUlongToLargeInteger( 1l );
+//                      StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Del-End --------------------------------------------------------
+                }
+//----- Add-Start <93.12.27> Bug-Fix -----------------------------------
+                //      temp += HeadNo.( = 1 )
+                LItemp = RtlConvertUlongToLargeInteger( 1l );
+                StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+//----- Add-End --------------------------------------------------------
+                //      temp *= SectorsPerTrack
+                StartOffset = RtlExtendedIntegerMultiply( StartOffset, (ULONG)disk_geometry.SectorsPerTrack);
+                //      temp += SectorNo.( = 0 )
+                LItemp = RtlConvertUlongToLargeInteger( 0l );
+                StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+                //      StartOffset = temp * BytesPerSector
+                StartOffset = RtlExtendedIntegerMultiply( StartOffset, (ULONG)disk_geometry.BytesPerSector);
+
+                /*
+                **      now, go reading for verify remaining data
+                */
+                status = NtReadFile(    fd,
+                                        0,
+                                        NULL,
+                                        NULL,
+                                        &io_status_block,
+                                        (PVOID)temp_buffer,
+                                        RemainVerifyLen,
+                                        &StartOffset,
+                                        NULL
+                                        );
+
+                /*
+                **      save current head number
+                */
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = (getDH() & 0x01) + fHeadChng;
+                }
+                else
+                        LastAccess[LogDrv].head += fHeadChng;
+
+                if (!NT_SUCCESS(status))
+                {
+                        free(temp_buffer);
+                        NtClose(fd);
+                        SetErrorCode(status);
+                        return;
+                }
+
+                free(temp_buffer);
+        }
+
+        NtClose( fd );
+
+        if( !fOverVerify )
+        {
+                setAH(FLS_NORMAL_END);
+                SetDiskBiosCarryFlag(0);
+        }
+        else
+        {
+                setAH(FLS_END_OF_CYLINDER);
+                SetDiskBiosCarryFlag(1);
+        }
+
+#else  // !NEC_98
 	/*
 	 *	Verify sectors in the diskette in "drive"
 	 *
@@ -477,6 +1949,7 @@ void fl_disk_verify IFN1(int, drive)
 	put_c0_MFM(fdc_cmd_block, 1);
 	put_c0_MT(fdc_cmd_block, 1);
 	rd_wr_vf(drive, fdc_cmd_block, BIOS_DMA_VERIFY);
+#endif // !NEC_98
 }
 
 /*
@@ -495,6 +1968,283 @@ void GetFormatParams IFN4(int *, c, int *, h, int *, s, int *, n)
 
 void fl_disk_format IFN1(int, drive)
 {
+#if defined(NEC_98)
+        /*
+         *      Format the diskette in "drive"
+         *
+         *      Register inputs:
+         *              AH      command code & operation mode
+         *              AL      DA/UA
+         *              BX      DTL buffer length in byte
+         *              DH      head number
+         *              CH      sector length (N)
+         *              CL      cylinder number
+         *              ES:BP   address fields for the track
+         *      Register outputs:
+         *              AH      diskette status
+         *              CF      status flag
+         */
+        HANDLE  fd;
+        DISK_GEOMETRY   disk_geometry;
+        NTSTATUS    status;
+        MEDIA_TYPE media_type;
+        IO_STATUS_BLOCK io_status_block;
+        int LogDrv;
+        FORMAT_PARAMETERS format_param;
+        BYTE daua;
+        WORD PhyBytesPerSec,bad_track;
+//----- Add-Start <93.12.28> Bug-Fix -----------------------------------
+        ULONG TrackLength;
+        PBYTE temp_buffer;
+        BYTE PatternData;
+        ULONG i;
+        LARGE_INTEGER StartOffset,LItemp;
+//----- Add-End --------------------------------------------------------
+
+        /*
+        **      check drive number validation
+        */
+        if( drive > MAX_FLOPPY )
+        {
+                setAH(FLS_EQUIPMENT_CHECK);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+        /*
+        **      check DMA boundary
+        */
+        if( !CheckDmaBoundary( getES(), getBP(), getBX()) )
+        {
+                setAH(FLS_DMA_BOUNDARY);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+        /*
+        **      check FM mode
+        */
+        if( !( getAH() & OP_MFM_MODE ) )
+        {
+                setAH(FLS_MISSING_ID);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+//----- Add-Start <94.01.15> Bug-Fix -----------------------------------
+        /*
+        **      convert from DA/UA to logical drive number (0 based)
+        */
+        LogDrv = ConvToLogical( getAL() );
+
+        /*
+        **      check whether the specified sector length is valid.
+        **      If specified sector length is greater than 2048,
+        **      then error returned.
+        */
+        if( getCH() > 4 )
+        {
+                if( getAH() & OP_SEEK )
+                {
+                        LastAccess[LogDrv].cylinder = getCL();
+                        LastAccess[LogDrv].head = getDH() & 0x01;
+                }
+//----- Del-Start <94.01.17> Bug-Fix -----------------------------------
+//              NtClose(fd);
+//----- Del-End --------------------------------------------------------
+                SetErrorCode((NTSTATUS)STATUS_NONEXISTENT_SECTOR);
+                return;
+        }
+//----- Add-End --------------------------------------------------------
+
+        /*
+        **      get requested media type
+        */
+        daua = (BYTE)getAL();
+        PhyBytesPerSec = (WORD)( 128 << getCH() );
+        if( (media_type = GetFormatMedia( daua, PhyBytesPerSec)) == Unknown )
+        {
+                setAH(FLS_EQUIPMENT_CHECK);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+        status = FloppyOpenHandle(drive,&io_status_block,&fd);
+
+        if(!NT_SUCCESS(status))
+        {
+                SetErrorCode(status);
+                return;
+        }
+
+        /*
+        **      set up format parameter
+        */
+//----- Del-Start <94.01.15> Bug-Fix -----------------------------------
+//      LogDrv = ConvToLogical( getAL() );
+//----- Del-End --------------------------------------------------------
+        format_param.MediaType = media_type;
+//----- Chg-Start <93.12.27> Bug-Fix -----------------------------------
+//      if( getAH() & OP_SEEK )
+//      {
+//              format_param.StartCylinderNumber =
+//              format_param.EndCylinderNumber   = (DWORD)getCL();
+//              format_param.StartHeadNumber     =
+//              format_param.EndHeadNumber       = (DWORD)( getDH() & 0x01 );
+//      }
+//      else
+//      {
+//              format_param.StartCylinderNumber =
+//              format_param.EndCylinderNumber   = (DWORD)LastAccess[LogDrv].cylinder;
+//              format_param.StartHeadNumber     =
+//              format_param.EndHeadNumber       = (DWORD)LastAccess[LogDrv].head;
+//      }
+//----------------------------------------------------------------------
+        if( getAH() & OP_SEEK )
+        {
+                format_param.StartCylinderNumber =
+                format_param.EndCylinderNumber   = (DWORD)getCL();
+        }
+        else
+        {
+                format_param.StartCylinderNumber =
+                format_param.EndCylinderNumber   = (DWORD)LastAccess[LogDrv].cylinder;
+        }
+        format_param.StartHeadNumber     =
+        format_param.EndHeadNumber       = (DWORD)( getDH() & 0x01 );
+//----- Chg-End --------------------------------------------------------
+
+        status = NtDeviceIoControlFile( fd,
+                                        0,
+                                        NULL,
+                                        NULL,
+                                        &io_status_block,
+                                        IOCTL_DISK_FORMAT_TRACKS,
+                                        (PVOID)&format_param,
+                                        sizeof(FORMAT_PARAMETERS),
+                                        (PVOID)&bad_track,
+                                        sizeof(bad_track)
+                                        );
+
+//----- Add-Start <93.12.29> Bug-Fix -----------------------------------
+        /*
+        **      save accessed cylinder number
+        */
+        if( getAH() & OP_SEEK )
+        {
+                LastAccess[LogDrv].cylinder = (UCHAR)format_param.EndCylinderNumber;
+                LastAccess[LogDrv].head = (UCHAR)format_param.EndHeadNumber;
+        }
+//----- Add-End --------------------------------------------------------
+
+        if(!NT_SUCCESS(status))
+        {
+                NtClose(fd);
+                SetErrorCode(status);
+                return;
+        }
+
+//----- Del-Start <93.12.28> Bug-Fix -----------------------------------
+//      if( getAH() & OP_SEEK )
+//      {
+//              LastAccess[LogDrv].cylinder = (UCHAR)format_param.EndCylinderNumber;
+//              LastAccess[LogDrv].head = (UCHAR)format_param.EndHeadNumber;
+//      }
+//----- Del-End --------------------------------------------------------
+
+//----- Add-Start <93.12.28> Bug-Fix -----------------------------------
+        /*
+        **      if specified pattern data is different default
+        **      pattern (E5H), then write specified pattern data
+        **      to the track.
+        */
+        if( (PatternData = getDL()) != DEFAULT_PATTERN )
+        {
+                /*
+                **      detection track length
+                */
+                switch( media_type )
+                {
+#if 1                                                                    // NEC 941110
+                        case F5_1Pt23_1024:     TrackLength = 8l * 1024l;// NEC 941110
+#else                                                                    // NEC 941110
+                        case F5_1Pt2_1024:      TrackLength = 8l * 1024l;
+#endif                                                                   // NEC 941110
+                                                break;
+                        case F3_1Pt44_512:      TrackLength = 18l * 512l;
+                                                break;
+                        case F5_1Pt2_512:       TrackLength = 15l * 512l;
+                                                break;
+
+                        case F3_720_512:        TrackLength = 9l * 512l;
+                        default:                break;
+                }
+
+                /*
+                **      allocate temporary buffer for writing pattern data
+                */
+                if( (temp_buffer=(PBYTE)malloc( TrackLength )) == NULL )
+                {
+                        NtClose(fd);
+                        SetErrorCode((NTSTATUS)STATUS_UNSUCCESSFUL);
+                        return;
+                }
+
+                /*
+                **      fill temporary buffer with pattern data
+                */
+                for( i=0; i<TrackLength; i++)
+                        temp_buffer[i] = PatternData;
+
+                /*
+                **      calculate writing start offset on "drive".
+                **
+                **      StartOffset = ( CylinderNo. * 2 + HeadNo. ) * SectorsPerTrack * BytesPerSector
+                **                  = ( CylinderNo. * 2 + HeadNo. ) * TrackLength
+                */
+                //      temp = CylinderNo. * TracksPerCylinder( = 2 )
+                LItemp = RtlConvertUlongToLargeInteger( (ULONG)format_param.EndCylinderNumber );
+                StartOffset = RtlExtendedIntegerMultiply( LItemp, 2l );
+                //      temp += HeadNo.
+                LItemp = RtlConvertUlongToLargeInteger( (ULONG)format_param.EndHeadNumber );
+                StartOffset = RtlLargeIntegerAdd( StartOffset, LItemp);
+                //      StartOffset = temp * TrackLength
+                StartOffset = RtlExtendedIntegerMultiply( StartOffset, TrackLength );
+
+                /*
+                **      now, write pattern data
+                */
+                status = NtWriteFile(   fd,
+                                        0,
+                                        NULL,
+                                        NULL,
+                                        &io_status_block,
+                                        (PVOID)temp_buffer,
+                                        TrackLength,
+                                        &StartOffset,
+                                        NULL
+                                        );
+
+                /*
+                **      note: we have already saved last accessed
+                **            cylinder number.
+                */
+
+                if(!NT_SUCCESS(status))
+                {
+                        free((PVOID)temp_buffer);
+                        NtClose(fd);
+                        SetErrorCode(status);
+                        return;
+                }
+        }
+//----- Add-End --------------------------------------------------------
+
+        NtClose(fd);
+        setAH(FLS_NORMAL_END);
+        SetDiskBiosCarryFlag(0);
+
+#else  // !NEC_98
 	/*
 	 *	Format the diskette in "drive"
 	 *
@@ -523,7 +2273,7 @@ void fl_disk_format IFN1(int, drive)
 
 	/*
 	 *	Establish the default format for the size of drive, unless
-	 *	this has already been set up via previous calls to 
+	 *	this has already been set up via previous calls to
 	 *	diskette_io()
 	 */
 
@@ -576,7 +2326,7 @@ void fl_disk_format IFN1(int, drive)
 
 
 			/*
-			 *	Send the remainder of the format 
+			 *	Send the remainder of the format
 			 *	parameters to the FDC
 			 */
 
@@ -602,6 +2352,7 @@ void fl_disk_format IFN1(int, drive)
 	translate_old(drive);
 	setup_end(IGNORE_SECTORS_TRANSFERRED);
 
+#endif // !NEC_98
 }
 
 void fl_fnc_err IFN1(int, drive)
@@ -619,9 +2370,18 @@ void fl_fnc_err IFN1(int, drive)
 	 */
 	UNUSED(drive);
 	
+#if defined(NEC_98)
+        /*
+        **      Invalid command is normal end.
+        */
+        setAH(FLS_NORMAL_END);
+        SetDiskBiosCarryFlag(0);
+
+#else  // NEC_98
 	setAH(FS_BAD_COMMAND);
 	sas_store(FLOPPY_STATUS, FS_BAD_COMMAND);
 	setCF(1);
+#endif // !NEC_98
 }
 
 void fl_disk_parms IFN1(int, drive)
@@ -658,7 +2418,7 @@ void fl_disk_parms IFN1(int, drive)
 	if (equip_flag.bits.diskette_present == 0)
 		setDL(0);
 	else
-		setDL(equip_flag.bits.max_diskette + 1);
+		setDL((UCHAR)(equip_flag.bits.max_diskette + 1));
 
 
 	/*
@@ -796,7 +2556,7 @@ void fl_disk_parms IFN1(int, drive)
 
 
 	/*
-	 *	Arrive here if "drive" is invalid or if its type 
+	 *	Arrive here if "drive" is invalid or if its type
 	 *	could not be determined
 	 */
 
@@ -1146,13 +2906,13 @@ void fl_set_media IFN1(int, drive)
  * in the status byte. If they differ
  * set BIOS RATE STATUS byte to reflect old rate status
  * for this drive as it may have been altered by an
- * access to the other drive. This may result in a call 
- * to send_rate not being performed because the old 
- * rate status (possibly for the other drive) matching the 
+ * access to the other drive. This may result in a call
+ * to send_rate not being performed because the old
+ * rate status (possibly for the other drive) matching the
  * new data rate for this drive, when actually the last rate
- * attempted for this drive was different. Thus the 
- * controller for this drive is at an old rate (for low 
- * density say) and we are assuming it has been previously 
+ * attempted for this drive was different. Thus the
+ * controller for this drive is at an old rate (for low
+ * density say) and we are assuming it has been previously
  * set to the updated (high) state when it has not!
  * In all this will ensure the updated data rate being sent
  * for the drive concerned !
@@ -1287,7 +3047,7 @@ LOCAL void translate_new IFN1(int, drive)
 void translate_old IFN1(int, drive)
 {
 	/*
-	 *	Translates diskette state locations from new 
+	 *	Translates diskette state locations from new
 	 *	architecture to compatible mode
 	 */
 	half_word hf_cntrl, disk_state, mode, drive_type;
@@ -1413,7 +3173,7 @@ LOCAL void rd_wr_vf IFN3(int, drive, FDC_CMD_BLOCK *, fcbp, half_word, dma_type)
 	int sectors_transferred;
 	word md_segment, md_offset;
 	/*
-	 *	Establish initial data rate, then loop through each 
+	 *	Establish initial data rate, then loop through each
 	 *	possible data rate
 	 */
 	translate_new(drive);
@@ -1421,14 +3181,14 @@ LOCAL void rd_wr_vf IFN3(int, drive, FDC_CMD_BLOCK *, fcbp, half_word, dma_type)
 	while ((! high_density(drive)) || med_change(drive) == SUCCESS)
 	{
 		sas_load(FDD_STATUS+drive, &disk_state);
-		data_rate = disk_state & RS_MASK;
+		data_rate = (half_word)(disk_state & RS_MASK);
 		if (cmos_type(drive, &drive_type) != FAILURE)
 		{
 			/*
 			 *	Check CMOS value against what is really
 			 *	known about the drive
 			 */
-			/* 
+			/*
 			 * The original code here had a very bad case of "Bad-C"
 			 * if-if-else troubles, but replacing the code with
 			 * the switch statement originally intended breaks
@@ -1609,6 +3369,7 @@ LOCAL void rd_wr_vf IFN3(int, drive, FDC_CMD_BLOCK *, fcbp, half_word, dma_type)
 
 LOCAL void setup_state IFN1(int, drive)
 {
+#ifndef NEC_98
 	half_word	drive_type;	/* Floppy unit type specified by CMOS */
 
 	/*
@@ -1740,10 +3501,12 @@ if( cmos_type( drive, &drive_type ) != FAILURE ){
 			sas_store(RATE_STATUS, lastrate);
 		}
 	}
+#endif // !NEC_98
 }
 
 LOCAL void fmt_init IFN1(int, drive)
 {
+#ifndef NEC_98
 	/*
 	 *	If the media type has not already been set up, establish
 	 *	the default media type for the drive type
@@ -1790,10 +3553,12 @@ LOCAL void fmt_init IFN1(int, drive)
 			sas_store(FDD_STATUS+drive, disk_state);
 		}
 	}
+#endif // !NEC_98
 }
 
 LOCAL med_change IFN1(int, drive)
 {
+#ifndef NEC_98
 	/*
 	 *	Checks for media change, resets media change,
 	 *	checks media change again
@@ -1806,7 +3571,7 @@ LOCAL med_change IFN1(int, drive)
 			return(SUCCESS);
 
 		/*
-		 *	Media has been changed - set media state to 
+		 *	Media has been changed - set media state to
 		 *	undetermined
 		 */
 		sas_load(FDD_STATUS+drive, &disk_state);
@@ -1841,10 +3606,12 @@ LOCAL med_change IFN1(int, drive)
 			sas_store(FLOPPY_STATUS, FS_TIME_OUT);
 	}
 	return(FAILURE);
+#endif // !NEC_98
 }
 
 LOCAL void send_rate IFN1(int, drive)
 {
+#ifndef NEC_98
 	/*
 	 *	Update the data rate for "drive"
 	 */
@@ -1868,8 +3635,9 @@ LOCAL void send_rate IFN1(int, drive)
 		 *	the floppy adapter
 		 */
 
-		outb(DISKETTE_DCR_REG, (disk_state >> 6));
+		outb(DISKETTE_DCR_REG, (IU8)(disk_state >> 6));
 	}
+#endif // !NEC_98
 }
 
 LOCAL chk_lastrate IFN1(int, drive)
@@ -1888,12 +3656,13 @@ LOCAL chk_lastrate IFN1(int, drive)
 	
 	sas_load(RATE_STATUS, &lastrate);
 	sas_load(FDD_STATUS+drive, &disk_state);
-	return((lastrate & RS_MASK) != (disk_state & RS_MASK) 
+	return((lastrate & RS_MASK) != (disk_state & RS_MASK)
 			? SUCCESS : FAILURE);
 }
 
 LOCAL dma_setup IFN1(half_word, dma_mode)
 {
+#ifndef NEC_98
 	/*
 	 *	This routine sets up the DMA for read/write/verify
 	 *	operations
@@ -1915,7 +3684,7 @@ LOCAL dma_setup IFN1(half_word, dma_mode)
 	outb(DMA_WRITE_MODE_REG, dma_mode);
 
 	/*
-	 *	Output the address to the DMA adapter as a page address 
+	 *	Output the address to the DMA adapter as a page address
 	 *	and 16 bit offset
 	 */
 	if (dma_mode == BIOS_DMA_VERIFY)
@@ -1956,10 +3725,12 @@ LOCAL dma_setup IFN1(half_word, dma_mode)
 	}
 
 	return(SUCCESS);
+#endif // !NEC_98
 }
 
 LOCAL fmtdma_set IFN0()
 {
+#ifndef NEC_98
 	/*
 	 *	This routine sets up the DMA for format operations
 	 */
@@ -1980,7 +3751,7 @@ LOCAL fmtdma_set IFN0()
 	outb(DMA_WRITE_MODE_REG, BIOS_DMA_WRITE);
 
 	/*
-	 *	Output the address to the DMA adapter as a page address 
+	 *	Output the address to the DMA adapter as a page address
 	 *	and 16 bit offset
 	 */
 	dma_address.all = effective_addr(getES(), getBX());
@@ -2022,12 +3793,13 @@ LOCAL fmtdma_set IFN0()
 #endif
 
 	return(SUCCESS);
+#endif // !NEC_98
 }
 
 LOCAL void nec_init IFN2(int, drive, FDC_CMD_BLOCK *, fcbp)
 {
 	/*
-	 *	This routine seeks to the requested track and 
+	 *	This routine seeks to the requested track and
 	 *	initialises the FDC for the read/write/verify
 	 *	operation.
 	 */
@@ -2046,7 +3818,7 @@ LOCAL void nec_init IFN2(int, drive, FDC_CMD_BLOCK *, fcbp)
 LOCAL void rwv_com IFN2(word, md_segment, word, md_offset)
 {
 	/*
-	 *	This routine send read/write/verify parameters to the 
+	 *	This routine send read/write/verify parameters to the
 	 *	FDC
 	 */
 	half_word md_gap;
@@ -2091,7 +3863,7 @@ LOCAL nec_term IFN0()
 		/*
 		 *	Result phase completed
 		 */
-		if ((get_r0_ST0(fl_nec_status) & 
+		if ((get_r0_ST0(fl_nec_status) &
 			(ST0_INTERRUPT_CODE_0 | ST0_INTERRUPT_CODE_1)) != 0)
 		{
 			/*
@@ -2111,35 +3883,35 @@ LOCAL nec_term IFN0()
 			else
 			{
 				/*
-				 *	Abnormal termination - set 
+				 *	Abnormal termination - set
 				 *	diskette status up accordingly
 				 */
-				if (get_r0_ST1(fl_nec_status) & 
+				if (get_r0_ST1(fl_nec_status) &
 						ST1_END_OF_CYLINDER)
 				{
 					diskette_status |= FS_SECTOR_NOT_FOUND;
 				}
-				else if (get_r0_ST1(fl_nec_status) & 
+				else if (get_r0_ST1(fl_nec_status) &
 						ST1_DATA_ERROR)
 				{
 					diskette_status |= FS_CRC_ERROR;
 				}
-				else if (get_r0_ST1(fl_nec_status) & 
+				else if (get_r0_ST1(fl_nec_status) &
 						ST1_OVERRUN)
 				{
 					diskette_status |= FS_DMA_ERROR;
 				}
-				else if (get_r0_ST1(fl_nec_status) & 
+				else if (get_r0_ST1(fl_nec_status) &
 						ST1_NO_DATA)
 				{
 					diskette_status |= FS_FDC_ERROR; /* Tim Sept 91, was FS_SECTOR_NOT_FOUND */
 				}
-				else if (get_r0_ST1(fl_nec_status) & 
+				else if (get_r0_ST1(fl_nec_status) &
 						ST1_NOT_WRITEABLE)
 				{
 					diskette_status |= FS_WRITE_PROTECTED;
 				}
-				else if (get_r0_ST1(fl_nec_status) & 
+				else if (get_r0_ST1(fl_nec_status) &
 						ST1_MISSING_ADDRESS_MARK)
 				{
 					diskette_status |= FS_BAD_ADDRESS_MARK;
@@ -2219,7 +3991,7 @@ LOCAL retry IFN1(int, drive)
 		if ((disk_state & FS_MEDIA_DET) == 0)
 		{
 			sas_load(RATE_STATUS, &lastrate);
-			if ((data_rate = (disk_state & RS_MASK)) != 
+			if ((data_rate = (half_word)((disk_state & RS_MASK))) !=
 					((lastrate << 4) & RS_MASK))
 			{
 				/*
@@ -2284,7 +4056,7 @@ LOCAL void setup_end IFN1(int, sectors_transferred)
 {
 	/*
 	 *	Restore MOTOR_COUNT to parameter provided in table;
-	 *	set return status values and sectors transferred, 
+	 *	set return status values and sectors transferred,
 	 *	where applicable
 	 */
 	half_word diskette_status;
@@ -2308,7 +4080,7 @@ LOCAL void setup_end IFN1(int, sectors_transferred)
 		 *	Operation succeeded
 		 */
 		if (sectors_transferred != IGNORE_SECTORS_TRANSFERRED)
-			setAL(sectors_transferred);
+			setAL((UCHAR)(sectors_transferred));
 		setCF(0);
 	}
 }
@@ -2341,7 +4113,7 @@ LOCAL setup_dbl IFN1(int, drive)
 				 *	Try reading ids from cylinder 2 to
 				 *	the last cylinder on both heads. If
 				 *	the putative track number disagrees
-				 *	with what is on the disk, then 
+				 *	with what is on the disk, then
 				 *	double stepping is required
 				 */
 				if ((disk_state & DC_80_TRACK) == 0)
@@ -2361,7 +4133,7 @@ LOCAL setup_dbl IFN1(int, drive)
 						LOAD_RESULT_BLOCK;
 						sas_store(FDD_TRACK+drive,
   						    get_r0_cyl(fl_nec_status));
-						if ((track/2) != 
+						if ((track/2) !=
 					 	    get_r0_cyl(fl_nec_status))
 						{
 							disk_state |= FS_DOUBLE_STEP;
@@ -2486,7 +4258,7 @@ LOCAL void motor_on IFN1(int, drive)
 	{
 		/*
 		 *	Notify OS that BIOS is about to wait for motor
-		 *	start up 
+		 *	start up
 		 */
 #ifndef	JOKER
 		word savedAX, savedCX, savedDX, savedCS, savedIP;
@@ -2588,6 +4360,7 @@ LOCAL void motor_on IFN1(int, drive)
 
 LOCAL turn_on IFN1(int, drive)
 {
+#ifndef NEC_98
 	/*
 	 *	Turn motor on and return wait state
 	 */
@@ -2609,7 +4382,7 @@ LOCAL turn_on IFN1(int, drive)
 	 *	Get existing and desired drive select and motor on
 	 */
 	sas_load(MOTOR_STATUS, &motor_status);
-	drive_select = motor_status & MS_DRIVE_SELECT_MASK;
+	drive_select = (half_word)(motor_status & MS_DRIVE_SELECT_MASK);
 	drive_select_desired = (drive << 4);
 	motor_on_desired = (1 << drive);
 
@@ -2620,7 +4393,7 @@ LOCAL turn_on IFN1(int, drive)
 		 *	Store desired motor status
 		 */
 		status_desired = motor_on_desired | drive_select_desired;
-		old_motor_on = motor_status & MS_MOTOR_ON_MASK;
+		old_motor_on = (half_word)(motor_status & MS_MOTOR_ON_MASK);
 		motor_status &= ~MS_DRIVE_SELECT_MASK;
 		motor_status |= status_desired;
 		sas_store(MOTOR_STATUS, motor_status);
@@ -2629,7 +4402,7 @@ LOCAL turn_on IFN1(int, drive)
 		 *	Switch on motor of selected drive via a write
 		 *	to the floppy adapter's Digital Output Register
 		 */
-		new_motor_on = motor_status & MS_MOTOR_ON_MASK;
+		new_motor_on = (half_word)(motor_status & MS_MOTOR_ON_MASK);
 		setIF(1);
 		diskette_dor_reg = motor_status << 4;
 		diskette_dor_reg |= (motor_status & MS_DRIVE_SELECT_MASK) >> 4;
@@ -2649,6 +4422,7 @@ LOCAL turn_on IFN1(int, drive)
 	 */
 	setIF(1);
 	return(FAILURE);
+#endif // !NEC_98
 }
 
 LOCAL void hd_wait IFN1(int, drive)
@@ -2743,6 +4517,7 @@ LOCAL void hd_wait IFN1(int, drive)
 
 LOCAL void nec_output IFN1(half_word, byte_value)
 {
+#ifndef NEC_98
 	/*
 	 *	This routine sends a byte to the FDC after testing for
 	 *	correct direction and controller ready. If the FDC does
@@ -2775,6 +4550,7 @@ LOCAL void nec_output IFN1(half_word, byte_value)
 	 *	Do fixed wait for FDC update cycle time
 	 */
 	waitf(FDC_SETTLE);
+#endif // !NEC_98
 }
 
 LOCAL seek IFN2(int, drive, int, track)
@@ -2782,14 +4558,14 @@ LOCAL seek IFN2(int, drive, int, track)
 	/*
 	 *	This routine will move the head on the named drive
 	 *	to the named track. If the drive has not been accessed
-	 *	since the drive reset command was issued, the drive 
+	 *	since the drive reset command was issued, the drive
 	 *	will be recalibrated
 	 */
 	half_word seek_status, disk_track, disk_state;
 	FDC_CMD_BLOCK fdc_cmd_block[MAX_COMMAND_LEN];
 	int status;
 
-	note_trace2(FLOPBIOS_VERBOSE, "diskette_io:seek(drive=%d,track=%d)", 
+	note_trace2(FLOPBIOS_VERBOSE, "diskette_io:seek(drive=%d,track=%d)",
 							drive, track);
 
 	/*
@@ -2801,7 +4577,7 @@ LOCAL seek IFN2(int, drive, int, track)
 		/*
 		 *	Update the seek status and recalibrate
 		 */
-		sas_store(SEEK_STATUS, seek_status | (1 << drive));
+		sas_store(SEEK_STATUS, (IU8)(seek_status | (1 << drive)));
 		if (recal(drive) != SUCCESS)
 		{
 			sas_store(FLOPPY_STATUS, FS_OK);
@@ -2841,7 +4617,7 @@ LOCAL seek IFN2(int, drive, int, track)
 		 */
 		return(SUCCESS);
 	}
-	sas_store(FDD_TRACK+drive, track);
+	sas_store(FDD_TRACK+drive, (IU8)track);
 
 	/*
 	 *	Do the seek and check the results
@@ -2853,7 +4629,7 @@ LOCAL seek IFN2(int, drive, int, track)
 	put_c8_head(fdc_cmd_block, 0);
 	put_c8_pad1(fdc_cmd_block, 0);
 	nec_output(fdc_cmd_block[1]);
-	put_c8_new_cyl(fdc_cmd_block, track);
+	put_c8_new_cyl(fdc_cmd_block, ((unsigned char)track));
 	nec_output(fdc_cmd_block[2]);
 	status = chk_stat_2();
 
@@ -2905,7 +4681,7 @@ LOCAL chk_stat_2 IFN0()
 		if (results() != FAILURE)
 		{
 
-			if ((get_r3_ST0(fl_nec_status) & (ST0_SEEK_END | ST0_INTERRUPT_CODE_0)) 
+			if ((get_r3_ST0(fl_nec_status) & (ST0_SEEK_END | ST0_INTERRUPT_CODE_0))
 				!= (ST0_SEEK_END | ST0_INTERRUPT_CODE_0))
 			{
 				return(SUCCESS);
@@ -2973,7 +4749,9 @@ LOCAL wait_int IFN0()
 	 *	Call sub-cpu to do the "wait" for interrupt, saving
 	 *	registers that would otherwise be corrupted
 	 */
+#ifdef FLOPPIES_KEEP_TRYING
    try_again:
+#endif
 	savedCS = getCS();
 	savedIP = getIP();
 
@@ -3049,6 +4827,8 @@ LOCAL wait_int IFN0()
 
 LOCAL results IFN0()
 {
+#ifndef NEC_98
+
 	/*
 	 *	This routine will read anything that the FDC controller
 	 *	returns following an interrupt
@@ -3066,7 +4846,7 @@ LOCAL results IFN0()
 		if (count++ >= FDC_TIME_OUT)
 		{
 			/*
-			 *	Expect to return here when there is a 
+			 *	Expect to return here when there is a
 			 *	time out (not an FDC error)
 			 */
 			sas_load(FLOPPY_STATUS, &diskette_status);
@@ -3077,7 +4857,7 @@ LOCAL results IFN0()
 			return(FAILURE);
 		}
 		inb(DISKETTE_STATUS_REG, &diskette_status_reg);
-	} while ((diskette_status_reg & (DSR_RQM | DSR_DIO)) 
+	} while ((diskette_status_reg & (DSR_RQM | DSR_DIO))
 						!= (DSR_RQM | DSR_DIO));
 
 	/*
@@ -3119,10 +4899,12 @@ LOCAL results IFN0()
 	}
 
 	return(SUCCESS);
+#endif // !NEC_98
 }
 
 LOCAL read_dskchng IFN1(int, drive)
 {
+#ifndef NEC_98
 	/*
 	 *	Reads the state of the disk change line for "drive"
 	 */
@@ -3139,6 +4921,7 @@ LOCAL read_dskchng IFN1(int, drive)
 	 */
 	inb(DISKETTE_DIR_REG, &diskette_dir_reg);
 	return(((diskette_dir_reg & DIR_DISKETTE_CHANGE) != 0) ? FAILURE : SUCCESS);
+#endif // !NEC_98
 }
 
 void drive_detect IFN1(int, drive)
@@ -3165,7 +4948,7 @@ void drive_detect IFN1(int, drive)
 	 */
 	note_trace1( GFI_VERBOSE, "drive_detect():start: DRIVE %x", drive );
 	motor_on(drive);
-	if (    (recal(drive) == SUCCESS) 
+	if (    (recal(drive) == SUCCESS)
              && (seek(drive, FDD_CLONK_TRACK) == SUCCESS))
 	{
 		track = FDD_JUDDER_TRACK + 1;
@@ -3286,7 +5069,7 @@ void fl_diskette_setup IFN0()
 		
 		translate_old(drive);
 	}
-	 
+	
 	/*
 	 *	Force an immediate recalibrate
 	 */
@@ -3304,3 +5087,792 @@ void fl_diskette_setup IFN0()
 	 */
 	setup_end(IGNORE_SECTORS_TRANSFERRED);
 }
+#if defined(NEC_98)
+
+NTSTATUS FloppyOpenHandle IFN3( int, drive,
+                           PIO_STATUS_BLOCK, io_status_block,
+                           PHANDLE, fd)
+{
+
+    PUNICODE_STRING unicode_string;
+    ANSI_STRING ansi_string;
+    OBJECT_ATTRIBUTES   floppy_obj;
+    int drv;            // logical drive number
+    NTSTATUS status;
+
+    /*
+    **  get device name
+    */
+    for( drv=0; drv<MAX_FLOPPY; drv++)
+    {
+        if(DauaTable[drv].FloppyNum == (UINT)drive)
+                break;
+    }
+    if( drv == MAX_FLOPPY )
+    {
+        status = STATUS_UNSUCCESSFUL;
+        return status;
+    }
+
+    RtlInitAnsiString( &ansi_string, DauaTable[drv].DeviceName);
+
+    unicode_string =  &NtCurrentTeb()->StaticUnicodeString;
+
+    status = RtlAnsiStringToUnicodeString(unicode_string,
+                                          &ansi_string,
+                                          FALSE
+                                          );
+    if ( !NT_SUCCESS(status) )
+        return status;
+
+    InitializeObjectAttributes(
+                               &floppy_obj,
+                               unicode_string,
+                               OBJ_CASE_INSENSITIVE,
+                               NULL,
+                               NULL
+                               );
+
+    // this call will fail if the current user is not
+    // the administrator or the volume is locked by other process.
+    status = NtOpenFile(
+                        fd,
+                        FILE_READ_DATA | FILE_READ_ATTRIBUTES | FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE,
+                        &floppy_obj,
+                        io_status_block,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE
+                        );
+
+    return status;
+
+}
+
+void SetErrorCode IFN1( NTSTATUS, status )
+{
+
+        switch( status )
+        {
+                case STATUS_IO_TIMEOUT:
+                case STATUS_TIMEOUT:
+                                        setAH(FLS_TIME_OUT);
+                                        break;
+                case STATUS_UNRECOGNIZED_MEDIA:
+                case STATUS_NONEXISTENT_SECTOR:
+                case STATUS_END_OF_FILE:
+                case STATUS_FLOPPY_ID_MARK_NOT_FOUND:
+                case STATUS_FLOPPY_WRONG_CYLINDER:
+                                        setAH(FLS_MISSING_ID);
+                                        break;
+                case STATUS_DEVICE_DATA_ERROR:
+                case STATUS_CRC_ERROR:
+                                        setAH(FLS_DATA_ERROR);
+                                        break;
+                case STATUS_DATA_OVERRUN:
+                                        setAH(FLS_OVER_RUN);
+                                        break;
+                case STATUS_MEDIA_WRITE_PROTECTED:
+                                        setAH(FLS_WRITE_PROTECTED);
+                                        break;
+                case STATUS_DEVICE_NOT_READY:
+                case STATUS_NO_MEDIA_IN_DEVICE:
+                                        setAH(FLS_NOT_READY);
+                                        break;
+                default:                setAH(FLS_ERROR);
+                                        break;
+        }
+        SetDiskBiosCarryFlag(1);
+}
+
+NTSTATUS GetGeometry IFN3(  HANDLE, fd,
+                        PIO_STATUS_BLOCK, io_status_block,
+                        PDISK_GEOMETRY, disk_geometry)
+{
+        NTSTATUS status;
+
+    // get geomerty information, the caller wants this
+        status = NtDeviceIoControlFile(fd,
+                                        0,
+                                        NULL,
+                                        NULL,
+                                        io_status_block,
+                                        IOCTL_DISK_GET_DRIVE_GEOMETRY,
+                                        NULL,
+                                        0,
+                                        (PVOID)disk_geometry,
+                                        sizeof (DISK_GEOMETRY)
+                                        );
+        return status;
+}
+
+ULONG CalcActualLength IFN4( ULONG, RestCylLen, ULONG, RestTrkLen, BOOL*, fOverData, int, LogDrv)
+{
+        ULONG ActOpLen;
+        ULONG PhyBytesPerSec;
+
+        /*
+        **      get requested length
+        */
+        ActOpLen = (ULONG)getBX();
+        PhyBytesPerSec = 128 << (ULONG)getCH();
+//----- Chg-Start <93.12.27> Bug-Fix -----------------------------------
+//      if( (getAH() & OP_SEEK) ? ((getDH() & 0x01) == 0) : (LastAccess[LogDrv].head == 0) )
+//----------------------------------------------------------------------
+        if( !( getDH() & 0x01 ) )
+//----- Chg-End --------------------------------------------------------
+        {
+                if( getAH() & OP_MULTI_TRACK )
+                {
+                        if( ActOpLen > RestCylLen )
+                        {
+                                ActOpLen = RestCylLen;
+                                *fOverData = TRUE;
+                        }
+                        else
+                        {
+                                ActOpLen = (ActOpLen / PhyBytesPerSec) * PhyBytesPerSec;
+                                *fOverData = FALSE;
+                        }
+                }
+                else
+                {
+                        if( ActOpLen > RestTrkLen )
+                        {
+                                ActOpLen = RestTrkLen;
+                                *fOverData = TRUE;
+                        }
+                        else
+                        {
+                                ActOpLen = (ActOpLen / PhyBytesPerSec) * PhyBytesPerSec;
+                                *fOverData = FALSE;
+                        }
+                }
+        }
+        else
+        {
+                if( ActOpLen > RestTrkLen )
+                {
+                        ActOpLen = RestTrkLen;
+                        *fOverData = TRUE;
+                }
+                else
+                {
+                        ActOpLen = (ActOpLen / PhyBytesPerSec) * PhyBytesPerSec;
+                        *fOverData = FALSE;
+                }
+        }
+
+        return ActOpLen;
+
+}
+
+BOOL CheckDmaBoundary IFN3( UINT, segment, UINT, offset, UINT, length)
+{
+
+        ULONG EffectStart;
+        ULONG EffectEnd;
+
+        EffectStart = ((ULONG)segment << 4) + (ULONG)offset;
+        if( length == 0 )
+                EffectEnd = EffectStart + (64l * 1024l);
+        else
+                EffectEnd = EffectStart + length;
+
+        /*
+        **      Check Bank Boundary.
+        **
+        **      note:if length equal to 64KB ,then buffer is across surely
+        **           bank boundary.
+        */
+        if( length != 0 )
+        {
+                if( (EffectStart & 0xffff0000l) != (EffectEnd & 0xffff0000l) )
+                        return FALSE;
+        }
+        else
+        {
+                if( (EffectStart & 0x0000ffffl) != 0x00000000l )
+                        return FALSE;
+        }
+
+        /*
+        **      check segment wrap around
+        **
+        **      note: if length equal to 64kb, then buffer is surely
+        **            to wrap around.
+        */
+        if( length != 0 )
+        {
+                if( ((ULONG)offset + (ULONG)length) > 0x10000l )
+                        return FALSE;
+        }
+
+        return TRUE;
+
+}
+
+void fl_disk_recal IFN1( int, drive)
+{
+        /*
+         *      recalibrate head in "drive"
+         *
+         *      Register inputs:
+         *              AH      command code
+         *              AL      DA/UA
+         *      Register outputs:
+         *              AH      diskette status
+         *              CF      status flag
+         */
+
+        WORD savedBX,savedCX,savedDX,savedES,savedBP;
+        BYTE AHstatus, SecLenN;
+        int LogDrv;
+        NTSTATUS status;
+        IO_STATUS_BLOCK io_status_block;
+        HANDLE fd;
+        DISK_GEOMETRY disk_geometry;
+
+        /*
+        **      check drive number validation
+        */
+        if( drive > MAX_FLOPPY )
+        {
+                setAH(FLS_EQUIPMENT_CHECK);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+        LogDrv = ConvToLogical( (UINT)getAL() );
+
+        status = FloppyOpenHandle(drive,&io_status_block,&fd);
+
+        if(!NT_SUCCESS(status))
+        {
+                SetErrorCode(status);
+                AHstatus = getAH();
+                if( (AHstatus != FLS_EQUIPMENT_CHECK) && (AHstatus != FLS_TIME_OUT) )
+                {
+                        /*
+                        **      Assume that the head is moved to track 0.
+                        */
+                        LastAccess[LogDrv].cylinder =
+                        LastAccess[LogDrv].head     = 0;
+                        SetErrorCode((NTSTATUS)STATUS_SUCCESS);
+                }
+                return;
+        }
+
+        status = GetGeometry(fd,&io_status_block,&disk_geometry);
+
+        if(!NT_SUCCESS(status))
+        {
+                NtClose(fd);
+                SetErrorCode(status);
+                AHstatus = getAH();
+                if( (AHstatus != FLS_EQUIPMENT_CHECK) && (AHstatus != FLS_TIME_OUT) )
+                {
+                        /*
+                        **      Assume that the head is moved to track 0.
+                        */
+                        LastAccess[LogDrv].cylinder =
+                        LastAccess[LogDrv].head     = 0;
+                        SetErrorCode((NTSTATUS)STATUS_SUCCESS);
+                }
+                return;
+        }
+
+        NtClose( fd );
+
+        savedBX = getBX();
+        savedCX = getCX();
+        savedDX = getDX();
+        savedES = getES();
+        savedBP = getBP();
+
+        setAX( (WORD)( ( (WORD)getAX() & 0x00ff ) | 0xd100 ) );
+        setBX( (WORD)disk_geometry.BytesPerSector );
+        setCL( 0 );
+        setDH( 0 );
+        setDL( 1 );
+
+        for( SecLenN=0; disk_geometry.BytesPerSector > 128; SecLenN++)
+                disk_geometry.BytesPerSector /= 2;
+
+        setCH( SecLenN );
+        setES( 0x0000 );
+        setBP( 0x0000 );
+
+        fl_disk_verify( drive );
+
+        AHstatus = getAH();
+        if( (getCF() == 1) && ( (AHstatus != FLS_EQUIPMENT_CHECK)&&
+                                (AHstatus != FLS_TIME_OUT) ) )
+        {
+                setAH(FLS_NORMAL_END);
+                SetDiskBiosCarryFlag(0);
+        }
+
+        /*
+        **      Assume that the head is moved to track 0.
+        */
+        LastAccess[LogDrv].cylinder =
+        LastAccess[LogDrv].head     = 0;
+
+        setBX(savedBX);
+        setCX(savedCX);
+        setDX(savedDX);
+        setES(savedES);
+        setBP(savedBP);
+}
+
+void fl_disk_sense IFN1( int, drive)
+{
+        /*
+         *      sense condition in "drive"
+         *
+         *      Register inputs:
+         *              AH      command code & operation mode
+         *              AL      DA/UA
+         *      Register outputs:
+         *              AH      diskette status
+         *              CF      status flag
+         */
+        UCHAR status_st3 = 0;
+        BOOL fFixedMode;
+        BOOL f1Pt44Mode;
+        BYTE ah_status;
+        HANDLE fd;
+        IO_STATUS_BLOCK io_status_block;
+        NTSTATUS status;
+        DISK_GEOMETRY DiskGeometry;
+        PVOID temp_buffer;
+        LARGE_INTEGER StartOffset;
+        int LogDrv;
+
+        /*
+        **      check drive number validation
+        */
+        if( drive > MAX_FLOPPY )
+        {
+                setAH(FLS_EQUIPMENT_CHECK);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+        /*
+        **      convert from DA/UA to logical drive number (0 based)
+        */
+        LogDrv = ConvToLogical( getAL() );
+
+        status = FloppyOpenHandle(drive,&io_status_block,&fd);
+
+        if(!NT_SUCCESS(status))
+        {
+                SetErrorCode(status);
+                return;
+        }
+
+        /*
+        **      check whether drive is fixed mode, and 1.44MB media
+        **      id available.
+        */
+        fFixedMode = CheckDriveMode( fd );
+        f1Pt44Mode = Check144Mode( fd );
+
+        /*
+        **      get drive parameter for dummy reaad
+        */
+        status = GetGeometry(fd,&io_status_block,&DiskGeometry);
+
+        if(!NT_SUCCESS(status))
+        {
+                NtClose(fd);
+                ah_status = getAH();
+                SetErrorCode(status);
+
+                if( (ah_status & OP_SENSE2) == OP_SENSE2 )
+                {
+                        if( f1Pt44Mode )
+                                setAH( (BYTE)(getAH() | FLS_AVAILABLE_1PT44MB) );
+                        else
+                                setAH( (BYTE)(getAH() & ~FLS_AVAILABLE_1PT44MB) );
+                }
+                else if ( (ah_status & OP_NEW_SENSE) == OP_NEW_SENSE )
+                {
+                        if ( !fFixedMode )
+                                setAH( (BYTE)(getAH() | FLS_2MODE) );
+                        else
+                                setAH( (BYTE)(getAH() & ~FLS_2MODE) );
+                }
+
+                return;
+        }
+
+        /*
+        **      get FDC status
+        */
+        GetFdcStatus( fd, &status_st3 );
+
+        NtClose( fd );
+
+        if( (getAH() & OP_SENSE2) == OP_SENSE2 )
+        {
+                /*
+                **      operate SENSE2(ah=c4h) command
+                */
+
+                SetSenseStatusHi( status_st3, &ah_status);
+
+                if( f1Pt44Mode )
+                        ah_status |= FLS_AVAILABLE_1PT44MB;
+                else
+                        ah_status &= ~FLS_AVAILABLE_1PT44MB;
+        }
+        else if( getAH() & OP_NEW_SENSE )
+        {
+                /*
+                **      operate NewSENSE(ah=84h) command
+                */
+
+                SetSenseStatusHi( status_st3, &ah_status);
+
+                if( fFixedMode )
+                    ah_status &= ~(FLS_2MODE | FLS_HIGH_DENSITY | FLS_DETECTION_AI);
+                else
+                {
+                    ah_status |= FLS_2MODE;
+                    if( Check1MbInterface( drive ) )
+                        ah_status &= ~(FLS_HIGH_DENSITY | FLS_DETECTION_AI);
+                    else
+                    {
+                        ah_status &= FLS_DETECTION_AI;
+                        ah_status |= FLS_HIGH_DENSITY;
+                    }
+                }
+        }
+        else
+                /*
+                **      operate SENSE(ah=04h) command
+                */
+                SetSenseStatusHi( status_st3, &ah_status);
+
+        setAH(ah_status);
+        if( ah_status >= FLS_DMA_BOUNDARY )
+                SetDiskBiosCarryFlag(1);
+        else
+                SetDiskBiosCarryFlag(0);
+        return;
+}
+
+void fl_disk_read_id IFN1( int, drive)
+{
+        /*
+         *      read id information in "drive"
+         *
+         *      Register inputs:
+         *              AH      command code & operation mode
+         *              AL      DA/UA
+         *              CL      cylinder number
+         *              DH      head number
+         *      Register outputs:
+         *              AH      diskette status
+         *              CF      status flag
+         */
+        HANDLE  fd;
+        DISK_GEOMETRY   disk_geometry;
+        NTSTATUS    status;
+        IO_STATUS_BLOCK io_status_block;
+        int LogDrv;
+        word savedAX;
+        UCHAR SecLenN = 0;
+        LARGE_INTEGER SpcfydCylNo;
+
+        /*
+        **      check drive number validation
+        */
+        if( drive > MAX_FLOPPY )
+        {
+                setAH(FLS_EQUIPMENT_CHECK);
+                SetDiskBiosCarryFlag(1);
+                return;
+        }
+
+        status = FloppyOpenHandle(drive,&io_status_block,&fd);
+
+        if(!NT_SUCCESS(status))
+        {
+                SetErrorCode(status);
+                return;
+        }
+
+        status = GetGeometry(fd,&io_status_block,&disk_geometry);
+
+        if(!NT_SUCCESS(status))
+        {
+                NtClose(fd);
+                SetErrorCode(status);
+                return;
+        }
+
+        NtClose( fd );
+
+//----- Chg-Start <93.12.29> Bug-Fix ---------------------------------
+//      /*
+//      **      recalibrate
+//      */
+//      savedAX = getAX();
+//      setAH(FLP_RECALIBRATE);
+//      fl_disk_recal( drive );
+//      setAX( savedAX );
+//
+//      LogDrv = ConvToLogical( getAL() );
+//      LastAccess[LogDrv].cylinder = 0;
+//      LastAccess[LogDrv].head = 0;
+//
+//      /*
+//      **      check cylinder number validation
+//      */
+//      SpcfydCylNo = RtlConvertUlongToLargeInteger( (ULONG)getCL() );
+//      if( RtlLargeIntegerGreaterThanOrEqualTo( SpcfydCylNo, disk_geometry.Cylinders ) )
+//      {
+//              SetErrorCode( (NTSTATUS)STATUS_NONEXISTENT_SECTOR );
+//              return;
+//      }
+//--------------------------------------------------------------------
+
+        LogDrv = ConvToLogical( getAL() );
+
+        if( getAH() & OP_SEEK )
+        {
+                /*
+                **      check cylinder number validation
+                */
+                SpcfydCylNo = RtlConvertUlongToLargeInteger( (ULONG)getCL() );
+                if( RtlLargeIntegerGreaterThanOrEqualTo( SpcfydCylNo, disk_geometry.Cylinders ) )
+                {
+                        SetErrorCode( (NTSTATUS)STATUS_NONEXISTENT_SECTOR );
+                        return;
+                }
+        }
+
+        if( getAH() & OP_SEEK )
+        {
+                LastAccess[LogDrv].cylinder = getCL();
+                LastAccess[LogDrv].head = getDH() & 0x01;
+        }
+
+        setCL( LastAccess[LogDrv].cylinder );
+        setDH( LastAccess[LogDrv].head );
+//----- Chg-End ------------------------------------------------------
+
+        /*
+        **      calculate sector length N
+        */
+        for( SecLenN=0; disk_geometry.BytesPerSector > 128; SecLenN++)
+                disk_geometry.BytesPerSector /= 2;
+
+        setCH( SecLenN );
+        setDL( (BYTE)disk_geometry.SectorsPerTrack );
+        setAH( FLS_NORMAL_END );
+        SetDiskBiosCarryFlag(0);
+
+}
+
+void SetSenseStatusHi IFN2( UCHAR, st3, PBYTE, ah_status)
+{
+
+        if( st3 & ST3_WRITE_PROTECT )
+                *ah_status = FLS_WRITE_PROTECTED;
+        else if( st3 & ST3_READY )
+                *ah_status = FLS_READY;
+
+        if( st3 & ST3_DOUBLE_SIDE )
+                *ah_status |= FLS_DOUBLE_SIDE;
+
+}
+
+BOOL CheckDriveMode IFN1( HANDLE, fd )
+{
+
+        BOOL fFixedMode;
+        BOOL f2HD = FALSE;
+        BOOL f2DD = FALSE;
+        DISK_GEOMETRY   disk_geometry[20];
+        ULONG   media_types;
+        NTSTATUS    status;
+        IO_STATUS_BLOCK io_status_block;
+
+        status = NtDeviceIoControlFile(fd,
+                                       NULL,
+                                       NULL,
+                                       NULL,
+                                       &io_status_block,
+                                       IOCTL_DISK_GET_MEDIA_TYPES,
+                                       NULL,
+                                       0L,
+                                       (PVOID)&disk_geometry,
+                                       sizeof(disk_geometry)
+                                       );
+
+        if (!NT_SUCCESS(status))
+        {
+            fFixedMode = TRUE;
+            return fFixedMode;
+        }
+
+        media_types = io_status_block.Information / sizeof(DISK_GEOMETRY);
+
+        for (; media_types != 0; media_types--)
+        {
+                switch (disk_geometry[media_types - 1].MediaType)
+                {
+                        case F3_1Pt2_512:                                // NEC 970620
+                        case F5_1Pt2_512:
+                        case F3_1Pt44_512:
+#if 1                                                                    // NEC 941110
+                        case F3_1Pt23_1024:                              // NEC 970620
+                        case F5_1Pt23_1024:                              // NEC 941110
+#else                                                                    // NEC 941110
+                        case F5_1Pt2_1024:
+#endif                                                                   // NEC 941110
+                                f2HD = TRUE;
+                                break;
+                        case F3_720_512:
+                        case F5_720_512:                                 // NEC 970620
+                        case F3_640_512:
+                        case F5_640_512:                                 // NEC 970620
+                                f2DD = TRUE;
+                        default:
+                                break;
+                }
+        }
+
+        if( (f2HD == TRUE) && (f2DD == TRUE) )
+                fFixedMode = FALSE;
+        else
+                fFixedMode = TRUE;
+
+        return fFixedMode;
+}
+
+BOOL Check144Mode IFN1( HANDLE, fd )
+{
+
+        BOOL f144Mode;
+        DISK_GEOMETRY   disk_geometry[20];
+        ULONG   media_types;
+        NTSTATUS    status;
+        IO_STATUS_BLOCK io_status_block;
+
+        status = NtDeviceIoControlFile(fd,
+                                       NULL,
+                                       NULL,
+                                       NULL,
+                                       &io_status_block,
+                                       IOCTL_DISK_GET_MEDIA_TYPES,
+                                       NULL,
+                                       0L,
+                                       (PVOID)&disk_geometry,
+                                       sizeof(disk_geometry)
+                                       );
+
+        if (!NT_SUCCESS(status))
+        {
+            f144Mode = FALSE;
+            return f144Mode;
+        }
+
+        media_types = io_status_block.Information / sizeof(DISK_GEOMETRY);
+
+        f144Mode = FALSE;
+
+        for (; media_types != 0; media_types--)
+        {
+                switch (disk_geometry[media_types - 1].MediaType)
+                {
+                        case F3_1Pt44_512:
+                                f144Mode = TRUE;
+                        default:
+                                break;
+                }
+        }
+
+        return f144Mode;
+
+}
+
+BOOL Check1MbInterface IFN1( int, drive )
+{
+
+        half_word disk_equip2;
+        UINT daua;
+        int LogDrv;
+
+        /*
+        **      get system common area
+        */
+        sas_load( BIOS_NEC98_DISK_EQUIP2, &disk_equip2);
+
+        daua = getAL();
+        LogDrv = ConvToLogical( daua );
+
+        if( disk_equip2 & ( 1 << (DauaTable[LogDrv].FloppyNum+4) ) )
+                return FALSE;
+        else
+                return TRUE;
+
+}
+
+MEDIA_TYPE GetFormatMedia IFN2( BYTE, daua, WORD, PhyBytesPerSec )
+{
+
+        MEDIA_TYPE media_type;
+        BYTE da;
+
+        da = daua & 0xf0;
+        switch( PhyBytesPerSec )
+        {
+#if 1                                                           // NEC 941110
+                case 1024:      media_type = F5_1Pt23_1024;     // NEC 941110
+#else                                                           // NEC 941110
+                case 1024:      media_type = F5_1Pt2_1024;
+#endif                                                          // NEC 941110
+                                break;
+                case 512:       if( da == 0x30 )
+                                        media_type = F3_1Pt44_512;
+                                else if( da == 0x90 )
+                                        media_type = F5_1Pt2_512;
+                                else
+                                        media_type = F3_720_512;
+                                break;
+                case 256:
+                case 128:
+
+                default:        media_type = Unknown;
+                                break;
+        }
+
+        return media_type;
+}
+
+void    GetFdcStatus IFN2( HANDLE, fd, UCHAR, *st3 )
+{
+        IO_STATUS_BLOCK io_status_block;
+
+        /*
+        **      get FDC status
+        */
+        NtDeviceIoControlFile(  fd,
+                                0,
+                                NULL,
+                                NULL,
+                                &io_status_block,
+                                IOCTL_DISK_SENSE_DEVICE,
+                                NULL,
+                                0,
+                                (PVOID)st3,
+                                sizeof (UCHAR)
+                                );
+}
+
+#endif // NEC_98

@@ -12,13 +12,15 @@
  *  Created.
 --*/
 
-BOOL DemInit (int argc, char *argv[]);
+VOID DemInit (VOID);
 BOOL DemDispatch(ULONG iSvc);
 VOID demCloseAllPSPRecords (VOID);
+DWORD demFileDelete (LPSTR lpFile);
 DWORD demFileFindFirst (PVOID pDTA, LPSTR lpFile, USHORT usSearchAttr);
 DWORD demFileFindNext (PVOID pDTA);
 ULONG demClientErrorEx (HANDLE hFile, CHAR chDrive, BOOL bSetRegs);
 UCHAR demGetPhysicalDriveType(UCHAR DriveNum);
+ULONG demWOWLFNEntry(PVOID pUserFrame);
 
 #define SIZEOF_DOSSRCHDTA 43
 
@@ -34,4 +36,18 @@ UCHAR demGetPhysicalDriveType(UCHAR DriveNum);
 #define DEMERROR       0x08000000
 
 extern DWORD  fShowSVCMsg;
+#endif
+
+#ifdef FE_SB
+#define NTIO_411 "\\ntio411.sys"        // LANG_JAPANESE
+#define NTIO_409 "\\ntio.sys"           //
+#define NTIO_804 "\\ntio804.sys"        // LANG_CHINESE,SUBLANG_CHINESE_SIMPLIFIED or SUBLANG_CHINESE_HONGKONG
+#define NTIO_404 "\\ntio404.sys"        // LANG_CHINESE,SUBLANG_CHINESE_TRADITIONAL
+#define NTIO_412 "\\ntio412.sys"        // LANG_KOREAN
+
+#define NTDOS_411 "\\ntdos411.sys"      // LANG_JAPANESE
+#define NTDOS_409 "\\ntdos.sys"         //
+#define NTDOS_804 "\\ntdos804.sys"      // LANG_CHINESE,SUBLANG_CHINESE_SIMPLIFIED or SUBLANG_CHINESE_HONGKONG
+#define NTDOS_404 "\\ntdos404.sys"      // LANG_CHINESE,SUBLANG_CHINESE_TRADITIONAL
+#define NTDOS_412 "\\ntdos412.sys"      // LANG_KOREAN
 #endif

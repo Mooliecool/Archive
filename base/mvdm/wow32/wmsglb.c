@@ -92,7 +92,7 @@ BOOL FASTCALL ThunkLBMsg16(LPMSGPARAMEX lpmpex)
     if (wMsg < (LBCB_CARETOFF - LB_ADDSTRING + 1)) {
 
         switch(lpmpex->uMsg = wMsg + LB_ADDSTRING) {
-    
+
         case LB_SELECTSTRING:
         case LB_FINDSTRING:
         case LB_FINDSTRINGEXACT:
@@ -100,13 +100,13 @@ BOOL FASTCALL ThunkLBMsg16(LPMSGPARAMEX lpmpex)
         case LB_ADDSTRING:
             if (!(pww = lpmpex->pww))
                     return FALSE;
-        
-            if (!(pww->dwStyle & (LBS_OWNERDRAWFIXED|LBS_OWNERDRAWVARIABLE)) ||
-                 (pww->dwStyle & (LBS_HASSTRINGS))) {
+
+            if (!(pww->style & (LBS_OWNERDRAWFIXED|LBS_OWNERDRAWVARIABLE)) ||
+                 (pww->style & (LBS_HASSTRINGS))) {
                     GETPSZPTR(lpmpex->Parm16.WndProc.lParam, (LPSZ)lpmpex->lParam);
                 }
             break;
-    
+
         case LB_DIR:
             GETPSZPTR(lpmpex->Parm16.WndProc.lParam, (LPSZ)lpmpex->lParam);
             break;
@@ -115,9 +115,9 @@ BOOL FASTCALL ThunkLBMsg16(LPMSGPARAMEX lpmpex)
             if (NULL != (pww = lpmpex->pww)) {
                 register PTHUNKTEXTDWORD pthkdword = (PTHUNKTEXTDWORD)lpmpex->MsgBuffer;
 
-                // we set this as a flag to indicate that we retrieve a dword 
+                // we set this as a flag to indicate that we retrieve a dword
                 // instead of a string there. In case when hooks are installed
-                // this code prevents RISC platforms from malfunctioning in 
+                // this code prevents RISC platforms from malfunctioning in
                 // kernel (they have code like this:
                 //   try {
                 //       <assign to original ptr here>
@@ -126,14 +126,14 @@ BOOL FASTCALL ThunkLBMsg16(LPMSGPARAMEX lpmpex)
                 //       <put error message in debug>
                 //   }
                 // which causes this message not to return the proper value)
-                // See walias.h for definition of THUNKTEXTDWORD structure as 
+                // See walias.h for definition of THUNKTEXTDWORD structure as
                 // well as MSGPARAMEX structure
                 // this code is complemented in UnThunkLBMsg16
-                // 
+                //
                 // Application: PeachTree Accounting v3.5
 
-                pthkdword->fDWORD = (pww->dwStyle & (LBS_OWNERDRAWFIXED|LBS_OWNERDRAWVARIABLE)) &&
-                                    !(pww->dwStyle & (LBS_HASSTRINGS));
+                pthkdword->fDWORD = (pww->style & (LBS_OWNERDRAWFIXED|LBS_OWNERDRAWVARIABLE)) &&
+                                    !(pww->style & (LBS_HASSTRINGS));
 
                 if (pthkdword->fDWORD) {
                     lpmpex->lParam = (LPARAM)(LPVOID)&pthkdword->dwDataItem;
@@ -147,25 +147,25 @@ BOOL FASTCALL ThunkLBMsg16(LPMSGPARAMEX lpmpex)
 
             GETPSZPTR(lpmpex->Parm16.WndProc.lParam, (LPSZ)lpmpex->lParam);
             break;
-    
+
         case LB_GETITEMRECT:
             lpmpex->lParam = (LONG)lpmpex->MsgBuffer;
             break;
-    
+
         case LB_GETSELITEMS:
-            (PVOID)lpmpex->lParam = STACKORHEAPALLOC(lpmpex->Parm16.WndProc.wParam * sizeof(INT), 
+            (PVOID)lpmpex->lParam = STACKORHEAPALLOC(lpmpex->Parm16.WndProc.wParam * sizeof(INT),
                                                        sizeof(lpmpex->MsgBuffer), lpmpex->MsgBuffer);
             break;
-    
+
         case LB_SETSEL:
             // sign extend
             {
                 LPARAM lParam = lpmpex->Parm16.WndProc.lParam;
-                lpmpex->lParam = (LOWORD(lParam) == 0xffff) ? 
-                                         INT32(LOWORD(lParam)) : (LONG)lParam; 
+                lpmpex->lParam = (LOWORD(lParam) == 0xffff) ?
+                                         INT32(LOWORD(lParam)) : (LONG)lParam;
             }
             break;
-    
+
         case LB_SETTABSTOPS:
             //  apparently lParam is a pointer even if wParam == 1. Recorder passes
             //  the data so.    - nandurir
@@ -173,17 +173,19 @@ BOOL FASTCALL ThunkLBMsg16(LPMSGPARAMEX lpmpex)
             {
                 INT cItems = INT32(lpmpex->Parm16.WndProc.wParam);
                 if (cItems > 0) {
-                    (PVOID)lpmpex->lParam = STACKORHEAPALLOC(cItems * sizeof(INT), 
+                    (PVOID)lpmpex->lParam = STACKORHEAPALLOC(cItems * sizeof(INT),
                                    sizeof(lpmpex->MsgBuffer), lpmpex->MsgBuffer);
                     getintarray16((VPINT16)lpmpex->Parm16.WndProc.lParam, cItems, (LPINT)lpmpex->lParam);
                 }
             }
             break;
-    
+
         case LB_ADDSTRING + 3:
-            lpmpex->uMsg = 0;
+            if (!(CURRENTPTD()->dwWOWCompatFlagsEx & WOWCFEX_THUNKLBSELITEMRANGEEX)) {
+               lpmpex->uMsg = 0;
+            }
             break;
-    
+
         }
     }
     return TRUE;
@@ -198,7 +200,7 @@ VOID FASTCALL UnThunkLBMsg16(LPMSGPARAMEX lpmpex)
         {
            register PTHUNKTEXTDWORD pthkdword = (PTHUNKTEXTDWORD)lpmpex->MsgBuffer;
 
-           if (pthkdword->fDWORD) { 
+           if ((pthkdword->fDWORD) && (lpmpex->lReturn != LB_ERR)) {
                 // this is a dword, not a string
                 // assign the dword as unaligned
                 UNALIGNED DWORD *lpdwDataItem;
@@ -208,7 +210,7 @@ VOID FASTCALL UnThunkLBMsg16(LPMSGPARAMEX lpmpex)
                 FREEVDMPTR(lpdwDataItem);
                 break;
            }
- 
+
         }
 
         // fall through to the common code

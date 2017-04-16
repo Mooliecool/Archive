@@ -64,7 +64,7 @@
 #define FAST    register	/* High-speed Storage */
 
 /*
- * Define crap "old" types so that old code can be brought into the 4.0 masterpack
+ * Define types so that old code can be brought into the 4.0 masterpack
  */
 #define ULONG	unsigned long
 #define LONG	long

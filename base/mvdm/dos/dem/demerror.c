@@ -26,6 +26,7 @@ VOID SubstituteDeviceName( PUNICODE_STRING InputDeviceName,
  *
  * Entry
  *      Client (DS:DX) - VHE structure
+ *      Client (DS:BX) - nuldev, first device in BIOS chain
  *
  * Exit
  *      None
@@ -118,6 +119,9 @@ ULONG iSvc;
  *      ERROR_GEN_FAILURE                31L
  *      ERROR_WRONG_DISK                 34l
  *      ERROR_NO_MEDIA_IN_DRIVE        1112l
+ *      #ifdef JAPAN
+ *      ERROR_UNRECOGNIZED_MEDIA       1785L
+ *      #ifdef JAPAN
  *
  */
 
@@ -133,8 +137,13 @@ ULONG ulErrCode;
     if(!(ulErrCode = GetLastError()))
         ulErrCode = ERROR_ACCESS_DENIED;
 
+#ifdef JAPAN
+    if ((ulErrCode < ERROR_WRITE_PROTECT || ulErrCode > ERROR_GEN_FAILURE)
+        && ulErrCode != ERROR_WRONG_DISK && ulErrCode != ERROR_UNRECOGNIZED_MEDIA)
+#else // !JAPAN
     if ((ulErrCode < ERROR_WRITE_PROTECT || ulErrCode > ERROR_GEN_FAILURE)
         && ulErrCode != ERROR_WRONG_DISK )
+#endif // !JAPAN
        {
 #if DBG
        if (fShowSVCMsg & DEMERROR) {
@@ -301,6 +310,12 @@ VOID SubstituteDeviceName( PUNICODE_STRING InputDeviceName,
                 if (DeviceName.Buffer[(DeviceName.Length >>1) - 1] != *pSlash)
                     RtlAppendUnicodeToString(&DeviceName, pSlash);
 
+#ifdef JAPAN
+                // #6197 compare only device name
+                if (InputDeviceName->Length > DeviceName.Length)
+                    InputDeviceName->Length = DeviceName.Length;
+
+#endif // JAPAN
                 if ( RtlEqualUnicodeString(InputDeviceName,&DeviceName,TRUE) )
                    {
                     OutputDriveLetter[0]='A'+(WCHAR)i;
@@ -386,3 +401,4 @@ VOID demRestoreHardErrInfo (VOID)
     CurrentISVC =   RetryInfo.iSVC;
     return;
 }
+

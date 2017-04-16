@@ -423,7 +423,23 @@ typedef struct _IFIEXTRA
 #define OPENGL_GETINFO  4353        /* for OpenGL ExtEscape */
 #define WNDOBJ_SETUP    4354        /* for live video ExtEscape */
 
-#define DDI_DRIVER_VERSION 0x00020000
+/**************************************************************************\
+* Display Driver version numbers
+*
+*   Note: DDI_DRIVER_VERSION has been removed.  Drivers must specify
+*         what version of the DDI they support using one of the below
+*         DDI_DRIVER_VERSION_Xxx macros.
+*         DDI_DRIVER_VERSION_NT4 is equivalent to old DDI_DRIVER_VERSION.
+\**************************************************************************/
+
+#define DDI_DRIVER_VERSION_NT4      0x00020000
+#define DDI_DRIVER_VERSION_SP3      0x00020003
+#define DDI_DRIVER_VERSION_NT5      0x00030000
+#define DDI_DRIVER_VERSION_NT5_01   0x00030100
+#define DDI_DRIVER_VERSION_NT5_01_SP1 0x00030101
+
+// FIXME: Temporary DDI_DRIVER_VERSION addition to maintain compatibility with existing codebase.
+#define DDI_DRIVER_VERSION          DDI_DRIVER_VERSION_NT4
 #define GDI_DRIVER_VERSION 0x4000   /* for NT version 4.0.00 */
 
 typedef int (*PFN)();
@@ -1308,6 +1324,21 @@ VOID APIENTRY EngDeleteClip(CLIPOBJ *pco);
 /*
  * Function prototypes
  */
+
+//
+// User-mode printer driver information-query entrypoint
+//
+
+BOOL APIENTRY
+APIENTRY
+DrvQueryDriverInfo(
+    DWORD   dwMode,
+    PVOID   pBuffer,
+    DWORD   cbBuf,
+    PDWORD  pcbNeeded
+    );
+
+#define DRVQUERY_USERMODE   1
 
 // These are the only EXPORTED functions for ANY driver
 

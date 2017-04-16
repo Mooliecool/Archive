@@ -72,7 +72,7 @@ static char SccsID[]="@(#)gfi.c	1.16 08/03/93 Copyright Insignia Solutions Ltd."
 /*
  * The command/result phases of the FDC are described in the following database.
  *
- * The structure contains 
+ * The structure contains
  *
  *	- number of command bytes
  *	- number of result bytes
@@ -82,7 +82,7 @@ static char SccsID[]="@(#)gfi.c	1.16 08/03/93 Copyright Insignia Solutions Ltd."
  *	- if dma is required
  *	- if an interrupt is generated
  *
- * A command byte count of 0 indicates a command that is handled by the FLA 
+ * A command byte count of 0 indicates a command that is handled by the FLA
  * itself and not passed to GFI.
  *
  * Note that Sense Interrupt Status is not considered a generic GFI command
@@ -126,10 +126,10 @@ FDC_DATA_ENTRY gfi_fdc_description[] =
 	{ 9, 7, 7, 0, 0, TRUE,	TRUE  },	/* scan equal */
 	{ 0, 1, 1, 0, 4, FALSE,	FALSE },	/* invalid */
 	{ 0, 1, 1, 0, 4, FALSE,	FALSE },	/* invalid */
-}; 
+};
 
 /*
- * The function table that is built by the init function of the 
+ * The function table that is built by the init function of the
  * individual GFI servers.
  */
 
@@ -142,7 +142,7 @@ GFI_FUNCTION_ENTRY gfi_function_table[MAX_DISKETTES];
  * ============================================================================
  */
 
-GLOBAL SHORT gfi_fdc_command 
+GLOBAL SHORT gfi_fdc_command
 IFN2(FDC_CMD_BLOCK *,command_block,FDC_RESULT_BLOCK *,result_block)
 {
     /*
@@ -173,12 +173,12 @@ IFN2(FDC_CMD_BLOCK *,command_block,FDC_RESULT_BLOCK *,result_block)
     }
     else
  	/*
-	 * All other commands specify the drive in the command.  
+	 * All other commands specify the drive in the command.
    	 */
 
 	ret_stat = (*gfi_function_table[get_type_drive(command_block)].command_fn)(command_block, result_block);
 
-    return(ret_stat);
+    return((SHORT)ret_stat);
 }
 
 
@@ -192,7 +192,7 @@ GLOBAL SHORT gfi_drive_on IFN1(UTINY,drive)
     /*
      * Route to the correct module.
      */
- 
+
     return((*gfi_function_table[drive].drive_on_fn)(drive));
 }
 
@@ -236,7 +236,7 @@ GLOBAL SHORT gfi_reset IFN2(FDC_RESULT_BLOCK *,result_block, UTINY, drive)
     put_r3_ST0(result_block, 0);
     put_r1_ST0_int_code(result_block, 3);
     put_r3_PCN(result_block, 0);
-    
+
     return(SUCCESS);
 }
 
@@ -253,41 +253,41 @@ GLOBAL SHORT gfi_high IFN2(UTINY,drive,half_word,datarate)
     /*
      * Route to the correct module.
      */
- 
+
     return((*gfi_function_table[drive].high_fn)(drive,datarate));
 }
- 
- 
+
+
 GLOBAL SHORT gfi_drive_type IFN1(UTINY,drive)
 {
 #ifndef PROD
     if (io_verbose & GFI_VERBOSE)
         gfi_test_drive_type(drive);
 #endif
- 
+
     /*
      * Route to the correct module.
      */
- 
+
     return((*gfi_function_table[drive].drive_type_fn)(drive));
 }
- 
+
 GLOBAL SHORT gfi_change IFN1(UTINY,drive)
 {
 #ifndef PROD
     if (io_verbose & GFI_VERBOSE)
         gfi_test_change(drive);
 #endif
- 
+
     /*
      * Route to the correct module.
      */
- 
+
     return((*gfi_function_table[drive].change_fn)(drive));
 }
- 
+
 GLOBAL SHORT
-gfi_floppy_valid 
+gfi_floppy_valid
 IFN4(UTINY, hostID, ConfigValues *,vals, NameTable *,table, CHAR *,err)
 {
 	UNUSED(table);
@@ -351,7 +351,7 @@ gfi_attach_adapter IFN2(UTINY, adapter, BOOL, attach)
 		config_activate(C_SLAVEPC_DEVICE, FALSE);
 #endif /* SLAVEPC */
 
-	config_activate(C_FLOPPY_A_DEVICE + adapter, attach);
+	config_activate((UTINY)(C_FLOPPY_A_DEVICE + adapter), attach);
 }
 
 #ifdef SEGMENTATION
@@ -375,5 +375,5 @@ GLOBAL VOID gfi_init IFN0()
 	host_runtime_set(C_FLOPPY_SERVER, GFI_REAL_DISKETTE_SERVER);
 
 	for (i = 0; i < MAX_DISKETTES; i++)
-		gfi_empty_active(C_FLOPPY_A_DEVICE+i,TRUE,NULL);
+		gfi_empty_active((UTINY)(C_FLOPPY_A_DEVICE+i),TRUE,NULL);
 }

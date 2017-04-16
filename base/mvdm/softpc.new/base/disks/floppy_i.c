@@ -1,5 +1,7 @@
 #include "insignia.h"
 #include "host_def.h"
+
+extern void host_simulate();
 /*
  * SoftPC Revision 3.0
  *
@@ -20,7 +22,7 @@
  * Author	: Ross Beresford
  *
  *
- * Notes	: 
+ * Notes	:
  *
  */
 
@@ -75,6 +77,7 @@ int	op;
 		getDL(), getDH(), getCH(), getCL(), getAL());
 	if (op != FL_DISK_VERF)
 		fprintf(trace_file, ",addr=%x:%x", getES(), getBX());
+
 	fprintf(trace_file, ")\n");
 }
 
@@ -120,7 +123,7 @@ int op;
 		fprintf(trace_file, "diskette_io:CHANGE(drive=%d)\n", getDL());
 		break;
 	case	FL_FORMAT_SET:
-		fprintf(trace_file, 
+		fprintf(trace_file,
 			"diskette_io:SET_FORMAT(drive=%d,type=", getDL());
 		switch(getAL())
 		{
@@ -148,7 +151,7 @@ int op;
 		}
 		break;
 	case	FL_SET_MEDIA:
-		fprintf(trace_file, 
+		fprintf(trace_file,
 			"diskette_io:SET_MEDIA(drive=%d,tracks=%d,sectors=%d)\n",
 			getDL(), getCH(), getCL());
 		break;
@@ -165,6 +168,7 @@ static void gen_dump()
 	int status = getAH();
 
 	fprintf(trace_file, "status=");
+
 	if (status & FS_CRC_ERROR)
 		fprintf(trace_file, "FS_CRC_ERROR|");
 	if (status & FS_FDC_ERROR)
@@ -175,35 +179,35 @@ static void gen_dump()
 		fprintf(trace_file, "FS_TIME_OUT|");
 	switch (status & 0xf)
 	{
-	case FS_OK: 
-		fprintf(trace_file, "FS_OK"); 
+	case FS_OK:
+		fprintf(trace_file, "FS_OK");
 		break;
-	case FS_BAD_COMMAND: 
-		fprintf(trace_file, "FS_BAD_COMMAND"); 
+	case FS_BAD_COMMAND:
+		fprintf(trace_file, "FS_BAD_COMMAND");
 		break;
-	case FS_BAD_ADDRESS_MARK: 
-		fprintf(trace_file, "FS_BAD_ADDRESS_MARK"); 
+	case FS_BAD_ADDRESS_MARK:
+		fprintf(trace_file, "FS_BAD_ADDRESS_MARK");
 		break;
-	case FS_WRITE_PROTECTED: 
-		fprintf(trace_file, "FS_WRITE_PROTECTED"); 
+	case FS_WRITE_PROTECTED:
+		fprintf(trace_file, "FS_WRITE_PROTECTED");
 		break;
-	case FS_SECTOR_NOT_FOUND: 
-		fprintf(trace_file, "FS_SECTOR_NOT_FOUND"); 
+	case FS_SECTOR_NOT_FOUND:
+		fprintf(trace_file, "FS_SECTOR_NOT_FOUND");
 		break;
-	case FS_MEDIA_CHANGE: 
-		fprintf(trace_file, "FS_MEDIA_CHANGE"); 
+	case FS_MEDIA_CHANGE:
+		fprintf(trace_file, "FS_MEDIA_CHANGE");
 		break;
-	case FS_DMA_ERROR: 
-		fprintf(trace_file, "FS_DMA_ERROR"); 
+	case FS_DMA_ERROR:
+		fprintf(trace_file, "FS_DMA_ERROR");
 		break;
-	case FS_DMA_BOUNDARY: 
-		fprintf(trace_file, "FS_DMA_BOUNDARY"); 
+	case FS_DMA_BOUNDARY:
+		fprintf(trace_file, "FS_DMA_BOUNDARY");
 		break;
-	case FS_MEDIA_NOT_FOUND: 
-		fprintf(trace_file, "FS_MEDIA_NOT_FOUND"); 
+	case FS_MEDIA_NOT_FOUND:
+		fprintf(trace_file, "FS_MEDIA_NOT_FOUND");
 		break;
-	default: 
-		fprintf(trace_file, "SILLY"); 
+	default:
+		fprintf(trace_file, "SILLY");
 		break;
 	}
 	fprintf(trace_file, ")\n");
@@ -219,13 +223,13 @@ int op;
 	case	FL_DISK_TYPE:
 		switch(getAH())
 		{
-		case DRIVE_IQ_UNKNOWN: 
+		case DRIVE_IQ_UNKNOWN:
 			fprintf(trace_file, "ABSENT");
 			break;
-		case DRIVE_IQ_NO_CHANGE_LINE: 
+		case DRIVE_IQ_NO_CHANGE_LINE:
 			fprintf(trace_file, "NO CHANGE LINE");
 			break;
-		case DRIVE_IQ_CHANGE_LINE: 
+		case DRIVE_IQ_CHANGE_LINE:
 			fprintf(trace_file, "CHANGE LINE");
 			break;
 		case DRIVE_IQ_RESERVED:
@@ -305,6 +309,7 @@ void diskette_io()
 	half_word diskette_status;
 	int op = getAH(), drive = getDL();
 
+
 #ifndef	PROD
 	if (io_verbose & FLOPBIOS_VERBOSE)
 		call_dump(op);
@@ -330,6 +335,7 @@ void diskette_io()
 	 *	If the drive number is applicable in the operation, check it
 	 */
 
+
 	if (op != FL_DISK_RESET && op != FL_DISK_STATUS && op != FL_DISK_PARMS)
 #ifdef NTVDM
 		if (drive >= number_of_floppy)
@@ -337,6 +343,8 @@ void diskette_io()
 		if (drive >= MAX_FLOPPY)
 #endif /* NTVDM */
 			op = FL_FNC_ERR;
+
+
 
 
 	/*
@@ -348,11 +356,13 @@ void diskette_io()
 	setAH(diskette_status);
 	sas_store(FLOPPY_STATUS, FS_OK);
 
+
 	/*
 	 *	Do the operation
 	 */
 
 	(*fl_fnc_tab[op])(drive);
+
 
 
 
@@ -376,7 +386,7 @@ void diskette_int()
 
 	note_trace0(FLOPBIOS_VERBOSE, "diskette_int()");
 	sas_load(SEEK_STATUS, &seek_status);
-	sas_store(SEEK_STATUS, seek_status | SS_INT_OCCURRED);
+	sas_store(SEEK_STATUS, (IU8)(seek_status | SS_INT_OCCURRED));
 
 	outb(ICA0_PORT_0, END_INTERRUPT);
 

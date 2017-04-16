@@ -2,7 +2,22 @@
 
 #ifndef _HOST_LPT_H
 #define _HOST_LPT_H
+#if defined(NEC_98)         // NEC {
 
+IMPORT  SHORT           host_lpt_valid
+   IPT4(UTINY,hostID, ConfigValues *,val, NameTable *,dummy, CHAR *,errString);
+IMPORT  VOID            host_lpt_change IPT2(UTINY,hostID, BOOL,apply);
+IMPORT  SHORT           host_lpt_active
+                        IPT3(UTINY,hostID, BOOL,active, CHAR *,errString);
+IMPORT  void            host_lpt_close IPT0();
+IMPORT  unsigned long   host_lpt_status IPT0();
+IMPORT  BOOL            host_print_byte IPT1(byte, value);
+//IMPORT        BOOL            host_print_doc IPT0();
+//IMPORT        void            host_reset_print IPT0();
+IMPORT  void            host_print_auto_feed IPT1(BOOL,auto_feed);
+
+#define HOST_LPT_BUSY   (1 << 0)                // NEC
+#else
 /*[
 	Name:		host_lpt.h
 	Derived From:	Base 2.0
@@ -161,6 +176,8 @@ IMPORT void host_printer_setup_table(sys_addr table_addr, word nPorts, word * lp
 #define LPT3			2
 
 #define	number_for_adapter(adapter)	(adapter + 1)
+
+#endif	// NEC_98                                          // NEC }
 
 #endif /* _HOST_LPT_H */
 

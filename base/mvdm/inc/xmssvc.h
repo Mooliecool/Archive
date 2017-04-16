@@ -37,4 +37,4 @@ xmssvc	macro	func
 #define XMS_REALLOCBLOCK                0x0b
 #define XMS_LASTSVC                     0x0c
 
-extern BOOL XMSInit (int argc, char *argv[]);
+extern BOOL XMSInit (VOID);

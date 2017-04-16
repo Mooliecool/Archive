@@ -1537,6 +1537,28 @@ GetShortPathNameW(
 #endif // !UNICODE
 
 WINBASEAPI
+DWORD
+WINAPI
+GetLongPathNameA(
+    IN LPCSTR lpszShortPath,
+    OUT LPSTR  lpszLongPath,
+    IN DWORD    cchBuffer
+    );
+WINBASEAPI
+DWORD
+WINAPI
+GetLongPathNameW(
+    IN LPCWSTR lpszShortPath,
+    OUT LPWSTR  lpszLongPath,
+    IN DWORD    cchBuffer
+    );
+#ifdef UNICODE
+#define GetLongPathName  GetLongPathNameW
+#else
+#define GetLongPathName  GetLongPathNameA
+#endif // !UNICODE
+
+WINBASEAPI
 BOOL
 WINAPI
 GetProcessAffinityMask(

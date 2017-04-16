@@ -38,7 +38,7 @@ Revision History:
 
 
 #include "monitorp.h"
-
+#include "dbgsvc.h"
 
 //
 // Internal functions
@@ -80,6 +80,11 @@ EventVdmIrq13(
     );
 
 VOID
+EventVdmHandShakeAck(
+    VOID
+    );
+
+VOID
 CreateProfile(
     VOID
     );
@@ -99,24 +104,36 @@ AnalyzeProfile(
     VOID
     );
 
+VOID
+CheckScreenSwitchRequest(
+    HANDLE handle
+    );
+
 // [LATER]  how do you prevent a struct from straddling a page boundary?
-VDM_TIB VdmTib;
 
 ULONG   IntelBase;          // base memory address
 ULONG   VdmSize;            // Size of memory in VDM
-ULONG   IntelMSW;           // Msw value (no msw in context)
 ULONG   VdmDebugLevel;      // used to control debugging
 PVOID  CurrentMonitorTeb;   // thread that is currently executing instructions.
 ULONG InitialBreakpoint = FALSE; // if set, breakpoint at end of cpu_init
-ULONG InitialVdmTibFlags = 0; // VdmTib flags picked up from here
+ULONG InitialVdmTibFlags = INITIAL_VDM_TIB_FLAGS; // VdmTib flags picked up from here
 CONTEXT InitialContext;     // Initial context for all threads
 BOOLEAN DebugContextActive = FALSE;
 ULONG VdmFeatureBits = 0;   // bit to indicate special features
+BOOLEAN MainThreadInMonitor = TRUE;
 
 extern PVOID NTVDMpLockPrefixTable;
+extern BOOL  HandshakeInProgress;
+extern HANDLE hSuspend;
+extern HANDLE hResume;
+extern HANDLE hMainThreadSuspended;
+
+extern PVOID __safe_se_handler_table[]; /* base of safe handler entry table */
+extern BYTE  __safe_se_handler_count;   /* absolute symbol whose address is
+                                           the count of table entries */
 
 IMAGE_LOAD_CONFIG_DIRECTORY _load_config_used = {
-    0,                          // Reserved
+    sizeof(_load_config_used),                          // Reserved
     0,                          // Reserved
     0,                          // Reserved
     0,                          // Reserved
@@ -125,15 +142,16 @@ IMAGE_LOAD_CONFIG_DIRECTORY _load_config_used = {
     0,                          // CriticalSectionTimeout (milliseconds)
     0,                          // DeCommitFreeBlockThreshold
     0,                          // DeCommitTotalFreeThreshold
-    &NTVDMpLockPrefixTable,     // LockPrefixTable, defined in FASTPM.ASM
-    0, 0, 0, 0, 0, 0, 0         // Reserved
+    (ULONG)&NTVDMpLockPrefixTable,     // LockPrefixTable, defined in FASTPM.ASM
+    0, 0, 0, 0, 0, 0, 0,        // Reserved
+    0,                             // & security_cookie
+    (ULONG)__safe_se_handler_table,
+    (ULONG)&__safe_se_handler_count
 };
 
 // Bop dispatch table
 
 extern void (*BIOS[])();
-
-BOOLEAN ContinueExecution;
 
 //
 // Event Dispatch table
@@ -146,14 +164,12 @@ VOID (*EventDispatch[VdmMaxEvent])(VOID) = {
         EventVdmIntAck,
         EventVdmBop,
         EventVdmError,
-        EventVdmIrq13
+        EventVdmIrq13,
+        EventVdmHandShakeAck
         };
 
-// Debug control flags
-BOOLEAN fShowBop = FALSE;
 #if DBG
 BOOLEAN fBreakInDebugger = FALSE;
-LONG NumTasks = -1;
 #endif
 
 
@@ -184,33 +200,8 @@ Return Value:
 {
     NTSTATUS Status;
 
-    IntelMSW = 0x0;             // bugbug use correct value for ET and MP
     InitialVdmTibFlags |= RM_BIT_MASK;
 
-    VdmTib.VdmContext.SegGs = 0;
-    VdmTib.VdmContext.SegFs = 0;
-    VdmTib.VdmContext.SegEs = 0;
-    VdmTib.VdmContext.SegDs = 0;
-    VdmTib.VdmContext.SegCs = 0;
-    VdmTib.VdmContext.Eip = 0xFFF0L;
-    VdmTib.VdmContext.EFlags = 0x02L | EFLAGS_INTERRUPT_MASK;
-
-    VdmTib.MonitorContext.SegDs = KGDT_R3_DATA | RPL_MASK;
-    VdmTib.MonitorContext.SegEs = KGDT_R3_DATA | RPL_MASK;
-    VdmTib.MonitorContext.SegGs = 0;
-    VdmTib.MonitorContext.SegFs = KGDT_R3_TEB | RPL_MASK;
-
-    VdmTib.PrinterInfo.prt_State       = NULL;
-    VdmTib.PrinterInfo.prt_Control     = NULL;
-    VdmTib.PrinterInfo.prt_Status      = NULL;
-    VdmTib.PrinterInfo.prt_HostState   = NULL;
-    ASSERT(VDM_NUMBER_OF_LPT == 3);
-
-    VdmTib.PrinterInfo.prt_Mode[0] =
-    VdmTib.PrinterInfo.prt_Mode[1] =
-    VdmTib.PrinterInfo.prt_Mode[2] = PRT_MODE_NO_SIMULATION;
-
-    VdmTib.Size = sizeof(VDM_TIB);
 
     //
     // Find out if we are running with IOPL.  We call the kernel
@@ -285,7 +276,7 @@ Return Value:
     //
     // Do the rest of thread initialization
     //
-    cpu_createthread( NtCurrentThread() );
+    cpu_createthread( NtCurrentThread(), NULL );
 
     InterruptInit();
 
@@ -336,22 +327,23 @@ Return Value:
 
 {
     NTSTATUS Status;
-    VDMEVENTINFO OldEventInfo;
-    CONTEXT OldMonitorContext;
+    PVDM_TIB VdmTib;
+    ULONG oldIntState = VDM_VIRTUAL_INTERRUPTS;
 
-    OldEventInfo = VdmTib.EventInfo;
-    OldMonitorContext = VdmTib.MonitorContext;
-
-    ContinueExecution = TRUE;
+    DBGTRACE(VDMTR_TYPE_MONITOR | MONITOR_CPU_SIMULATE, 0, 0);
 
     CurrentMonitorTeb = NtCurrentTeb();
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
 
-    VdmTib.VdmContext.ContextFlags = CONTEXT_FULL;
+    VdmTib->ContinueExecution = TRUE;
 
-    while (ContinueExecution) {
 
-        ASSERT(CurrentMonitorTeb == NtCurrentTeb());
-        ASSERT(InterlockedIncrement(&NumTasks) == 0);
+    VdmTib->VdmContext.ContextFlags = CONTEXT_FULL;
+
+    while (VdmTib->ContinueExecution) {
+
+        //ASSERT(CurrentMonitorTeb == NtCurrentTeb());
+        ASSERT(InterlockedIncrement(&VdmTib->NumTasks) == 0);
 
         if (*pNtVDMState & VDM_INTERRUPT_PENDING) {
             DispatchInterrupts();
@@ -359,13 +351,42 @@ Return Value:
 
         // translate MSW bits into EFLAGS
         if ( getMSW() & MSW_PE ) {
-            VdmTib.VdmContext.EFlags &= ~EFLAGS_V86_MASK;
+            if (!VDMForWOW && !getIF() && oldIntState == VDM_VIRTUAL_INTERRUPTS) {
+
+                //
+                // For PM apps, we need to set Cli time stamp if interrupts
+                // are disabled and the time stamp was not set already.
+                // This is because apps may use int31 to change interrupt
+                // state instead of using cli.
+                //
+
+                VDM_PM_CLI_DATA cliData;
+
+                cliData.Control = PM_CLI_CONTROL_SET;
+                NtVdmControl(VdmPMCliControl, &cliData);
+            }
+
+            VdmTib->VdmContext.EFlags &= ~EFLAGS_V86_MASK;
+            if (HandshakeInProgress) {
+                CheckScreenSwitchRequest(hMainThreadSuspended);
+            }
+            MainThreadInMonitor = FALSE;
+
             Status = FastEnterPm();
         } else {
-            VdmTib.VdmContext.EFlags |= EFLAGS_V86_MASK;
+            VdmTib->VdmContext.EFlags |= EFLAGS_V86_MASK;
+            if (HandshakeInProgress) {
+                CheckScreenSwitchRequest(hMainThreadSuspended);
+            }
+            MainThreadInMonitor = FALSE;
+
             Status = NtVdmControl(VdmStartExecution,NULL);
         }
 
+        MainThreadInMonitor = TRUE;
+        if (HandshakeInProgress) {
+            CheckScreenSwitchRequest(hMainThreadSuspended);
+        }
         if (!NT_SUCCESS(Status)) {
 #if DBG
             DbgPrint("NTVDM: Could not start execution\n");
@@ -373,7 +394,19 @@ Return Value:
             return;
         }
 
-        ASSERT(InterlockedDecrement(&NumTasks) < 0);
+        //
+        // Refresh VdmTib for the fact that wow32 thread never enters cpu_simulate
+        // but returns here to handle BOP
+        // Note, I think this needs only in FREE build.
+        //
+
+        CurrentMonitorTeb = NtCurrentTeb();
+        VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+        if (!VDMForWOW) {
+            oldIntState = getIF() ? VDM_VIRTUAL_INTERRUPTS : 0;
+        }
+
+        ASSERT(InterlockedDecrement(&VdmTib->NumTasks) < 0);
 
 #if DBG
         if (fBreakInDebugger) {
@@ -383,32 +416,30 @@ Return Value:
 #endif
 
         // Translate Eflags value
-        ASSERT ((!((VdmTib.VdmContext.EFlags & EFLAGS_V86_MASK) &&
+        ASSERT ((!((VdmTib->VdmContext.EFlags & EFLAGS_V86_MASK) &&
             (getMSW() & MSW_PE))));
 
-        if ( VdmTib.VdmContext.EFlags & EFLAGS_V86_MASK ) {
-            VdmTib.VdmContext.EFlags &= ~EFLAGS_V86_MASK;
+        if ( VdmTib->VdmContext.EFlags & EFLAGS_V86_MASK ) {
+            VdmTib->VdmContext.EFlags &= ~EFLAGS_V86_MASK;
         }
 
         // bugbug does cs:eip wrap cause some kind of fault?
-        VdmTib.VdmContext.Eip += VdmTib.EventInfo.InstructionSize;
+        VdmTib->VdmContext.Eip += VdmTib->EventInfo.InstructionSize;
 
-        if (VdmTib.EventInfo.Event >= VdmMaxEvent) {
+        if (VdmTib->EventInfo.Event >= VdmMaxEvent) {
 #if DBG
             DbgPrint("NTVDM: Unknown event type\n");
             DbgBreakPoint();
 #endif
-            ContinueExecution = FALSE;
+            VdmTib->ContinueExecution = FALSE;
             continue;
         }
-
-        (*EventDispatch[VdmTib.EventInfo.Event])();
-
+        (*EventDispatch[VdmTib->EventInfo.Event])();
     }
 
 
     // set this back to true incase we are nested
-    ContinueExecution = TRUE;
+    VdmTib->ContinueExecution = TRUE;
 
     //
     // Restore the old Vdm tib info.  This is necessary for the for the
@@ -416,10 +447,8 @@ Return Value:
     // performed from another thread
     //
 
-    VdmTib.EventInfo = OldEventInfo;
-    VdmTib.MonitorContext = OldMonitorContext;
+    DBGTRACE(VDMTR_TYPE_MONITOR | MONITOR_CPU_UNSIMULATE, 0, 0);
 }
-
 
 VOID
 host_unsimulate(
@@ -441,8 +470,10 @@ Return Value:
 --*/
 
 {
+    PVDM_TIB VdmTib;
 
-    ContinueExecution = FALSE;
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->ContinueExecution = FALSE;
 
 }
 
@@ -466,28 +497,33 @@ Return Value:
 
 --*/
 {
-    if (VdmTib.EventInfo.IoInfo.Size == 1) {
-        if (VdmTib.EventInfo.IoInfo.Read) {
-            inb(VdmTib.EventInfo.IoInfo.PortNumber,(half_word *)&(VdmTib.VdmContext.Eax));
+    PVDM_TIB VdmTib;
+
+    EnableScreenSwitch(TRUE, hMainThreadSuspended);   // only in FULLSCREEN
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    if (VdmTib->EventInfo.IoInfo.Size == 1) {
+        if (VdmTib->EventInfo.IoInfo.Read) {
+            inb(VdmTib->EventInfo.IoInfo.PortNumber,(half_word *)&(VdmTib->VdmContext.Eax));
         } else {
-            outb(VdmTib.EventInfo.IoInfo.PortNumber,getAL());
+            outb(VdmTib->EventInfo.IoInfo.PortNumber,getAL());
         }
-    } else if (VdmTib.EventInfo.IoInfo.Size == 2) {
-        if (VdmTib.EventInfo.IoInfo.Read) {
-            inw(VdmTib.EventInfo.IoInfo.PortNumber,(word *)&(VdmTib.VdmContext.Eax));
+    } else if (VdmTib->EventInfo.IoInfo.Size == 2) {
+        if (VdmTib->EventInfo.IoInfo.Read) {
+            inw(VdmTib->EventInfo.IoInfo.PortNumber,(word *)&(VdmTib->VdmContext.Eax));
         } else {
-            outw(VdmTib.EventInfo.IoInfo.PortNumber,getAX());
+            outw(VdmTib->EventInfo.IoInfo.PortNumber,getAX());
         }
     }
 #if DBG
     else {
     DbgPrint(
         "NtVdm: Unimplemented IO size %d\n",
-        VdmTib.EventInfo.IoInfo.Size
+        VdmTib->EventInfo.IoInfo.Size
         );
     DbgBreakPoint();
     }
 #endif
+    DisableScreenSwitch(hMainThreadSuspended);
 }
 
 VOID
@@ -512,10 +548,14 @@ Return Value:
    PVDMSTRINGIOINFO pvsio;
    PUSHORT pIndexRegister;
    USHORT Index;
+   PVDM_TIB VdmTib;
+
+   EnableScreenSwitch(TRUE, hMainThreadSuspended);
+   VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
 
    // WARNING no 32 bit address support
 
-    pvsio = &VdmTib.EventInfo.StringIoInfo;
+    pvsio = &VdmTib->EventInfo.StringIoInfo;
 
     if (pvsio->Size == 1) {
         if (pvsio->Read) {
@@ -523,13 +563,13 @@ Return Value:
                  (half_word *)Sim32GetVDMPointer(pvsio->Address, 1, ISPESET),
                  (word)pvsio->Count
                  );
-            pIndexRegister = (PUSHORT)&VdmTib.VdmContext.Edi;
+            pIndexRegister = (PUSHORT)&VdmTib->VdmContext.Edi;
         } else {
             outsb((io_addr)pvsio->PortNumber,
                  (half_word *)Sim32GetVDMPointer(pvsio->Address,1,ISPESET),
                  (word)pvsio->Count
                  );
-            pIndexRegister = (PUSHORT)&VdmTib.VdmContext.Esi;
+            pIndexRegister = (PUSHORT)&VdmTib->VdmContext.Esi;
         }
     } else if (pvsio->Size == 2) {
         if (pvsio->Read) {
@@ -537,22 +577,23 @@ Return Value:
                  (word *)Sim32GetVDMPointer(pvsio->Address,1,ISPESET),
                  (word)pvsio->Count
                  );
-            pIndexRegister = (PUSHORT)&VdmTib.VdmContext.Edi;
+            pIndexRegister = (PUSHORT)&VdmTib->VdmContext.Edi;
         } else {
             outsw((io_addr)pvsio->PortNumber,
                  (word *)Sim32GetVDMPointer(pvsio->Address,1,ISPESET),
                  (word)pvsio->Count
                  );
-            pIndexRegister = (PUSHORT)&VdmTib.VdmContext.Esi;
+            pIndexRegister = (PUSHORT)&VdmTib->VdmContext.Esi;
         }
     } else {
 #if DBG
          DbgPrint(
              "NtVdm: Unimplemented IO size %d\n",
-             VdmTib.EventInfo.IoInfo.Size
+             VdmTib->EventInfo.IoInfo.Size
              );
          DbgBreakPoint();
 #endif
+        DisableScreenSwitch(hMainThreadSuspended);
         return;
     }
 
@@ -566,10 +607,10 @@ Return Value:
     *pIndexRegister = Index;
 
     if (pvsio->Rep) {
-        (USHORT)VdmTib.VdmContext.Ecx = 0;
+        (USHORT)VdmTib->VdmContext.Ecx = 0;
         }
 
-
+    DisableScreenSwitch(hMainThreadSuspended);
 }
 
 VOID
@@ -595,9 +636,12 @@ Return Value:
 {
     int line;
     int adapter;
+    PVDM_TIB VdmTib;
 
-    if (VdmTib.EventInfo.IntAckInfo) {
-        if (VdmTib.EventInfo.IntAckInfo & VDMINTACK_SLAVE)
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+
+    if (VdmTib->EventInfo.IntAckInfo) {
+        if (VdmTib->EventInfo.IntAckInfo & VDMINTACK_SLAVE)
             adapter = 1;
         else
             adapter = 0;
@@ -606,7 +650,7 @@ Return Value:
         host_ica_lock();
         ica_eoi(adapter,
                 &line,
-                (int)(VdmTib.EventInfo.IntAckInfo & VDMINTACK_RAEOIMASK)
+                (int)(VdmTib->EventInfo.IntAckInfo & VDMINTACK_RAEOIMASK)
                 );
         host_ica_unlock();
         }
@@ -632,27 +676,28 @@ Return Value:
 
 --*/
 {
-    if (VdmTib.EventInfo.BopNumber > MAX_BOP) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    if (VdmTib->EventInfo.BopNumber > MAX_BOP) {
 #if DBG
         DbgPrint(
             "NtVdm: Invalid BOP %lx\n",
-            VdmTib.EventInfo.BopNumber
+            VdmTib->EventInfo.BopNumber
             );
 #endif
-         ContinueExecution = FALSE;
+         VdmTib->ContinueExecution = FALSE;
     } else {
-#if DBG
-       if (fShowBop) {
-       DbgPrint("Ntvdm cpu_simulate : bop dispatch %x,%x\n",
-           VdmTib.EventInfo.BopNumber,
-           (ULONG)(*((UCHAR *)Sim32GetVDMPointer(
-               (VdmTib.VdmContext.SegCs << 16) | VdmTib.VdmContext.Eip,
-               1,
-               ISPESET)))
-           );
-       }
-#endif
-       (*BIOS[VdmTib.EventInfo.BopNumber])();
+
+       DBGTRACE(VDMTR_TYPE_MONITOR | MONITOR_EVENT_BOP,
+                (USHORT)VdmTib->EventInfo.BopNumber,
+                (ULONG)(*((UCHAR *)Sim32GetVDMPointer(
+                                   (VdmTib->VdmContext.SegCs << 16) | VdmTib->VdmContext.Eip,
+                                   1,
+                                   ISPESET)))
+                );
+
+       (*BIOS[VdmTib->EventInfo.BopNumber])();
        CurrentMonitorTeb = NtCurrentTeb();
    }
 }
@@ -676,15 +721,18 @@ Return Value:
 
 --*/
 {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
 #if DBG
     DbgPrint(
         "NtVdm: Error code %lx\n",
-        VdmTib.EventInfo.ErrorStatus
+        VdmTib->EventInfo.ErrorStatus
         );
     DbgBreakPoint();
 #endif
     TerminateVDM();
-    ContinueExecution = FALSE;
+    VdmTib->ContinueExecution = FALSE;
 }
 
 VOID
@@ -716,6 +764,26 @@ Return Value:
     }
 }
 
+VOID
+EventVdmHandShakeAck(
+    VOID
+    )
+/*++
+
+Routine Description:
+
+    This routine does nothing.
+
+Arguments:
+
+
+Return Value:
+
+    None.
+
+--*/
+{
+}
 
 VOID
 EventVdmMemAccess(
@@ -738,260 +806,633 @@ Return Value:
 --*/
 {
 
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+
     // RWMode is 0 if read fault or 1 if write fault.
 
     DispatchPageFault(
-        VdmTib.EventInfo.FaultInfo.FaultAddr,
-        VdmTib.EventInfo.FaultInfo.RWMode
+        VdmTib->EventInfo.FaultInfo.FaultAddr,
+        VdmTib->EventInfo.FaultInfo.RWMode
         );
     CurrentMonitorTeb = NtCurrentTeb();
 }
 
+
 // Get and Set routines for intel registers.
 
-ULONG  getEAX (VOID) { return  (VdmTib.VdmContext.Eax); }
-USHORT getAX  (VOID) { return  ((USHORT)(VdmTib.VdmContext.Eax)); }
-UCHAR  getAL  (VOID) { return  ((BYTE)(VdmTib.VdmContext.Eax)); }
-UCHAR  getAH  (VOID) { return  ((BYTE)(VdmTib.VdmContext.Eax >> 8)); }
-ULONG  getEBX (VOID) { return  (VdmTib.VdmContext.Ebx); }
-USHORT getBX  (VOID) { return  ((USHORT)(VdmTib.VdmContext.Ebx)); }
-UCHAR  getBL  (VOID) { return  ((BYTE)(VdmTib.VdmContext.Ebx)); }
-UCHAR  getBH  (VOID) { return  ((BYTE)(VdmTib.VdmContext.Ebx >> 8)); }
-ULONG  getECX (VOID) { return  (VdmTib.VdmContext.Ecx); }
-USHORT getCX  (VOID) { return  ((USHORT)(VdmTib.VdmContext.Ecx)); }
-UCHAR  getCL  (VOID) { return  ((BYTE)(VdmTib.VdmContext.Ecx)); }
-UCHAR  getCH  (VOID) { return  ((BYTE)(VdmTib.VdmContext.Ecx >> 8)); }
-ULONG  getEDX (VOID) { return  (VdmTib.VdmContext.Edx); }
-USHORT getDX  (VOID) { return  ((USHORT)(VdmTib.VdmContext.Edx)); }
-UCHAR  getDL  (VOID) { return  ((BYTE)(VdmTib.VdmContext.Edx)); }
-UCHAR  getDH  (VOID) { return  ((BYTE)(VdmTib.VdmContext.Edx >> 8)); }
-ULONG  getESP (VOID) { return  (VdmTib.VdmContext.Esp); }
-USHORT getSP  (VOID) { return  ((USHORT)VdmTib.VdmContext.Esp); }
-ULONG  getEBP (VOID) { return  (VdmTib.VdmContext.Ebp); }
-USHORT getBP  (VOID) { return  ((USHORT)VdmTib.VdmContext.Ebp); }
-ULONG  getESI (VOID) { return  (VdmTib.VdmContext.Esi); }
-USHORT getSI  (VOID) { return  ((USHORT)VdmTib.VdmContext.Esi); }
-ULONG  getEDI (VOID) { return  (VdmTib.VdmContext.Edi); }
-USHORT getDI  (VOID) { return  ((USHORT)VdmTib.VdmContext.Edi); }
-ULONG  getEIP (VOID) { return  (VdmTib.VdmContext.Eip); }
-USHORT getIP (VOID)  { return  ((USHORT)VdmTib.VdmContext.Eip); }
-USHORT getCS (VOID)  { return  ((USHORT)VdmTib.VdmContext.SegCs); }
-USHORT getSS (VOID)  { return  ((USHORT)VdmTib.VdmContext.SegSs); }
-USHORT getDS (VOID)  { return  ((USHORT)VdmTib.VdmContext.SegDs); }
-USHORT getES (VOID)  { return  ((USHORT)VdmTib.VdmContext.SegEs); }
-USHORT getFS (VOID)  { return  ((USHORT)VdmTib.VdmContext.SegFs); }
-USHORT getGS (VOID)  { return  ((USHORT)VdmTib.VdmContext.SegGs); }
-ULONG  getCF (VOID)  { return  ((VdmTib.VdmContext.EFlags & FLG_CARRY) ? 1 : 0); }
-ULONG  getPF (VOID)  { return  ((VdmTib.VdmContext.EFlags & FLG_PARITY) ? 1 : 0); }
-ULONG  getAF (VOID)  { return  ((VdmTib.VdmContext.EFlags & FLG_AUXILIARY) ? 1 : 0); }
-ULONG  getZF (VOID)  { return  ((VdmTib.VdmContext.EFlags & FLG_ZERO) ? 1 : 0); }
-ULONG  getSF (VOID)  { return  ((VdmTib.VdmContext.EFlags & FLG_SIGN) ? 1 : 0); }
-ULONG  getTF (VOID)  { return  ((VdmTib.VdmContext.EFlags & FLG_TRAP) ? 1 : 0); }
-ULONG  getIF (VOID)  { return  ((VdmTib.VdmContext.EFlags & FLG_INTERRUPT) ? 1 : 0); }
-ULONG  getDF (VOID)  { return  ((VdmTib.VdmContext.EFlags & FLG_DIRECTION) ? 1 : 0); }
-ULONG  getOF (VOID)  { return  ((VdmTib.VdmContext.EFlags & FLG_OVERFLOW) ? 1 : 0); }
-USHORT getMSW (VOID) { return  ((USHORT)IntelMSW); }
-USHORT getSTATUS(VOID){ return (USHORT)VdmTib.VdmContext.EFlags; }
-ULONG  getEFLAGS(VOID) { return VdmTib.VdmContext.EFlags; }
-USHORT getFLAGS(VOID) { return (USHORT)VdmTib.VdmContext.EFlags; }
+ULONG  getEAX (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  (VdmTib->VdmContext.Eax);
+}
+USHORT getAX  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)(VdmTib->VdmContext.Eax));
+}
+UCHAR  getAL  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((BYTE)(VdmTib->VdmContext.Eax));
+}
+UCHAR  getAH  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((BYTE)(VdmTib->VdmContext.Eax >> 8));
+}
+ULONG  getEBX (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  (VdmTib->VdmContext.Ebx);
+}
+USHORT getBX  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)(VdmTib->VdmContext.Ebx));
+}
+UCHAR  getBL  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((BYTE)(VdmTib->VdmContext.Ebx));
+}
+UCHAR  getBH  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((BYTE)(VdmTib->VdmContext.Ebx >> 8));
+}
+ULONG  getECX (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  (VdmTib->VdmContext.Ecx);
+}
+USHORT getCX  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)(VdmTib->VdmContext.Ecx));
+}
+UCHAR  getCL  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((BYTE)(VdmTib->VdmContext.Ecx));
+}
+UCHAR  getCH  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((BYTE)(VdmTib->VdmContext.Ecx >> 8));
+}
+ULONG  getEDX (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  (VdmTib->VdmContext.Edx);
+}
+USHORT getDX  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)(VdmTib->VdmContext.Edx));
+}
+UCHAR  getDL  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((BYTE)(VdmTib->VdmContext.Edx));
+}
+UCHAR  getDH  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((BYTE)(VdmTib->VdmContext.Edx >> 8));
+}
+ULONG  getESP (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  (VdmTib->VdmContext.Esp);
+}
+USHORT getSP  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)VdmTib->VdmContext.Esp);
+}
+ULONG  getEBP (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  (VdmTib->VdmContext.Ebp);
+}
+USHORT getBP  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)VdmTib->VdmContext.Ebp);
+}
+ULONG  getESI (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  (VdmTib->VdmContext.Esi);
+}
+USHORT getSI  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)VdmTib->VdmContext.Esi);
+}
+ULONG  getEDI (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  (VdmTib->VdmContext.Edi);
+}
+USHORT getDI  (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)VdmTib->VdmContext.Edi);
+}
+ULONG  getEIP (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  (VdmTib->VdmContext.Eip);
+}
+USHORT getIP (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)VdmTib->VdmContext.Eip);
+}
+USHORT getCS (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)VdmTib->VdmContext.SegCs);
+}
+USHORT getSS (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)VdmTib->VdmContext.SegSs);
+}
+USHORT getDS (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)VdmTib->VdmContext.SegDs);
+}
+USHORT getES (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)VdmTib->VdmContext.SegEs);
+}
+USHORT getFS (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)VdmTib->VdmContext.SegFs);
+}
+USHORT getGS (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)VdmTib->VdmContext.SegGs);
+}
+ULONG  getCF (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((VdmTib->VdmContext.EFlags & FLG_CARRY) ? 1 : 0);
+}
+ULONG  getPF (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((VdmTib->VdmContext.EFlags & FLG_PARITY) ? 1 : 0);
+}
+ULONG  getAF (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((VdmTib->VdmContext.EFlags & FLG_AUXILIARY) ? 1 : 0);
+}
+ULONG  getZF (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((VdmTib->VdmContext.EFlags & FLG_ZERO) ? 1 : 0);
+}
+ULONG  getSF (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((VdmTib->VdmContext.EFlags & FLG_SIGN) ? 1 : 0);
+}
+ULONG  getTF (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((VdmTib->VdmContext.EFlags & FLG_TRAP) ? 1 : 0);
+}
+ULONG  getIF (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((VdmTib->VdmContext.EFlags & FLG_INTERRUPT) ? 1 : 0);
+}
+ULONG  getDF (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((VdmTib->VdmContext.EFlags & FLG_DIRECTION) ? 1 : 0);
+}
+ULONG  getOF (VOID)  {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((VdmTib->VdmContext.EFlags & FLG_OVERFLOW) ? 1 : 0);
+}
+USHORT getMSW (VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return  ((USHORT)VdmTib->IntelMSW);
+}
+USHORT getSTATUS(VOID){
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return (USHORT)VdmTib->VdmContext.EFlags;
+}
+ULONG  getEFLAGS(VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return VdmTib->VdmContext.EFlags;
+}
+USHORT getFLAGS(VOID) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return (USHORT)VdmTib->VdmContext.EFlags;
+}
 
 VOID setEAX (ULONG val) {
-    VdmTib.VdmContext.Eax = val;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Eax = val;
 }
 
 VOID setAX  (USHORT val) {
-    VdmTib.VdmContext.Eax = (VdmTib.VdmContext.Eax & 0xFFFF0000) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Eax = (VdmTib->VdmContext.Eax & 0xFFFF0000) |
                             ((ULONG)val & 0x0000FFFF);
 }
 
 VOID setAH  (UCHAR val) {
-    VdmTib.VdmContext.Eax = (VdmTib.VdmContext.Eax & 0xFFFF00FF) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Eax = (VdmTib->VdmContext.Eax & 0xFFFF00FF) |
                             ((ULONG)(val << 8) & 0x0000FF00);
 }
 
 VOID setAL  (UCHAR val) {
-    VdmTib.VdmContext.Eax = (VdmTib.VdmContext.Eax & 0xFFFFFF00) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Eax = (VdmTib->VdmContext.Eax & 0xFFFFFF00) |
                             ((ULONG)val & 0x000000FF);
 }
 
 VOID setEBX (ULONG val) {
-    VdmTib.VdmContext.Ebx = val ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Ebx = val ;
 }
 
 VOID setBX  (USHORT val) {
-    VdmTib.VdmContext.Ebx = (VdmTib.VdmContext.Ebx & 0xFFFF0000) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Ebx = (VdmTib->VdmContext.Ebx & 0xFFFF0000) |
                             ((ULONG)val & 0x0000FFFF);
 }
 
 VOID setBH  (UCHAR val) {
-    VdmTib.VdmContext.Ebx = (VdmTib.VdmContext.Ebx & 0xFFFF00FF) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Ebx = (VdmTib->VdmContext.Ebx & 0xFFFF00FF) |
                             ((ULONG)(val << 8) & 0x0000FF00);
 }
 
 VOID setBL  (UCHAR  val) {
-    VdmTib.VdmContext.Ebx = (VdmTib.VdmContext.Ebx & 0xFFFFFF00) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Ebx = (VdmTib->VdmContext.Ebx & 0xFFFFFF00) |
                             ((ULONG)val & 0x000000FF);
 }
 
 VOID setECX (ULONG val) {
-    VdmTib.VdmContext.Ecx = val ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Ecx = val ;
 }
 
 VOID setCX  (USHORT val) {
-    VdmTib.VdmContext.Ecx = (VdmTib.VdmContext.Ecx & 0xFFFF0000) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Ecx = (VdmTib->VdmContext.Ecx & 0xFFFF0000) |
                             ((ULONG)val & 0x0000FFFF);
 }
 
 VOID setCH  (UCHAR val) {
-    VdmTib.VdmContext.Ecx = (VdmTib.VdmContext.Ecx & 0xFFFF00FF) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Ecx = (VdmTib->VdmContext.Ecx & 0xFFFF00FF) |
                             ((ULONG)(val << 8) & 0x0000FF00);
 }
 
 VOID setCL  (UCHAR val) {
-    VdmTib.VdmContext.Ecx = (VdmTib.VdmContext.Ecx & 0xFFFFFF00) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Ecx = (VdmTib->VdmContext.Ecx & 0xFFFFFF00) |
                             ((ULONG)val & 0x000000FF);
 }
 
 VOID setEDX (ULONG val) {
-    VdmTib.VdmContext.Edx = val ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Edx = val ;
 }
 
 VOID setDX  (USHORT val) {
-    VdmTib.VdmContext.Edx = (VdmTib.VdmContext.Edx & 0xFFFF0000) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Edx = (VdmTib->VdmContext.Edx & 0xFFFF0000) |
                             ((ULONG)val & 0x0000FFFF);
 }
 
 VOID setDH  (UCHAR val) {
-    VdmTib.VdmContext.Edx = (VdmTib.VdmContext.Edx & 0xFFFF00FF) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Edx = (VdmTib->VdmContext.Edx & 0xFFFF00FF) |
                             ((ULONG)(val << 8) & 0x0000FF00);
 }
 
 VOID setDL  (UCHAR val) {
-    VdmTib.VdmContext.Edx = (VdmTib.VdmContext.Edx & 0xFFFFFF00) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Edx = (VdmTib->VdmContext.Edx & 0xFFFFFF00) |
                                 ((ULONG)val & 0x000000FF);
 }
 
 VOID setESP (ULONG val) {
-    VdmTib.VdmContext.Esp = val ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Esp = val ;
 }
 
 VOID setSP  (USHORT val) {
-    VdmTib.VdmContext.Esp = (VdmTib.VdmContext.Esp & 0xFFFF0000) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Esp = (VdmTib->VdmContext.Esp & 0xFFFF0000) |
                                 ((ULONG)val & 0x0000FFFF);
 }
 
 VOID setEBP (ULONG val) {
-    VdmTib.VdmContext.Ebp = val;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Ebp = val;
 }
 
 VOID setBP  (USHORT val) {
-    VdmTib.VdmContext.Ebp = (VdmTib.VdmContext.Ebp & 0xFFFF0000) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Ebp = (VdmTib->VdmContext.Ebp & 0xFFFF0000) |
                                 ((ULONG)val & 0x0000FFFF);
 }
 
 VOID setESI (ULONG val) {
-    VdmTib.VdmContext.Esi = val ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Esi = val ;
 }
 
 VOID setSI  (USHORT val) {
-    VdmTib.VdmContext.Esi = (VdmTib.VdmContext.Esi & 0xFFFF0000) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Esi = (VdmTib->VdmContext.Esi & 0xFFFF0000) |
                                 ((ULONG)val & 0x0000FFFF);
 }
 VOID setEDI (ULONG val) {
-    VdmTib.VdmContext.Edi = val ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Edi = val ;
 }
 
 VOID setDI  (USHORT val) {
-    VdmTib.VdmContext.Edi = (VdmTib.VdmContext.Edi & 0xFFFF0000) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Edi = (VdmTib->VdmContext.Edi & 0xFFFF0000) |
                                 ((ULONG)val & 0x0000FFFF);
 }
 
 VOID setEIP (ULONG val) {
-    VdmTib.VdmContext.Eip = val ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Eip = val ;
 }
 
 VOID setIP  (USHORT val) {
-    VdmTib.VdmContext.Eip = (VdmTib.VdmContext.Eip & 0xFFFF0000) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.Eip = (VdmTib->VdmContext.Eip & 0xFFFF0000) |
                                 ((ULONG)val & 0x0000FFFF);
 }
 
 VOID setCS  (USHORT val) {
-    VdmTib.VdmContext.SegCs = (ULONG) val & 0x0000FFFF ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.SegCs = (ULONG) val & 0x0000FFFF ;
 }
 
 VOID setSS  (USHORT val) {
-    VdmTib.VdmContext.SegSs = (ULONG) val & 0x0000FFFF ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.SegSs = (ULONG) val & 0x0000FFFF ;
 }
 
 VOID setDS  (USHORT val) {
-    VdmTib.VdmContext.SegDs = (ULONG) val & 0x0000FFFF ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.SegDs = (ULONG) val & 0x0000FFFF ;
 }
 
 VOID setES  (USHORT val) {
-    VdmTib.VdmContext.SegEs = (ULONG) val & 0x0000FFFF ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.SegEs = (ULONG) val & 0x0000FFFF ;
 }
 
 VOID setFS  (USHORT val) {
-    VdmTib.VdmContext.SegFs = (ULONG) val & 0x0000FFFF ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.SegFs = (ULONG) val & 0x0000FFFF ;
 }
 
 VOID setGS  (USHORT val) {
-    VdmTib.VdmContext.SegGs = (ULONG) val & 0x0000FFFF ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.SegGs = (ULONG) val & 0x0000FFFF ;
 }
 
 VOID setCF  (ULONG val)  {
-    VdmTib.VdmContext.EFlags = (VdmTib.VdmContext.EFlags & ~FLG_CARRY) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.EFlags = (VdmTib->VdmContext.EFlags & ~FLG_CARRY) |
                                 (((ULONG)val << FLG_CARRY_BIT) & FLG_CARRY);
 }
 
 VOID setPF  (ULONG val) {
-    VdmTib.VdmContext.EFlags = (VdmTib.VdmContext.EFlags & ~FLG_PARITY) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.EFlags = (VdmTib->VdmContext.EFlags & ~FLG_PARITY) |
                                 (((ULONG)val << FLG_PARITY_BIT) & FLG_PARITY);
 }
 
 VOID setAF  (ULONG val) {
-    VdmTib.VdmContext.EFlags = (VdmTib.VdmContext.EFlags & ~FLG_AUXILIARY) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.EFlags = (VdmTib->VdmContext.EFlags & ~FLG_AUXILIARY) |
                                 (((ULONG)val << FLG_AUXILIARY_BIT) & FLG_AUXILIARY);
 }
 
 VOID setZF  (ULONG val) {
-    VdmTib.VdmContext.EFlags = (VdmTib.VdmContext.EFlags & ~FLG_ZERO) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.EFlags = (VdmTib->VdmContext.EFlags & ~FLG_ZERO) |
                                 (((ULONG)val << FLG_ZERO_BIT) & FLG_ZERO);
 }
 
 VOID setSF  (ULONG val) {
-    VdmTib.VdmContext.EFlags = (VdmTib.VdmContext.EFlags & ~FLG_SIGN) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.EFlags = (VdmTib->VdmContext.EFlags & ~FLG_SIGN) |
                                 (((ULONG)val << FLG_SIGN_BIT) & FLG_SIGN);
 }
 
 VOID setIF  (ULONG val) {
-    VdmTib.VdmContext.EFlags = (VdmTib.VdmContext.EFlags & ~FLG_INTERRUPT) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.EFlags = (VdmTib->VdmContext.EFlags & ~FLG_INTERRUPT) |
                                 (((ULONG)val << FLG_INTERRUPT_BIT) & FLG_INTERRUPT);
 }
 
 VOID setDF  (ULONG val) {
-    VdmTib.VdmContext.EFlags = (VdmTib.VdmContext.EFlags & ~FLG_DIRECTION) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.EFlags = (VdmTib->VdmContext.EFlags & ~FLG_DIRECTION) |
                                 (((ULONG)val << FLG_DIRECTION_BIT) & FLG_DIRECTION);
 }
 
 VOID setOF  (ULONG val) {
-    VdmTib.VdmContext.EFlags = (VdmTib.VdmContext.EFlags & ~FLG_OVERFLOW) |
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.EFlags = (VdmTib->VdmContext.EFlags & ~FLG_OVERFLOW) |
                                 (((ULONG)val << FLG_OVERFLOW_BIT) & FLG_OVERFLOW);
 }
 
 VOID setMSW (USHORT val) {
-    IntelMSW = val ;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->IntelMSW = val ;
 }
 
 VOID setSTATUS(USHORT val) {
-    VdmTib.VdmContext.EFlags = (VdmTib.VdmContext.EFlags & 0xFFFF0000) | val;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.EFlags = (VdmTib->VdmContext.EFlags & 0xFFFF0000) | val;
+}
+
+VOID setEFLAGS(ULONG val) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.EFlags = val;
+}
+
+VOID setFLAGS(USHORT val) {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    VdmTib->VdmContext.EFlags = (VdmTib->VdmContext.EFlags & 0xFFFF0000) | val;
 }
 //
 // The following is a private register function
 //
 
 ULONG getPE(){
-    return((IntelMSW & MSW_PE) ? 1 : 0);
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return((VdmTib->IntelMSW & MSW_PE) ? 1 : 0);
 }
 
 
@@ -1016,7 +1457,10 @@ Return Value:
 
 --*/
 {
-    return &(VdmTib.VdmContext);
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
+    return &(VdmTib->VdmContext);
 }
 
 
@@ -1029,107 +1473,160 @@ BOOLEAN MonitorInitializePrinterInfo(
      PUCHAR Status,
      PUCHAR HostState)
 {
-    int     i;
+    UCHAR   adapter;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
 
     ASSERT (Ports == 3);
     ASSERT (Status != NULL);
 
     // only do this if the structure has not been initialized -- meaning
     // the pointers can be set once.
-    if (NULL == VdmTib.PrinterInfo.prt_Status) {
+    if (NULL == VdmTib->PrinterInfo.prt_Status) {
 
-	VdmTib.PrinterInfo.prt_PortAddr[0] = PortTable[0];
-	VdmTib.PrinterInfo.prt_PortAddr[1] = PortTable[1];
-	VdmTib.PrinterInfo.prt_PortAddr[2] = PortTable[2];
+        VdmTib->PrinterInfo.prt_PortAddr[0] = PortTable[0];
+        VdmTib->PrinterInfo.prt_PortAddr[1] = PortTable[1];
+        VdmTib->PrinterInfo.prt_PortAddr[2] = PortTable[2];
 
-	VdmTib.PrinterInfo.prt_Handle[0] =
-	VdmTib.PrinterInfo.prt_Handle[1] =
-	VdmTib.PrinterInfo.prt_Handle[2] = NULL;
+        VdmTib->PrinterInfo.prt_Handle[0] =
+        VdmTib->PrinterInfo.prt_Handle[1] =
+        VdmTib->PrinterInfo.prt_Handle[2] = NULL;
 
+        // default mode is kernel simulating status port read
+        // mode will be changed if
+        // (1). A vdd is hooking printer ports.
+        // (2). Dongle mode is detected
+        VdmTib->PrinterInfo.prt_Mode[0] =
+        VdmTib->PrinterInfo.prt_Mode[1] =
+        VdmTib->PrinterInfo.prt_Mode[2] = PRT_MODE_SIMULATE_STATUS_PORT;
 
-	// primarily for dongle
-	VdmTib.PrinterInfo.prt_BytesInBuffer[0] =
-	VdmTib.PrinterInfo.prt_BytesInBuffer[1] =
-	VdmTib.PrinterInfo.prt_BytesInBuffer[2] = 0;
+        // primarily for dongle
+        VdmTib->PrinterInfo.prt_BytesInBuffer[0] =
+        VdmTib->PrinterInfo.prt_BytesInBuffer[1] =
+        VdmTib->PrinterInfo.prt_BytesInBuffer[2] = 0;
 
-	// primarily for simulating printer status read in kernel
-	VdmTib.PrinterInfo.prt_State = State;
-	VdmTib.PrinterInfo.prt_Control = Control;
-	VdmTib.PrinterInfo.prt_Status = Status;
-	VdmTib.PrinterInfo.prt_HostState = HostState;
+        // primarily for simulating printer status read in kernel
+        VdmTib->PrinterInfo.prt_State = State;
+        VdmTib->PrinterInfo.prt_Control = Control;
+        VdmTib->PrinterInfo.prt_Status = Status;
+        VdmTib->PrinterInfo.prt_HostState = HostState;
 
+        //
+        // Give the kernel printer emulation an opportunity to cache the
+        // pointers
+        //
+        if (!NT_SUCCESS(NtVdmControl(VdmPrinterInitialize,NULL))) {
+           return FALSE;
+        }
 
-	// deal with mode carefully. VDD may have hooked printer ports
-	// before we get here. If the mode is undefined, we can
-	// safely initialize it to our default, otherwise, just leave
-	// it alone.
-	for (i = 0; i < 3; i++) {
-	    if (PRT_MODE_NO_SIMULATION == VdmTib.PrinterInfo.prt_Mode[i])
-		VdmTib.PrinterInfo.prt_Mode[i] = PRT_MODE_SIMULATE_STATUS_PORT;
-	}
-
-	return TRUE;
+        return TRUE;
+    } else {
+            return FALSE;
     }
-    else
-	return FALSE;
 }
 
 BOOLEAN MonitorEnablePrinterDirectAccess(WORD adapter, HANDLE handle, BOOLEAN Enable)
 {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
     ASSERT(VDM_NUMBER_OF_LPT > adapter);
     if (Enable) {
-	// if the adapter has been allocated by a third party VDD,
-	// can't do direct io.
-	if (PRT_MODE_VDD_CONNECTED != VdmTib.PrinterInfo.prt_Mode[adapter]) {
-	    VdmTib.PrinterInfo.prt_Mode[adapter] = PRT_MODE_DIRECT_IO;
-	    VdmTib.PrinterInfo.prt_Handle[adapter] = handle;
-	    // NtVdmControl(VdmPrinterDirectIoOpen, &adapter);
-	    return TRUE;
-	}
-	else
-	    return FALSE;
+        // if the adapter has been allocated by a third party VDD,
+        // can't do direct io.
+        if (PRT_MODE_VDD_CONNECTED != VdmTib->PrinterInfo.prt_Mode[adapter]) {
+            VdmTib->PrinterInfo.prt_Mode[adapter] = PRT_MODE_DIRECT_IO;
+            VdmTib->PrinterInfo.prt_Handle[adapter] = handle;
+            // NtVdmControl(VdmPrinterDirectIoOpen, &adapter);
+            return TRUE;
+        }
+        else
+            return FALSE;
     }
     else {
-	// disabling direct i/o. reset it back to status port simulation
-	if (VdmTib.PrinterInfo.prt_Handle[adapter] == handle) {
-	    NtVdmControl(VdmPrinterDirectIoClose, &adapter);
-	    VdmTib.PrinterInfo.prt_Mode[adapter] = PRT_MODE_SIMULATE_STATUS_PORT;
-	    VdmTib.PrinterInfo.prt_Handle[adapter] = NULL;
-	    VdmTib.PrinterInfo.prt_BytesInBuffer[adapter] = 0;
-	    return TRUE;
-	}
-	else
-	    return FALSE;
+        // disabling direct i/o. reset it back to status port simulation
+        if (VdmTib->PrinterInfo.prt_Handle[adapter] == handle) {
+            NtVdmControl(VdmPrinterDirectIoClose, &adapter);
+            VdmTib->PrinterInfo.prt_Mode[adapter] = PRT_MODE_SIMULATE_STATUS_PORT;
+            VdmTib->PrinterInfo.prt_Handle[adapter] = NULL;
+            VdmTib->PrinterInfo.prt_BytesInBuffer[adapter] = 0;
+            return TRUE;
+        }
+        else
+            return FALSE;
     }
 }
 
 BOOLEAN MonitorVddConnectPrinter(WORD Adapter, HANDLE hVdd, BOOLEAN Connect)
 {
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
     if (VDM_NUMBER_OF_LPT <= Adapter)
-	return FALSE;
+        return FALSE;
     if (Connect) {
-	VdmTib.PrinterInfo.prt_Mode[Adapter] = PRT_MODE_VDD_CONNECTED;
-	VdmTib.PrinterInfo.prt_Handle[Adapter] = hVdd;
-	return TRUE;
+        VdmTib->PrinterInfo.prt_Mode[Adapter] = PRT_MODE_VDD_CONNECTED;
+        VdmTib->PrinterInfo.prt_Handle[Adapter] = hVdd;
+        return TRUE;
     }
     else {
-	if (hVdd == VdmTib.PrinterInfo.prt_Handle[Adapter]) {
-	    VdmTib.PrinterInfo.prt_Mode[Adapter] = PRT_MODE_SIMULATE_STATUS_PORT;
-	    VdmTib.PrinterInfo.prt_Handle[Adapter] = NULL;
-	    return TRUE;
-	}
-	else return FALSE;
+        if (hVdd == VdmTib->PrinterInfo.prt_Handle[Adapter]) {
+            VdmTib->PrinterInfo.prt_Mode[Adapter] = PRT_MODE_SIMULATE_STATUS_PORT;
+            VdmTib->PrinterInfo.prt_Handle[Adapter] = NULL;
+            return TRUE;
+        }
+        else return FALSE;
     }
 }
 
 BOOLEAN MonitorPrinterWriteData(WORD Adapter, BYTE Value)
 {
     USHORT BytesInBuffer;
+    PVDM_TIB VdmTib;
+
+    VdmTib = (PVDM_TIB)NtCurrentTeb()->Vdm;
 
     ASSERT(VDM_NUMBER_OF_LPT > Adapter);
-    BytesInBuffer = VdmTib.PrinterInfo.prt_BytesInBuffer[Adapter];
-    VdmTib.PrinterInfo.prt_Buffer[Adapter][BytesInBuffer] = Value;
-    VdmTib.PrinterInfo.prt_BytesInBuffer[Adapter]++;
+    BytesInBuffer = VdmTib->PrinterInfo.prt_BytesInBuffer[Adapter];
+    VdmTib->PrinterInfo.prt_Buffer[Adapter][BytesInBuffer] = Value;
+    VdmTib->PrinterInfo.prt_BytesInBuffer[Adapter]++;
 
     return TRUE;
 }
+
+/*  CheckScreenSwitchRequest -
+ *
+ *  This function checks if timer thread has asked us to stop such that it
+ *  can handle the fullscreen and windowed switch.
+ *  If yes, we will signal that we are stopped and wait for resume event.
+ *
+ */
+VOID CheckScreenSwitchRequest(HANDLE handle)
+{
+    DWORD status;
+
+    //
+    // Check if Suspen is requested.  If yes, we will signal that we are going to
+    // the wait state and wait for the resume event
+    // Since 'handle' event is a manual event, it is important that
+    // we check-and-wait in a loop such that timer thread will not pick up the
+    // 'handle' event between the wait-for-resume and the ResetEvent(handle).
+    //
+    while (TRUE) {
+        status = WaitForSingleObject(hSuspend, 0);
+        if (status == 0) {
+            SetEvent(handle);
+            WaitForSingleObject(hResume, INFINITE);
+            ResetEvent(handle);
+        } else {
+
+            //
+            // Make sure event is reset before leaving this function
+            //
+            ResetEvent(handle);
+            return;
+        }
+    }
+}
+

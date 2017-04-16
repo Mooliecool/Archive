@@ -1,10 +1,10 @@
 /********************************************************/
 /*
- *	nt_vdd.c	-	NT support for VDD DLLs
+ *      nt_vdd.c        -       NT support for VDD DLLs
  *
- *	Ade Brownlow	
+ *      Ade Brownlow
  *
- *	19/11/91
+ *      19/11/91
  *
  */
 
@@ -24,6 +24,7 @@
 #include "dma.h"
 #include "nt_vdd.h"
 #include "nt_vddp.h"
+#include "nt_uis.h"
 
 
 #ifdef ANSI
@@ -49,31 +50,33 @@ GLOBAL half_word io_get_spare_slot ();
 GLOBAL void io_release_spare_slot ();
 #endif
 
+extern void illegal_bop(void);
+
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::: Local data structures */
 
 #define MAX_SLOTS (10)
 
-LOCAL void (*MS_bop_tab[MAX_SLOTS])();		/* MS bop table */
+LOCAL void (*MS_bop_tab[MAX_SLOTS])();          /* MS bop table */
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 /* Microsoft BOP vectoring code references MS_bop_tab above and calls function
  * as directed by AH */
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 
-GLOBAL void ms_bop ()		    /* called from MS_bop_5 ie bop 0x55 */
+GLOBAL void ms_bop ()               /* called from MS_bop_5 ie bop 0x55 */
 {
-    half_word ah = getAH();		      /* get the value in AH */
+    half_word ah = getAH();                   /* get the value in AH */
 
     /*........................................Valid then call the MS function */
 
     if(ah >= MAX_SLOTS || MS_bop_tab[ah] == NULL)
-	ms_not_a_bop();
+        ms_not_a_bop();
     else
-	(*MS_bop_tab[ah])();
+        (*MS_bop_tab[ah])();
 }
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
-/*:::::	Dummy for unset AH values - stops us zipping into hyperspace :::::::::*/
+/*::::: Dummy for unset AH values - stops us zipping into hyperspace :::::::::*/
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 
 LOCAL void ms_not_a_bop()
@@ -97,11 +100,11 @@ GLOBAL half_word get_ms_bop_index (void (*func)())
 
     for(index = 0; index < MAX_SLOTS; index++)
     {
-	if(MS_bop_tab[index] == NULL)
-	{
-	    MS_bop_tab[index] = func;
-	    break;
-	}
+        if(MS_bop_tab[index] == NULL)
+        {
+            MS_bop_tab[index] = func;
+            break;
+        }
     }
 
     return (index == MAX_SLOTS ? (half_word) 0xff : index);
@@ -216,42 +219,43 @@ WORD FreeVddAdapter(HANDLE hVdd)
    return 0;
 }
 
+#ifndef NEC_98
 #ifdef MONITOR
 extern BOOLEAN MonitorVddConnectPrinter(WORD Adapter, HANDLE hVdd, BOOLEAN Connect);
 #endif /* MONITOR */
-
+#endif // !NEC98
 
 /*** VDDInstallIOHook - This service is provided for VDDs to hook the
- *			IO ports they are responsible for.
+ *                      IO ports they are responsible for.
  *
  * INPUT:
  *      hVDD      ; VDD Handle
  *      cPortRange; Number of VDD_IO_PORTRANGE structures
  *      pPortRange; Pointer to array of VDD_IO_PORTRANGE
- *	IOhandler : VDD handler for the ports.
+ *      IOhandler : VDD handler for the ports.
  *
  * OUTPUT
- *	SUCCESS : Returns TRUE
- *	FAILURE : Returns FALSE
- *		  GetLastError has the extended error information.
+ *      SUCCESS : Returns TRUE
+ *      FAILURE : Returns FALSE
+ *                GetLastError has the extended error information.
  *
  * NOTES:
  *      1. The first one to hook a port will get control. Subsequent
  *         requests will be failed. There is no concept of chaining
  *         the hooks.
  *
- *	2. IOHandler must atleast provide a byte read and a byte write
- *	   handler. Others can be NULL.
+ *      2. IOHandler must atleast provide a byte read and a byte write
+ *         handler. Others can be NULL.
  *
- *	3. If word or string handlers are not provided, their effect
- *	   will be emulated using byte handlers.
+ *      3. If word or string handlers are not provided, their effect
+ *         will be emulated using byte handlers.
  *
- *	4. VDDs should not hook DMA ports. NTVDM manages it for all
- *	   the clients and services are provided to perform DMA
- *	   operations and to access and modify DMA data.
+ *      4. VDDs should not hook DMA ports. NTVDM manages it for all
+ *         the clients and services are provided to perform DMA
+ *         operations and to access and modify DMA data.
  *
- *	5. VDDs should not hook video ports as well. Such a hooking
- *	   will succeed but there is no gurantee that the IO handler will
+ *      5. VDDs should not hook video ports as well. Such a hooking
+ *         will succeed but there is no gurantee that the IO handler will
  *         get called.
  *
  *      6. Each Vdd is allowed to install only one set of IO hooks
@@ -276,7 +280,7 @@ BOOL VDDInstallIOHook (
    WORD              wAdapter;
    PVDD_IO_PORTRANGE pPRange;
 #ifdef MONITOR
-   WORD 	     lptAdapter = 0;
+   WORD              lptAdapter = 0;
 #endif
 
 
@@ -328,18 +332,20 @@ BOOL VDDInstallIOHook (
           for (w = pPRange->First; w <= pPRange->Last; w++)
             {
 #ifdef MONITOR
-	    // watch out for lpt ports
-	    // note that the vdd must hook every port assoicated with
-	    // the lpt. Just imanging that the vdd traps the control
-	    // port while leaves the rest for softpc-- we are going
-	    // to screw up badly and so does the vdd.
-	    // QUESTION: How can we enforece this????
-	      if (w >= LPT1_PORT_START && w < LPT1_PORT_END)
-		lptAdapter |= 1;
-	      else if (w >= LPT2_PORT_START && w < LPT2_PORT_END)
-		lptAdapter |= 2;
-	      else if (w >= LPT3_PORT_START && w < LPT3_PORT_END)
-		lptAdapter |= 4;
+            // watch out for lpt ports
+            // note that the vdd must hook every port assoicated with
+            // the lpt. Just imanging that the vdd traps the control
+            // port while leaves the rest for softpc-- we are going
+            // to mess up badly and so does the vdd.
+            // QUESTION: How can we enforece this????
+              if (w >= LPT1_PORT_START && w < LPT1_PORT_END)
+                lptAdapter |= 1;
+#ifndef NEC_98
+              else if (w >= LPT2_PORT_START && w < LPT2_PORT_END)
+                lptAdapter |= 2;
+              else if (w >= LPT3_PORT_START && w < LPT3_PORT_END)
+                lptAdapter |= 4;
+#endif // !NEC_98
 #endif
               if (!io_connect_port(w, (half_word)wAdapter, IO_READ_WRITE))
                  {
@@ -369,35 +375,37 @@ BOOL VDDInstallIOHook (
           i--;
           }
 
+#ifndef NEC_98
 #ifdef MONITOR
 // i/o ports are hooked successfully, stop printer status port
 // kernel emulation if the they are in the hooked range
       if (lptAdapter & 1)
-	MonitorVddConnectPrinter(0, hVdd, TRUE);
+        MonitorVddConnectPrinter(0, hVdd, TRUE);
       if (lptAdapter & 2)
-	MonitorVddConnectPrinter(1, hVdd, TRUE);
+        MonitorVddConnectPrinter(1, hVdd, TRUE);
       if (lptAdapter & 4)
-	MonitorVddConnectPrinter(2, hVdd, TRUE);
+        MonitorVddConnectPrinter(2, hVdd, TRUE);
 #endif /* MONITOR */
+#endif // !NEC_98
    return TRUE;
 }
 
 
 
 /*** VDDDeInstallIOHook - This service is provided for VDDs to unhook the
- *			  IO ports they have hooked.
+ *                        IO ports they have hooked.
  *
  * INPUT:
- *	hVDD	: VDD Handle
+ *      hVDD    : VDD Handle
  *
  * OUTPUT
- *	None
+ *      None
  *
  * NOTES
  *
- *	1. On Deinstalling a hook, the defult hook is placed back on
- *	   those ports. Default hook  returns 0xff on reading
- *	   and ignores the write operations.
+ *      1. On Deinstalling a hook, the defult hook is placed back on
+ *         those ports. Default hook  returns 0xff on reading
+ *         and ignores the write operations.
  *
  */
 VOID VDDDeInstallIOHook (
@@ -408,7 +416,7 @@ VOID VDDDeInstallIOHook (
     WORD w;
     WORD wAdapter;
 #ifdef MONITOR
-   WORD 	     lptAdapter = 0;
+   WORD              lptAdapter = 0;
 #endif
 
 
@@ -423,34 +431,38 @@ VOID VDDDeInstallIOHook (
           for (w = pPortRange->First; w <= pPortRange->Last; w++)
             {
 #ifdef MONITOR
-	    // watch out for lpt status ports
-	    // note that the vdd must unhook every port assoicated with
-	    // the lpt. Just imanging that the vdd traps the control
-	    // port while leaves the rest for softpc-- we are going
-	    // to screw up badly and so does the vdd.
-	    // QUESTION: How can we enforece this????
-	      if (w >= LPT1_PORT_START && w < LPT1_PORT_END)
-		lptAdapter |= 1;
-	      else if (w >= LPT2_PORT_START && w < LPT2_PORT_END)
-		lptAdapter |= 2;
-	      else if (w >= LPT3_PORT_START && w < LPT3_PORT_END)
-		lptAdapter |= 4;
+            // watch out for lpt status ports
+            // note that the vdd must unhook every port assoicated with
+            // the lpt. Just imanging that the vdd traps the control
+            // port while leaves the rest for softpc-- we are going
+            // to mess up badly and so does the vdd.
+            // QUESTION: How can we enforece this????
+              if (w >= LPT1_PORT_START && w < LPT1_PORT_END)
+                lptAdapter |= 1;
+#ifndef NEC_98
+              else if (w >= LPT2_PORT_START && w < LPT2_PORT_END)
+                lptAdapter |= 2;
+              else if (w >= LPT3_PORT_START && w < LPT3_PORT_END)
+                lptAdapter |= 4;
+#endif // !NEC_98
 #endif
               io_disconnect_port(w, (half_word)wAdapter);
               }
           pPortRange++;
-	  }
+          }
 
+#ifndef NEC_98
 #ifdef MONITOR
 // i/o ports are Unhooked successfully, resume printer status port
 // kernel emulation if the they are in the hooked range
       if (lptAdapter & 1)
-	MonitorVddConnectPrinter(0, hVdd, FALSE);
+        MonitorVddConnectPrinter(0, hVdd, FALSE);
       if (lptAdapter & 2)
-	MonitorVddConnectPrinter(1, hVdd, FALSE);
+        MonitorVddConnectPrinter(1, hVdd, FALSE);
       if (lptAdapter & 4)
-	MonitorVddConnectPrinter(2, hVdd, FALSE);
-#endif	/* MONITOR */
+        MonitorVddConnectPrinter(2, hVdd, FALSE);
+#endif  /* MONITOR */
+#endif // !NEC_98
 }
 
 
@@ -577,18 +589,72 @@ BOOL VDDReleaseIrqLine (
 }
 
 
+BOOL
+HostUndefinedIo(
+    WORD IoAddress
+    )
+/*
+ * HostUndefinedIo
+ *
+ * Called when the client code has issued an I/O instruction to
+ * an address that has the default I/O handler. Instead of just
+ * ignoring it, this routine tries to dynamically load a predefined
+ * VDD to handle it.
+ *
+ * entry:  WORD IoAddress - address of target of IN or OUT
+ *
+ * exit:   TRUE - a VDD was loaded to handle the I/O, the caller
+ *                should retry the operation
+ *         FALSE - either the address is unknown, or an attempt
+ *                 to load the corresponding VDD failed earlier.
+ *
+ */
+{
+    HANDLE hVDD;
+    static BOOL bTriedVSndblst = FALSE;
+    BOOL bReturn = FALSE;
+
+#if 0
+    // SoundBlaster VDD is out of the project for now
+    // hence this section of the code is disabled pending
+    // further investigation
+
+
+        if (((IoAddress > 0x210) && (IoAddress < 0x280)) ||
+                   (IoAddress == 0x388) || (IoAddress == 0x389))  {
+           //
+           // Try the SoundBlaster VDD
+           //
+           if (!bTriedVSndblst) {
+               bTriedVSndblst = TRUE;
+
+               if ((hVDD = SafeLoadLibrary("VSNDBLST.DLL")) == NULL){
+                   RcErrorDialogBox(ED_LOADVDD, "VSNDBLST.DLL", NULL);
+               } else {
+                   bReturn = TRUE;
+               }
+            }
+
+        }
+
+#endif
+
+    return bReturn;
+}
+
+
 /********************************************************/
 /* DMA stuff */
 
 
 
 /*** VDDRequestDMA - This service is provided for VDDs to request a DMA
- *		     transfer.
+ *                   transfer.
  *
  * INPUT:
- *	hVDD	 VDD Handle
- *	iChannel DMA Channel on which the operation to take place
- *	Buffer	 Buffer where to or from transfer to take place
+ *      hVDD     VDD Handle
+ *      iChannel DMA Channel on which the operation to take place
+ *      Buffer   Buffer where to or from transfer to take place
  *      length   Transfer Count (in bytes)
  *
  *               If Zero, returns the Current VDMA transfer count
@@ -601,12 +667,12 @@ BOOL VDDReleaseIrqLine (
  *               GetLastError has the extended error information.
  *
  * NOTES
- *	1. This service is intended for those VDDs which do not want to
- *	   carry on the DMA operation on their own. Carrying on a DMA
- *	   operation involves understanding all the DMA registers and
- *	   figuring out what has to be copied, from where and how much.
+ *      1. This service is intended for those VDDs which do not want to
+ *         carry on the DMA operation on their own. Carrying on a DMA
+ *         operation involves understanding all the DMA registers and
+ *         figuring out what has to be copied, from where and how much.
  *
- *	2. This service will be slower than using VDDQueryDMA/VDDSetDMA and
+ *      2. This service will be slower than using VDDQueryDMA/VDDSetDMA and
  *         doing the transfer on your own.
  *
  *      3. Extended Error codes:
@@ -645,7 +711,7 @@ DWORD VDDRequestDMA (
     // if the controller or the channel is disabled, return 0
     if (pDcp->command.bits.controller_disable == 1 ||
        (pDcp->mask & (1 << Chan)) == 0)
-	return (0);
+        return (0);
 
     tCount = ((WORD)pDcp->current_count[Chan][1] << 8)
              | (WORD)pDcp->current_count[Chan][0];
@@ -654,7 +720,7 @@ DWORD VDDRequestDMA (
 
          // return requested transfer count (in bytes)
     if (!length)  {
-	 return (DWORD)Size*((DWORD)tCount + 1);
+         return (DWORD)Size*((DWORD)tCount + 1);
          }
 
     length = length/Size - 1;
@@ -688,26 +754,26 @@ DWORD VDDRequestDMA (
 
 
 /*** VDDQueryDMA -   This service is provided for VDDs to collect all the DMA
- *		     data.
+ *                   data.
  *
  * INPUT:
- *	hVDD	 VDD Handle
- *	iChannel DMA Channel for which to query
- *	Buffer	 Buffer where information will be returned
+ *      hVDD     VDD Handle
+ *      iChannel DMA Channel for which to query
+ *      Buffer   Buffer where information will be returned
  *
  * OUTPUT
- *	SUCCESS : Returns TRUE
- *	FAILURE : Returns FALSE
- *		  GetLastError has the extended error information.
+ *      SUCCESS : Returns TRUE
+ *      FAILURE : Returns FALSE
+ *                GetLastError has the extended error information.
  *
  *
  * NOTES
- *	1. This service is intended for those VDD which are doing
- *	   performance critical work. These VDD can do their own DMA
- *	   transfers and avoid one extra buffer copying which is a
- *	   overhead in using VDDRequestDMA.
+ *      1. This service is intended for those VDD which are doing
+ *         performance critical work. These VDD can do their own DMA
+ *         transfers and avoid one extra buffer copying which is a
+ *         overhead in using VDDRequestDMA.
  *
- *	2. VDDs should use VDDSetDMA to properly update the state of
+ *      2. VDDs should use VDDSetDMA to properly update the state of
  *         DMA after carrying on the operation.
  *
  *      3. Extended Error codes:
@@ -756,19 +822,19 @@ BOOL VDDQueryDMA (
 /*** VDDSetDMA - This service is provided for VDDs to set the DMA data.
  *
  * INPUT:
- *	hVDD	 VDD Handle
- *	iChannel DMA Channel for which to query
+ *      hVDD     VDD Handle
+ *      iChannel DMA Channel for which to query
  *      fDMA     Bit Mask indicating which DMA data fields are to be set
- *		    VDD_DMA_ADDR
- *		    VDD_DMA_COUNT
+ *                  VDD_DMA_ADDR
+ *                  VDD_DMA_COUNT
  *                  VDD_DMA_PAGE
  *                  VDD_DMA_STATUS
- *	Buffer	 Buffer with DMA data
+ *      Buffer   Buffer with DMA data
  *
  * OUTPUT
- *	SUCCESS : Returns TRUE
- *	FAILURE : Returns FALSE
- *		  GetLastError has the extended error information.
+ *      SUCCESS : Returns TRUE
+ *      FAILURE : Returns FALSE
+ *                GetLastError has the extended error information.
  *
  * NOTES
  *
@@ -816,6 +882,22 @@ BOOL VDDSetDMA (
         pDcp->status.all = (BYTE) pDmaInfo->status;
         }
 
+    //
+    // If DMA count is 0xffff and autoinit is enabled, we need to
+    // reload the count and address.
+    //
+
+    if ((pDcp->current_count[Chan][0] == (half_word) 0xff) &&
+        (pDcp->current_count[Chan][1] == (half_word) 0xff)) {
+
+        if (pDcp->mode[Chan].bits.auto_init != 0) {
+            pDcp->current_count[Chan][0] = pDcp->base_count[Chan][0];
+            pDcp->current_count[Chan][1] = pDcp->base_count[Chan][1];
+
+            pDcp->current_address[Chan][0] = pDcp->base_address[Chan][0];
+            pDcp->current_address[Chan][1] = pDcp->base_address[Chan][1];
+        }
+    }
 
     return TRUE;
 }

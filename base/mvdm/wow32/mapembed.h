@@ -34,7 +34,7 @@ Author:
 #define _MAP_EMBEDDING_SECTION_
 
 #define IS_EMBEDDING_SECTION(pszSection)                                     \
-    ( ! (pszSection == NULL || _stricmp( pszSection, szEmbedding )) )
+    ( ! (pszSection == NULL || WOW32_stricmp( pszSection, szEmbedding )) )
 
 BOOL
 IsWinIniHelper(
@@ -47,7 +47,7 @@ IsWinIniHelper(
 
 #define IS_WIN_INI(Filename) (                                               \
     (Filename)                                                               \
-    ? (strstr((Filename), szWinDotIni)                                       \
+    ? (WOW32_strstr((Filename), szWinDotIni)                                 \
           ? IsWinIniHelper((Filename))                                       \
           : FALSE)                                                           \
      : FALSE)

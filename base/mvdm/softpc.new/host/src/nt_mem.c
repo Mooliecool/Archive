@@ -22,7 +22,7 @@
 #ifdef CPU_40_STYLE
 
 #if defined(DBG)
-#define DEBUG_MEM YES_PLEASE
+//#define DEBUG_MEM YES_PLEASE
 //#define DEBUG_MEM_DUMP 1
 #endif
 
@@ -219,7 +219,7 @@ GLOBAL IU8 *InitIntelMemory IFN1(IU32, MaxIntelMemorySize)
         return((IU8 *) NULL);
     }
 
-    /* 
+    /*
      * Allocate the bottom 1 megabyte plus the 20-bit wrap area. Round this
      * to an Intel page boundary as this is the granularity of this system.
      */
@@ -568,7 +568,7 @@ GLOBAL NTSTATUS VdmFreeVirtualMemory IFN1(ULONG, INTELAddress)
      * chunk.
      */
     if ((Address & PAGE_MASK) ||
-        (headerPtr->flags & HDR_VALID_ALLOC != HDR_VALID_ALLOC))
+        ((headerPtr->flags & HDR_VALID_ALLOC) != HDR_VALID_ALLOC))
     {
         always_trace0("Tried to free invalid address");
         return(STATUS_MEMORY_NOT_ALLOCATED);
@@ -769,7 +769,7 @@ GLOBAL NTSTATUS VdmReallocateVirtualMemory IFN3(ULONG, INTELOriginalAddress,
      * chunk.
      */
     if ((OriginalAddress & PAGE_MASK) ||
-        (headerPtr->flags & HDR_VALID_ALLOC != HDR_VALID_ALLOC))
+        ((headerPtr->flags & HDR_VALID_ALLOC) != HDR_VALID_ALLOC))
     {
         always_trace0("Tried to reallocate invalid address");
         return(STATUS_MEMORY_NOT_ALLOCATED);
@@ -927,6 +927,8 @@ OUTPUT:
     IntelAddress    - the intel address the block is mapped to.
 ================================================================================
 )*/
+
+extern void VdmSetPhysRecStructs (ULONG, ULONG, ULONG);
 GLOBAL NTSTATUS VdmAddVirtualMemory IFN3(ULONG, HostAddress,
                                          ULONG, Size,
                                          PULONG, IntelAddress)
@@ -967,7 +969,7 @@ GLOBAL NTSTATUS VdmAddVirtualMemory IFN3(ULONG, HostAddress,
     ADDRESS_TO_HEADER(*IntelAddress+intelMem)->flags |= HDR_REMAP_FLAG;
 
     /* adjust IntelAddress if HostAddress not DWORD aligned */
-    
+
     *IntelAddress += alignfix;
 
 #ifdef DEBUG_MEM
@@ -1093,10 +1095,12 @@ LOCAL SECTION_HEADER *addHeaderEntry IFN5(SECTION_HEADER *, prevHeader,
                                (DWORD) MEM_COMMIT,
 			       (DWORD) PAGE_READWRITE);
 
-	if(retAddr != commitAddr)
+#ifdef DEBUG_MEM
+    if(retAddr != commitAddr)
 	{
 	    printf("V.Allocate failed (%xh) [%lxh :%xh]\n",GetLastError(),commitAddr,commitSize);
 	}
+#endif
 
 
         if (retAddr == commitAddr)
@@ -1104,7 +1108,7 @@ LOCAL SECTION_HEADER *addHeaderEntry IFN5(SECTION_HEADER *, prevHeader,
         else
             return((SECTION_HEADER *) NULL);
     }
-    
+
     /* Fill in header's fields. */
     newHeader->flags = HDR_VALID_FLAG;
     if (allocFree == SECT_ALLOC)
@@ -1276,7 +1280,7 @@ LOCAL void exclusiveChunkPages IFN4(SECTION_HEADER *, chunkHeader,
 
     /* Find next allocated chunk. */
     nextHeader = chunkHeader->next;
-    while ((nextHeader != NULL) && 
+    while ((nextHeader != NULL) &&
      (Commit?SECTION_IS_UNCOMMITTED(nextHeader):SECTION_IS_FREE(nextHeader)))
         nextHeader = nextHeader->next;
 

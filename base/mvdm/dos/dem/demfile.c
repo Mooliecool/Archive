@@ -19,12 +19,15 @@
 #include <winbase.h>
 #include <vrnmpipe.h>
 #include <nt_vdd.h>
+#include "dpmtbls.h"
 
+#define DOS_FLAG_EXEC_OPEN 1  // See dos\v86\inc\dossym.inc
 extern PDOSSF pSFTHead;
 
 BOOL (*VrInitialized)(VOID);  // POINTER TO FUNCTION
 extern BOOL LoadVdmRedir(VOID);
 extern BOOL IsVdmRedirLoaded(VOID);
+extern BYTE *Dos_Flag_Addr;
 
 BOOL
 IsNamedPipeName(
@@ -181,10 +184,11 @@ SECURITY_ATTRIBUTES sa;
     //
 
     if (strchr(lpFileName, '/')) {
+        char ch= *lpFileName;
         lpFileName = _strdup(lpFileName);
         if (lpFileName == NULL) {
             SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-            demClientError(INVALID_HANDLE_VALUE, *lpFileName);
+            demClientError(INVALID_HANDLE_VALUE, ch);
             return;
         }
         for (dupFileName = lpFileName; *dupFileName; ++dupFileName) {
@@ -205,6 +209,9 @@ SECURITY_ATTRIBUTES sa;
     else if (uchAccess == OPEN_FOR_WRITE)
         dwDesiredAccess = GENERIC_WRITE;
 
+    if (Dos_Flag_Addr && (*Dos_Flag_Addr & DOS_FLAG_EXEC_OPEN)) {
+        dwDesiredAccess |= GENERIC_EXECUTE;
+    }
     uchMode = uchMode & (UCHAR)SHARING_MASK;
 
     switch (uchMode) {
@@ -217,11 +224,6 @@ SECURITY_ATTRIBUTES sa;
         case SHARING_DENY_READ:
             dwShareMode = FILE_SHARE_WRITE;
             break;
-    // compatible mode is a special case
-    case SHARING_COMPAT:
-        dwShareMode |= FILE_SHARE_DELETE;
-        //dwDesiredAccess |= DELETE;
-        break;
     }
 
     //
@@ -270,7 +272,7 @@ SECURITY_ATTRIBUTES sa;
     while (TRUE) {
         if ((hFile = CreateFileOem(lpFileName,
                                    dwDesiredAccess,
-                                   dwShareMode,
+                                   dwShareMode | FILE_SHARE_DELETE,
                                    &sa,
                                    OPEN_EXISTING,
                                    ItsANamedPipe ? FILE_FLAG_OVERLAPPED : 0,
@@ -305,9 +307,9 @@ errorReturn:
         setDX(1);
     }
     else {
-        if(((dwFileSize=GetFileSize(hFile,&dwSizeHigh)) == (DWORD)-1) ||
+        if(((dwFileSize=DPM_GetFileSize(hFile,&dwSizeHigh)) == (DWORD)-1) ||
              dwSizeHigh) {
-            CloseHandle (hFile);
+            DPM_CloseHandle (hFile);
             demClientError(INVALID_HANDLE_VALUE, *lpFileName);
             return;
         }
@@ -392,6 +394,144 @@ VOID demCreateNew (VOID)
     return;
 }
 
+
+/* demFileDelete
+ *
+ * EXPORTED FUNCTION
+ *
+ * ENTRY:
+ *      lpFile -> OEM file name to be deleted
+ *
+ * EXIT:
+ *      returns 0 on success, DOS error code on failure
+ *
+ * NOTES:
+ * Some apps keep a file open and delete it.   Then rename another file to
+ * the old name.   On NT since the orignal object is still open the second
+ * rename fails.
+ * To get around this problem we rename the file before deleteing it
+ * this allows the second rename to work
+ *
+ * But since renaming the file is known to be expensive over the net, we try
+ * first to open the file exclusively to see if there is really any reason to
+ * rename it. If we can get a handle to it, then we should be able to skip the
+ * rename and just delete it. If we can't get a handle to it, then we try
+ * the rename trick. This should cut down our overhead for the normal case.
+ */
+
+DWORD demFileDelete (LPSTR lpFile)
+{
+    CHAR vdmtemp[MAX_PATH];
+    CHAR tmpfile[MAX_PATH];
+    PSZ pFileName;
+    HANDLE hFile;
+
+    //
+    // First, try to access the file exclusively
+    //
+
+    hFile = CreateFileOem(lpFile,
+                          DELETE,
+                          0,
+                          NULL,
+                          OPEN_EXISTING,
+                          FILE_ATTRIBUTE_NORMAL,
+                          NULL);
+
+    if (hFile != INVALID_HANDLE_VALUE) {
+        NTSTATUS status;
+        IO_STATUS_BLOCK ioStatusBlock;
+        FILE_DISPOSITION_INFORMATION fileDispositionInformation;
+
+        // Member name "DeleteFile" conflicts with win32 definition (it
+        // becomes "DeleteFileA".
+#undef DeleteFile
+        fileDispositionInformation.DeleteFile = TRUE;
+
+        //
+        // We got a handle to it, so there can't be any open
+        // handles to it. Set the disposition to DELETE.
+        //
+
+        status = NtSetInformationFile(hFile,
+                                      &ioStatusBlock,
+                                      &fileDispositionInformation,
+                                      sizeof(FILE_DISPOSITION_INFORMATION),
+                                      FileDispositionInformation);
+
+        DPM_CloseHandle(hFile);
+
+        if NT_SUCCESS(status) {
+            SetLastError(NO_ERROR);
+        } else {
+            SetLastError(ERROR_ACCESS_DENIED);
+        }
+    }
+
+    //
+    // Check to see if the delete went OK. If not, try renaming
+    // the file.
+    //
+    switch (GetLastError()) {
+
+    case NO_ERROR:
+    case ERROR_FILE_NOT_FOUND:
+    case ERROR_PATH_NOT_FOUND:
+        // Can't find it, forget about it
+        break;
+
+    case ERROR_SHARING_VIOLATION:
+    case ERROR_ACCESS_DENIED:
+        //
+        // The file didn't really go away because there appears to
+        // be an open handle to the file.
+        //
+        if (GetFullPathNameOemSys(lpFile,MAX_PATH,vdmtemp,&pFileName,FALSE)) {
+            if ( pFileName )
+               *(pFileName) = 0;
+            if (GetTempFileNameOem(vdmtemp,"VDM",0,tmpfile)) {
+                if (MoveFileExOem(lpFile,tmpfile, MOVEFILE_REPLACE_EXISTING)) {
+                    if(DeleteFileOem(tmpfile)) {
+                        SetLastError(NO_ERROR);
+                    } else {
+                        MoveFileOem(tmpfile,lpFile);
+                        SetLastError(ERROR_ACCESS_DENIED);
+                    }
+                }
+            }
+        }
+        break;
+
+    default:
+
+        //
+        // We couldn't open or delete the file, and it's not because of a
+        // sharing violation. Just try a last ditch effort of a
+        // plain old delete, and see if it works.
+        //
+        if(DeleteFileOem(lpFile)) {
+            SetLastError(NO_ERROR);
+        }
+    }
+
+    //
+    // Map win32 error code to DOS
+    //
+    switch(GetLastError()) {
+
+    case NO_ERROR:
+    case ERROR_FILE_NOT_FOUND:
+    case ERROR_PATH_NOT_FOUND:
+    case ERROR_ACCESS_DENIED:
+        break;
+    default:
+        // make sure demClientError can see retval
+        SetLastError(ERROR_ACCESS_DENIED);
+    }
+
+    return GetLastError();
+}
+
 /* demDelete - Delete a file
  *
  *
@@ -424,7 +564,7 @@ LPSTR   lpFileName;
     }
 #endif
 
-    if (DeleteFileOem (lpFileName) == FALSE){
+    if (demFileDelete(lpFileName)){
         demClientError(INVALID_HANDLE_VALUE, *lpFileName);
         return;
     }
@@ -475,7 +615,7 @@ DWORD   dwAttr;
 
 
     if(getAL() == 0){
-        if ((dwAttr = GetFileAttributesOem(lpFileName)) == -1)
+        if ((dwAttr = GetFileAttributesOemSys(lpFileName, FALSE)) == -1)
             goto dcerr;
 
 
@@ -486,6 +626,20 @@ DWORD   dwAttr;
             dwAttr &= DOS_ATTR_MASK;
             }
 
+        // SudeepB - 28-Jul-1997
+        //
+        // For CDFS, Win3.1/DOS/Win95, only return FILE_ATTRIBUTE_DIRECTORY (10)
+        // for directories while WinNT returns
+        // FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_READONLY (11).
+        // Some VB controls that app setups use, depend on getting
+        // FILE_ATTRIBUTE_DIRECTORY (10) only or otherwise are broken.
+        // An example of this is Cliffs StudyWare series.
+
+        if (dwAttr == (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_READONLY)) {
+            if(IsCdRomFile(lpFileName))
+                dwAttr = FILE_ATTRIBUTE_DIRECTORY;
+        }
+
         setCX((USHORT)dwAttr);
         setCF(0);
         return;
@@ -495,7 +649,7 @@ DWORD   dwAttr;
         dwAttr = FILE_ATTRIBUTE_NORMAL;
 
     dwAttr &= DOS_ATTR_MASK;
-    if (!SetFileAttributesOem(lpFileName,dwAttr))
+    if (!SetFileAttributesOemSys(lpFileName,dwAttr,FALSE))
         goto dcerr;
 
     setCF(0);
@@ -564,7 +718,7 @@ LPSTR   lpSrc,lpDst;
     return;
 }
 
-/* demCreateCommon - Create a file or Craete a new file
+/* demCreateCommon - Create a file or Create a new file
  *
  *
  * Entry - flCreateType - DEM_CREATE_NEW create new
@@ -604,22 +758,38 @@ DWORD   dwLastError;
     lpFileName = (LPSTR) GetVDMAddr (getDS(),getSI());
     dwAttr = (DWORD)getCX();
 
-    if ((dwAttr & 0xff) == 0)
-    dwAttr = FILE_ATTRIBUTE_NORMAL;
+    // Here is some code stolen from DOS_Create (create.asm) for handling the
+    // attributes
+
+    if (flCreateType == DEM_CREATE || flCreateType == DEM_CREATE_NEW)
+        dwAttr &= 0xff;
+
+    if (dwAttr & ~(ATTR_ALL | ATTR_IGNORE | ATTR_VOLUME_ID)) {
+        setCF(1);
+        setAX(5);   //Attribute problem
+        return;
+    }
 
     /* Special case for set volume label (INT 21 Func 3CH, Attr = 8H */
 
-    if((flCreateType == DEM_CREATE) && (dwAttr == ATTR_VOLUME_ID)) {
-    if((uErr = demCreateLabel(lpFileName[DRIVEBYTE],
-        lpFileName+LABELOFF))) {
-        setCF(1);
-        setAX(uErr);
+    if((flCreateType == DEM_CREATE || flCreateType == DEM_CREATE_NEW) && (dwAttr == ATTR_VOLUME_ID)) {
+        if((uErr = demCreateLabel(lpFileName[DRIVEBYTE],
+                                  lpFileName+LABELOFF))) {
+            setCF(1);
+            setAX(uErr);
+            return;
+        }
+        setAX(0);
+        setBP(0);   // in this case handle = 0 and if we will
+        setCF(0);   // close this handle CF will be 0(!)
         return;
     }
-    setAX(0);
-    setBP(0);   // in this case handle = 0 and if we will
-    setCF(0);   // close this handle CF will be 0(!)
-    return;
+
+
+    if ((dwAttr & 0xff) == 0) {
+        dwAttr = FILE_ATTRIBUTE_NORMAL;
+    } else {
+        dwAttr &= DOS_ATTR_MASK;
     }
 
 
@@ -659,7 +829,7 @@ DWORD   dwLastError;
             // APP COMPATABILITY
             // Some WOW apps installing .TTF or .FON or Fonts fail to create
             // The file because the font is already open by GDI32 server.
-            // The Stupid install/setup programs don't gracefully handle
+            // The install/setup programs don't gracefully handle
             // this error, they bomb out of the install with retry or cancel
             // without offering the user a way to ignore the error (which
             // would be the right thing since the font already exists.
@@ -690,7 +860,8 @@ DWORD   dwLastError;
                         // We failed to remove the .TTF file probably because
                         // the .FOT file was loaded, so try to remove it
 
-                        if (!_strcmpi(lpDot,".TTF")) {
+                        if (!_strcmpi(lpDot,".TTF") &&
+                            ((ULONG)lpDot-(ULONG)lpFileName) < sizeof(cFOTName)-sizeof(".FOT")) {
 
                             RtlZeroMemory(cFOTName,sizeof(cFOTName));
                             RtlCopyMemory(cFOTName,lpFileName,(ULONG)lpDot-(ULONG)lpFileName);
@@ -711,8 +882,8 @@ DWORD   dwLastError;
             break;
     }
 
-    if((dwFileSize=GetFileSize(hFile,&dwSizeHigh) == -1) || dwSizeHigh) {
-        CloseHandle (hFile);
+    if((dwFileSize=DPM_GetFileSize(hFile,&dwSizeHigh) == -1) || dwSizeHigh) {
+        DPM_CloseHandle (hFile);
         demClientError(INVALID_HANDLE_VALUE, *lpFileName);
         return;
     }
@@ -751,6 +922,10 @@ BOOL IsCdRomFile (PSTR pszPath)
                 }
             }
         }
+        if(i > sizeof(pszRootDir)-2) {
+           return FALSE;
+        }
+
         memcpy(pszRootDir, pszPath, i);
         pszRootDir[i] = '\\';
         pszRootDir[i+1] = 0;
@@ -772,8 +947,10 @@ BOOL IsCdRomFile (PSTR pszPath)
  *
  *
  * Entry - Client (DS:SI) Full path (with last '\')
+ *         Client DL is drive number (1-based)
  *
- * Exit
+ * Exit -  Set client DX to 0
+ *
  *         SUCCESS
  *       Client (CF) = 0
  *
@@ -796,7 +973,7 @@ CHAR    szFileName[MAX_PATH];
     // If we have \dev dir then return OK, DOS always has this directory for
     // devices.
 
-    if(!lstrcmpi(lpFileName, "\\DEV\\")) {
+    if(!_strnicmp(lpFileName, "\\DEV\\",6)) {
     setCF(0);
     return;
     }
@@ -829,7 +1006,7 @@ CHAR    szFileName[MAX_PATH];
         return;
     }
 
-    CloseHandle (hFile);
+    DPM_CloseHandle (hFile);
     setCF(0);
 
     return;
@@ -855,7 +1032,7 @@ PDOSSFT GetFreeSftEntry(PDOSSF pSfHead, PWORD usSFN)
         *usSFN += pSfHead->SFCount;
 
         ulSFLink = pSfHead->SFLink;
-        if (ulSFLink & 0xFFFF == 0xFFFF) {
+        if (LOWORD(ulSFLink) == 0xFFFF) {
             break;
         }
 
@@ -889,14 +1066,14 @@ PDOSSFT GetFreeSftEntry(PDOSSF pSfHead, PWORD usSFN)
  *  will be unavailable to other callers trying to issue DOS Open or Create api
  *  calls. It is the caller's responsibility to release this file handle (with
  *  a call to VDDReleaseDosHandle).
- *  
+ *
  *  If the pPDB pointer is not supplied (e.g., is NULL), then the current
  *  PDB as reported by DOS will be used.
  *
  *  Although the ppSFT parameter is technically optional, it is a required
  *  parameter of the VDDAssociateNtHandle call. This was done to avoid a
  *  second handle lookup in the Associate call.
- *  
+ *
  */
 
 SHORT VDDAllocateDosHandle (pPDB,ppSFT,ppJFT)
@@ -920,8 +1097,16 @@ SHORT   hDosHandle;
     //
 
     pPDBFlat = (PDOSPDB) Sim32GetVDMPointer (pPDB, 0, 0);
+
+    if ( NULL == pPDBFlat ) {
+      return (- ERROR_INVALID_HANDLE);
+    }
+
     pJFT     = (PBYTE)   Sim32GetVDMPointer (pPDBFlat->PDB_JFN_Pointer, 0, 0);
 
+    if ( NULL == pJFT ) {
+      return (- ERROR_INVALID_HANDLE);
+    }
 
     //
     // Check to see if there's a free entry in the JFT.
@@ -1014,7 +1199,7 @@ WORD        wAccess;
  * EXIT -
  *      TRUE  - the file handle was released
  *      FALSE - The file handle was not valid or open
- * 
+ *
  * Comments:
  *  This routine updates the DOS file system data areas to free the passed
  *  file handle. No effort is made to determine if this handle was previously
@@ -1068,7 +1253,7 @@ HANDLE  ntHandle;
  *                            associated with the given PDB.
  *
  *
- * EXIT - 
+ * EXIT -
  *      SUCCESS - returns 4byte NT handle
  *      FAILURE - returns 0
  *
@@ -1076,17 +1261,17 @@ HANDLE  ntHandle;
  *  The value returned by this function will be the NT handle passed in a
  *  previous VDDAssociateNtHandle call. If no previous call is made to the
  *  the Associate api, then the value returned by this function is undefined.
- *  
+ *
  *  If the pPDB pointer is not supplied (e.g., is NULL), then the current
  *  PDB as reported by DOS will be used.
  *
  *  Although the ppSFT parameter is technically optional, it is a required
  *  parameter of the VDDAssociateNtHandle call. This was done to avoid a
  *  second handle lookup in the Associate call.
- *  
+ *
  *  The third and fourth parameters are provided to provide the caller the
  *  ability to update the DOS system data areas directly. This may be useful
- *  for performance reasons, or necessary depending on the application. In 
+ *  for performance reasons, or necessary depending on the application. In
  *  general, care must be taken when using these pointers to avoid causing
  *  system integrity problems.
  *
@@ -1134,7 +1319,7 @@ ULONG   ulSFLink;
     while (usSFN >= (usSFTCount = pSfFlat->SFCount)){
         usSFN = usSFN - usSFTCount;
         ulSFLink = pSfFlat->SFLink;
-        if (ulSFLink & 0xffff == 0xffff)
+        if (LOWORD(ulSFLink) == 0xffff)
             return 0;
         pSfFlat = (PDOSSF) Sim32GetVDMPointer (ulSFLink, 0, 0);
     }

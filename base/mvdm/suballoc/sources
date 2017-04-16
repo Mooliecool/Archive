@@ -38,4 +38,4 @@ C_DEFINES=-DDEV_DBG
 
 UMTYPE=console
 UMTEST=tsa
-UMLIBS=$(ALT_PROJECT)\$(O)\suballoc.lib
+UMLIBS=$(O)\suballoc.lib

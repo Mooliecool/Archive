@@ -8,13 +8,6 @@
 #include	<ctype.h>
 #endif
 
-// BUGBUG: stephanos 04/02/2017
-//  These warnings were deliberately disabled to allow compilation.
-// ==
-#pragma warning(disable:4013)
-#pragma warning(disable:4018)
-// ==
-
 /*			INSIGNIA MODULE SPECIFICATION
 			-----------------------------
 
@@ -187,6 +180,10 @@ LOCAL void Start_Trace();
 LOCAL void End_Trace();
 #endif
 
+#if defined(NEC_98)
+LOCAL void Page_Frame_Bank_Status();
+#endif // NEC_98
+
 void (*emm_func[]) () = {
 	Get_Status,
 	Get_Page_Frame_Address,
@@ -288,9 +285,13 @@ DESCRIPTION	: uses a function jump table to call the appropriate
 GLOBAL void emm_io IFN0()
 
 {	
-	int func_num; 
+	int func_num;
 
+#if defined(NEC_98)
+        if((getAH() >= MIN_FUNC_NO && getAH() <= MAX_FUNC_NO) || getAH() == 0x70) {
+#else  // !NEC_98
 	if(getAH() >= MIN_FUNC_NO && getAH() <= MAX_FUNC_NO) {
+#endif // !NEC_98
 
 		func_num = getAH() - MIN_FUNC_NO;
 
@@ -302,7 +303,14 @@ GLOBAL void emm_io IFN0()
 		       func_names[func_num],getAX(),getBX(),getCX(),getDX()
 		      );
 #endif
+#if defined(NEC_98)
+                if(getAH() == 0x70)
+                        Page_Frame_Bank_Status();
+                else
+                        (*emm_func[func_num])();
+#else  // !NEC_98
 		(*emm_func[func_num])();	
+#endif // !NEC_98
 
 #ifdef EMM_DEBUG
 		printf("emm_io exit: AX=%x, BX=%x, CX=%x, DX=%x\n",
@@ -351,7 +359,7 @@ DESCRIPTION	: DS:DX contains the segment:offset of the bop68 call
 =========================================================================
 */
 
- 
+
 GLOBAL void emm_init IFN0()
 
 {
@@ -363,7 +371,7 @@ GLOBAL void emm_init IFN0()
 	 * frame's already been used for the ROMs)
 	 * warn the user, and bail out.
 	 */
-	 
+	
 	if (LimBufferInUse()) {
 		host_error(EG_NO_ROOM_FOR_LIM, ERR_CONT | ERR_QUIT, "");
 		setBX((word)0);		/* return error to driver */
@@ -388,7 +396,7 @@ GLOBAL void emm_init IFN0()
 
 #ifdef	SUN_VA
 
-	/* 
+	/*
 	 * config.sys command line pointer is passed in the DI:DX registers
 	  from the driver.
 	 */
@@ -425,11 +433,11 @@ GLOBAL void emm_init IFN0()
 	if (limSize = (SHORT)config_inquire(C_LIM_SIZE, NULL)){
 		backFill = 640;					/* We will always have at least 640k	*/
 		limSize--;						/* Subtract 1M of regular DOS memory	*/	
-		/* 
+		/*
 		 * Check that we have enough raw memory for the EMM request.
 		 * If not, set to the available memory size.
 		 */
-		if ( temp <= limSize) 
+		if ( temp <= limSize)
 			limSize = temp;
 
 		while (init_expanded_memory(limSize, backFill) != SUCCESS )
@@ -524,7 +532,7 @@ PURPOSE		: Returns the segment address where the page frame is
 RETURNED STATUS	: in AH register
 		SUCCESS - Allocation successful
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -547,7 +555,7 @@ PURPOSE		: Returns the number of unallocated (available) expanded
 RETURNED STATUS	: in AH register
 		SUCCESS - Allocation successful
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -571,11 +579,11 @@ PURPOSE		: Allocates a number of Expanded Memory Pages to the next
 RETURNED STATUS	: in AH register
 		SUCCESS - Allocation successful
 		NOT_ENOUGH_PAGES - not enough pages in the system
-		NO_MORE_PAGES - not enough free pages available  
+		NO_MORE_PAGES - not enough free pages available
 		NO_MORE_HANDLES - no more free handles available
 		EMM_HW_ERROR - memory allocation error
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -641,7 +649,7 @@ RETURNED STATUS	: in AH register
 		EMM_HW_ERROR - unable to map/unmap for some unspecified
 				reason
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -710,7 +718,7 @@ LOCAL void Map_Unmap_Handle_Pages IFN0()
 
 FUNCTION	: Deallocate_Pages
 
-PURPOSE		: Deallocates all pages assigned to the specified handle 
+PURPOSE		: Deallocates all pages assigned to the specified handle
 		number, freeing them for further use, also frees the handle
 		number itself.
 
@@ -720,7 +728,7 @@ RETURNED STATUS	: in AH register
 		MAP_SAVED - there is a map context saved in this handle
 		EMM_HW_ERROR - unable to free page or memory
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -783,7 +791,7 @@ PURPOSE		: Returns the version number of the memory manager software
 RETURNED STATUS	: in AH register
 		SUCCESS - returned successfuly
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -808,7 +816,7 @@ RETURNED STATUS	: in AH register
 		BAD_HANDLE - couldn't find specified handle
 		MAP_IN_USE - mapping already saved for this handle
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -852,7 +860,7 @@ RETURNED STATUS	: in AH register
 		NO_MAP - No map has been saved for this handle
 		EMM_HW_ERROR - error occurred in mapping or unmapping
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -860,8 +868,8 @@ LOCAL void Restore_Page_Map IFN0()
 {
 	short	handle_no,	
 		pages_out[MAX_NO_PAGES],	/* pages to map out	*/
-		pages_in[MAX_NO_PAGES],		/* pages to map in	*/
-		i;				/* loop counter		*/
+		pages_in[MAX_NO_PAGES];		/* pages to map in	*/
+    unsigned char i;				/* loop counter		*/
 
 	handle_no = getDX();
 
@@ -902,15 +910,15 @@ LOCAL void Restore_Page_Map IFN0()
 /*
 ===========================================================================
 
-FUNCTION	: 
+FUNCTION	:
 
-PURPOSE		: 
+PURPOSE		:
 
 
 RETURNED STATUS	: in AH register
-		SUCCESS - 
+		SUCCESS -
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -931,7 +939,7 @@ PURPOSE		: Returns the number of open EMM handles
 RETURNED STATUS	: in AH register
 		SUCCESS - number returned successfuly
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -955,7 +963,7 @@ RETURNED STATUS	: in AH register
 		SUCCESS - Page count returned successfuly
 		BAD_HANDLE - couldn't find specified handle
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -988,7 +996,7 @@ PURPOSE		: Returns a list of all open handles and the number of
 RETURNED STATUS	: in AH register
 		SUCCESS - Everything ok
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -1041,7 +1049,7 @@ RETURNED STATUS	: in AH register
 		BAD_SUB_FUNC - Invalid sub-function
 		BAD_MAP - The contents of the map are a load of cak
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -1053,8 +1061,8 @@ LOCAL void Get_Set_Page_Map IFN0()
 			dst_offset;	/* offset of destination array	*/
 	unsigned char	sub_func;	/* sub-function code		*/
 	short	pages_out[MAX_NO_PAGES],/* pages to map out		*/
-		pages_in[MAX_NO_PAGES],	/* pages to map in		*/
-		no_phys_pages,		/* no. of phys. pages available	*/
+		pages_in[MAX_NO_PAGES];	/* pages to map in		*/
+    unsigned short no_phys_pages,		/* no. of phys. pages available	*/
 		i;			/* loop counter			*/
 
 	sub_func = getAL();
@@ -1080,13 +1088,13 @@ LOCAL void Get_Set_Page_Map IFN0()
 			for(i = 0; i < no_phys_pages; i++)
 			{
 				if(pages_out[i] != EMPTY)
-					if(unmap_page(i) != SUCCESS)
+					if(unmap_page((UCHAR)i) != SUCCESS)
 					{
 						setAH(EMM_HW_ERROR);
 						return;
 					}
 				if(pages_in[i] != EMPTY)
-					if(map_page(pages_in[i], i) != SUCCESS)
+					if(map_page(pages_in[i], (UCHAR)i) != SUCCESS)
 					{
 						setAH(EMM_HW_ERROR);
 						return;
@@ -1122,7 +1130,7 @@ RETURNED STATUS	: in AH register
 		BAD_MAP - The contents of the map are a load of cak
 
 DESCRIPTION	: Note in this implementation the size of array used for
-		storing the partial mapping context is the same as for 
+		storing the partial mapping context is the same as for
 		storing a full context as the pages that are'nt specified
 		are marked in the array as being empty
 
@@ -1136,8 +1144,8 @@ LOCAL void Get_Set_Partial_Page_Map IFN0()
 			dst_offset;	/* offset of destination array	*/
 	unsigned char	sub_func;	/* sub-function code		*/
 	short	pages_out[MAX_NO_PAGES],/* pages to map out		*/
-		pages_in[MAX_NO_PAGES],	/* pages to map in		*/
-		no_phys_pages,		/* no. of phys. pages available */
+		pages_in[MAX_NO_PAGES];	/* pages to map in		*/
+    unsigned short no_phys_pages,		/* no. of phys. pages available */
 		i;			/* loop counter			*/
 
 	sub_func = getAL();
@@ -1166,13 +1174,13 @@ LOCAL void Get_Set_Partial_Page_Map IFN0()
 			for(i = 0; i < no_phys_pages; i++)
 			{
 				if(pages_out[i] != EMPTY)
-					if(unmap_page(i) != SUCCESS)
+					if(unmap_page((UCHAR)i) != SUCCESS)
 					{
 						setAH(EMM_HW_ERROR);
 						return;
 					}
 				if(pages_in[i] != EMPTY)
-					if(map_page(pages_in[i], i) != SUCCESS)
+					if(map_page(pages_in[i], (UCHAR)i) != SUCCESS)
 					{
 						setAH(EMM_HW_ERROR);
 						return;
@@ -1208,7 +1216,7 @@ RETURNED STATUS	: in AH register
 		EMM_HW_ERROR - unable to map/unmap for some unspecified
 				reason
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -1321,7 +1329,7 @@ RETURNED STATUS	: in AH register
 		NO_MORE_PAGES - not enough free pages available
 		EMM_HW_ERROR - memory allocation error
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -1393,7 +1401,7 @@ LOCAL void Reallocate_Pages IFN0()
 
 FUNCTION	: Get_Set_Handle_Attribute
 
-PURPOSE		: 
+PURPOSE		:
 
 
 RETURNED STATUS	: in AH register
@@ -1443,7 +1451,7 @@ RETURNED STATUS	: in AH register
 		BAD_SUB_FUNC -Invalid sub-function code
 		NAME_EXISTS - Name already exists in another handle
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -1527,7 +1535,7 @@ RETURNED STATUS	: in AH register
 		BAD_SUB_FUNC - Invalid sub-function
 		HANDLE_NOT_FOUND - could not find handle with specified name
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -1613,7 +1621,7 @@ RETURNED STATUS	: in AH register
 		EMM_HW_ERROR - Unable to map or unmap for some undefined
 				reason
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -1707,7 +1715,7 @@ LOCAL void Alter_Page_Map_And_Jump IFN0()
 	 * Push flags and segment:offset of target address onto stack
 	 * to enable iret in driver to transfer control
 	 */
-	push_word((word)getSTATUS());
+	push_word((word)(getSTATUS()));
 	push_word(jmp_segment);
 	push_word(jmp_offset);
 
@@ -1876,7 +1884,7 @@ LOCAL void Alter_Page_Map_And_Call IFN0()
 		}
 		/*
 		 * Push segment:offset of bop68 onto stack to trap far return
-		 */	 
+		 */	
 		push_word(segment68);
 		push_word(offset68);
 		/*
@@ -1970,7 +1978,7 @@ LOCAL void Move_Exchange_Memory_Region IFN0()
 			src_end,	/* end of src within handle	*/
 			dst_start,	/* start of dest within handle	*/
 			dst_end,	/* end of dest within handle	*/
-			data_block_size,/* transfer data block size     */ 
+			data_block_size,/* transfer data block size     */
 			bytes_available;/* no. bytes to end of handle	*/
 
 	short		src_handle_no,	/* source handle number		*/
@@ -2112,7 +2120,7 @@ LOCAL void Move_Exchange_Memory_Region IFN0()
 		if(src_handle_no == dst_handle_no)
 		{
 			/*
-			 * calc start and end positions of src and dst 
+			 * calc start and end positions of src and dst
 			 * within handle
 			 */
 			src_start = (src_seg_page * EMM_PAGE_SIZE) + src_offset;
@@ -2127,23 +2135,23 @@ LOCAL void Move_Exchange_Memory_Region IFN0()
 		    			setAH(XCHG_MEM_OVERLAP);
 		    			return;
 		    		}
-		    		else 
+		    		else
 		    			overlap = TRUE;
 		    	}
 		}
 	/*
-	 * If we get here everything is ok. Copy memory a page at a time, catering 
+	 * If we get here everything is ok. Copy memory a page at a time, catering
 	 * for the fact that expanded memory pages might not be contiguous and may be
-	 * mapped into the intel address space.  Remember that Intel memory may be 
+	 * mapped into the intel address space.  Remember that Intel memory may be
 	 * treated as contiguous memory.  So an Intel address need only be incremented
 	 * if a copy spans more than one page of LIM memory.
-	 */ 
+	 */
 
 	while (length>0) {
 		int min_src, min_dst;
 
-		min_src = (type & 2) ? min(EMM_PAGE_SIZE - src_offset, length) : length;
-		min_dst = (type & 1) ? min(EMM_PAGE_SIZE - dst_offset, length) : length;
+		min_src = (type & 2) ? min((unsigned long)(EMM_PAGE_SIZE - src_offset), length) : length;
+		min_dst = (type & 1) ? min((unsigned long)(EMM_PAGE_SIZE - dst_offset), length) : length;
 			
 		data_block_size = min(min_src, min_dst);
 
@@ -2153,8 +2161,8 @@ LOCAL void Move_Exchange_Memory_Region IFN0()
 			return;
 		}
 
-		Increment_Address(&src_seg_page, &src_offset, data_block_size, (type & 2));
-		Increment_Address(&dst_seg_page, &dst_offset, data_block_size, (type & 1));
+		Increment_Address(&src_seg_page, &src_offset, data_block_size, (unsigned char)(type & 2));
+		Increment_Address(&dst_seg_page, &dst_offset, data_block_size, (unsigned char)(type & 1));
 		length -= data_block_size;
 
 	}
@@ -2178,7 +2186,7 @@ PURPOSE		: Increments an address, correctly catering for whether the address
 
 RETURNED STATUS	: None
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -2197,7 +2205,7 @@ LOCAL void Increment_Address IFN4(unsigned short *,seg_or_page,
 			(*seg_or_page)++;
 			*offset = 0;
 		} else {
-			*offset += increment_by;
+			*offset += (unsigned short)increment_by;
 		}
 	} else {
 		/* Conventional memory */
@@ -2207,10 +2215,10 @@ LOCAL void Increment_Address IFN4(unsigned short *,seg_or_page,
 			/* Make new segment value as high as possible, to
 			 * minimise chances of further segment wrap */
 			address = (*seg_or_page << 4) + *offset + increment_by;	
-			*seg_or_page = address >> 4;
-			*offset = address & 0xf;
+			*seg_or_page = (unsigned short)(address >> 4);
+			*offset = (unsigned short)(address & 0xf);
 		} else {
-			*offset += increment_by;
+			*offset += (unsigned short)increment_by;
 		}
 	}
 }
@@ -2227,7 +2235,7 @@ RETURNED STATUS	: in AH register
 		SUCCESS - Everything ok
 		BAD_SUB_FUNC - The sub function is invalid
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -2306,7 +2314,7 @@ RETURNED STATUS	: in AH register
 		BAD_SUB_FUNC - invalid sub-function
 		ACCESS_DENIED - the OS has denied access to this function
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -2377,13 +2385,13 @@ PURPOSE		: Allocates the requested number of raw pages, in this case
 RETURNED STATUS	: in AH register
 		SUCCESS - Allocation successful
 		NOT_ENOUGH_PAGES - not enough pages in the system
-		NO_MORE_PAGES - not enough free pages available  
+		NO_MORE_PAGES - not enough free pages available
 		NO_MORE_HANDLES - no more free handles available
 		EMM_HW_ERROR - memory allocation error
 
 		BAD_FUNC_CODE - invalid function code
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -2434,7 +2442,7 @@ LOCAL void Allocate_Raw_Pages IFN0()
 
 FUNCTION	: Alternate_Map_Register_Support();
 
-PURPOSE		: provides an alternate method of saving and restoring 
+PURPOSE		: provides an alternate method of saving and restoring
 		mapping contexts
 
 RETURNED STATUS	: in AH register
@@ -2444,7 +2452,7 @@ RETURNED STATUS	: in AH register
 		BAD_SUB_FUNC - invalid sub-function code
 		ACCESS_DENIED - the OS has denied access to this function
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -2479,7 +2487,7 @@ LOCAL void Alternate_Map_Register_Support IFN0()
 		    if (alt_map_segment && alt_map_offset)
 			save_map(-1, alt_map_segment, alt_map_offset, 0, 0);
 		}
-		setBL(map_register);
+		setBL((unsigned char)map_register);
 		setAH(EMM_SUCCESS);
 		break;
 
@@ -2525,7 +2533,7 @@ LOCAL void Alternate_Map_Register_Support IFN0()
 
 	case 3:
 		if (allocate_altreg_set(&map_register)) {
-		    setBL(map_register);
+		    setBL((unsigned char)map_register);
 		    setAH(EMM_SUCCESS);
 		}
 		else {
@@ -2650,7 +2658,7 @@ LOCAL void Alternate_Map_Register_Support IFN0()
 			setBL(0);
 			break;
 
-		case 4: 
+		case 4:
 		case 6:
 		case 7:
 		case 8:
@@ -2677,10 +2685,10 @@ LOCAL void Alternate_Map_Register_Support IFN0()
 
 FUNCTION	: Prepare_Expanded_Memory_HW_For_Warm_Boot
 
-PURPOSE		: 
+PURPOSE		:
 
 RETURNED STATUS	: in AH register
-		SUCCESS - 
+		SUCCESS -
 
 DESCRIPTION	: We don't actually do anything here, we just pretend
 		 that we do
@@ -2698,7 +2706,7 @@ LOCAL void Prepare_Expanded_Memory_HW_For_Warm_Boot IFN0()
 
 FUNCTION	: Enable_Disable_OSE_Function_Set_Functions
 
-PURPOSE		: Enables or disables the functions:- 
+PURPOSE		: Enables or disables the functions:-
 			Get Expanded Memory Hardware Information,
 			Alternate Map Register Sets
 			Enable Disable OS/E Function Set Functions
@@ -2708,7 +2716,7 @@ RETURNED STATUS	: in AH register
 		BAD_SUB_FUNC - invalid sub-function code
 		ACCESS_DENIED - the OS has denied access to this function
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -2777,7 +2785,7 @@ PURPOSE		: sets up variables to their initial value, used mainly
 
 RETURNED STATUS	: none
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -2802,12 +2810,12 @@ GLOBAL void reset_emm_funcs IFN0()
 
 FUNCTION	: Routines to start and end a trace of all EMM calls
 
-PURPOSE		: 
+PURPOSE		:
 
 RETURNED STATUS	: in AH register
 		SUCCESS
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -2837,4 +2845,21 @@ LOCAL void End_Trace IFN0()
 	return;
 }
 #endif /* PROD */
+#if defined(NEC_98)
+LOCAL void Page_Frame_Bank_Status IFN0()
+{
+        switch(getAL()) {
+                case 0:
+                        setAX(0);
+                        break;
+                case 1:
+                        setAX(0);
+                        break;
+                default:
+                        setAH(BAD_SUB_FUNC);
+                        break;
+        }
+        return;
+}
+#endif // NEC_98
 #endif /* LIM */

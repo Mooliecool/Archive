@@ -59,7 +59,7 @@ void file_back_trace( filename )
 char    *filename ;
 {
         FILE *fp ;
- 
+
         if ( (fp = fopen( filename, "w" )) == NULL ) {
             printf( "cannot open file %s\n", filename );
         }
@@ -93,7 +93,7 @@ int i,j;
 }
 
 
-btrace(dump_info)
+void btrace(dump_info)
 int  dump_info;
 {
     word temp;
@@ -121,10 +121,10 @@ int  dump_info;
     if (dump_info & DUMP_REG)
     {
 	sprintf(trace_file,"AX:%-04x BX:%-04x CX:%-04x DX:%-04x SP:%-04x BP:%-04x SI:%-04x DI:%-04x ",
-		       getAX(), getBX(), getCX(), getDX(),  
+		       getAX(), getBX(), getCX(), getDX(),
 		       getSP(), getBP(), getSI(), getDI());
 	put_in_trace_buffer(trace_file);
-	sprintf(trace_file,"DS:%-04x ES:%-04x SS:%-04x CS:%-04x IP:%-04x\n", 
+	sprintf(trace_file,"DS:%-04x ES:%-04x SS:%-04x CS:%-04x IP:%-04x\n",
 		getDS(), getES(), getSS(), getCS(), getIP());
 	put_in_trace_buffer(trace_file);
     }
@@ -143,7 +143,7 @@ int  dump_info;
       }
 #endif /* DELTA */
 
-      dasm(trace_file, 0, getCS(), getIP(), 1); 
+      dasm(trace_file, 0, getCS(), getIP(), 1);
       put_in_trace_buffer(trace_file);
     }
 
@@ -154,7 +154,7 @@ int  dump_info;
  	i = getIP() - 31;
    	sprintf(trace_file, "%x:  ", i);
 	put_in_trace_buffer(trace_file);
-	for(; i < getIP() - 15; i+=2)
+	for(; i < (sys_addr)(getIP() - 15); i+=2)
         {
 	    sas_loadw(effective_addr(getCS(), i), &temp);
 	    sprintf(trace_file, "%-6x", temp);

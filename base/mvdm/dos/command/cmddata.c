@@ -30,6 +30,14 @@ BOOL     fSoftpcRedirectionOnShellOut;
 CHAR     ShortCutInfo[MAX_SHORTCUT_SIZE];
 BOOL	 DosEnvCreated = FALSE;
 
+// Top secret app compat flags for DOS apps!
+DWORD    dwDosCompatFlags = 0;
+int      cCmdLnParmStructs = 0;
+
+// For Dynamic Patch Module support
+PCMDLNPARMS     pCmdLnParms;             // an array of these structs
+PFAMILY_TABLE  *pgDpmDosFamTbls = NULL;  // the global DPM tables for DOS
+
 BOOL	 IsFirstVDM = TRUE;
 // FORCEDOS.EXE supported
 BOOL	 DontCheckDosBinaryType = FALSE;

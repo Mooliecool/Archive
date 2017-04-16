@@ -21,8 +21,8 @@
         Modifications:
         Tim August 92. nt_set_paint_routine() no longer calls TextToGraphics()
             during a full-screen to windowed transition.
-	Tim September 92. New function resizeWindow(), called from textResize()
-	    for resizing the console window.
+        Tim September 92. New function resizeWindow(), called from textResize()
+            for resizing the console window.
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: Include files */
@@ -78,9 +78,22 @@
 extern int  ega_int_enable;
 #endif
 
+#if defined(NEC_98)
+extern NEC98_VRAM_COPY  *video_copy;
+extern unsigned char   *graph_copy;
+unsigned int csr_g_x,csr_g_y;
+unsigned int csr_x_old,csr_y_old;
+unsigned int csr_tick = 0;
+int csr_now_visible;
+IMPORT BOOL NowFreeze;
+void nt_graph_cursor(void);
+void nt_remove_old_cursor(void);
+void nt_graph_paint_cursor(void);
+#else  // !NEC_98
 extern byte  *video_copy;
+#endif // !NEC_98
 
-static int flush_count = 0;	 /*count of graphic ticks since last flush*/
+static int flush_count = 0;      /*count of graphic ticks since last flush*/
 
 // DIB_PAL_INDICES shouldn't be used, use CreateDIBSECTION to get better
 // performance characteristics.
@@ -105,11 +118,33 @@ PBITMAPINFO     VGADIB;
 
 void            (*paint_screen)();
 BOOL            FunnyPaintMode;
+#if defined(NEC_98)
+void (*cursor_paint)();
+#endif // NEC_98
 
+#if defined(JAPAN) || defined(KOREA)
+// mskkbug#2002: lotus1-2-3 display garbage
+// refer from nt_fulsc.c:ResetConsoleState()
+BOOL            CurNowOff = FALSE;
+#endif // JAPAN || KOREA
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::: Paint functions */
 
 static PAINTFUNCS std_mono_paint_funcs =
 {
+#if defined(NEC_98)
+        nt_text,               //
+        nt_text20_only,        // Graph on(at PIF file) Text 20
+        nt_text25_only,        // Graph on(at PIF file) Text 25
+        nt_graph200_only,      // Graph on(at PIF file) Graph 200
+        nt_graph200slt_only,   // Graph on(at PIF file) Graph 200
+        nt_graph400_only,      // Graph on(at PIF file) Graph 400
+        nt_text20_graph200,    // Graph on(at PIF file) Text20graph200
+        nt_text20_graph200slt, // Graph on(at PIF file) Text20graph200
+        nt_text25_graph200,    // Graph on(at PIF file) Text25graph200
+        nt_text25_graph200slt, // Graph on(at PIF file) Text25graph200
+        nt_text20_graph400,    // Graph on(at PIF file) Text20graph400
+        nt_text25_graph400,    // Graph on(at PIF file) Text25graph400
+#endif // NEC_98
         nt_text,
         nt_cga_mono_graph_std,
         nt_cga_mono_graph_std,
@@ -127,6 +162,20 @@ static PAINTFUNCS std_mono_paint_funcs =
 
 static PAINTFUNCS big_mono_paint_funcs =
 {
+#if defined(NEC_98)
+        nt_text,               //
+        nt_text20_only,        // Graph on(at PIF file) Text 20
+        nt_text25_only,        // Graph on(at PIF file) Text 25
+        nt_graph200_only,      // Graph on(at PIF file) Graph 200
+        nt_graph200slt_only,   // Graph on(at PIF file) Graph 200
+        nt_graph400_only,      // Graph on(at PIF file) Graph 400
+        nt_text20_graph200,    // Graph on(at PIF file) Text20graph200
+        nt_text20_graph200slt, // Graph on(at PIF file) Text20graph200
+        nt_text25_graph200,    // Graph on(at PIF file) Text25graph200
+        nt_text25_graph200slt, // Graph on(at PIF file) Text25graph200
+        nt_text20_graph400,    // Graph on(at PIF file) Text20graph400
+        nt_text25_graph400,    // Graph on(at PIF file) Text25graph400
+#endif // NEC_98
         nt_text,
         nt_cga_mono_graph_big,
         nt_cga_mono_graph_big,
@@ -144,6 +193,20 @@ static PAINTFUNCS big_mono_paint_funcs =
 
 static PAINTFUNCS huge_mono_paint_funcs =
 {
+#if defined(NEC_98)
+        nt_text,               //
+        nt_text20_only,        // Graph on(at PIF file) Text 20
+        nt_text25_only,        // Graph on(at PIF file) Text 25
+        nt_graph200_only,      // Graph on(at PIF file) Graph 200
+        nt_graph200slt_only,   // Graph on(at PIF file) Graph 200
+        nt_graph400_only,      // Graph on(at PIF file) Graph 400
+        nt_text20_graph200,    // Graph on(at PIF file) Text20graph200
+        nt_text20_graph200slt, // Graph on(at PIF file) Text20graph200
+        nt_text25_graph200,    // Graph on(at PIF file) Text25graph200
+        nt_text25_graph200slt, // Graph on(at PIF file) Text25graph200
+        nt_text20_graph400,    // Graph on(at PIF file) Text20graph400
+        nt_text25_graph400,    // Graph on(at PIF file) Text25graph400
+#endif // NEC_98
         nt_text,
         nt_cga_mono_graph_huge,
         nt_cga_mono_graph_huge,
@@ -161,6 +224,20 @@ static PAINTFUNCS huge_mono_paint_funcs =
 
 static PAINTFUNCS std_colour_paint_funcs =
 {
+#if defined(NEC_98)
+        nt_text,               //
+        nt_text20_only,        // Graph on(at PIF file) Text 20
+        nt_text25_only,        // Graph on(at PIF file) Text 25
+        nt_graph200_only,      // Graph on(at PIF file) Graph 200
+        nt_graph200slt_only,   // Graph on(at PIF file) Graph 200
+        nt_graph400_only,      // Graph on(at PIF file) Graph 400
+        nt_text20_graph200,    // Graph on(at PIF file) Text20graph200
+        nt_text20_graph200slt, // Graph on(at PIF file) Text20graph200
+        nt_text25_graph200,    // Graph on(at PIF file) Text25graph200
+        nt_text25_graph200slt, // Graph on(at PIF file) Text25graph200
+        nt_text20_graph400,    // Graph on(at PIF file) Text20graph400
+        nt_text25_graph400,    // Graph on(at PIF file) Text25graph400
+#endif // NEC_98
         nt_text,
         nt_cga_colour_med_graph_std,
         nt_cga_colour_hi_graph_std,
@@ -178,6 +255,20 @@ static PAINTFUNCS std_colour_paint_funcs =
 
 static PAINTFUNCS big_colour_paint_funcs =
 {
+#if defined(NEC_98)
+        nt_text,               //
+        nt_text20_only,        // Graph on(at PIF file) Text 20
+        nt_text25_only,        // Graph on(at PIF file) Text 25
+        nt_graph200_only,      // Graph on(at PIF file) Graph 200
+        nt_graph200slt_only,   // Graph on(at PIF file) Graph 200
+        nt_graph400_only,      // Graph on(at PIF file) Graph 400
+        nt_text20_graph200,    // Graph on(at PIF file) Text20graph200
+        nt_text20_graph200slt, // Graph on(at PIF file) Text20graph200
+        nt_text25_graph200,    // Graph on(at PIF file) Text25graph200
+        nt_text25_graph200slt, // Graph on(at PIF file) Text25graph200
+        nt_text20_graph400,    // Graph on(at PIF file) Text20graph400
+        nt_text25_graph400,    // Graph on(at PIF file) Text25graph400
+#endif // NEC_98
         nt_text,
         nt_cga_colour_med_graph_big,
         nt_cga_colour_hi_graph_big,
@@ -195,6 +286,20 @@ static PAINTFUNCS big_colour_paint_funcs =
 
 static PAINTFUNCS huge_colour_paint_funcs =
 {
+#if defined(NEC_98)
+        nt_text,               //
+        nt_text20_only,        // Graph on(at PIF file) Text 20
+        nt_text25_only,        // Graph on(at PIF file) Text 25
+        nt_graph200_only,      // Graph on(at PIF file) Graph 200
+        nt_graph200slt_only,   // Graph on(at PIF file) Graph 200
+        nt_graph400_only,      // Graph on(at PIF file) Graph 400
+        nt_text20_graph200,    // Graph on(at PIF file) Text20graph200
+        nt_text20_graph200slt, // Graph on(at PIF file) Text20graph200
+        nt_text25_graph200,    // Graph on(at PIF file) Text25graph200
+        nt_text25_graph200slt, // Graph on(at PIF file) Text25graph200
+        nt_text20_graph400,    // Graph on(at PIF file) Text20graph400
+        nt_text25_graph400,    // Graph on(at PIF file) Text25graph400
+#endif // NEC_98
         nt_text,
         nt_cga_colour_med_graph_huge,
         nt_cga_colour_hi_graph_huge,
@@ -211,6 +316,7 @@ static PAINTFUNCS huge_colour_paint_funcs =
 };
 
 #ifdef MONITOR
+#ifndef NEC_98
 static PAINTFUNCS std_frozen_paint_funcs =
 {
         nt_dummy_frozen,
@@ -261,10 +367,25 @@ static PAINTFUNCS huge_frozen_paint_funcs =
         nt_dummy_frozen,
 #endif /* V7VGA */
 };
+#endif // !NEC_98
 #endif /* MONITOR */
 
 static INITFUNCS mono_init_funcs =
 {
+#if defined(NEC_98)
+        nt_init_text,               //
+        nt_init_text20_only,        // Graph on(at PIF file) Text 20
+        nt_init_text25_only,        // Graph on(at PIF file) Text 25
+        nt_init_graph200_only,      // Graph on(at PIF file) Graph 200
+        nt_init_graph200slt_only,   // Graph on(at PIF file) Graph 200
+        nt_init_graph400_only,      // Graph on(at PIF file) Graph 400
+        nt_init_text20_graph200,    // Graph on(at PIF file) Text20graph200
+        nt_init_text20_graph200slt, // Graph on(at PIF file) Text20graph200
+        nt_init_text25_graph200,    // Graph on(at PIF file) Text25graph200
+        nt_init_text25_graph200slt, // Graph on(at PIF file) Text25graph200
+        nt_init_text20_graph400,    // Graph on(at PIF file) Text20graph400
+        nt_init_text25_graph400,    // Graph on(at PIF file) Text25graph400
+#endif // NEC_98
         nt_init_text,
         nt_init_cga_mono_graph,
         nt_init_cga_mono_graph,
@@ -277,6 +398,20 @@ static INITFUNCS mono_init_funcs =
 
 static INITFUNCS colour_init_funcs =
 {
+#if defined(NEC_98)
+        nt_init_text,               //
+        nt_init_text20_only,        // Graph on(at PIF file) Text 20
+        nt_init_text25_only,        // Graph on(at PIF file) Text 25
+        nt_init_graph200_only,      // Graph on(at PIF file) Graph 200
+        nt_init_graph200slt_only,   // Graph on(at PIF file) Graph 200
+        nt_init_graph400_only,      // Graph on(at PIF file) Graph 400
+        nt_init_text20_graph200,    // Graph on(at PIF file) Text20graph200
+        nt_init_text20_graph200slt, // Graph on(at PIF file) Text20graph200
+        nt_init_text25_graph200,    // Graph on(at PIF file) Text25graph200
+        nt_init_text25_graph200slt, // Graph on(at PIF file) Text25graph200
+        nt_init_text20_graph400,    // Graph on(at PIF file) Text20graph400
+        nt_init_text25_graph400,    // Graph on(at PIF file) Text25graph400
+#endif // NEC_98
         nt_init_text,
         nt_init_cga_colour_med_graph,
         nt_init_cga_colour_hi_graph,
@@ -288,6 +423,7 @@ static INITFUNCS colour_init_funcs =
 };
 
 #ifdef MONITOR
+#ifndef NEC_98
 static INITFUNCS frozen_init_funcs =
 {
         nt_init_text,
@@ -299,6 +435,7 @@ static INITFUNCS frozen_init_funcs =
         nt_init_ega_hi_graph,
         nt_init_vga_hi_graph,
 };
+#endif // !NEC_98
 #endif /* MONITOR */
 
 /*::::::::::::::::::::::::::::::::::::::::::::::: Adaptor function protocol */
@@ -328,7 +465,7 @@ void    nt_color_select_changed(int);
 void    nt_screen_address_changed(int, int);
 void    nt_cursor_size_changed(int, int);
 void    nt_scroll_complete (void);
-void	make_cursor_change(void);
+void    make_cursor_change(void);
 
 boolean nt_scroll_up(int, int, int, int, int, int);
 boolean nt_scroll_down(int, int, int, int, int, int);
@@ -372,8 +509,8 @@ static int      current_height; /* Use to avoid redundant resizing */
 static int      current_width;  /* Use to avoid redundant resizing */
 static int      current_bits_per_pixel;
 static int      current_mode_type = TEXT;
-static int	current_mode;
-static int	current_scale;
+static int      current_mode;
+static int      current_scale;
 static int      palette_size;   /* Size of PC palette */
 static PC_palette *the_palette; /* Pointer to PC palette structure */
 static int      update_vlt = FALSE;      /* TRUE when new one needed */
@@ -444,7 +581,9 @@ extern BYTE     Red[];
 extern BYTE     Green[];
 extern BYTE     Blue[];
 
-GLOBAL BOOL	host_stream_io_enabled = FALSE;
+#ifndef NEC_98
+GLOBAL boolean  host_stream_io_enabled = FALSE;
+#endif // !NEC_98
 
 GLOBAL COLOURTAB defaultColours =
     {
@@ -477,7 +616,7 @@ GLOBAL COLOURTAB monoColours =
 
 /*:::::::::::::::::::::::::::::::::::::::::: Not supporting v7vga mode, yet */
 
-#undef	  is_v7vga_mode
+#undef    is_v7vga_mode
 #define   is_v7vga_mode(x)  (FALSE)
 
 static int      mode_change_now;
@@ -525,14 +664,33 @@ void prepare_surface();
 */
 GLOBAL VOID closeGraphicsBuffer IFN0()
 {
-	if( sc.ScreenBufHandle != (HANDLE)0 ){
+        if( sc.ScreenBufHandle != (HANDLE)0 ){
 
                 MouseDetachMenuItem(TRUE);
 
-		if( !SetConsoleActiveScreenBuffer( sc.OutputHandle ) ){
-			assert2( NO, "VDM: SCASB() failed:%#x H=%#x",
-			 	GetLastError(), sc.OutputHandle );
+#if defined(NEC_98)
+        {
+            INPUT_RECORD InputRecord[128];
+            DWORD RecordsRead;
+            if(GetNumberOfConsoleInputEvents(sc.InputHandle, &RecordsRead))
+                if (RecordsRead)
+                    ReadConsoleInputW(sc.InputHandle,
+                                         &InputRecord[0],
+                                         sizeof(InputRecord)/sizeof(INPUT_RECORD),
+                                         &RecordsRead);
+#endif // NEC_98
+                if( !SetConsoleActiveScreenBuffer( sc.OutputHandle ) ){
+                        assert2( NO, "VDM: SCASB() failed:%#x H=%#x",
+                                GetLastError(), sc.OutputHandle );
                 }
+#if defined(NEC_98)
+                if (RecordsRead)
+                    WriteConsoleInputW(sc.InputHandle,
+                                         &InputRecord[0],
+                                         RecordsRead,
+                                         &RecordsRead);
+        }
+#endif // NEC_98
 
                 /*
                  *  Cleanup ALL handles associated with screen buffer
@@ -550,37 +708,37 @@ GLOBAL VOID closeGraphicsBuffer IFN0()
 
 #ifndef MONITOR
                 //
-                // Turn the pointer back on when going from graphics 
+                // Turn the pointer back on when going from graphics
                 // to text mode since the selected buffer has changed
                 //
 
-		MouseDisplay();
+                MouseDisplay();
 #endif  // MONITOR
 
                 CloseHandle(sc.ConsoleBufInfo.hMutex);
                 sc.ConsoleBufInfo.hMutex = 0;
 #ifdef X86GFX
 
-		/*
-		 * Make sure a buffer is selected next time SelectMouseBuffer
-		 * is called.
-		 */
-		mouse_buffer_width = 0;
-		mouse_buffer_height = 0;
+                /*
+                 * Make sure a buffer is selected next time SelectMouseBuffer
+                 * is called.
+                 */
+                mouse_buffer_width = 0;
+                mouse_buffer_height = 0;
 #endif /* X86GFX */
-	}
+        }
 } /* end of closeGraphicsBuffer() */
 
 GLOBAL void resetWindowParams()
 {
-	/*
-	 * Reset saved video params
-	 */
-	current_height = current_width = 0;
-	current_char_height = 0;
-	current_mode_type = TEXT;
-	current_bits_per_pixel = 0;
-	current_scale = 0;
+        /*
+         * Reset saved video params
+         */
+        current_height = current_width = 0;
+        current_char_height = 0;
+        current_mode_type = TEXT;
+        current_bits_per_pixel = 0;
+        current_scale = 0;
 }
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
@@ -589,7 +747,7 @@ GLOBAL void resetWindowParams()
 
 void nt_init_screen(void)
 {
-    static int	    med_res_swapped = FALSE;
+    static int      med_res_swapped = FALSE;
     static boolean  already_called = FALSE;
 
 #ifdef X86GFX
@@ -613,6 +771,10 @@ void nt_init_screen(void)
 
     /*:::::::::::::::::::::::::::::::::::::::::: Allocate video copy buffer */
 
+#if defined(NEC_98)
+    if(!video_copy) video_copy = (NEC98_VRAM_COPY *) host_malloc(0x8000);
+    if(!graph_copy) graph_copy = (unsigned char *) host_malloc(0x40000);
+#else  // !NEC_98
 #ifdef MONITOR
     if(!video_copy) video_copy = (byte *) host_malloc(0x8000);
 #else
@@ -623,13 +785,21 @@ void nt_init_screen(void)
 
     if(!EGA_planes) EGA_planes = (byte *) host_malloc(4*EGA_PLANE_SIZE);
     if(!DAC) DAC = (PC_palette *) host_malloc(sizeof(PC_palette) * VGA_DAC_SIZE);
+#endif // !NEC_98
 
+#if defined(NEC_98)
+    if (video_copy == NULL)
+#else  // !NEC_98
     if (video_copy == NULL || EGA_planes == NULL || DAC == NULL)
-	host_error(EG_MALLOC_FAILURE, ERR_QUIT, "");
+#endif // !NEC_98
+        host_error(EG_MALLOC_FAILURE, ERR_QUIT, "");
 
     /* Set current screen height to prevent the window changing shape between
        init_screen and init_adaptor */
 
+#if defined(NEC_98)
+        current_height = NEC98_WIN_HEIGHT;  current_width = NEC98_WIN_WIDTH;
+#else  // !NEC_98
     video_adapter = (half_word) config_inquire(C_GFX_ADAPTER, NULL);
     switch (video_adapter)
     {
@@ -641,11 +811,16 @@ void nt_init_screen(void)
             current_height = EGA_WIN_HEIGHT;  current_width = EGA_WIN_WIDTH;
             break;
     }
+#endif // !NEC_98
 
     /*::::::::::::::::: Setup the screen dimensions for the initial adaptor */
 
+#if defined(NEC_98)
+    set_screen_sizes();
+#else  // !NEC_98
     host_set_screen_scale((SHORT) config_inquire(C_WIN_SIZE, NULL));
     set_screen_sizes(video_adapter);
+#endif // !NEC_98
 
     /*:::: Set pixel values to be used for FG and BG (mainly in mono modes) */
 
@@ -669,17 +844,17 @@ void host_call_bios_mode_change(void)
 
     if (sc.ScreenState == WINDOWED)
     {
-	ega_video_io();
+        ega_video_io();
     }
     else
     {
 
-	/*
-	 * We have a fullscreen mode change so we need to change the mouse
-	 * buffer so that we get mouse coordinates of the correct resolution.
-	 */
-	mode = getAL();
-	SelectMouseBuffer(mode, 0);
+        /*
+         * We have a fullscreen mode change so we need to change the mouse
+         * buffer so that we get mouse coordinates of the correct resolution.
+         */
+        mode = getAL();
+        SelectMouseBuffer(mode, 0);
     }
 }
 #endif /* MONITOR */
@@ -716,6 +891,7 @@ void nt_change_mode(void)
 
     /*:::::::::::::::::::: Setup update vectors and initialise paint system */
 
+#ifndef NEC_98
     switch(video_adapter)
     {
         /*::::::::::::::::::::::::::::::::::::::::::::::: CGA mode selected */
@@ -734,6 +910,7 @@ void nt_change_mode(void)
             sub_note_trace0(ALL_ADAPT_VERBOSE,"**** Unknown video adaptor ****");
             break;
     }
+#endif // !NEC_98
 }
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
@@ -780,12 +957,14 @@ void nt_clear_screen(void)
                               ScreenInfo.dwSize.X * ScreenInfo.dwSize.Y,
                               coord,&nCharWritten);
 #ifdef MONITOR
+#ifndef NEC_98
     /*
     ** Called during a mode change...
     ** Trash video copy so future updates will know what has changed.
     ** Alternatively mon_text_update() could listen to dirty_flag.
     */
     memfill( 0xff, &video_copy[ 0 ], &video_copy[ 0x7fff ] ); /* Tim Oct 92 */
+#endif // !NEC_98
 #endif
 }
 
@@ -798,7 +977,7 @@ void nt_flush_screen(void)
     sub_note_trace0(ALL_ADAPT_VERBOSE, "nt_flush_screen");
 
     if (ConsoleInitialised == TRUE && ConsoleNoUpdates == FALSE &&
-	!get_mode_change_required())
+        !get_mode_change_required())
 #ifdef X86GFX
         if (sc.ScreenState == WINDOWED)
 #endif
@@ -817,6 +996,18 @@ void nt_mark_screen_refresh(void)
         update_vlt = TRUE;
 }
 
+void UpdateScreen(void)
+{
+    if (ConsoleInitialised == TRUE && ConsoleNoUpdates == FALSE)
+#ifdef X86GFX
+        if (sc.ScreenState == WINDOWED)
+#endif
+        {
+            (*update_alg.calc_update)();
+            ega_tick_delay = EGA_TICK_DELAY;
+            flush_count = 0;
+        }
+}
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 /*::::::::::::::::::::: Handle graphics ticks ::::::::::::::::::::::::::::::*/
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
@@ -824,73 +1015,97 @@ void nt_mark_screen_refresh(void)
 void nt_graphics_tick(void)
 {
 
+#ifndef NEC_98
     if (sc.ScreenState == STREAM_IO) {
-	if (++flush_count == TICKS_PER_FLUSH){
-	    stream_io_update();
-	    flush_count = 0;
-	}
-	return;
+        if (++flush_count == TICKS_PER_FLUSH){
+            stream_io_update();
+            flush_count = 0;
+        }
+        return;
     }
+#endif // !NEC_98
 
 #ifdef EGG
+#ifndef NEC_98
     if((video_adapter == EGA) || (video_adapter == VGA))
     {
         /* two timer ticks since mode_change_required became true ?
            (really need same stuff for CGA, but not done yet)
            Now just delay screen update, & only if display REALLY changed */
+#endif // !NEC_98
 
-	/*
-	** When VGA registers get hit during a mode change, postpone
-	** the call to *choose_display_mode() by EGA_TICK_DELAY ticks.
-	** This will delay window resizing and eliminate possibility
-	** of doing it more than once per mode change. Tim Jan 93.
-	*/
+        /*
+        ** When VGA registers get hit during a mode change, postpone
+        ** the call to *choose_display_mode() by EGA_TICK_DELAY ticks.
+        ** This will delay window resizing and eliminate possibility
+        ** of doing it more than once per mode change. Tim Jan 93.
+        */
 
         /*Has mode_change_required been set (implying EGA regs have changed)*/
-	if (mode_change_now) {
-	    if (--mode_change_now == 0) {
-		(void)(*choose_display_mode)();
-		// must do this after video mode has been selected
-		// otherwise, the mouse code can come in and update the
-		// screen. See nt_flush_screen
-		set_mode_change_required(FALSE);
-	    }
-	}
-	else if (get_mode_change_required()) {
-	    mode_change_now = EGA_TICK_DELAY - 1;
-	    /* Delay mouse input and flush all pending mouse events. */
-	    DelayMouseEvents(MOUSE_DELAY);
-	}
-	else
+        if (mode_change_now) {
+            if (--mode_change_now == 0) {
+                (void)(*choose_display_mode)();
+                // must do this after video mode has been selected
+                // otherwise, the mouse code can come in and update the
+                // screen. See nt_flush_screen
+                set_mode_change_required(FALSE);
+            }
+        }
+        else if (get_mode_change_required()) {
+            mode_change_now = EGA_TICK_DELAY - 1;
+            /* Delay mouse input and flush all pending mouse events. */
+            DelayMouseEvents(MOUSE_DELAY);
+        }
+        else
         {
             /*................ Only update if a mode change is not imminent */
 
             if(++flush_count == TICKS_PER_FLUSH)
             {
 
+#if defined(NEC_98)
+                if(update_vlt || get_palette_change_required())
+                    set_the_vlt();
+
+                if (ConsoleNoUpdates == FALSE){
+                        NEC98GLOBS->dirty_flag++;
+#else  // !NEC_98
                 if(update_vlt || get_palette_change_required())
                     set_the_vlt();
 
                 if (ConsoleInitialised == TRUE && ConsoleNoUpdates == FALSE)
+#endif // !NEC_98
 #ifdef X86GFX
                     if (sc.ScreenState == WINDOWED)
 #endif
+#if defined(NEC_98)
+                        {
+#endif // !NEC_98
                         (void)(*update_alg.calc_update)();
+#if defined(NEC_98)
+                          if(sc.ModeType ==GRAPHICS)
+                              nt_graph_cursor();
+                        }
+                        }
+#endif // NEC_98
 
                 ega_tick_delay = EGA_TICK_DELAY;
 
-		/* batch cursor changes as some naffola apps (Word) change
-		 * cursor around every char!!
-		 */
-		if (CursorResizeNeeded)
-		    make_cursor_change();
+                /* batch cursor changes as some naffola apps (Word) change
+                 * cursor around every char!!
+                 */
+                if (CursorResizeNeeded)
+                    make_cursor_change();
 
                 flush_count = 0;
              }
         }
+#ifndef NEC_98
     }
     else
+#endif // !NEC_98
 #endif /* EGG */
+#ifndef NEC_98
     {
         /*:::::::::: Update the screen as required for mda and cga and herc */
 
@@ -907,6 +1122,7 @@ void nt_graphics_tick(void)
             flush_count = 0;
         }
     }
+#endif // !NEC_98
 }
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
@@ -933,7 +1149,7 @@ boolean nt_scroll_up(int tlx, int tly, int brx, int bry, int amount, int col)
     CONSOLE_SCREEN_BUFFER_INFO ScreenInfo;
     COORD dwDestinationOrigin;    /* Location of rectangle */
     SMALL_RECT ScrollRectangle;   /* Rectangle to scroll */
-    CHAR_INFO Fill;		  /* Fill exposed region with */
+    CHAR_INFO Fill;               /* Fill exposed region with */
 
     return(FALSE);
 
@@ -1007,7 +1223,7 @@ boolean nt_scroll_down(int tlx,int tly,int brx,int bry,int amount,int col)
     CONSOLE_SCREEN_BUFFER_INFO ScreenInfo;
     COORD dwDestinationOrigin;    /* Location of rectangle */
     SMALL_RECT ScrollRectangle;   /* Rectangle to scroll */
-    CHAR_INFO Fill;		  /* Fill exposed region with */
+    CHAR_INFO Fill;               /* Fill exposed region with */
 
     /*::::::::::::::::::::::::::::::::: Tell the outside world where we are */
 
@@ -1076,31 +1292,70 @@ boolean nt_scroll_down(int tlx,int tly,int brx,int bry,int amount,int col)
 
 void nt_paint_cursor IFN3(int, cursor_x, int, cursor_y, half_word, attr)
 {
+#if defined(NEC_98)         // NEC {
+    static COORD CursorPos;                                     // NEC
+    static CONSOLE_CURSOR_INFO CursorInfo;                      // NEC
+    static BOOL csr_visible = FALSE;                            // NEC
+    static DWORD csrSize = 0;                                   // NEC
+#else                                                           // NEC
     COORD CursorPos;
+#endif                                                          // NEC
 
     /*::::::::::::::::::::::::::::::::::::::::::::::::::: Guess where we are */
 
     sub_note_trace3(ALL_ADAPT_VERBOSE, "nt_paint_cursor x=%d, y=%d, attr=%d\n",
-		    cursor_x, cursor_y, attr);
+                    cursor_x, cursor_y, attr);
 
     /*::::::::::::::::::::::::::::::::::::::::::::::::::::::: Update cursor */
 
+#if defined(NEC_98)
+    if(sc.ModeType == GRAPHICS){
+        if(csr_tick>3 && csr_now_visible &&
+           !((csr_g_x == cursor_x)&&(csr_g_y == cursor_y))){
+            nt_remove_old_cursor();
+            csr_tick = 0;
+        }
+    } else {
+        CursorInfo.bVisible = TRUE;
+        CursorInfo.dwSize =
+                (get_cursor_height() * 100)/get_char_height();
+        if ((LINES_PER_SCREEN < cursor_y)
+                ||(is_cursor_visible()==FALSE)
+                || (get_cursor_height() == 0)) {
+                        CursorInfo.bVisible = FALSE;
+        }
+        if(csr_visible != CursorInfo.bVisible ||
+           csrSize != CursorInfo.dwSize){
+            csr_visible = CursorInfo.bVisible;
+            csrSize = CursorInfo.dwSize;
+            SetConsoleCursorInfo(sc.OutputHandle,&CursorInfo);
+        }
+        if(csr_g_x != cursor_x || csr_g_y != cursor_y){
+            CursorPos.X = cursor_x;  CursorPos.Y = cursor_y;
+            SetConsoleCursorPosition(sc.OutputHandle,CursorPos);
+        }
+    }
+    csr_g_x = cursor_x;
+    csr_g_y = cursor_y;
+#else  // !NEC_98
     if(is_cursor_visible() && (get_screen_height() > cursor_y))
     {
 
-	/*::::::::::::::::::::::::::::::::::::::::::::::::::::: Draw cursor */
+        /*::::::::::::::::::::::::::::::::::::::::::::::::::::: Draw cursor */
 
-	if(get_cursor_height() > 0)
-	{
-	    /*...................................... Set new cursor postion */
+        if(get_cursor_height() > 0)
+        {
+            /*...................................... Set new cursor postion */
 
-	    CursorPos.X = cursor_x;  CursorPos.Y = cursor_y;
-	    SetConsoleCursorPosition(sc.OutputHandle,CursorPos);
-	}
+            CursorPos.X = (SHORT)cursor_x;
+        CursorPos.Y = (SHORT)cursor_y;
+            SetConsoleCursorPosition(sc.OutputHandle,CursorPos);
+        }
     }
+#endif // !NEC_98
 }
 
-void nt_cursor_size_changed(int lo, int hi)	 
+void nt_cursor_size_changed(int lo, int hi)
 {
     UNREFERENCED_FORMAL_PARAMETER(lo);
     UNREFERENCED_FORMAL_PARAMETER(hi);
@@ -1114,7 +1369,7 @@ void make_cursor_change(void)
     COORD fontsize;
 
     SAVED DWORD CurrentCursorSize = (DWORD)-1;
-    SAVED BOOL CurNowOff = FALSE;
+    SAVED BOOL MyCurNowOff = FALSE;
 
     if(sc.ScreenState == FULLSCREEN) return;
 
@@ -1125,53 +1380,64 @@ void make_cursor_change(void)
     if(is_cursor_visible())
     {
 
-	/*::::::::::::::::::::::::::::::::::::::::::::::::::::: Draw cursor */
+        /*::::::::::::::::::::::::::::::::::::::::::::::::::::: Draw cursor */
 
-	if(get_cursor_height() > 0)
-	{
-	    /*...........................................Change cursor size */
+        if(get_cursor_height() > 0)
+        {
+            /*...........................................Change cursor size */
 
-	    if(get_cursor_height())
-	    {
-		/* value has to be percentage of block filled */
-		CursorInfo.dwSize = (get_cursor_height() * 100)/get_char_height();
-   		/* %age may be too small on smaller fonts, check size */
-		fontsize.X = fontsize.Y = 0;
+            if(get_cursor_height())
+            {
+                /* value has to be percentage of block filled */
+#if (defined(JAPAN) || defined(KOREA)) && !defined(NEC_98)
+                // support Dosv cursor
+                if ( !is_us_mode() ) {
+                    CursorInfo.dwSize = ( (get_cursor_height() ) * 100)/(get_cursor_height()+get_cursor_start());
+                    //DbgPrint("Char height=%d\n", get_char_height() );
+                }
+                else {
+                    CursorInfo.dwSize = (get_cursor_height() * 100)/get_char_height();
+                }
+#else // !JAPAN
+                CursorInfo.dwSize = (get_cursor_height() * 100)/get_char_height();
+#endif // !JAPAN
+                /* %age may be too small on smaller fonts, check size */
+                fontsize.X = fontsize.Y = 0;
 
-		/* get font index */
-		if (GetCurrentConsoleFont(sc.OutputHandle, TRUE,  &font) == FALSE)
-		    CursorInfo.dwSize = 20;		/* min 20% */
-		else
-		{
-        	    fontsize = GetConsoleFontSize(sc.OutputHandle, font.nFont);
-		    if (fontsize.Y != 0)   /* what's the error return???? */
-		    {
-			if(((WORD)(100 / fontsize.Y)) >= CursorInfo.dwSize)
-			    CursorInfo.dwSize = (DWORD) (100/fontsize.Y + 1);
-		    }
-		    else
-			CursorInfo.dwSize = (DWORD)20;	/* min 20% */
-		}
+                /* get font index */
+                if (GetCurrentConsoleFont(sc.OutputHandle, TRUE,  &font) == FALSE)
+                    CursorInfo.dwSize = 20;             /* min 20% */
+                else
+                {
+                    fontsize = GetConsoleFontSize(sc.OutputHandle, font.nFont);
+                    if (fontsize.Y != 0)   /* what's the error return???? */
+                    {
+                        if(((WORD)(100 / fontsize.Y)) >= CursorInfo.dwSize)
+                            CursorInfo.dwSize = (DWORD) (100/fontsize.Y + 1);
+                    }
+                    else
+                        CursorInfo.dwSize = (DWORD)20;  /* min 20% */
+                }
 
-		if(CurrentCursorSize != CursorInfo.dwSize || CurNowOff)
-		{
-		    CurrentCursorSize = CursorInfo.dwSize;
-		    CurNowOff = FALSE;
-		    CursorInfo.bVisible = TRUE;
-		    SetConsoleCursorInfo(sc.OutputHandle,&CursorInfo);
-		}
-	    }
-	}
+                if(CurrentCursorSize != CursorInfo.dwSize || MyCurNowOff)
+                {
+                    CurrentCursorSize = CursorInfo.dwSize;
+                    MyCurNowOff = FALSE;
+                    CursorInfo.bVisible = TRUE;
+                    SetConsoleCursorInfo(sc.OutputHandle,&CursorInfo);
+                }
+            }
+        }
     }
-    else	/* Turn cursor image off */
+    else        /* Turn cursor image off */
     {
-	if (CurNowOff == FALSE)
-	{
-	    CursorInfo.dwSize = 1;
-	    CursorInfo.bVisible = FALSE;
-	    SetConsoleCursorInfo(sc.OutputHandle,&CursorInfo);
-	    CurNowOff = TRUE;
-	}
+        if (MyCurNowOff == FALSE)
+        {
+            CursorInfo.dwSize = 1;
+            CursorInfo.bVisible = FALSE;
+            SetConsoleCursorInfo(sc.OutputHandle,&CursorInfo);
+            MyCurNowOff = TRUE;
+        }
     }
 }
 
@@ -1197,6 +1463,96 @@ void nt_set_paint_routine(DISPLAY_MODE mode, int height)
     switch((int) mode)
     {
 
+#if defined(NEC_98)
+        case NEC98_TEXT_40:
+            sc.ModeType = TEXT;
+            paint_screen = nt_paint_funcs->NEC98_text;
+            (*nt_init_funcs->NEC98_text) ();
+            break;
+
+        case NEC98_TEXT_80:
+            sc.ModeType = TEXT;
+            paint_screen = nt_paint_funcs->NEC98_text;
+            (*nt_init_funcs->NEC98_text) ();
+            break;
+
+        case NEC98_TEXT_20L:
+            sc.ModeType = GRAPHICS;
+            paint_screen = nt_paint_funcs->NEC98_text20_only;
+            cursor_paint = nt_cursor20_only;
+            (*nt_init_funcs->NEC98_text20_only) ();
+            break;
+
+        case NEC98_TEXT_25L:
+            sc.ModeType = GRAPHICS;
+            paint_screen = nt_paint_funcs->NEC98_text25_only;
+            cursor_paint = nt_cursor25_only;
+            (*nt_init_funcs->NEC98_text25_only) ();
+            break;
+
+        case NEC98_GRAPH_200:
+            sc.ModeType = GRAPHICS;
+            paint_screen = nt_paint_funcs->NEC98_graph200_only;
+            cursor_paint = dummy_cursor_paint;
+            (*nt_init_funcs->NEC98_graph200_only) ();
+            break;
+
+        case NEC98_GRAPH_200_SLT:
+            sc.ModeType = GRAPHICS;
+            paint_screen = nt_paint_funcs->NEC98_graph200slt_only;
+            cursor_paint = dummy_cursor_paint;
+            (*nt_init_funcs->NEC98_graph200slt_only) ();
+            break;
+
+        case NEC98_GRAPH_400:
+            sc.ModeType = GRAPHICS;
+            paint_screen = nt_paint_funcs->NEC98_graph400_only;
+            cursor_paint = dummy_cursor_paint;
+            (*nt_init_funcs->NEC98_graph400_only) ();
+            break;
+
+        case NEC98_T20L_G200:
+            sc.ModeType = GRAPHICS;
+            paint_screen = nt_paint_funcs->NEC98_text20_graph200;
+            cursor_paint = nt_cursor20;
+            (*nt_init_funcs->NEC98_text20_graph200) ();
+            break;
+
+        case NEC98_T20L_G200_SLT:
+            sc.ModeType = GRAPHICS;
+            paint_screen = nt_paint_funcs->NEC98_text20_graph200slt;
+            cursor_paint = nt_cursor20;
+            (*nt_init_funcs->NEC98_text20_graph200slt) ();
+            break;
+
+        case NEC98_T25L_G200:
+            sc.ModeType = GRAPHICS;
+            paint_screen = nt_paint_funcs->NEC98_text25_graph200;
+            cursor_paint = nt_cursor25;
+            (*nt_init_funcs->NEC98_text25_graph200) ();
+            break;
+
+        case NEC98_T25L_G200_SLT:
+            sc.ModeType = GRAPHICS;
+            paint_screen = nt_paint_funcs->NEC98_text25_graph200slt;
+            cursor_paint = nt_cursor25;
+            (*nt_init_funcs->NEC98_text25_graph200slt) ();
+            break;
+
+        case NEC98_T20L_G400:
+            sc.ModeType = GRAPHICS;
+            paint_screen = nt_paint_funcs->NEC98_text20_graph400;
+            cursor_paint = nt_cursor20;
+            (*nt_init_funcs->NEC98_text20_graph400) ();
+            break;
+
+        case NEC98_T25L_G400:
+            sc.ModeType = GRAPHICS;
+            paint_screen = nt_paint_funcs->NEC98_text25_graph400;
+            cursor_paint = nt_cursor25;
+            (*nt_init_funcs->NEC98_text25_graph400) ();
+            break;
+#else  // !NEC_98
         /* CGA modes (40 columns). */
         case TEXT_40_FUN:
             assert1(NO,"Funny text mode selected %s",get_mode_string(mode));
@@ -1295,12 +1651,12 @@ void nt_set_paint_routine(DISPLAY_MODE mode, int height)
                             paint_screen = nt_paint_funcs->vga_graph;
                     }
                     else
-		    {
-			if (get_char_height() == 2)
-			    paint_screen = nt_paint_funcs->vga_med_graph;
-			else
-			    paint_screen = nt_paint_funcs->vga_hi_graph;
-		    }
+                    {
+                        if (get_char_height() == 2)
+                            paint_screen = nt_paint_funcs->vga_med_graph;
+                        else
+                            paint_screen = nt_paint_funcs->vga_hi_graph;
+                    }
                     (*nt_init_funcs->vga_hi_graph)();
                 }
             }
@@ -1335,6 +1691,7 @@ void nt_set_paint_routine(DISPLAY_MODE mode, int height)
             (*nt_init_funcs->ega_lo_graph)();
             break;
 
+#endif // !NEC_98
         default:
             assert1(NO,"bad mode for host paint routine selection %d\n",(int)mode);
             paint_screen = dummy_paint_screen;
@@ -1353,15 +1710,17 @@ void nt_set_paint_routine(DISPLAY_MODE mode, int height)
         ** full-screen to windowed transition. Otherwise the display gets
         ** set back to full-screen!
         */
+#ifndef NEC_98
         extern int BlockModeChange; /* Tim August 92, in nt_fulsc.c */
         if ((BlockModeChange == 0) &&
             (sc.ScreenState == WINDOWED) &&
             (oldModeType == TEXT) &&
             (sc.ModeType == GRAPHICS))
         {
-            TextToGraphics();
+            SwitchToFullScreen(FALSE);
         }
         else
+#endif // !NEC_98
         {
 
             /* No call to TextToGraphics() */
@@ -1446,12 +1805,23 @@ static void select_paint_routines(void)
 {
     /*::::::::::::::::::::::::::::::::::::::::::: Display trace information */
 
+#ifndef NEC_98
     sub_note_trace2((CGA_HOST_VERBOSE | EGA_HOST_VERBOSE),
                     "select_paint_routine scale=%d depth=%d",
                     get_screen_scale(), host_display_depth);
+#endif // !NEC_98
 
     /*::::::::::::::::::::::::::::::::::::::::::::::: Select paint routines */
 
+#if defined(NEC_98)
+    if(host_display_depth > 1){                // color mode
+        nt_paint_funcs = &std_colour_paint_funcs;
+        nt_init_funcs = &colour_init_funcs;
+    }else{                                     // mono mode
+        nt_paint_funcs = &std_mono_paint_funcs;
+        nt_init_funcs = &mono_init_funcs;
+    }
+#else  // !NEC_98
     if(host_display_depth > 1)
     {
         if (get_screen_scale() == 2)
@@ -1474,19 +1844,22 @@ static void select_paint_routines(void)
 
         nt_init_funcs = &mono_init_funcs;
     }
+#endif // !NEC_98
 }
 
 #ifdef MONITOR
 GLOBAL void select_frozen_routines(void)
 {
+#ifndef NEC_98
     if (get_screen_scale() == 2)
-	nt_paint_funcs = &std_frozen_paint_funcs;
+        nt_paint_funcs = &std_frozen_paint_funcs;
     else if (get_screen_scale() == 3)
-	nt_paint_funcs = &big_frozen_paint_funcs;
+        nt_paint_funcs = &big_frozen_paint_funcs;
     else
-	nt_paint_funcs = &huge_frozen_paint_funcs;
+        nt_paint_funcs = &huge_frozen_paint_funcs;
 
     nt_init_funcs = &frozen_init_funcs;
+#endif // !NEC_98
 }
 #endif /* MONITOR */
 
@@ -1554,72 +1927,81 @@ static void check_win_size(register int height)
     register int width;
     extern int soft_reset;
 
-    if (! soft_reset)	// we want top get the chance to integrate with
-	return;		// console before changing size
+    if (! soft_reset)   // we want top get the chance to integrate with
+        return;         // console before changing size
 
     /*:::::::::::::::::::::::::::::::::::::::::::::: Calculate screen width */
 
+#if defined(NEC_98)
+       width = NEC98_WIN_WIDTH;
+#else  // !NEC_98
     if(sas_hw_at(vd_video_mode) > 0x10)
     {
-	if(alpha_num_mode())
-	    width = get_chars_per_line() * get_pix_char_width();
-	else
-	    width = get_chars_per_line() * get_char_width() *
-		    (get_256_colour_mode() ? 2 : 1);
-	if (width == 0)
-	    width = CGA_WIN_WIDTH;
+        if(alpha_num_mode())
+            width = get_chars_per_line() * get_pix_char_width();
+        else
+            width = get_chars_per_line() * get_char_width() *
+                    (get_256_colour_mode() ? 2 : 1);
+        if (width == 0)
+            width = CGA_WIN_WIDTH;
     }
     else
        width = CGA_WIN_WIDTH;
+#endif // !NEC_98
 
     /*::::::::::::::::::::::::::::::::::::::::::::::::::::::: Resize window */
 
     if (sc.ModeType == TEXT)
     {
-	if((current_mode_type != TEXT) ||
-	   (get_char_height() != current_char_height) ||
-	   (current_height != height)  ||
-	   (current_width != width))
-	{
+        if((current_mode_type != TEXT) ||
+           (get_char_height() != current_char_height) ||
+           (current_height != height)  ||
+           (current_width != width))
+        {
 
-	    /* Get width and height. Note no SCALE for text modes. */
-	    sc.PC_W_Width = width;
-	    sc.PC_W_Height = height*get_host_pix_height();
-	    textResize();
+            /* Get width and height. Note no SCALE for text modes. */
+            sc.PC_W_Width = width;
+            sc.PC_W_Height = height*get_host_pix_height();
+            textResize();
 
-	    current_height = height;
-	    current_width = width;
-	    current_mode_type = TEXT;
-	    current_char_height = get_char_height();
-	}
+            current_height = height;
+            current_width = width;
+            current_mode_type = TEXT;
+            current_char_height = get_char_height();
+        }
     }
     else
     {
-	if((current_mode_type != GRAPHICS) ||
-	   (current_height != height) ||
-	   (current_width != width) ||
-	   (current_bits_per_pixel != sc.BitsPerPixel) ||
-	   (current_scale != host_screen_scale))
-	{
-	    sc.PC_W_Width = SCALE(width);
-	    sc.PC_W_Height = SCALE(height*get_host_pix_height());
-	    graphicsResize();
+        if((current_mode_type != GRAPHICS) ||
+           (current_height != height) ||
+           (current_width != width) ||
+           (current_bits_per_pixel != sc.BitsPerPixel) ||
+           (current_scale != host_screen_scale))
+        {
+            sc.PC_W_Width = SCALE(width);
+            sc.PC_W_Height = SCALE(height*get_host_pix_height());
+#ifndef NEC_98
+            graphicsResize();
+#endif // !NEC_98
 
-	    current_height = height;
-	    current_width = width;
-	    current_mode_type = GRAPHICS;
-	    current_bits_per_pixel = sc.BitsPerPixel;
-	    current_scale = host_screen_scale;
-	}
+            current_height = height;
+            current_width = width;
+            current_mode_type = GRAPHICS;
+            current_bits_per_pixel = sc.BitsPerPixel;
+            current_scale = host_screen_scale;
+        }
     }
 
+#if defined(NEC_98)
+            graphicsResize();
+#endif // NEC_98
     sc.CharHeight = current_char_height;
 
     /*::::::::::::::::::::::::::::::::::::::::::: Display trace information */
 
     sub_note_trace2(ALL_ADAPT_VERBOSE,
-		    "check_win_size width = %d, height = %d",
-		    width, height);
+                    "check_win_size width = %d, height = %d",
+                    width, height);
 }
 
 
@@ -1627,8 +2009,84 @@ static void check_win_size(register int height)
 /*::::::::::::::::::::::::::: Set the VLT ??? ::::::::::::::::::::::::::::::*/
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 
+#if defined(NEC_98)
+static  PALETTEENTRY    defaultpalette[20]=
+{
+    { 0x00,0x00,0x00,0x00 },       // 0
+    { 0x80,0x00,0x00,0x00 },       // 1
+    { 0x00,0x80,0x00,0x00 },       // 2
+    { 0x80,0x80,0x00,0x00 },       // 3
+    { 0x00,0x00,0x80,0x00 },       // 4
+    { 0x80,0x00,0x80,0x00 },       // 5
+    { 0x00,0x80,0x80,0x00 },       // 6
+    { 0xC0,0xC0,0xC0,0x00 },       // 7
+    {  192, 220, 192,   0 },       // 8
+    {  166, 202, 240,   0 },       // 9
+    {  255, 251, 240,   0 },       // 10
+    {  160, 160, 164,   0 },       // 11
+    { 0x80,0x80,0x80,0x00 },       // 12
+    { 0xFF,0x00,0x00,0x00 },       // 13
+    { 0x00,0xFF,0x00,0x00 },       // 14
+    { 0xFF,0xFF,0x00,0x00 },       // 15
+    { 0x00,0x00,0xFF,0x00 },       // 16
+    { 0xFF,0x00,0xFF,0x00 },       // 17
+    { 0x00,0xFF,0xFF,0x00 },       // 18
+    { 0xFF,0xFF,0xFF,0x00 },       // 19
+};
+
+static  PALETTEENTRY    textpalette[8]=
+{
+    { 0x00,0x00,0x00,0x00 },       // BLACK
+    { 0x00,0x00,0xFF,0x00 },       // BLUE
+    { 0xFF,0x00,0x00,0x00 },       // RED
+    { 0xFF,0x00,0xFF,0x00 },       // MAGENTA
+    { 0x00,0xFF,0x00,0x00 },       // GREEN
+    { 0x00,0xFF,0xFF,0x00 },       // CYAN
+    { 0xFF,0xFF,0x00,0x00 },       // YELLOW
+    { 0xFF,0xFF,0xFF,0x00 },       // WHITE
+};
+
+#endif // NEC_98
 void set_the_vlt(void)
 {
+#if defined(NEC_98)
+    PALETTEENTRY        NEC98_color[VGA_DAC_SIZE];
+    unsigned long       ulLoop;
+    BYTE                palRed,palGreen,palBlue;
+
+    /*  set deault palette for PC-9821 display driver */
+    palRed = palGreen = palBlue = 0;
+    for( ulLoop=0 ; ulLoop<256 ; ulLoop++ ){
+                NEC98_color[ulLoop].peRed   = palRed;
+                NEC98_color[ulLoop].peGreen = palGreen;
+        NEC98_color[ulLoop].peBlue  = palBlue;
+        NEC98_color[ulLoop].peFlags = (BYTE)0x00;
+        if (!(palRed   += 32))
+        if (!(palGreen += 32))
+        palBlue += 64;
+        }
+
+        /*      set SYSTEM color palette for Windows */
+    for( ulLoop=0 ; ulLoop<10 ; ulLoop++ ){
+        NEC98_color[ulLoop] = defaultpalette[ulLoop];
+        NEC98_color[ulLoop+246]  = defaultpalette[ulLoop+10];
+    }
+
+        /*      set NEC98 TEXT color palette */
+    for( ulLoop=0 ; ulLoop<8 ; ulLoop++ ){
+        NEC98_color[ulLoop+16] = textpalette[ulLoop];
+    }
+
+        /*      set NEC98 GRAPH color palette */
+        for( ulLoop=0 ; ulLoop<16 ; ulLoop++ ){
+        NEC98_color[ulLoop+32] = NEC98Display.palette.data[ulLoop] ;
+    }
+
+     SetPaletteEntries(sc.ColPalette, 0, VGA_DAC_SIZE, &NEC98_color[0]);
+     IDLE_video();
+     set_palette_change_required(FALSE);
+
+#else  // !NEC_98
     PALETTEENTRY vga_color[VGA_DAC_SIZE];
     int i, ind;
     byte mask, top_bit;
@@ -1692,13 +2150,13 @@ void set_the_vlt(void)
 
                 ind = i & host_plane_mask;
 
-		/*
-		 * If attribute controller, mode select, blink bit set in
-		 * graphics mode, pixels 0-7 select palette entries 8-15
-		 * i.e. bit 3, 0->1.
-		 */
-		if ((sc.ModeType == GRAPHICS) && (bg_col_mask == 0x70))
-		    ind |= 8;
+                /*
+                 * If attribute controller, mode select, blink bit set in
+                 * graphics mode, pixels 0-7 select palette entries 8-15
+                 * i.e. bit 3, 0->1.
+                 */
+                if ((sc.ModeType == GRAPHICS) && (bg_col_mask == 0x70))
+                    ind |= 8;
 
                 ind = get_palette_val(ind);
                 ind = top_bit | (ind & mask);
@@ -1717,22 +2175,84 @@ void set_the_vlt(void)
 
         set_palette_change_required(FALSE);
     }
+#endif // !NEC_98
 
     /*::::::::::::::::::::::::::::::::::::::::::::::::::::: Display changes */
 
+#if defined(NEC_98)
+    if(sc.ScreenBufHandle && sc.ModeType == GRAPHICS)
+    {
+        /*
+        ** For extra safety, cos set_the_vlt() can get called in text mode.
+        */
+
+        {
+            INPUT_RECORD InputRecord[128];
+            DWORD RecordsRead;
+            if(GetNumberOfConsoleInputEvents(sc.InputHandle, &RecordsRead))
+                if (RecordsRead)
+                    ReadConsoleInputW(sc.InputHandle,
+                                         &InputRecord[0],
+                                         sizeof(InputRecord)/sizeof(INPUT_RECORD),
+                                         &RecordsRead);
+           if( !SetConsoleActiveScreenBuffer( sc.ScreenBufHandle ) ){
+                    assert2( NO, "VDM: SCASB() failed:%#x H=%#x",
+                             GetLastError(), sc.ScreenBufHandle );
+                    return;
+            }
+            sc.ActiveOutputBufferHandle = sc.ScreenBufHandle;
+            if (RecordsRead)
+                WriteConsoleInputW(sc.InputHandle,
+                                     &InputRecord[0],
+                                     RecordsRead,
+                                     &RecordsRead);
+        }
+        if(!SetConsolePalette(sc.ScreenBufHandle, sc.ColPalette, SYSPAL_STATIC))
+            assert1( NO, "SetConsolePalette() failed:%#x\n", GetLastError() );
+    }
+    else if(sc.ScreenBufHandle && NowFreeze == TRUE)
+    {
+        /*
+        ** For extra safety, cos set_the_vlt() can get called in text mode.
+        */
+        {
+            INPUT_RECORD InputRecord[128];
+            DWORD RecordsRead;
+            if(GetNumberOfConsoleInputEvents(sc.InputHandle, &RecordsRead))
+                if (RecordsRead)
+                    ReadConsoleInputW(sc.InputHandle,
+                                         &InputRecord[0],
+                                         sizeof(InputRecord)/sizeof(INPUT_RECORD),
+                                         &RecordsRead);
+            if( !SetConsoleActiveScreenBuffer( sc.ScreenBufHandle ) ){
+                    assert2( NO, "VDM: SCASB() failed:%#x H=%#x",
+                             GetLastError(), sc.ScreenBufHandle );
+                    return;
+            }
+            if (RecordsRead)
+                WriteConsoleInputW(sc.InputHandle,
+                                     &InputRecord[0],
+                                     RecordsRead,
+                                     &RecordsRead);
+        }
+        if(!SetConsolePalette(sc.ScreenBufHandle, sc.ColPalette, SYSPAL_STATIC))
+            assert1( NO, "SetConsolePalette() failed:%#x\n", GetLastError() );
+    }
+#else  // !NEC_98
     if (sc.ScreenBufHandle)             // only sensible in gfx context
     {
-	/*
-	** For extra safety, cos set_the_vlt() can get called in text mode.
-	*/
-	if( !SetConsoleActiveScreenBuffer( sc.ScreenBufHandle ) ){
-		assert2( NO, "VDM: SCASB() failed:%#x H=%#x",
-			 GetLastError(), sc.ScreenBufHandle );
-		return;
-	}
+        /*
+        ** For extra safety, cos set_the_vlt() can get called in text mode.
+        */
+        if( !SetConsoleActiveScreenBuffer( sc.ScreenBufHandle ) ){
+                assert2( NO, "VDM: SCASB() failed:%#x H=%#x",
+                         GetLastError(), sc.ScreenBufHandle );
+                return;
+        }
         if(!SetConsolePalette(sc.ScreenBufHandle, sc.ColPalette, SYSPAL_STATIC))
-	    assert1( NO, "SetConsolePalette() failed:%#x\n", GetLastError() );
+            assert1( NO, "SetConsolePalette() failed:%#x\n", GetLastError() );
     }
+#endif // !NEC_98
 
     update_vlt = FALSE;
 }
@@ -1742,14 +2262,25 @@ void set_the_vlt(void)
 /*::::::: Set screen sizes - update the screen description structure :::::::*/
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 
+#if defined(NEC_98)
+static void set_screen_sizes()
+#else  // !NEC_98
 static void set_screen_sizes(int adaptor)
+#endif // !NEC_98
 {
+#if defined(NEC_98)
+        sc.PC_W_Width = SCALE(NEC98_WIN_WIDTH);
+        sc.PC_W_Height = SCALE(NEC98_WIN_HEIGHT);
+        sc.CharWidth = SCALE(NEC98_CHAR_WIDTH);
+        sc.CharHeight = SCALE(NEC98_CHAR_HEIGHT);
+#else  // !NEC_98
     UNUSED(adaptor);
 
     sc.PC_W_Width = SCALE(CGA_WIN_WIDTH);
     sc.PC_W_Height = SCALE(CGA_WIN_HEIGHT);
     sc.CharWidth = CGA_CHAR_WIDTH;
     sc.CharHeight = CGA_CHAR_HEIGHT;
+#endif // !NEC_98
 }
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
@@ -1842,18 +2373,18 @@ void nt_set_screen_scale(int scale)
 {
     if (scale != host_screen_scale)
     {
-	host_screen_scale = scale;
+        host_screen_scale = scale;
 
-	/*
-	 * Don't want to do any painting if this is called on initialisation
-	 * and sc.PC_W_Width is as good a variable as any to check for this.
-	 */
-	if (sc.PC_W_Width)
-	{
-	    select_paint_routines();
-	    nt_set_paint_routine(current_mode, current_height);
-	    nt_mark_screen_refresh();
-	}
+        /*
+         * Don't want to do any painting if this is called on initialisation
+         * and sc.PC_W_Width is as good a variable as any to check for this.
+         */
+        if (sc.PC_W_Width)
+        {
+            select_paint_routines();
+            nt_set_paint_routine(current_mode, current_height);
+            nt_mark_screen_refresh();
+        }
     }
 }
 
@@ -1881,19 +2412,19 @@ void nt_set_border_colour(int colour)
 */
 VOID windowSize IFN4( int, w, int, h, int, top, int, left )
 {
-	SMALL_RECT WinSize;
+        SMALL_RECT WinSize;
 
-	WinSize.Top    = top;
-	WinSize.Left   = left;
-	WinSize.Bottom = top  + h - 1;
-	WinSize.Right  = left + w - 1;
+        WinSize.Top    = (SHORT)top;
+        WinSize.Left   = (SHORT)left;
+        WinSize.Bottom = top  + h - 1;
+        WinSize.Right  = left + w - 1;
 
-#ifndef	PROD
-	//fprintf(trace_file, "newW: %d.%d at %d.%d\n", h, w, top, left);
+#ifndef PROD
+        //fprintf(trace_file, "newW: %d.%d at %d.%d\n", h, w, top, left);
 #endif
-	if( !SetConsoleWindowInfo( sc.OutputHandle, TRUE, &WinSize ) )
-		assert3( NO, "VDM: SetConsoleWindowInfo() w=%d h=%d failed:%#x",
-			w, h, GetLastError() );
+        if( !SetConsoleWindowInfo( sc.OutputHandle, TRUE, &WinSize ) )
+                assert3( NO, "VDM: SetConsoleWindowInfo() w=%d h=%d failed:%#x",
+                        w, h, GetLastError() );
 }
 
 /*
@@ -1904,17 +2435,17 @@ VOID windowSize IFN4( int, w, int, h, int, top, int, left )
 */
 VOID bufferSize IFN2( int, w, int, h )
 {
-	COORD      ScrSize;
+        COORD      ScrSize;
 
-	ScrSize.X = w;
-	ScrSize.Y = h;
-#ifndef	PROD
-	//fprintf(trace_file, "newB: %d.%d\n", h, w);
+        ScrSize.X = (SHORT)w;
+        ScrSize.Y = (SHORT)h;
+#ifndef PROD
+        //fprintf(trace_file, "newB: %d.%d\n", h, w);
 #endif
-	if( !SetConsoleScreenBufferSize( sc.OutputHandle, ScrSize ) )
-		assert3( NO, "VDM: SetCons...BufferSize() w=%d h=%d failed:%#x",
-			w, h, GetLastError() );
-} 
+        if( !SetConsoleScreenBufferSize( sc.OutputHandle, ScrSize ) )
+                assert3( NO, "VDM: SetCons...BufferSize() w=%d h=%d failed:%#x",
+                        w, h, GetLastError() );
+}
 
 /*
 *****************************************************************************
@@ -1939,84 +2470,100 @@ VOID bufferSize IFN2( int, w, int, h )
 */
 VOID resizeWindow IFN2( int, w, int, h )
 {
-#define	MIN(a,b)	((a)<(b)?(a):(b))
+#define MIN(a,b)        ((a)<(b)?(a):(b))
 
-	int	oldTop, oldLeft;	/* present values	*/
-	int	newTop, newLeft;/* new values		*/
-	COORD	oldW,		/* present window size	*/
-		oldB;		/* present buffer size	*/
-        CONSOLE_SCREEN_BUFFER_INFO bufferInfo;                               
+        int     oldTop, oldLeft;        /* present values       */
+        int     newTop, newLeft;/* new values           */
+        COORD   oldW,           /* present window size  */
+                oldB;           /* present buffer size  */
+        CONSOLE_SCREEN_BUFFER_INFO bufferInfo;
 
-	if( h > 50 ){
-		/* Shouldn't get this anymore said Tim */
-		assert1( NO, "VDM: resizeWindow() clipping height:%d", h  );
-		h = 50;
-	}
-	if( !GetConsoleScreenBufferInfo( sc.OutputHandle, &bufferInfo) )   
-		assert1( NO, "VDM: GetConsoleScreenBufferInfo() failed:%#x",
-			GetLastError() );
-
-	oldTop  = bufferInfo.srWindow.Top;
-	oldLeft = bufferInfo.srWindow.Left;
-
-	oldW.X  = bufferInfo.srWindow.Right  - bufferInfo.srWindow.Left + 1;
-	oldW.Y  = bufferInfo.srWindow.Bottom - bufferInfo.srWindow.Top  + 1;
-	oldB    = bufferInfo.dwSize;
-#ifndef	PROD
-	//fprintf(trace_file, "resz: %d.%d\n", h, w);
-	//fprintf(trace_file, "oldW: %d.%d\n", oldW.Y, oldW.X);
-	//fprintf(trace_file, "maxW: %d.%d\n", bufferInfo.dwMaximumWindowSize.Y, bufferInfo.dwMaximumWindowSize.X);
-	//fprintf(trace_file, "oldB: %d.%d\n", oldB.Y, oldB.X);
+#if defined(JAPAN) || defined(KOREA)
+        // Clipping Window height
+        if ( GetConsoleCP() != 437 ) {
+        // if ( !is_us_mode() ) {  // Didn't come BOP
+            if( h > 25 ){
+                /* Shouldn't get this anymore said Tim */
+#ifdef JAPAN_DBG
+                DbgPrint( "NTVDM: resizeWindow() clipping height:%d->25\n", h  );
 #endif
-	/*
-	 * Reduce window width and height as necessary:
-	 */
-	if (    bufferInfo.srWindow.Bottom >= h
-	     || bufferInfo.srWindow.Right  >= w ) {
-		windowSize( MIN(w,oldW.X), MIN(h,oldW.Y), 0, 0);
-	}
+                h = 25;
+            }
+        } else
+#endif // JAPAN || KOREA
+        if( h > 50 ){
+                /* Shouldn't get this anymore said Tim */
+                assert1( NO, "VDM: resizeWindow() clipping height:%d", h  );
+                h = 50;
+        }
+        if( !GetConsoleScreenBufferInfo( sc.OutputHandle, &bufferInfo) )
+                assert1( NO, "VDM: GetConsoleScreenBufferInfo() failed:%#x",
+                        GetLastError() );
 
-	/*
-	 * Change Buffer width and height as required.
-	 */
-	if ( oldB.X || h != oldB.Y ) {
-		bufferSize( w, h );
+        oldTop  = bufferInfo.srWindow.Top;
+        oldLeft = bufferInfo.srWindow.Left;
 
-		/*
-		 * This increase in Buffer size may have affected maximum
-		 * possible window sizes:
-		 */
-		if( !GetConsoleScreenBufferInfo( sc.OutputHandle, &bufferInfo) )   
-			assert1( NO, "VDM: GetConsoleScreenBufferInfo() failed:%#x",
-				GetLastError() );
-#ifndef	PROD
-		//fprintf(trace_file, "maxW: %d.%d\n", bufferInfo.dwMaximumWindowSize.Y, bufferInfo.dwMaximumWindowSize.X);
+        oldW.X  = bufferInfo.srWindow.Right  - bufferInfo.srWindow.Left + 1;
+        oldW.Y  = bufferInfo.srWindow.Bottom - bufferInfo.srWindow.Top  + 1;
+        oldB    = bufferInfo.dwSize;
+#ifndef PROD
+        //fprintf(trace_file, "resz: %d.%d\n", h, w);
+        //fprintf(trace_file, "oldW: %d.%d\n", oldW.Y, oldW.X);
+        //fprintf(trace_file, "maxW: %d.%d\n", bufferInfo.dwMaximumWindowSize.Y, bufferInfo.dwMaximumWindowSize.X);
+        //fprintf(trace_file, "oldB: %d.%d\n", oldB.Y, oldB.X);
 #endif
-	}
-	/*
-	** Clip requested values to Window maximum and
-	** compute new (possible) top and left values.
-	*/
+        /*
+         * Reduce window width and height as necessary:
+         */
+        if (    bufferInfo.srWindow.Bottom >= h
+             || bufferInfo.srWindow.Right  >= w ) {
+                windowSize( MIN(w,oldW.X), MIN(h,oldW.Y), 0, 0);
+        }
 
-	newLeft = w - bufferInfo.dwMaximumWindowSize.X;
-	if ( newLeft > 0 ) {
-		w = bufferInfo.dwMaximumWindowSize.X;
-	} else
-		newLeft = 0;
+        /*
+         * Change Buffer width and height as required.
+         */
+        if ( oldB.X || h != oldB.Y ) {
+                bufferSize( w, h );
 
-	newTop = h - bufferInfo.dwMaximumWindowSize.Y;
-	if ( newTop > 0 ) {
-		h = bufferInfo.dwMaximumWindowSize.Y;
-	} else
-		newTop = 0;
+                /*
+                 * This increase in Buffer size may have affected maximum
+                 * possible window sizes:
+                 */
+                if( !GetConsoleScreenBufferInfo( sc.OutputHandle, &bufferInfo) )
+                        assert1( NO, "VDM: GetConsoleScreenBufferInfo() failed:%#x",
+                                GetLastError() );
+#ifndef PROD
+                //fprintf(trace_file, "maxW: %d.%d\n", bufferInfo.dwMaximumWindowSize.Y, bufferInfo.dwMaximumWindowSize.X);
+#endif
+        }
+        /*
+        ** Clip requested values to Window maximum and
+        ** compute new (possible) top and left values.
+        */
 
-	/*
-	 * Check if we need to enlarge the window now.
-	 * Settle for old top and left if they were smaller.
-	 * This avoids unnecessary updates in the window.
-	 */
-	if ( w > oldW.X || h > oldW.Y )
-		windowSize( w, h, MIN(newTop,oldTop), MIN(newLeft,oldLeft) );
+        newLeft = w - bufferInfo.dwMaximumWindowSize.X;
+        if ( newLeft > 0 ) {
+                w = bufferInfo.dwMaximumWindowSize.X;
+        } else
+                newLeft = 0;
+
+        newTop = h - bufferInfo.dwMaximumWindowSize.Y;
+        if ( newTop > 0 ) {
+                h = bufferInfo.dwMaximumWindowSize.Y;
+        } else
+                newTop = 0;
+
+#if defined(NEC_98)
+        if(get_char_height() == 20) h = 20;
+#endif // !NEC_98
+        /*
+         * Check if we need to enlarge the window now.
+         * Settle for old top and left if they were smaller.
+         * This avoids unnecessary updates in the window.
+         */
+        if ( w > oldW.X || h > oldW.Y )
+                windowSize( w, h, MIN(newTop,oldTop), MIN(newLeft,oldLeft) );
 
 } /* end of resizeWindow() */
 
@@ -2032,7 +2579,11 @@ VOID resizeWindow IFN2( int, w, int, h )
 */
 
 //Used by the text paint functions
+#if defined(NEC_98)
+GLOBAL int now_height = 25, now_width = 80;
+#else  // !NEC_98
 GLOBAL int now_height = 80, now_width = 50;
+#endif // !NEC_98
 
 void textResize(void)
 {
@@ -2040,13 +2591,13 @@ void textResize(void)
     if(sc.PC_W_Height && sc.PC_W_Width &&
        get_host_char_height() && get_pix_char_width())
     {
-	now_height = sc.PC_W_Height/get_host_char_height();
-	now_width = sc.PC_W_Width / get_pix_char_width();
+        now_height = sc.PC_W_Height/get_host_char_height();
+        now_width = sc.PC_W_Width / get_pix_char_width();
 
-	select_paint_routines();
+        select_paint_routines();
         nt_change_mode();
 
-	resizeWindow(now_width, now_height); /* Tim, September 92 */
+        resizeWindow(now_width, now_height); /* Tim, September 92 */
      }
 }
 
@@ -2064,11 +2615,15 @@ void graphicsResize(void)
         DWORD    headerSize;
         LPBITMAPINFO     infoStructPtr;
 
+#if defined(NEC_98)
+        HANDLE   saveHandle;
+#else  // !NEC_98
         if (sc.ScreenState == FULLSCREEN)
             return;
+#endif // !NEC_98
 
         /* Destroy previous data. */
-	closeGraphicsBuffer(); /* Tim Oct 92 */
+        closeGraphicsBuffer(); /* Tim Oct 92 */
 
         if (sc.ConsoleBufInfo.lpBitMapInfo != NULL)
             free((char *) sc.ConsoleBufInfo.lpBitMapInfo);
@@ -2077,6 +2632,15 @@ void graphicsResize(void)
          * Create a `BITMAPINFO' structure - sc.PC_W_Width pixels x
          * sc.PC_W_Height pixels x sc.BitsPerPixel bits-per-pixel.
          */
+#if defined(NEC_98)
+        headerSize = CreateSpcDIB(640,             // screen width
+                                  400,             // screen height
+                                  8,               // bits-per-pixel
+                                  DIB_PAL_COLORS,
+                                  0,
+                                  (COLOURTAB *) NULL,
+                                  &infoStructPtr);
+#else  // !NEC_98
         headerSize = CreateSpcDIB(sc.PC_W_Width,
                                   sc.PC_W_Height,
                                   sc.BitsPerPixel,
@@ -2084,6 +2648,7 @@ void graphicsResize(void)
                                   0,
                                   (COLOURTAB *) NULL,
                                   &infoStructPtr);
+#endif // !NEC_98
 
         /* Initialise the console info structure. */
         sc.ConsoleBufInfo.dwBitMapInfoLength = headerSize;
@@ -2102,7 +2667,7 @@ void graphicsResize(void)
         {
             sc.ScreenBufHandle = NULL;
             assert1( NO, "VDM: graphics screen buffer creation failed:%#x\n",
-				GetLastError());
+                                GetLastError());
         }
 
         /* 'cos old palette discarded with close buffer */
@@ -2112,16 +2677,43 @@ void graphicsResize(void)
             set_palette_change_required(TRUE);
         }
 
-	/* save the handle away to a useful place */
+#if defined(NEC_98)
+        saveHandle = sc.ActiveOutputBufferHandle;
+#endif // NEC_98
+        /* save the handle away to a useful place */
         MouseDetachMenuItem(TRUE);
         sc.ActiveOutputBufferHandle = sc.ScreenBufHandle;
         MouseAttachMenuItem(sc.ActiveOutputBufferHandle);
+#if defined(NEC_98)
+        sc.ActiveOutputBufferHandle = saveHandle;
+#endif // NEC_98
 
         /*
          * Make it the current screen buffer, which resizes the window
          * on the display.
          */
+#if defined(NEC_98)
+    if(sc.ModeType == GRAPHICS || sc.ScreenState == FULLSCREEN)
+    {
+        INPUT_RECORD InputRecord[128];
+        DWORD RecordsRead;
+        if(GetNumberOfConsoleInputEvents(sc.InputHandle, &RecordsRead))
+            if (RecordsRead)
+                ReadConsoleInputW(sc.InputHandle,
+                                     &InputRecord[0],
+                                     sizeof(InputRecord)/sizeof(INPUT_RECORD),
+                                     &RecordsRead);
+#endif // NEC_98
         SetConsoleActiveScreenBuffer(sc.ScreenBufHandle);
+#if defined(NEC_98)
+        sc.ActiveOutputBufferHandle = sc.ScreenBufHandle;
+        if (RecordsRead)
+            WriteConsoleInputW(sc.InputHandle,
+                                 &InputRecord[0],
+                                 RecordsRead,
+                                 &RecordsRead);
+    }
+#endif // !NEC_98
 
         /*
          * Get a pointer to the last line of the bitmap to build
@@ -2214,7 +2806,7 @@ GLOBAL DWORD CreateSpcDIB(int width, int height, int bitsPerPixel,
     /* Initialise BITMAPINFOHEADER. */
     pDibInfo->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     pDibInfo->bmiHeader.biWidth = width;
-    pDibInfo->bmiHeader.biHeight = -height; 
+    pDibInfo->bmiHeader.biHeight = -height;
     pDibInfo->bmiHeader.biPlanes = 1;
     pDibInfo->bmiHeader.biBitCount = (WORD) bitsPerPixel;
     pDibInfo->bmiHeader.biCompression = BI_RGB;
@@ -2300,15 +2892,16 @@ void nt_screen_address_changed(int lo, int hi)
 
 void nt_scroll_complete()        { }
 
+
 void host_stream_io_update(half_word * buffer, word count)
 {
     DWORD dwBytesWritten;
 
     WriteConsoleA(sc.OutputHandle,
-		  buffer,
-		  count,
-		  &dwBytesWritten,
-		  NULL
-		  );
+                  buffer,
+                  count,
+                  &dwBytesWritten,
+                  NULL
+                  );
     flush_count = 0;
 }

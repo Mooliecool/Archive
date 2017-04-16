@@ -200,6 +200,40 @@ typedef union
 } DMA_MODE;
 #endif
 
+#if defined(NEC_98)
+
+#ifdef BIT_ORDER1
+typedef union
+{
+        half_word all;
+        struct
+        {
+                HALF_WORD_BIT_FIELD reserve:4;
+                HALF_WORD_BIT_FIELD incrementmode:2;
+                HALF_WORD_BIT_FIELD scratch:2;
+        } bits;
+} DMA_BANK_MODE;
+#endif
+
+#ifdef BIT_ORDER2
+typedef union
+{
+        half_word all;
+        struct
+        {
+                HALF_WORD_BIT_FIELD scratch:2;
+                HALF_WORD_BIT_FIELD incrementmode:2;
+                HALF_WORD_BIT_FIELD reserve:4;
+        } bits;
+} DMA_BANK_MODE;
+#endif
+
+#define DMA_64K_MODE            0
+#define DMA_1M_MODE             1
+#define DMA_16M_MODE            3
+
+#endif // NEC_98
+
 /* DMA Mode register mode bit settings */
 #define DMA_DEMAND_MODE		0
 #define DMA_SINGLE_MODE		1
@@ -254,6 +288,9 @@ typedef struct
 	DMA_MASK	mask;
 	half_word	request;
 	DMA_FLIP_FLOP	first_last;
+#if defined(NEC_98)
+        DMA_BANK_MODE   bank_mode[DMA_CONTROLLER_CHANNELS];
+#endif // NEC_98
 } DMA_CNTRL;
 
 /*
@@ -274,7 +311,11 @@ typedef	struct
  */
 
 /* the number of controllers per adaptor */
+#if defined(NEC_98)
+#define DMA_ADAPTOR_CONTROLLERS 1
+#else  // !NEC_98
 #define	DMA_ADAPTOR_CONTROLLERS	2
+#endif // !NEC_98
 
 /* the numbering convention for the controllers */
 #define	DMA_CONTROLLER	0
@@ -310,6 +351,12 @@ typedef	struct
 
 /* the channel assignments */
 #define	DMA_RESERVED_CHANNEL_0	0
+#if defined(NEC_98)
+#define DMA_RESERVED_CHANNEL_1  1
+#define DMA_RESERVED_CHANNEL_2  2
+#define DMA_RESERVED_CHANNEL_3  3
+#define DMA_DISKETTE_CHANNEL    2
+#else  // !NEC_98
 #define	DMA_SDLC_CHANNEL	1
 #define	DMA_DISKETTE_CHANNEL	2
 #define	DMA_DISK_CHANNEL	3
@@ -325,6 +372,7 @@ typedef	struct
 #define DMA_FAKE_CHANNEL_6	13
 #define DMA_FAKE_CHANNEL_7	14
 #define DMA_REFRESH_CHANNEL	15
+#endif  // !NEC_98
 
 /* these masks define the redundant bits of the I/O addresses */
 #define	DMA_REDUNDANT_BITS	0x10

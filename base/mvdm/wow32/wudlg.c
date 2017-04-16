@@ -17,151 +17,8 @@
 
 MODNAME(wudlg.c);
 
-extern DOSWOWDATA DosWowData;
-
 // SendDlgItemMessage cache
 extern HWND  hdlgSDIMCached ;
-
-LONG W32DialogFunc(HWND hdlg, UINT uMsg, DWORD uParam, LPARAM lParam)
-{
-    BOOL fSuccess;
-    register PWW pww;
-    WM32MSGPARAMEX wm32mpex;
-    BOOL   fMessageNeedsThunking;
-
-#ifdef WOWPROFILE  // for MSG profiling only (debugger extension)
-    extern INT fWMsgProfRT;
-    DWORD dwTics;
-#endif // WOWPROFILE
-
-    // If the app has GP Faulted we don't want to pass it any more input
-    // This should be removed when USER32 does clean up on task death so
-    // it doesn't call us - mattfe june 24 92
-
-    if (CURRENTPTD()->dwFlags & TDF_IGNOREINPUT) {
-        LOGDEBUG(6,("    W32DialogFunc Ignoring Input Messsage %04X\n",uMsg));
-        WOW32ASSERTMSG(!gfIgnoreInputAssertGiven,
-                       "WCD32CommonDialogProc: TDF_IGNOREINPUT hack was used, shouldn't be, "
-                       "please email DaveHart with repro instructions.  Hit 'g' to ignore this "
-                       "and suppress this assertion from now on.\n");
-        gfIgnoreInputAssertGiven = TRUE;
-        goto SilentError;
-    }
-
-    if (!(pww = (PWW) GetWindowLong(hdlg, GWL_WOWWORDS))) {
-        LOGDEBUG(LOG_ALWAYS,("    W32DialogFunc ERROR: cannot find alias for window %08lx\n", hdlg));
-        goto Error;
-    }
-
-    // If pww->vpfnDlgProc is NULL, then something is broken;  we
-    // certainly can't continue because we don't know what 16-bit func to call
-
-    if (!pww->vpfnDlgProc) {
-        LOGDEBUG(LOG_ALWAYS,("    W32DialogFunc ERROR: no window proc for message %04x Dlg = %08lx\n", uMsg, hdlg ));
-        goto Error;
-    }
-
-    wm32mpex.Parm16.WndProc.hwnd   = GETHWND16(hdlg);
-    wm32mpex.Parm16.WndProc.wMsg   = (WORD)uMsg;
-    wm32mpex.Parm16.WndProc.wParam = (WORD)uParam;
-    wm32mpex.Parm16.WndProc.lParam = (LONG)lParam;
-    wm32mpex.Parm16.WndProc.hInst  = 0;   // Forces AX = SS on WndProc entry,
-                                          // for Win 3.1 compatibility.
-
-    fMessageNeedsThunking =  (uMsg < 0x400) &&
-                                  (aw32Msg[uMsg].lpfnM32 != WM32NoThunking);
-    if (fMessageNeedsThunking) {
-        LOGDEBUG(3,("%04X (%s)\n", CURRENTPTD()->htask16, (aw32Msg[uMsg].lpszW32)));
-
-#ifdef WOWPROFILE  // for MSG profiling only (debugger extension)
-        dwTics = GetWOWTicDiff(0L);
-#endif // WOWPROFILE
-
-        wm32mpex.fThunk = THUNKMSG;
-        wm32mpex.hwnd = hdlg;
-        wm32mpex.uMsg = uMsg;
-        wm32mpex.uParam = uParam;
-        wm32mpex.lParam = lParam;
-        wm32mpex.pww = pww;
-        wm32mpex.lpfnM32 = aw32Msg[uMsg].lpfnM32;
-        if (!(wm32mpex.lpfnM32)(&wm32mpex)) {
-                LOGDEBUG(LOG_ERROR,("    W32DialogFunc ERROR: cannot thunk 32-bit message %04x\n", uMsg));
-                goto Error;
-        }
-
-#ifdef WOWPROFILE  // for MSG profiling only (debugger extension)
-        if( !fWMsgProfRT ) {  // only if not round trip profiling
-            aw32Msg[uMsg].cTics += GetWOWTicDiff(dwTics);
-        }
-#endif  // WOWPROFILE
-
-    }
-    else {
-        LOGDEBUG(6,("    No Thunking was required for the 32-bit message %s(%04x)\n", (LPSZ)GetWMMsgName(uMsg), uMsg));
-    }
-
-    BlockWOWIdle(FALSE);
-
-    fSuccess = CallBack16(RET_WNDPROC, &wm32mpex.Parm16, pww->vpfnDlgProc, (PVPVOID)&wm32mpex.lReturn);
-
-    BlockWOWIdle(TRUE);
-
-    // the callback function of a dialog is of type FARPROC whose return value
-    // is of type 'int'. Since dx:ax is copied into lReturn in the above
-    // CallBack16 call, we need to zero out the hiword, otherwise we will be
-    // returning an erroneous value.
-
-    wm32mpex.lReturn = (LONG)((SHORT)(LOWORD(wm32mpex.lReturn)));
-
-    if (fMessageNeedsThunking) {
-
-#ifdef WOWPROFILE  // for MSG profiling only (debugger extension)
-        if( !fWMsgProfRT ) {  // only if not round trip profiling
-            dwTics = GetWOWTicDiff(0L);
-        }
-#endif // WOWPROFILE
-
-
-        //
-        // if you send a message to a dialog what gets returned
-        // to the caller is the dlg's msgresult window long.
-        // app dialog functions will call
-        //     SetWindowLong(hdlg, DWL_MSGRESULT, n);
-        // during message processing so the right thing gets returned.
-        // scottlu says we only need to do this for wm_gettext, it's
-        // the only message whose result is an output count.
-        //
-
-        if (uMsg == WM_GETTEXT  &&  wm32mpex.lReturn != 0) {
-            wm32mpex.lReturn = GetWindowLong(hdlg, DWL_MSGRESULT);
-        }
-
-        wm32mpex.fThunk = UNTHUNKMSG;
-        (wm32mpex.lpfnM32)(&wm32mpex);
-
-#ifdef WOWPROFILE  // for MSG profiling only (debugger extension)
-        aw32Msg[uMsg].cTics += GetWOWTicDiff(dwTics);
-        aw32Msg[uMsg].cCalls++;   // increment # times message passed
-#endif // WOWPROFILE
-
-    }
-
-    if (!fSuccess)
-        goto Error;
-
-Done:
-
-    return wm32mpex.lReturn;
-
-Error:
-    LOGDEBUG(6,("    W32DialogFunc WARNING: cannot call back, using default message handling\n"));
-SilentError:
-    wm32mpex.lReturn = 0;
-    goto Done;
-}
-
-
-
 
 /*++
     void CheckDlgButton(<hDlg>, <nIDButton>, <wCheck>)
@@ -277,17 +134,19 @@ ULONG FASTCALL WU32CheckRadioButton(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32DialogBoxParam(PVDMFRAME pFrame)
 {
-    ULONG    ul;
-    DLGDATA  DlgData;
+    ULONG    ul=(ULONG)-1;
     PVOID    pDlg;
     DWORD    cb, cb16;
     register PDIALOGBOXPARAM16 parg16;
     BYTE     abT[1024];
+    WNDPROC  vpDlgProc = NULL;
 
     GETARGPTR(pFrame, sizeof(DIALOGBOXPARAM16), parg16);
 
-    DlgData.vpfnDlgProc     = DWORD32(parg16->f4);
-    DlgData.dwUserInitParam = DWORD32(parg16->f5);
+    if (DWORD32(parg16->f4)) {
+        // mark the proc as WOW proc and save the high bits in the RPL
+        MarkWOWProc (parg16->f4,vpDlgProc);
+    }
 
     if (!(cb16 = parg16->f6)) {
         cb = ConvertDialog16(NULL, DWORD32(parg16->f2), 0, cb16);
@@ -316,14 +175,14 @@ ULONG FASTCALL WU32DialogBoxParam(PVDMFRAME pFrame)
         if (parg16->f7) {
             ul = GETINT16(DialogBoxIndirectParamAorW(HMODINST32(parg16->f1),
                             pDlg, HWND32(parg16->f3),
-                            (DLGPROC)(DlgData.vpfnDlgProc ? W32DialogFunc: 0),
-                            (LPARAM) &DlgData, SCDLG_ANSI));
+                            vpDlgProc,
+                            (LPARAM) DWORD32(parg16->f5), SCDLG_ANSI));
         }
         else {
             ul = GETHWND16((pfnOut.pfnServerCreateDialog)(HMODINST32(parg16->f1), (LPDLGTEMPLATE)pDlg,
                             cb,  HWND32(parg16->f3),
-                            (DLGPROC)(DlgData.vpfnDlgProc ? W32DialogFunc: 0),
-                            (LPARAM) &DlgData,  SCDLG_CLIENT | SCDLG_ANSI | SCDLG_NOREVALIDATE));
+                            vpDlgProc,
+                            (LPARAM) DWORD32(parg16->f5),  SCDLG_CLIENT | SCDLG_ANSI | SCDLG_NOREVALIDATE));
         }
 
         if (pDlg != (PVOID)abT) {
@@ -608,17 +467,22 @@ ULONG FASTCALL WU32DlgDirSelect(PVDMFRAME pFrame)
 {
     ULONG ul;
     PSZ psz2;
+    VPVOID vp;
     register PDLGDIRSELECT16 parg16;
 
     GETARGPTR(pFrame, sizeof(DLGDIRSELECT16), parg16);
     ALLOCVDMPTR(parg16->f2, MAX_VDMFILENAME, psz2);
+    vp = parg16->f2;
 
     ul = GETBOOL16(DlgDirSelectEx(
     HWND32(parg16->f1),
     psz2,
-    SIZE_BOGUS,
+    SIZE_BOGUS, 
     WORD32(parg16->f3)
     ));
+
+    // special case to keep common dialog structs in sync (see wcommdlg.c)
+    Check_ComDlg_pszptr(CURRENTPTD()->CommDlgTd, vp);
 
     FLUSHVDMPTR(parg16->f2, strlen(psz2)+1, psz2);
     FREEVDMPTR(psz2);
@@ -672,10 +536,12 @@ ULONG FASTCALL WU32DlgDirSelectComboBox(PVDMFRAME pFrame)
 {
     ULONG ul;
     PSZ psz2;
+    VPVOID vp;
     register PDLGDIRSELECTCOMBOBOX16 parg16;
 
     GETARGPTR(pFrame, sizeof(DLGDIRSELECTCOMBOBOX16), parg16);
     ALLOCVDMPTR(parg16->f2, MAX_VDMFILENAME, psz2);
+    vp = parg16->f2;
 
     ul = GETBOOL16(DlgDirSelectComboBoxEx(
     HWND32(parg16->f1),
@@ -683,6 +549,9 @@ ULONG FASTCALL WU32DlgDirSelectComboBox(PVDMFRAME pFrame)
     SIZE_BOGUS,
     WORD32(parg16->f3)
     ));
+
+    // special case to keep common dialog structs in sync (see wcommdlg.c)
+    Check_ComDlg_pszptr(CURRENTPTD()->CommDlgTd, vp);
 
     FLUSHVDMPTR(parg16->f2, strlen(psz2)+1, psz2);
     FREEVDMPTR(psz2);
@@ -725,15 +594,27 @@ ULONG FASTCALL WU32DlgDirSelectComboBox(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32EndDialog(PVDMFRAME pFrame)
 {
-    register PENDDIALOG16 parg16;
-
+    HWND     hwnd;
+    register PENDDIALOG16 parg16;   
+ 
     GETARGPTR(pFrame, sizeof(ENDDIALOG16), parg16);
 
-    EndDialog(
-    HWND32(parg16->f1),
-    INT32(parg16->f2)
-    );
+    hwnd = HWND32(parg16->f1);
 
+    if(!EndDialog(hwnd, INT32(parg16->f2)) && IsWindow(hwnd)){
+       CHAR szType[8];
+       
+       // FIXME: Enable the following when we are ready.
+       /*if(GetLastError() == ERROR_WINDOW_NOT_DIALOG ||
+         (RealGetWindowClass(hwnd,szType,8) && WOW32_strnicmp(szType,"#32770",6))) {*/
+       if(GetLastError() == ERROR_WINDOW_NOT_DIALOG || WOW32_strnicmp(szType,"#32770",6)) {
+          // jarbats
+          // App is trying to close window created by CreateWindow
+          // via EndDialog! whistler bug #231059
+
+          DestroyWindow(hwnd);
+       }
+    }
     FREEARGPTR(parg16);
     RETURN(0);
 }
@@ -921,17 +802,22 @@ ULONG FASTCALL WU32GetDlgItemText(PVDMFRAME pFrame)
 {
     ULONG ul;
     PSZ psz3;
+    VPVOID vp;
     register PGETDLGITEMTEXT16 parg16;
 
     GETARGPTR(pFrame, sizeof(GETDLGITEMTEXT16), parg16);
     ALLOCVDMPTR(parg16->f3, parg16->f4, psz3);
+    vp = parg16->f3;
 
     ul = GETINT16(GetDlgItemText(
     HWND32(parg16->f1),
-    WORD32(parg16->f2),     // see comment in wu32getdlgitem
+    WORD32(parg16->f2), // see comment in wu32getdlgitem
     psz3,
     WORD32(parg16->f4)
     ));
+
+    // special case to keep common dialog structs in sync (see wcommdlg.c)
+    Check_ComDlg_pszptr(CURRENTPTD()->CommDlgTd, vp);
 
     FLUSHVDMPTR(parg16->f3, strlen(psz3)+1, psz3);
     FREEVDMPTR(psz3);
@@ -1084,7 +970,7 @@ ULONG FASTCALL WU32IsDialogMessage(PVDMFRAME pFrame)
     mpex.Parm16.WndProc.wMsg = pMsg16->message;
     mpex.Parm16.WndProc.wParam = pMsg16->wParam;
     mpex.Parm16.WndProc.lParam = pMsg16->lParam;
-    mpex.iMsgThunkClass = WOWCLASS_UNKNOWN;
+    mpex.iMsgThunkClass = WOWCLASS_WIN16;
 
     ThunkMsg16(&mpex);
 
@@ -1194,9 +1080,9 @@ ULONG FASTCALL WU32MapDialogRect(PVDMFRAME pFrame)
     WOW32VERIFY(GETRECT16(parg16->f2, &t2));
 
     MapDialogRect(
-    HWND32(parg16->f1),
-    &t2
-    );
+        HWND32(parg16->f1),
+        &t2
+        );
 
     PUTRECT16(parg16->f2, &t2);
     FREEARGPTR(parg16);
@@ -1337,6 +1223,7 @@ ULONG FASTCALL WU32MapDialogRect(PVDMFRAME pFrame)
 ULONG FASTCALL WU32MessageBox(PVDMFRAME pFrame)
 {
     ULONG ul;
+    UINT uType;
     PSZ psz2;
     PSZ psz3;
     register PMESSAGEBOX16 parg16;
@@ -1344,12 +1231,25 @@ ULONG FASTCALL WU32MessageBox(PVDMFRAME pFrame)
     GETARGPTR(pFrame, sizeof(MESSAGEBOX16), parg16);
     GETPSZPTR(parg16->f2, psz2);
     GETPSZPTR(parg16->f3, psz3);
-
+    
+    // WHISTLER RAID BUG #348251
+    // A messagebox posted by artgalry.exe would remain behind autosketches window
+    // after it was invoked. In order to move the messagebox to the foreground we
+    // need to set its MB_SETFOREGROUND bit. Since this will be applied to all 
+    // 16bit MessageBox's we will only set this bit if the MessageBox does not 
+    // have the MB_NOFOCUS bit. This fix works in conjunction with the 
+    // GACF2_GIVEUPFOREGROUND compat flag. 
+    uType = (UINT)parg16->f4;
+    if(!(uType & MB_NOFOCUS))
+    {
+        uType |= MB_SETFOREGROUND;
+    }
+    
     ul = GETINT16(MessageBox(
     HWND32(parg16->f1),
     psz2,
     psz3,
-    WORD32(parg16->f4)
+    uType
     ));
 
     FREEPSZPTR(psz2);
@@ -1357,6 +1257,7 @@ ULONG FASTCALL WU32MessageBox(PVDMFRAME pFrame)
     FREEARGPTR(parg16);
     RETURN(ul);
 }
+
 
 
 /*++
@@ -1393,16 +1294,19 @@ ULONG FASTCALL WU32MessageBox(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32SetDlgItemInt(PVDMFRAME pFrame)
 {
+    HWND     hwnd;
     register PSETDLGITEMINT16 parg16;
 
     GETARGPTR(pFrame, sizeof(SETDLGITEMINT16), parg16);
 
+    hwnd = HWND32(parg16->f1);
+
     SetDlgItemInt(
-    HWND32(parg16->f1),
-    WORD32(parg16->f2),         // see comment in wu32getdlgitem
-    (parg16->f4) ? INT32(parg16->f3) : WORD32(parg16->f3),
-    BOOL32(parg16->f4)
-    );
+        hwnd,
+        WORD32(parg16->f2),         // see comment in wu32getdlgitem
+        (parg16->f4) ? INT32(parg16->f3) : WORD32(parg16->f3),
+        BOOL32(parg16->f4)
+        );
 
     FREEARGPTR(parg16);
     RETURN(0);
@@ -1434,17 +1338,29 @@ ULONG FASTCALL WU32SetDlgItemInt(PVDMFRAME pFrame)
 
 ULONG FASTCALL WU32SetDlgItemText(PVDMFRAME pFrame)
 {
+    HWND hwnd;
     PSZ psz3;
     register PSETDLGITEMTEXT16 parg16;
 
     GETARGPTR(pFrame, sizeof(SETDLGITEMTEXT16), parg16);
     GETPSZPTR(parg16->f3, psz3);
 
+    hwnd = HWND32(parg16->f1);
+
+    if (NULL != psz3) {
+        AddParamMap((DWORD)psz3, FETCHDWORD(parg16->f3));
+    }
+
     SetDlgItemText(
-    HWND32(parg16->f1),
+    hwnd,
     WORD32(parg16->f2),     // see comment in wu32getdlgitem
     psz3
     );
+
+    if (NULL != psz3) {
+        DeleteParamMap((DWORD)psz3, PARAM_32, NULL);
+    }
+
 
     FREEPSZPTR(psz3);
     FREEARGPTR(parg16);

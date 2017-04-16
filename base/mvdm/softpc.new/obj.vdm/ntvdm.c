@@ -2,8 +2,9 @@
 #include <ntrtl.h>
 #include <nturtl.h>
 #include <windows.h>
-#include "host_def.h"
+#include <vdm.h>
 #include "insignia.h"
+#include "host_def.h"
 #include <stdlib.h>
 #include "xt.h"
 #include "error.h"
@@ -30,7 +31,7 @@ BOOLEAN verboseGetenv;
 
 INT host_main(INT argc, CHAR **argv);  // located in base\support\main.c
 
-_CRTAPI1 main(int argc, CHAR ** argv)
+__cdecl main(int argc, CHAR ** argv)
 {
    int ret=-1;
 
@@ -238,6 +239,15 @@ CpuEnvInit(
 
 
 
+
+    //
+    // Initialize TEB->Vdm to current version number
+    //
+
+    Index = (GetTickCount() << 16) | 0x80000000;
+    Index |= sizeof(VDM_TIB) + sizeof(VDMVIRTUALICA) + sizeof(VDMICAUSERDATA);
+    NtCurrentTeb()->Vdm = (PVOID)Index;
+
     KeyValueInfo = (PKEY_VALUE_FULL_INFORMATION) NameDataBuffer;
 
 #ifndef MONITOR
@@ -321,7 +331,6 @@ CpuEnvInit(
     verboseGetenv = pEnvStr && !_stricmp(pEnvStr, "TRUE");
     }
 #endif
-
 }
 
 
@@ -330,7 +339,7 @@ CpuEnvInit(
  * In order to catch all references, we define our own
  * version of the CRT getenv, which does the mapping.
  */
-char * _CRTAPI1 getenv(const char *Name)
+char * __cdecl getenv(const char *Name)
 {
   PCPUENVVAR CpuEnvVar;
   char *Value = NULL;

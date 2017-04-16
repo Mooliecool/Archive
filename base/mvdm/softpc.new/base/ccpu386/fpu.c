@@ -5922,7 +5922,7 @@ GLOBAL IU32 getNpxTagwordReg IFN0()
 
 GLOBAL VOID setNpxTagwordReg IFN1(IU32, newTag)
 {
-	/* Don't do it!! It fucks you up!! */
+	/* Don't do it!! */
 	/* SetIntelTagword(newTag); */
 }
 

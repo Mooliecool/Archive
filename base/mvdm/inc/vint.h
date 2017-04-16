@@ -43,13 +43,25 @@ EXEC_BIT_MASK         - tells if DOS is in int21/exec operation.
 #define  RM_BIT_MASK                0x1000
 #define  RI_BIT_MASK                0x2000
 
+#if defined(NEC_98)
+#define  FIXED_NTVDMSTATE_SEGMENT   0x60                          
+#else  // !NEC_98
 #define  FIXED_NTVDMSTATE_SEGMENT   0x70
+#endif // !NEC_98
 #define  FIXED_NTVDMSTATE_OFFSET    0x14
 #define  FIXED_NTVDMSTATE_LINEAR    ((FIXED_NTVDMSTATE_SEGMENT << 4) + FIXED_NTVDMSTATE_OFFSET)
+#if defined(NEC_98)
+#define  FIXED_NTVDMSTATE_REL40     0x214                         
+#else  // !NEC_98
 #define  FIXED_NTVDMSTATE_REL40     0x314
+#endif // !NEC_98
 
 #define  FIXED_NTVDMSTATE_SIZE	    4
-#define  NTIO_LOAD_SEGMENT	        0x70
+#if defined(NEC_98)
+#define  NTIO_LOAD_SEGMENT          0x60                          
+#else  // !NEC_98
+#define  NTIO_LOAD_SEGMENT	    0x70
+#endif // !NEC_98
 #define  NTIO_LOAD_OFFSET           0
 #define  pNtVDMState                ((PULONG)FIXED_NTVDMSTATE_LINEAR)
 

@@ -19,15 +19,15 @@
  *
  *
  * Entry - Client (DS:DX) directory name to create
- *	   Client (BX:SI) EAs (NULL if no EAs)
+ *         Client (BX:SI) EAs (NULL if no EAs)
  *
  * Exit
- *	   SUCCESS
- *	     Client (CY) = 0
+ *         SUCCESS
+ *           Client (CY) = 0
  *
- *	   FAILURE
- *	     Client (CY) = 1
- *	     Client (AX) = system status code
+ *         FAILURE
+ *           Client (CY) = 1
+ *           Client (AX) = system status code
  *
  *
  * Notes : Extended Attributes is not yet taken care of.
@@ -35,16 +35,26 @@
 
 VOID demCreateDir (VOID)
 {
-LPSTR	lpDir;
+LPSTR   lpDir;
+#ifdef DBCS /* demCreateDir() for CSNW */
+CHAR    achPath[MAX_PATH];
+#endif /* DBCS */
 
     // EAs not yet implemented
     if (getBX() || getSI()){
-	demPrintMsg (MSG_EAS);
-	return;
+        demPrintMsg (MSG_EAS);
+        return;
     }
 
     lpDir = (LPSTR) GetVDMAddr (getDS(),getDX());
 
+#ifdef DBCS /* demCreateDir() for CSNW */
+    /*
+     * convert Netware path to Dos path
+     */
+    ConvNwPathToDosPath(achPath,lpDir, sizeof(achPath));
+    lpDir = achPath;
+#endif /* DBCS */
 
     if(CreateDirectoryOem (lpDir,NULL) == FALSE){
         demClientError(INVALID_HANDLE_VALUE, *lpDir);
@@ -62,12 +72,12 @@ LPSTR	lpDir;
  * Entry - Client (DS:DX) directory name to create
  *
  * Exit
- *	   SUCCESS
- *	     Client (CY) = 0
+ *         SUCCESS
+ *           Client (CY) = 0
  *
- *	   FAILURE
- *	     Client (CY) = 1
- *	     Client (AX) = system status code
+ *         FAILURE
+ *           Client (CY) = 1
+ *           Client (AX) = system status code
  *
  */
 
@@ -95,11 +105,11 @@ LPSTR  lpDir;
  * Next  Validates Path, if invalid set path to root (not an error)
  *
  * Entry - Client (DS:SI) Buffer to CDS path to verify
- *	   Client (AL)	  Physical Drive in question (A=0, B=1, ...)
+ *         Client (AL)    Physical Drive in question (A=0, B=1, ...)
  *
  * Exit
- *	   SUCCESS
- *	     Client (CY) = 0
+ *         SUCCESS
+ *           Client (CY) = 0
  *
  *         FAILURE
  *           Client (CY) = 1 , I24 drive invalid
@@ -117,7 +127,7 @@ CHAR  EnvVar[] = "=?:";
           // validate media
     chDrive = getAL() + 'A';
     pPath[0] = chDrive;
-    dw = GetFileAttributesOem(pPath);
+    dw = GetFileAttributesOemSys(pPath, TRUE);
     if (dw == 0xFFFFFFFF || !(dw & FILE_ATTRIBUTE_DIRECTORY))
       {
         demClientError(INVALID_HANDLE_VALUE, chDrive);
@@ -126,7 +136,7 @@ CHAR  EnvVar[] = "=?:";
 
        // if invalid path, set path to the root
        // reset CDS, and win32 env for win32
-    dw = GetFileAttributesOem(pcds->CurDir_Text);
+    dw = GetFileAttributesOemSys(pcds->CurDir_Text, TRUE);
     if (dw == 0xFFFFFFFF || !(dw & FILE_ATTRIBUTE_DIRECTORY))
       {
         strcpy(pcds->CurDir_Text, pPath);
@@ -145,38 +155,144 @@ CHAR  EnvVar[] = "=?:";
  *
  *
  * Entry - Client (DS:DX) directory name
+ *         Client (ES:DI) CDS structure
+ *         Dos default drive (AL) , CurDrv, where 1 == A.
  *
  * Exit
- *	   SUCCESS
- *	     Client (CY) = 0
+ *         SUCCESS
+ *           Client (CY) = 0
  *
- *	   FAILURE
- *	     Client (CY) = 1
- *	     Client (AX) = system status code
+ *         FAILURE
+ *           Client (CY) = 1
+ *           Client (AX) = system status code
  *
  */
 
 VOID demSetCurrentDir (VOID)
 {
+DWORD  dw;
 LPSTR  lpBuf;
-CHAR   EnvVar[] = "=?:",ch;
+CHAR   EnvVar[] = "=?:";
+CHAR   ch;
+PCDS   pCDS;
+BOOL   bLongDirName;
+
 
     lpBuf = (LPSTR) GetVDMAddr (getDS(),getDX());
-    ch = toupper(*(PCHAR)lpBuf);
+    ch = (CHAR) toupper(*(PCHAR)lpBuf);
     if (ch < 'A' || ch > 'Z'){
-	setCF(1);
-	return;
-    }
-
-    if (SetCurrentDirectoryOem (lpBuf) == FALSE){
-        demClientError(INVALID_HANDLE_VALUE, *lpBuf);
+        setCF(1);
         return;
     }
 
+    // got the darn cds ptr
+    pCDS = (PCDS)GetVDMAddr(getES(), getDI());
+
+    // now see if the directory name is too long
+    bLongDirName = (strlen(lpBuf) > DIRSTRLEN);
+            //
+        // if the current dir is for the default drive
+        // set the win32 process's current drive,dir. This
+        // will open an NT dir handle, and verify that it
+        // exists.
+        //
+
+    if (ch == getAL() + 'A') {
+       if (SetCurrentDirectoryOem (lpBuf) == FALSE){
+           demClientError(INVALID_HANDLE_VALUE, ch);
+           return;
+           }
+       }
+
+        //
+        // if its not for the default drive, we still need
+        // to verify that the dir\drive combinations exits.
+        //
+
+    else {
+       dw = GetFileAttributesOemSys(lpBuf, TRUE);
+       if (dw == 0xFFFFFFFF || !(dw & FILE_ATTRIBUTE_DIRECTORY))
+         {
+           demClientError(INVALID_HANDLE_VALUE, ch);
+           return;
+           }
+       }
+
+
     EnvVar[1] = *(PCHAR)lpBuf;
     if(SetEnvironmentVariableOem ((LPSTR)EnvVar,lpBuf) == FALSE)
-	setCF(1);
-    else
-	setCF(0);
+        setCF(1);
+    else {
+        // this is what '95 is doing for dos apps.
+        // upon a getcurdir call -- it is going to be invalid
+
+        strncpy(pCDS->CurDir_Text, lpBuf, DIRSTRLEN);
+        pCDS->CurDir_Text[DIRSTRLEN-1] = 0;
+        if (bLongDirName) {
+           setCF(1);
+        }
+        else {
+           setCF(0);
+        }
+    }
+
     return;
 }
+#ifdef DBCS /* ConvNwPathToDosPath() for CSNW */
+//
+// TO BT LATER and IT SHOULD BE...
+//
+//  This routine does change Novell-J-laized file name to
+// our well-known filename, but this code is only for the
+// request from Novell utilities. these code should be
+// laied onto nw16.exe (nw\nw16\tsr\resident.asm).
+//
+VOID ConvNwPathToDosPath(CHAR *lpszDos,CHAR *lpszNw, ULONG uDosSize)
+{
+    /*
+     * check parameter
+     */
+    if((lpszDos == NULL) || (lpszNw == NULL)) return;
+
+    /*
+     * copy data from vdm buffer to our local buffer
+     */
+    strncpy(lpszDos,lpszNw, uDosSize);
+    lpszDos[uDosSize-1] = 0;
+
+    /*
+     * replace the specified character
+     */
+    while(*lpszDos) {
+
+        if(IsDBCSLeadByte(*lpszDos)) {
+            /*
+             * This is a DBCS character, check trailbyte is 0x5C or not.
+             */
+            lpszDos++;
+
+            if( *lpszDos == 0x13 ) {
+                *lpszDos++ = (UCHAR)0x5C;
+                continue;
+            }
+        }
+
+        switch((UCHAR)*lpszDos) {
+            case 0x10 :
+                *lpszDos = (UCHAR)0xBF;
+                break;
+            case 0x11 :
+                *lpszDos = (UCHAR)0xAE;
+                break;
+            case 0x12 :
+                *lpszDos = (UCHAR)0xAA;
+                break;
+        }
+
+        /*
+         * next char
+         */
+        lpszDos++;
+    }
+}
+#endif /* DBCS */

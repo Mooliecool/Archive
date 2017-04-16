@@ -113,3 +113,4 @@ typedef VKKEYSCAN16 UNALIGNED *PVKKEYSCAN16;
 /* XLATOFF */
 #pragma pack()
 /* XLATON */
+

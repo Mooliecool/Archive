@@ -577,6 +577,7 @@ TeglTable equ 0BE8H
 TeglCurrentRC equ 0BECH
 TeglContext equ 0BF0H
 TeDeallocationStack equ 0E0CH
+TeVdm equ 0F18H
 TeGdiBatchCount equ 0F70H
 TeInstrumentation equ 0F2CH
 

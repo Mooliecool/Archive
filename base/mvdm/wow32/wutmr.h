@@ -56,6 +56,13 @@ VOID CALLBACK W32Timer24(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime);
 VOID CALLBACK W32Timer25(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime);
 VOID CALLBACK W32Timer26(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime);
 VOID CALLBACK W32Timer27(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime);
+VOID CALLBACK W32Timer28(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime);
+VOID CALLBACK W32Timer29(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime);
+VOID CALLBACK W32Timer30(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime);
+VOID CALLBACK W32Timer31(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime);
+VOID CALLBACK W32Timer32(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime);
+VOID CALLBACK W32Timer33(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime);
+VOID CALLBACK W32Timer34(HWND hwnd, UINT msg, UINT idEvent, DWORD dwTime);
 
 
 VOID W32TimerFunc(UINT index, HWND hwnd, UINT idEvent, DWORD dwTime);
@@ -70,3 +77,4 @@ ULONG FASTCALL  WU32SetTimer(PVDMFRAME pFrame);
 PTMR	FindTimer32(HWND16 hwnd, DWORD dwEventID);
 PTMR    FindTimer16(HWND16 hwnd, HTASK16 htask16, WORD wEventID);
 PTMR    IsDuplicateTimer16(HWND16 hwnd16, HTASK16 htask16, WORD wEventID);
+VOID    FreeWindowTimers16(HWND hwnd32);

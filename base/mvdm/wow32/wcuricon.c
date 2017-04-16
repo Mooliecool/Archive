@@ -86,7 +86,7 @@ HANDLE W32CreateCursorIcon32(LPCURSORICONALIAS lpCIAliasIn)
 
     lpBitsXOR = (LPBYTE)lpBitsAND + nBytesAND;
 
-    lpCIAliasIn->flType = flType;
+    lpCIAliasIn->flType = (BYTE)flType;
 
     if (flType & HANDLE_TYPE_CURSOR) {
         hT = CreateCursor(HMODINST32(lpCIAliasIn->hInst16),
@@ -194,6 +194,15 @@ HANDLE GetCursorIconAlias32(HAND16 h16, UINT flType)
         if (BOGUSHANDLE(h16))
             return (HANDLE)NULL;
 
+#if defined(FE_SB)
+        //In Excel95, XLVISEX.EXE use wrong cursor handle
+        //that is already freed. So, we double check this handle
+        //whether it is valid or not. 09/27/96 bklee.
+
+        if (!FindCursorIconAliasInUse((ULONG)h16))
+            return (HANDLE)NULL;
+#endif
+
         vp = RealLockResource16(h16, (PINT)&cb);
         if (vp == (VPVOID)NULL)
             return (ULONG)NULL;
@@ -208,11 +217,15 @@ HANDLE GetCursorIconAlias32(HAND16 h16, UINT flType)
         //
 
         lpT = AllocCursorIconAlias();
+        if (!lpT) {
+            return (ULONG)NULL;
+        }
+
         lpT->h16 = h16;
         lpT->hTask16 = CURRENTPTD()->htask16;
 
         lpT->vpData = vp;
-        lpT->cbData = cb;
+        lpT->cbData = (WORD)cb;
         lpT->pbDataNew = (LPBYTE)pcurs16;
 
         lpT->pbDataOld = malloc_w(cb);
@@ -379,6 +392,32 @@ LPCURSORICONALIAS FindCursorIconAlias(ULONG hCI, UINT flHandleSize)
     return lpT;
 }
 
+#if defined(FE_SB)
+//*****************************************************************************
+//
+// FindCursorIconAliasInUse -
+//
+//     Searches for the given handle and returns corresponding
+//     lpT->fInUse.
+//
+//     09/27/96 bklee
+//*****************************************************************************
+
+
+BOOL FindCursorIconAliasInUse(ULONG hCI)
+{
+    LPCURSORICONALIAS  lpT;
+    LPCURSORICONALIAS  lpTprev;
+
+    lpTprev = (LPCURSORICONALIAS)NULL;
+    for (lpT = lpCIAlias; lpT != NULL; lpTprev = lpT, lpT = lpT->lpNext) {
+         if (lpT->h16 == (HAND16)hCI)
+               return lpT->fInUse;
+    }
+
+    return TRUE;
+}
+#endif
 
 
 //*****************************************************************************
@@ -493,10 +532,15 @@ HAND16 SetupCursorIconAlias(HAND16 hInst16, HAND32 h32, HAND16 h16, UINT flType,
     INT                cb;
 
     lpT = AllocCursorIconAlias();
+    // paranoid check for memory exaust 
+    if (!lpT) {
+      return (HAND16)NULL;
+    }
+
     lpT->fInUse = TRUE;
     lpT->h16 = h16;
     lpT->h32 = h32;
-    lpT->flType = flType;
+    lpT->flType = (BYTE)flType;
     if (!(flType & HANDLE_TYPE_WOWGLOBAL)) {
         lpT->hInst16 = hInst16;
         lpT->hMod16  = GETHMOD16(HMODINST32(hInst16));
@@ -508,7 +552,7 @@ HAND16 SetupCursorIconAlias(HAND16 hInst16, HAND32 h32, HAND16 h16, UINT flType,
             return (HAND16)NULL;
 
         lpT->vpData = vp;
-        lpT->cbData = cb;
+        lpT->cbData = (WORD)cb;
         GETVDMPTR(vp, cb, lpT->pbDataNew);
 
         lpT->pbDataOld = malloc_w(cb);
@@ -518,11 +562,14 @@ HAND16 SetupCursorIconAlias(HAND16 hInst16, HAND32 h32, HAND16 h16, UINT flType,
 
         if (hRes16) {
             lpT->lpszName = lpResName;
+            // if this is a string...
             if ((WORD)HIWORD(lpResName) != (WORD)NULL) {
-                UINT   cb;
-                cb = strlen(lpResName)+1;
-                if (lpT->lpszName = malloc_w_small(cb)) {
-                    memcpy (lpT->lpszName, lpResName, cb);
+                UINT   cbStr;
+                cbStr = strlen(lpResName)+1;
+                // note: strlen+1 will force memcpy to copy the null from the
+                //       src string.
+                if (lpT->lpszName = malloc_w_small(cbStr)) {
+                    memcpy (lpT->lpszName, lpResName, cbStr);
                 }
             }
         }
@@ -619,7 +666,7 @@ ULONG SetCursorIconFlag(HAND16 h16, BOOL fSet)
     VPVOID vp = 0;
 
     Parm16.WndProc.wParam = h16;
-    Parm16.WndProc.wMsg = fSet;
+    Parm16.WndProc.wMsg = (WORD)fSet;
     CallBack16(RET_SETCURSORICONFLAG, &Parm16, 0, &vp);
     return (ULONG)0;
 }
@@ -857,9 +904,11 @@ HAND16 W32Create16BitCursorIconFrom32BitHandle(HANDLE h32, HAND16 hInst16,
     if (GetIconInfo(h32, &iinfo)) {
         if (GetObject(iinfo.hbmMask, sizeof(BITMAP), &bm)) {
             nBytesAND = GetBitmapBits(iinfo.hbmMask, 0, (LPBYTE)NULL);
+            WOW32WARNMSG(nBytesAND,("WOW: W32C16BCIFBH: nBytesAND == 0\n"));
             if (iinfo.hbmColor) {
                 GetObject(iinfo.hbmColor, sizeof(BITMAP), &bmClr);
                 nBytesXOR = GetBitmapBits(iinfo.hbmColor, 0, (LPBYTE)NULL);
+                WOW32WARNMSG(nBytesXOR,("WOW: W32C16BCIFBH: nBytesAND == 0\n"));
             }
             else {
                 bm.bmHeight /= 2;
@@ -1084,7 +1133,7 @@ HAND16 W32CheckIfAlreadyLoaded(VPVOID pData, WORD ResType)
     GETMISCPTR(pData, parg16);
     GETPSZIDPTR(parg16->lpStr, psz);
 
-    ResType = (ResType == FUN_LOADCURSOR) ?  HANDLE_TYPE_CURSOR : HANDLE_TYPE_ICON;
+    ResType = (ResType == NW_LOADCURSOR) ?  HANDLE_TYPE_CURSOR : HANDLE_TYPE_ICON;
     for (lpT = lpCIAlias; lpT != NULL; lpT = lpT->lpNext) {
          if (lpT->fInUse) {
              LPBYTE lpszNameT = lpT->lpszName;
@@ -1092,7 +1141,7 @@ HAND16 W32CheckIfAlreadyLoaded(VPVOID pData, WORD ResType)
                                             lpT->hInst16 == parg16->hInst) {
                  WOW32ASSERT(!(lpT->flType & HANDLE_TYPE_WOWGLOBAL));
                  if (HIWORD(lpszNameT) && HIWORD(psz)) {
-                     if (!(_stricmp(psz, (LPSTR)lpszNameT)))
+                     if (!(WOW32_stricmp(psz, (LPSTR)lpszNameT)))
                          break;
                  }
                  else if (lpszNameT == psz) {

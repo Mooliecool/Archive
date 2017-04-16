@@ -186,8 +186,8 @@ host_error_ext
 #define EG_NO_ROM_BASIC         2
 #define EG_EXPANDED_MEM_FAILURE 3
 #define EG_CONT_RESET           4
-#define EG_NO_REZ_UPDATE        5
-#define EG_REZ_UPDATE           6
+////#define EG_NO_REZ_UPDATE        5
+////#define EG_REZ_UPDATE           6
 #define EG_MALLOC_FAILURE       7
 #define EG_SYS_MISSING_SPCHOME  8
 #define EG_SYS_MISSING_FILE     9

@@ -16,7 +16,7 @@
 #pragma hdrstop
 
 //
-//  BUGBUG: moved macros from mvdm.h and wo32.h
+//  BUGBUG: moved macros from mvdm.h and wow32.h
 //  as they are not what they appear to be.
 //  Watch out these macros increment the pointer arguments!!!!
 //  02-Feb-1994 Jonle
@@ -67,10 +67,12 @@ PSZ GetResourceType(LPSZ lpszType)
     register PRTINFO prt;
 
     if (HIWORD(lpszType) != 0)
-    return lpszType;
+        return lpszType;
+
     for (prt=artInfo,i=NUMEL(artInfo); i>0; i--,prt++)
-    if (prt->lpType == lpszType)
-        return prt->pszName;
+        if (prt->lpType == lpszType)
+            return prt->pszName;
+
     return "UNKNOWN";
 }
 
@@ -114,7 +116,16 @@ VOID FreeRes16(PRES presFree)
             break;
         presPrev = pres;
     }
-    WOW32ASSERT(pres);  // not finding a pres would be rather distressing
+
+    // Changed from WOW32ASSERT by cmjones  11/3/97
+    // This might be a bogus warning in that USER32!SplFreeResource() calls
+    // W32FreeResource() twice on certain types of resources.  The Warning
+    // might be raised on the 2nd call after the resource was just freed.
+    // The only known occurances are at the start of the Winstone '94 
+    // Quattro Pro test.  This can safely be ignored if you see SplFreeResource
+    // in the stack dump.
+    WOW32WARNMSG((pres),("WOW::FreeRes16:Possible lost resource.\n"));
+
     if (pres) {
         presPrev->presNext = pres->presNext;
         if (pres->pbResData)
@@ -160,11 +171,28 @@ PRES FindResource16(HMOD16 hmod16, LPSZ lpszName, LPSZ lpszType)
         LOGDEBUG(5,("    Finding resource %lx, type %s(%lx)\n",
                  lpszName, GetResourceType(lpszType), lpszType));
     } else {
+#ifdef FE_SB
+        if (CURRENTPTD()->dwWOWCompatFlagsFE & WOWCF_FE_ARIRANG20_PRNDLG) {
+       /*
+        * In case of Korean Arirang2.0 word processor, it use wrong dialog ID
+        * for Print or Print setup dialog. See dialog box ID on awpfont.dll.
+        */
+            if (!WOW32_strcmp(lpszName, "PRINTDLGTEMP"))
+                vpszName = (VPSZ) 2;
+            else if(!WOW32_strcmp(lpszName, "PRNSETUPDLGTEMP"))
+                vpszName = (VPSZ) 1;
+            else goto NOT_ARIRANG20;
+        } else {  // original code
+NOT_ARIRANG20:
+#endif
         cb = strlen(lpszName)+1;
         if (vpszName = GlobalAllocLock16(GMEM_MOVEABLE, cb, NULL))
             putstr16(vpszName, lpszName, cb);
         LOGDEBUG(5,("    Finding resource \"%s\", type %s(%lx)\n",
                  lpszName, GetResourceType(lpszType), lpszType));
+#ifdef FE_SB
+        }
+#endif
     }
 
     if (vpszName) {
@@ -177,16 +205,12 @@ PRES FindResource16(HMOD16 hmod16, LPSZ lpszName, LPSZ lpszType)
             }
         }
         if (vpszType) {
-            PCBVDMFRAME pCBFrame;
-
             Parm16.WndProc.wParam = hmod16;
             Parm16.WndProc.lParam = vpszName;
             Parm16.WndProc.wMsg = LOWORD(vpszType);
             Parm16.WndProc.hwnd = HIWORD(vpszType);
             CallBack16(RET_FINDRESOURCE, &Parm16, 0, &vp);
-            pCBFrame = CBFRAMEPTR(CURRENTPTD()->vpCBStack);
-            wExpWinVer = pCBFrame->wGenUse1;
-            FREEVDMPTR(pCBFrame);
+            wExpWinVer = LOWORD(Parm16.WndProc.lParam);
             if (HIWORD(vpszType))
                 GlobalUnlockFree16(vpszType);
         }
@@ -207,7 +231,11 @@ PRES LoadResource16(HMOD16 hmod16, PRES pres)
     PARM16 Parm16;
 
     DBG_UNREFERENCED_PARAMETER(hmod16);
+
     WOW32ASSERT(pres && hmod16 == pres->hmod16);
+    if(pres == NULL) {
+        return(NULL);
+    }
 
     Parm16.WndProc.wParam = pres->hmod16;
     Parm16.WndProc.lParam = pres->hresinfo16;
@@ -229,7 +257,10 @@ BOOL FreeResource16(PRES pres)
     VPVOID vp=0;
     PARM16 Parm16;
 
-    WOW32ASSERT(pres);
+    if(pres == NULL) {
+        WOW32ASSERT(pres);
+        return(FALSE);
+    }
 
     Parm16.WndProc.wParam = pres->hresdata16;
     CallBack16(RET_FREERESOURCE, &Parm16, 0, &vp);
@@ -247,15 +278,18 @@ LPBYTE LockResource16(register PRES pres)
     PARM16 Parm16;
     WOW32ASSERT(pres);
 
+    if(pres == NULL) {
+        WOW32ASSERT(pres);
+        return(NULL);
+    }
+
     Parm16.WndProc.wParam = pres->hresdata16;
     CallBack16(RET_LOCKRESOURCE, &Parm16, 0, &vp);
 
     if (vp) {
-        PCBVDMFRAME pCBFrame;
 
         // Get size of 16-bit resource
-        pCBFrame = CBFRAMEPTR(CURRENTPTD()->vpCBStack);
-        cb16 = pCBFrame->wGenUse2 | (LONG)pCBFrame->wGenUse1 << 16;
+        cb16 = Parm16.WndProc.lParam;
 
         LOGDEBUG(5,("    Locking/converting resource type %s(%lx)\n",
              GetResourceType(pres->lpszResType), pres->lpszResType));
@@ -306,7 +340,10 @@ BOOL UnlockResource16(PRES pres)
     VPVOID vp=0;
     PARM16 Parm16;
 
-    WOW32ASSERT(pres);
+    if(pres == NULL) {
+        WOW32ASSERT(pres);
+        return(FALSE);
+    }
 
     Parm16.WndProc.wParam = pres->hresdata16;
     CallBack16(RET_UNLOCKRESOURCE, &Parm16, 0, &vp);
@@ -329,6 +366,9 @@ DWORD SizeofResource16(HMOD16 hmod16, PRES pres)
     DBG_UNREFERENCED_PARAMETER(hmod16);
 
     WOW32ASSERT(pres && hmod16 == pres->hmod16);
+    if(pres == NULL) {
+        return(0);
+    }
 
     Parm16.WndProc.wParam = pres->hmod16;
     Parm16.WndProc.lParam = pres->hresinfo16;
@@ -509,7 +549,7 @@ DWORD ConvertDialog16(PBYTE pdlg32, VPBYTE vpdlg16, DWORD cb, DWORD cb16)
 
     for (i=0; i<3; i++) {
         if (i==0 && *pdlg16 == 0xFF) {  // special encoding of szMenuName
-            GETBYTE(pdlg16);            // advance past the ff byte
+            ((PBYTE)pdlg16)++;          // advance past the ff byte
             PUTWORD(pdlg32, 0xffff);    // copy the f word
             w = GETWORD(pdlg16);        // get the menu ordinal
             PUTWORD(pdlg32, w);         // transfer it
@@ -532,6 +572,17 @@ DWORD ConvertDialog16(PBYTE pdlg32, VPBYTE vpdlg16, DWORD cb, DWORD cb16)
         cbAnsi = strlen(pdlg16)+1;      // then szTypeFace
         if (VALIDPUT(pdlg32)) {
             RtlMultiByteToUnicodeN((LPWSTR)pdlg32, MAXULONG, (PULONG)&cbUni, pdlg16, cbAnsi);
+#ifdef FE_SB
+            // orignal source should be fixed.
+            // We can't convert right Unicode string from Broken FaceName
+            // string.
+            // Converted Unicode String should be NULL terminated.
+            // 1994.11.12 V-HIDEKK
+            if( cbUni && ((LPWSTR)pdlg32)[cbUni/sizeof(WCHAR)-1] ){
+                LOGDEBUG(0,("    ConvertDialog16: WARNING: BAD FaceName String\n      End of Unicode String (%04x)\n", ((LPWSTR)pdlg32)[cbUni/2-1]));
+                ((LPWSTR)pdlg32)[cbUni/sizeof(WCHAR)-1] = 0;
+            }
+#endif // FE_SB
         } else {
             cbUni = cbAnsi * sizeof(WCHAR);
         }
@@ -579,7 +630,7 @@ DWORD ConvertDialog16(PBYTE pdlg32, VPBYTE vpdlg16, DWORD cb, DWORD cb16)
         //
 
         if (*pdlg16 == 0xFF) {       // special encoding
-            GETBYTE(pdlg16);
+            ((PBYTE)pdlg16)++;
             PUTWORD(pdlg32, 0xFFFF);
             w = GETWORD(pdlg16);
             PUTWORD(pdlg32, w);

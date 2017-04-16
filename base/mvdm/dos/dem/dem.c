@@ -8,19 +8,17 @@
 #include "dem.h"
 
 /* DemInit - DEM Initialiazation routine. (This name may change when DEM is
- *	     converted to DLL).
+ *           converted to DLL).
  *
  * Entry
- *	argc,argv - from softpc as it is.
- *
+ *      None
  *
  * Exit
- *	None
+ *      None
  */
 
-PSZ pszDefaultDOSDirectory;
+extern VOID     dempInitLFNSupport(VOID);
 
-extern VOID	TerminateVDM(VOID);
 
 CHAR demDebugBuffer [256];
 
@@ -28,9 +26,8 @@ CHAR demDebugBuffer [256];
 BOOL ToDebugOnF11 = FALSE;
 #endif
 
-BOOL DemInit (int argc, char *argv[])
+VOID DemInit (VOID)
 {
-    PSZ psz;
     DWORD dw;
 
     // Modify default hard error handling
@@ -39,38 +36,18 @@ BOOL DemInit (int argc, char *argv[])
     //
     SetErrorMode (SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
 
-    pszDefaultDOSDirectory =  (PCHAR) malloc(MAX_PATH+14);
-    if (!pszDefaultDOSDirectory ||
-        !(dw = GetSystemDirectory(pszDefaultDOSDirectory, MAX_PATH)) ||
-        dw >= MAX_PATH )
-      {
-        return FALSE;
-        }
-
-    if (VDMForWOW)
-        return TRUE;
-
-    // Check the debugging level
-    while (--argc > 0) {
-	psz = *++argv;
-	if (*psz == '-' || *psz == '/') {
-	    psz++;
-	    if(tolower(*psz) == 'd'){
-		fShowSVCMsg = DEMDOSDISP | DEMFILIO;
-		break;
-	    }
-	}
-    }
-
+    dempInitLFNSupport();
 
 #if DBG
-#ifndef i386
-    if( getenv( "YODA" ) != 0 )
-#else
-    if( getenv( "DEBUGDOS" ) != 0 )
-#endif
-	ToDebugOnF11 = TRUE;
-#endif
+    if (!VDMForWOW) {
 
-    return TRUE;
+#ifndef i386
+        if( getenv( "YODA" ) != 0 )
+#else
+        if( getenv( "DEBUGDOS" ) != 0 )
+#endif
+            ToDebugOnF11 = TRUE;
+    }
+
+#endif
 }

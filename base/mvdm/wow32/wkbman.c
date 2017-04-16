@@ -44,54 +44,6 @@ ULONG FASTCALL WKB32ToAscii(PVDMFRAME pFrame)
 }
 
 
-
-ULONG FASTCALL WKB32AnsiToOem(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    int cb;
-    register PANSITOOEM16 parg16;
-    LPSTR  lpstrAnsi, lpstrOem;
-
-    GETARGPTR(pFrame, sizeof(ANSITOOEM16), parg16);
-    GETPSZPTR(parg16->f1, lpstrAnsi);
-    GETPSZPTR(parg16->f2, lpstrOem);
-
-    cb = strlen(lpstrAnsi);
-
-    ul = AnsiToOem(lpstrAnsi, lpstrOem);
-
-    FLUSHVDMPTR(parg16->f2, cb, lpstrOem);
-    FREEPSZPTR(lpstrAnsi);
-    FREEPSZPTR(lpstrOem);
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
-
-ULONG FASTCALL WKB32OemToAnsi(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    int cb;
-    register POEMTOANSI16 parg16;
-    LPSTR  lpstrAnsi, lpstrOem;
-
-    GETARGPTR(pFrame, sizeof(OEMTOANSI16), parg16);
-    GETPSZPTR(parg16->f1, lpstrOem);
-    GETPSZPTR(parg16->f2, lpstrAnsi);
-
-    cb = strlen(lpstrOem);
-
-    ul = OemToAnsi(lpstrOem, lpstrAnsi);
-
-    FLUSHVDMPTR(parg16->f2, cb, lpstrAnsi);
-    FREEPSZPTR(lpstrOem);
-    FREEPSZPTR(lpstrAnsi);
-    FREEARGPTR(parg16);
-    RETURN(ul);
-}
-
-
 ULONG FASTCALL WKB32OemKeyScan(PVDMFRAME pFrame)
 {
     ULONG ul;
@@ -193,7 +145,6 @@ ULONG FASTCALL WKB32AnsiToOemBuff(PVDMFRAME pFrame)
     GETARGPTR(pFrame, sizeof(ANSITOOEMBUFF16), parg16);
     GETPSZPTR(parg16->f1, lpstrAnsi);
     GETPSZPTR(parg16->f2, lpstrOem);
-
 
     ul = AnsiToOemBuff(lpstrAnsi, lpstrOem, (DWORD)(WORD)(parg16->f3));
 

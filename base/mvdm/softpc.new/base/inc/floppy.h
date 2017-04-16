@@ -429,7 +429,11 @@
  *	Number of floppy drives that can really be supported
  */
 
+#if defined(NEC_98)
+#define MAX_FLOPPY      0x1a
+#else  // !NEC_98
 #define MAX_FLOPPY	0x02
+#endif // !NEC_98
 
 /*
  *	Special value of sectors transferred count

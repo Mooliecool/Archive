@@ -45,7 +45,9 @@
 #define USHORT	NT_USHORT
 #define ULONG	NT_ULONG
 #define UINT	NT_UINT
+#undef INT
 #define INT 	NT_INT
+#undef BOOL
 #define BOOL	NT_BOOL
 #define FLOAT	NT_FLOAT
 //#define DOUBLE	NT_DOUBLE

@@ -23,7 +23,7 @@ PURPOSE         :
 
 The Following Routines are defined:
                 1. host_read_resource
-                2. host_write_resource
+                2. host_write_resource (REMOVED FOR .NET SERVER)
 
 =========================================================================
 
@@ -49,9 +49,9 @@ AMENDMENTS      :
  * Allow a suitable default for the CMOS file name.
  */
 
-#ifndef CMOS_FILE_NAME
-#define CMOS_FILE_NAME "cmos.ram"
-#endif
+//#ifndef CMOS_FILE_NAME
+//#define CMOS_FILE_NAME "cmos.ram"
+//#endif
 
 long host_read_resource(int type, char *name, byte *addr, int maxsize, int display_error)
 /* int type;                     Unused */
@@ -79,13 +79,16 @@ long host_read_resource(int type, char *name, byte *addr, int maxsize, int displ
                 /* seek to end to get size */
                 size = _lseek (file_fd, 0L, 2);
 
-                if (size > maxsize)     // corrupted file???
-                    return(0);
-
+                /* Check if the size is valid         */
                 /* Seek back to start before reading! */
-                _lseek (file_fd, 0L, 0);
 
-                _read(file_fd,addr,size);
+                if (size > maxsize || 0 > _lseek (file_fd, 0L, 0))  {
+                    /* Don't forget to close the handle */
+                    _close (file_fd);
+                    return(0);
+                }
+
+                size=_read(file_fd,addr,size);
                 _close(file_fd);
         }
 
@@ -93,6 +96,12 @@ long host_read_resource(int type, char *name, byte *addr, int maxsize, int displ
 }
 
 
+
+#if 0
+
+// The following host_write_resource has been removed for .NET SERVER.
+// The function was called only for the CMOS resource for which we
+// wrote our own code instead of using soft pc.
 
 /********************************************************/
 
@@ -185,3 +194,5 @@ long size;              /* Quantity of data to write */
 
         host_release_timer ();
 }
+
+#endif

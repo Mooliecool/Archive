@@ -42,12 +42,14 @@ GCSfn GetCommShadowMSR;
 
 /*::::::::::::::::::::::::::::::::::::::::::::: Internal function protocols */
 
+#ifndef NEC_98
 #ifndef PROD
 void DisplayPortAccessError(int PortOffset, BOOL ReadAccess, BOOL PortOpen);
 #endif
 
 BOOL SetupBaudRate(HANDLE FileHandle, DIVISOR_LATCH divisor_latch);
 BOOL SetupLCRData(HANDLE FileHandle, LINE_CONTROL_REG LCR_reg);
+#endif // NEC_98
 BOOL SyncLineSettings(HANDLE FileHandle, DCB *pdcb,
 		      DIVISOR_LATCH *divisor_latch,
 		      LINE_CONTROL_REG *LCR_reg);
@@ -57,6 +59,21 @@ BOOL SyncLineSettings(HANDLE FileHandle, DCB *pdcb,
 
 /*:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: UART state */
 
+#if defined(NEC_98)         
+static struct ADAPTER_STATE
+{
+        BUFFER_REG      tx_buffer;
+        BUFFER_REG      rx_buffer;
+        DIVISOR_LATCH   divisor_latch;
+        COMMAND8251     command_write_reg;
+        MODE8251        mode_set_reg;
+        MASK8251        int_mask_reg;
+        STATUS8251      read_status_reg;
+        SIGNAL8251      read_signal_reg;
+        TIMER_MODE      timer_mode_set_reg;
+
+} adapter_state[3];
+#else  // NEC_98
 static struct ADAPTER_STATE
 {
 	DIVISOR_LATCH divisor_latch;
@@ -69,9 +86,73 @@ static struct ADAPTER_STATE
         half_word scratch;      /* scratch register */
 
 } adapter_state[NUM_SERIAL_PORTS];
+#endif // NEC_98
 
 /*:::::::::::::::::::::::::::::::::::::::::::::::::::::::::: WOW inb function */
 
+#if defined(NEC_98)         
+void wow_com_inb(io_addr port, half_word *value)
+{
+    int adapter = adapter_for_port(port);
+    struct ADAPTER_STATE *asp = &adapter_state[adapter];
+    BOOL Invalid_port_access = FALSE;
+    HANDLE FileH;
+    half_word newMSR; //ADD 93.10.14
+
+    /*........................................... Communications port open ? */
+
+   if (GetCommHandle == NULL) {
+        com_inb(port,value);
+        return;
+    }
+
+   FileH = (HANDLE)(*GetCommHandle)((WORD)adapter);
+
+    /*.................................................... Process port read */
+
+    switch(port)
+    {
+        //Process read to RX register
+        case RS232_CH1_TX_RX:   // CH.1 DATA READ
+        case RS232_CH2_TX_RX:   // CH.2 DATA READ
+        case RS232_CH3_TX_RX:   // CH.3 DATA READ
+            Invalid_port_access = TRUE;
+            break;
+
+        //Process read to STATUS register
+        case RS232_CH1_STATUS:  // CH.1 READ STATUS
+        case RS232_CH2_STATUS:  // CH.2 READ STATUS
+        case RS232_CH3_STATUS:  // CH.3 READ STATUS
+
+            *value = (((half_word) (*GetCommShadowMSR)((WORD)adapter) & 0x20) << 2 ) + 5 ;
+// CATION !!!
+
+            break;
+
+        //Process read to MASK register (CH.1 only)
+        case RS232_CH1_MASK:    // CH.1 READ MASK (CH.1 ONLY)
+            Invalid_port_access = TRUE;
+            break;
+
+        //Process read to SIGNAL register
+        case RS232_CH1_SIG:             // CH.1 READ SIGNAL
+        case RS232_CH2_SIG:             // CH.2 READ SIGNAL
+        case RS232_CH3_SIG:             // CH.3 READ SIGNAL
+
+            //*value = ((half_word) (*GetCommShadowMSR)((WORD)adapter) & 0xc0) + 
+            //        (((half_word) (*GetCommShadowMSR)((WORD)adapter) & 0x10) << 1);
+            newMSR = ~(half_word) (*GetCommShadowMSR)((WORD)adapter);
+            *value = (((newMSR & 0x80) >> 2)    
+                     |((newMSR & 0x10) << 2)    
+                     |((newMSR & 0x40) << 1));  // ADD 93.10.14
+// CATION !!!
+
+            break;
+    }
+
+    /*.......................................... Handle invalid port accesses */
+}
+#else // NEC_98
 void wow_com_inb(io_addr port, half_word *value)
 {
     int adapter = adapter_for_port(port);
@@ -165,9 +246,64 @@ void wow_com_inb(io_addr port, half_word *value)
 
 
 }
+#endif // NEC_98
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::: WOW outb function */
 
+#if defined(NEC_98)         
+void wow_com_outb(io_addr port, half_word value)
+{
+    int adapter = adapter_for_port(port);
+    struct ADAPTER_STATE *asp = &adapter_state[adapter];
+    BOOL Invalid_port_access = FALSE;
+    LINE_CONTROL_REG newLCR;
+    HANDLE FileH;
+
+    /*........................................... Communications port open ? */
+
+    if (GetCommHandle == NULL) {
+        com_outb(port,value);
+        return;
+    }
+
+    FileH = (HANDLE)(*GetCommHandle)((WORD)adapter);
+
+    /*.................................................... Process port write */
+
+    switch(port)
+    {
+        //Process write to TX register
+        case RS232_CH1_TX_RX:   // CH.1 DATA WRITE
+        case RS232_CH2_TX_RX:   // CH.2 DATA WRITE
+        case RS232_CH3_TX_RX:   // CH.3 DATA WRITE
+            Invalid_port_access = TRUE;
+            break;
+
+        //Process write to COMMAND/MODE register
+        case RS232_CH1_CMD_MODE:        // CH.1 WRITE COMMAND/MODE
+        case RS232_CH2_CMD_MODE:        // CH.2 WRITE COMMAND/MODE
+        case RS232_CH3_CMD_MODE:        // CH.3 WRITE COMMAND/MODE
+
+// CATION !!!
+
+            break;
+
+        //Process write to MASK register
+        case RS232_CH1_MASK:            // CH.1 SET MASK
+        case RS232_CH2_MASK:            // CH.2 SET MASK
+        case RS232_CH3_MASK:            // CH.3 SET MASK
+            Invalid_port_access = TRUE;
+            break;
+        //Process write to MASK(bit set) register (CH.1 only)
+        case 0x37:                                      // CH.1 SET MASK
+            Invalid_port_access = TRUE;
+            break;
+    }
+
+    /*.......................................... Handle invalid port accesses */
+
+}
+#else  // NEC_98
 void wow_com_outb(io_addr port, half_word value)
 {
     int adapter = adapter_for_port(port);
@@ -253,6 +389,7 @@ void wow_com_outb(io_addr port, half_word value)
 #endif
 
 }
+#endif // NEC_98
 
 
 /*:::::::::::::::: Synchronise Baud/Parity/Stop bits/Data bits with real UART */
@@ -276,8 +413,13 @@ BOOL SyncLineSettings(HANDLE FileHandle,
 
     dcb_ptr = pdcb ? pdcb : &dcb;
 
+#if defined(NEC_98)         
+    // Convert BAUD rate to divisor latch setting
+    divisor_latch->all = (unsigned short)(153600/dcb_ptr->BaudRate);
+#else  // NEC_98
     // Convert BAUD rate to divisor latch setting
     divisor_latch->all = (unsigned short)(115200/dcb_ptr->BaudRate);
+#endif // NEC_98
 
     //Setup parity value
     LCR_reg->bits.parity_enabled = PARITYENABLE_ON;       //Default parity on
@@ -317,6 +459,7 @@ BOOL SyncLineSettings(HANDLE FileHandle,
 }
 
 
+#ifndef NEC_98
 /*::::::::::::::::::::::::::::::::::::::::::::::::::: Setup Line control data */
 
 BOOL SetupLCRData(HANDLE FileHandle, LINE_CONTROL_REG LCR_reg)
@@ -436,3 +579,4 @@ void DisplayPortAccessError(int PortOffset, BOOL ReadAccess, BOOL PortOpen)
     printf("WOW Communication Port Access Error\n%s\n",ErrorMessage);
 }
 #endif
+#endif // NEC_98

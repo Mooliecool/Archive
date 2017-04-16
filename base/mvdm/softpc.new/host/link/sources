@@ -18,8 +18,6 @@ Author:
 
     Steve Wood (stevewo) 12-Apr-1990
 
-NOTE:   Commented description of this file is in \nt\bak\bin\sources.tpl
-
 !ENDIF
 
 MAJORCOMP=spchost
@@ -28,7 +26,7 @@ MINORCOMP=resources
 TARGETNAME=resource
 
 
-TARGETPATH=$(SOFTPC_DEST)\obj
+TARGETPATH=$(SOFTPC_DEST)\$(_OBJ_DIR)
 
 
 

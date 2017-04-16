@@ -49,9 +49,15 @@ extern void call_ica_hw_interrupt(int, int, int);
 ** --------------------------------------------------------------------
 */
 
+#ifdef  NEC_98
+#define MULTIMEDIA_LINE         4
+#define MULTIMEDIA_ICA          1
+#define MULTIMEDIA_INTERRUPT    0x14
+#else   // NEC_98
 #define MULTIMEDIA_LINE         2
 #define MULTIMEDIA_ICA          1
 #define MULTIMEDIA_INTERRUPT    0x72
+#endif  // NEC_98
 
 #define CALLBACK_ARGS_SIZE      16
 

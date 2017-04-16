@@ -15,6 +15,7 @@
 #include <softpc.h>
 
 #include <winbase.h>
+#include "dpmtbls.h"
 
 USHORT demDeleteLabel(BYTE Drive)
 {
@@ -23,7 +24,7 @@ USHORT demDeleteLabel(BYTE Drive)
 
     sprintf(szStr, "%c:\\", Drive);
 
-    if(!SetVolumeLabelA(szStr, NULL))
+    if(!SetVolumeLabelOem(szStr, NULL))
 	return(1);
     else
 	return(0);
@@ -33,7 +34,6 @@ USHORT demDeleteLabel(BYTE Drive)
 USHORT demCreateLabel(BYTE Drive, LPSTR lpszName)
 {
     CHAR szStr[32];
-    CHAR szAnsi[32];
     CHAR szTmp[32];
     CHAR *p, *s;
     int  i = 0;
@@ -45,32 +45,31 @@ USHORT demCreateLabel(BYTE Drive, LPSTR lpszName)
     p = szTmp;
 
     while(s) {
-	if(*s != '.')  {
-	    *p = *s;
-	    i++;
-	    p++;
-	}
-	else {
-	    while(i < 8) {
-		*p++ = ' ';
-		i++;
-	    }
-	}
-	s++;
+        if(*s != '.')  {
+            *p = *s;
+            i++;
+            p++;
+        }
+        else {
+            while(i < 8) {
+                *p++ = ' ';
+                i++;
+            }
+        }
+        s++;
 
-	if(i > 11)
-	    break;
+        if(i > 11) {
+            break;
+        }
     }
 
     szTmp[i] = '\0';
 
-    OemToAnsi(szTmp, szAnsi);
-
-    if(!SetVolumeLabelA(szStr, szAnsi))
-	return(1);
+    if(!SetVolumeLabelOem(szStr, szTmp))
+	    return(1);
 
     else
-	return(0);
+	    return(0);
 
 
 }

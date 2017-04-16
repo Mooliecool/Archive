@@ -32,12 +32,16 @@ Revision History:
 #define BOP_NOSUPPORT        0x59    // host warning dialog box
 #define BOP_WAITIFIDLE       0x5A    // idle bop
 #define BOP_DBGBREAKPOINT    0x5B    // does a 32 bit DbgBreakPoint
-#define BOP_KBD              0x5C    // BUGBUG temporary
+#define BOP_DEVICES          0x5C    // Devices internal to host\src
 #define BOP_VIDEO            0x5D    // BUGBUG temporary
 #define BOP_NOTIFICATION     0x5E    // 16bits to 32 bits notification
 #define BOP_UNIMPINT         0x5F    // BUGBUG temporary
 #define BOP_SWITCHTOREALMODE 0xFD
 #define BOP_UNSIMULATE       0xFE    // end execution of code in a vdm
+
+#define SVC_DEVICES_MSCDEXINIT      0x00
+#define SVC_DEVICES_MSCDEX          0x01
+#define SVC_DEVICES_LASTSVC         0x02
 
 #define BOP_SIZE         3       // # of bytes in a bop instruction
 //

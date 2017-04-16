@@ -19,6 +19,22 @@
  */
 
 /* Mouse port number definitions. */
+#if defined(NEC_98)
+#define NMODE_BASE              0x7FD9
+#define HMODE_BASE              0x61
+#define MOUSE_PORT_START        0
+#define MOUSE_PORT_END          6
+#define MOUSE_PORT_0            0
+#define MOUSE_PORT_1            2
+#define MOUSE_PORT_2            4
+#define MOUSE_PORT_3            6
+
+#define NEC98_CPU_MOUSE_INT2     6   //INT2 Master PIC
+#define NEC98_CPU_MOUSE_INT6     5   //INT6 Slave PIC
+
+#define NEC98_CPU_MOUSE_ADAPTER0 0
+#define NEC98_CPU_MOUSE_ADAPTER1 1
+#else  // !NEC_98
 #define MOUSE_PORT_0		0x023c
 #define MOUSE_PORT_1		0x023d
 #define MOUSE_PORT_2		0x023e
@@ -26,6 +42,7 @@
 
 #define MOUSE_PORT_START	0x023c
 #define MOUSE_PORT_END		0x023f
+#endif // !NEC_98
 
 /* Internal mouse status word bits. */
 #define LEFT_BUTTON_DOWN	0x04
