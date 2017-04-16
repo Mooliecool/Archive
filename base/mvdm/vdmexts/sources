@@ -64,7 +64,7 @@ SOURCES= \
         wowprof.c  \
         vdmexts.rc
 
-i386_SOURCES=i386\profile.c i386\vdmtib.c i386\regs.c
+X86_SOURCES=x86\profile.c x86\vdmtib.c x86\regs.c
 
 USE_NTDLL=1
 
@@ -79,3 +79,5 @@ W32_SB=1
 PRECOMPILED_INCLUDE=precomp.h
 PRECOMPILED_PCH=precomp.pch
 PRECOMPILED_OBJ=precomp.obj
+
+NO_SAFESEH=1
