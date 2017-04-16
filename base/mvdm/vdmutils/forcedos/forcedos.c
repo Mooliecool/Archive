@@ -36,7 +36,7 @@ Revision History:
 #include <ntrtl.h>
 #include <nturtl.h>
 #include <windows.h>
-#include <winnlsp.h>
+//#include <winnlsp.h>
 #include "forcedos.h"
 
 #if DBG
@@ -91,7 +91,7 @@ main(
     Extention[2] = BATExtention;
 
     // Set language code page to system locale.
-    SetThreadUILanguage(0);
+    //SetThreadUILanguage(0);
 
 
     pCurDirectory = pProgramName = NULL;

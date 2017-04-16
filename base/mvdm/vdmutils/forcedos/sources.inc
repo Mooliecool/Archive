@@ -28,14 +28,17 @@ TARGETTYPE=PROGRAM
 
 SOURCES=..\forcedos.c ..\forcedos.rc
 
-C_DEFINES=/DUNICODE=1 /DNOMINMAX
+C_DEFINES=/DUNICODE=1
 
 USE_MSVCRT=1
 
 UMLIBS=$(SDK_LIB_PATH)\user32.lib \
        $(SDK_LIB_PATH)\ntdll.lib \
-       $(SDK_LIB_PATH)\kernl32p.lib
+       $(SDK_LIB_PATH)\kernel32.lib
+
 MSC_WARNING_LEVEL=/W3 /WX
 
 UMTYPE=console
 SOURCES_USED=..\sources.inc
+
+NO_SAFESEH=1

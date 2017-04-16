@@ -28,7 +28,7 @@ TARGETTYPE=LIBRARY
 
 SOURCES=..\graftabl.c ..\graftabl.rc
 
-C_DEFINES=/DUNICODE=1 /DNOMINMAX
+C_DEFINES=/DUNICODE=1
 
 UMLIBS=$(SDK_LIB_PATH)\user32.lib
 
@@ -40,3 +40,5 @@ UMAPPLEXT=.com
 UMRES=$(O)\graftabl.res
 
 SOURCES_USED=..\sources.inc
+
+NO_SAFESEH=1
