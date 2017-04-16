@@ -246,26 +246,130 @@ BOOL FASTCALL free16(VPVOID vp)
 //      Allocs memory from current task's 16bit stack.
 //      Returns farpointer to memoryblock;
 //
+// NOTES!!!!!:
+// - This is not intended to be a full blown memory manager. It is intended to 
+//   replace the TDF_INITCALLBACKSTACKFLAG to avoid problems with ptd->vpCBStack
+//   getting hosed by multiple stackalloc16 calls. (See bug #393267 et al)
+// - All calls to stackalloc16() and stackfree16() must be properly nested.
+//   If you can't assure that your usage is properly nested, you'd better use
+//   GlobalAllocLock16() & GlobalUnlockFree16() instead.
+//   Beware individual message thunks may have calls to stackalloc16() that
+//   aren't readily apparent.
+// - The request size passed to stackfree16() needs to be the same as the size
+//   of the corresponding stackalloc16() call.
+// - Run your changes involving stackalloc16() under debug WOW32.DLL.  The
+//   built-in sanity checking will help you catch any gotcha's
+// - ptd->vpCBStack *SHOULD NOT* be referenced or used outside of stackalloc16()
+//   stackfree16(), and callback16().
+// - If this mechanism gets out of whack, chances are the symptom will be
+//   a 16-bit stack fault message.
 //*****************************************************************************
-
 VPVOID FASTCALL stackalloc16(UINT cb)
 {
+#ifdef DEBUG
+    VPVOID   vp;
+    DWORD   *psig, cb16;
+#endif
     register PTD ptd;
 
-    // get current task's 16bit stack
 
+    // get current task's 16bit stack
     ptd = CURRENTPTD();
 
-    // grow ss:sp and return this imaginary pointer.
+#ifdef DEBUG
+    // Save requested allocation size. Assume it will always be less than 64K
+    cb16 = (DWORD)cb;      
 
-    if (ptd->dwFlags & TDF_INITCALLBACKSTACK) {
+    // Add a dword (for signature) to the requested size
+    cb += sizeof(DWORD);   
+
+    // Get the current callback sp
+    if (ptd->cStackAlloc16 == 0) {
+        vp = ptd->vpStack;
+    } else {
+        vp = ptd->vpCBStack;
+    }
+#endif
+
+    // grow ss:sp and return this imaginary pointer.
+    if (ptd->cStackAlloc16 == 0) {
         ptd->vpCBStack = ptd->vpStack - cb;
-        ptd->dwFlags &= ~TDF_INITCALLBACKSTACK;
     }
     else {
         ptd->vpCBStack -= cb;
     }
 
+#ifdef DEBUG
+        // Slide our DWORD signature in after the allocated request
+        vp -= sizeof(DWORD);
+        GETVDMPTR(vp, sizeof(DWORD), psig);
+
+        // The signature hiword is the offset (sp) we're returning.
+        // The signature loword is the requested size.
+        *psig = ((ptd->vpCBStack & 0x0000FFFF) << 16) | cb16;
+        FLUSHVDMPTR(vp, sizeof(DWORD), psig);
+        FREEVDMPTR(psig);
+#endif
+
+    ptd->cStackAlloc16++;
+    WOW32ASSERT((ptd->cStackAlloc16 >= 1));
+
     return (VPVOID)ptd->vpCBStack;
+}
+
+
+
+
+
+//*****************************************************************************
+//
+// StackFree16 -
+//
+//  Decrements count of memory alloc'd by stackalloc16 
+//
+//  NOTES:  
+//  - This is #define'd as stackfree16(vp,cb) StackFree16(cb) in free builds
+//    and stackfree16(vp,cb) StackFree16(vp, cb) in DEBUG builds (wcall16.h)
+//  - See stackalloc16() NOTES above
+//
+//*****************************************************************************
+#ifdef DEBUG
+VOID FASTCALL StackFree16(VPVOID vp, UINT cb)
+#else
+VOID FASTCALL StackFree16(UINT cb)
+#endif
+{
+    register PTD ptd;
+#ifdef DEBUG
+    DWORD  *psig, sig;
+
+    // reconstruct what our signature should be 
+    sig = ((vp & 0x0000FFFFF) << 16) | cb;
+#endif
+
+    ptd = CURRENTPTD();
+
+    ptd->vpCBStack += cb;
+
+#ifdef DEBUG
+    // vpCBStack should now be pointing at our signature.
+    GETVDMPTR(ptd->vpCBStack, sizeof(DWORD), psig);
+
+    // you are hitting this assertion for one of the following reasons:
+    //  - calls to stackalloc16() & stackfree16() are not properly nested
+    //  - the signature got overwritten
+    //  - somebody changed ptd->vpCBStack incorrectly
+    WOW32ASSERTMSG((*psig == sig), ("WOW::StackFree16 out of synch!!\n"));
+
+    // adjust for the signature DWORD we added to the request
+    ptd->vpCBStack += sizeof(DWORD);
+#endif
+
+    if(ptd->cStackAlloc16 > 0) {
+        ptd->cStackAlloc16--;
+    } else { 
+        WOW32ASSERTMSG((FALSE), ("WOW::StackFree16:cStackAlloc16 <= 0!\n"));
+        ptd->cStackAlloc16 = 0;  // if it was less than 0 somehow
+    }
 }
 

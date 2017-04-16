@@ -13,7 +13,6 @@
 
 #define WOWCLASS_ATOM_NAME  9           /* "#" + 7 digits + "\0" */
 
-#define WOWCLASS_VIRTUAL_NOT_BIT31  0x00040000  // the LDT bit
 
 /* Function prototypes
  */

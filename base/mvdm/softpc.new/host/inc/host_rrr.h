@@ -38,10 +38,10 @@ void nls_init(void);
 extern char szDoomMsg[];
 extern char szSysErrMsg[];
 #ifdef X86GFX
-extern char szFrozenString[];
+extern wchar_t wszFrozenString[];
 #endif
-extern char szHideMouseMenuStr[];
-extern char szDisplayMouseMenuStr[];
+extern wchar_t wszHideMouseMenuStr[];
+extern wchar_t wszDisplayMouseMenuStr[];
 
 
 

@@ -71,7 +71,7 @@ WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
  * before the later config items that refer to them
  *
  * EG if C_EXTEND_MAX_SIZE is not validated before then the check in
- * C_EXTENDED_MEM_SIZE is against whatever crap max was malloced.
+ * C_EXTENDED_MEM_SIZE is against whatever max was malloced.
  *
  * =====================================================================
  * 	To avoid backwards compatibility problems,

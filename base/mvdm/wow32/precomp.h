@@ -32,7 +32,6 @@
 #include "wsubcls.h"
 #include <mmsystem.h>
 #include "wkman.h"
-#include "fastwow.h"
 #include "wcall32.h"
 #include "wudlg.h"
 #include "tdb16.h"
@@ -56,7 +55,6 @@
 #include "wgprnset.h"
 #include "wgfont.h"
 #include "wgdi31.h"
-#include "wgman.h"
 #include "wgpal.h"
 #include "wgtext.h"
 #include "wheap.h"
@@ -68,7 +66,6 @@
 #include "oemuni.h"
 #include "vrnmpipe.h"
 #include "wkgthunk.h"
-#include "wklocal.h"
 #include "wowhooks.h"
 #include "wutmr.h"
 #include "wreldc.h"
@@ -108,9 +105,11 @@
 #include "wowshell.h"
 #include "wshell.h"
 #include "wowth.h"
-#include "wthman.h"
 #include "wusercli.h"
 #include "wole2.h"
+#include "win95.h"
 #include "wparam.h"
 #include <limits.h>
-
+#include <commctrl.h>
+#include "wshimdb.h"
+#include "dpmtbls.h"

@@ -17,396 +17,394 @@
  */
 #define FUN_ADJUSTWINDOWRECT        102 //
 #define FUN_ADJUSTWINDOWRECTEX      454 //
-#define FUN_ANSILOWER           432 //
-#define FUN_ANSILOWERBUFF       438 //
-#define FUN_ANSINEXT            472 //
-#define FUN_ANSIPREV            473 //
-#define FUN_ANSIUPPER           431 //
-#define FUN_ANSIUPPERBUFF       437 //
-#define FUN_ANYPOPUP            52  //
-#define FUN_APPENDMENU          411 //
+#define FUN_ANSILOWER               432 //
+#define FUN_ANSILOWERBUFF           438 //
+#define FUN_ANSINEXT                472 //
+#define FUN_ANSIPREV                473 //
+#define FUN_ANSIUPPER               431 //
+#define FUN_ANSIUPPERBUFF           437 //
+#define FUN_ANYPOPUP                52  //
+#define FUN_APPENDMENU              411 //
 #define FUN_ARRANGEICONICWINDOWS    170 // Internal, proto
 #define FUN_BEGINDEFERWINDOWPOS     259 // Internal, proto
-#define FUN_BEGINPAINT          39  //
+#define FUN_BEGINPAINT              39  //
 #define FUN_BRINGWINDOWTOTOP        45  //
 #define FUN_BROADCASTMESSAGE        355 // Internal
-#define FUN_BUILDCOMMDCB        213 //
-#define FUN_BUTTONWNDPROC       303 // Internal
-#define FUN_CALCCHILDSCROLL     462 // Internal
-#define FUN_CALLMSGFILTER       123 //
-#define FUN_CALLWINDOWPROC      122 //
-#define FUN_CARETBLINKPROC      311 // Internal
+#define FUN_BUILDCOMMDCB            213 //
+#define FUN_BUTTONWNDPROC           303 // Internal
+#define FUN_CALCCHILDSCROLL         462 // Internal
+#define FUN_CALLMSGFILTER           123 //
+#define FUN_CALLWINDOWPROC          122 //
+#define FUN_CARETBLINKPROC          311 // Internal
 #define FUN_CASCADECHILDWINDOWS     198 // Internal
 #define FUN_CHANGECLIPBOARDCHAIN    149 //
-#define FUN_CHANGEMENU          153 //
-#define FUN_CHECKDLGBUTTON      97  //
-#define FUN_CHECKMENUITEM       154 //
+#define FUN_CHANGEMENU              153 //
+#define FUN_CHECKDLGBUTTON          97  //
+#define FUN_CHECKMENUITEM           154 //
 #define FUN_CHECKRADIOBUTTON        96  //
 #define FUN_CHILDWINDOWFROMPOINT    191 //
-#define FUN_CLEARCOMMBREAK      211 //
-#define FUN_CLIENTTOSCREEN      28  //
-#define FUN_CLIPCURSOR          16  //
-#define FUN_CLOSECLIPBOARD      138 //
-#define FUN_CLOSECOMM           207 //
-#define FUN_CLOSEWINDOW         43  //
+#define FUN_CLEARCOMMBREAK          211 //
+#define FUN_CLIENTTOSCREEN          28  //
+#define FUN_CLIPCURSOR              16  //
+#define FUN_CLOSECLIPBOARD          138 //
+#define FUN_CLOSECOMM               207 //
+#define FUN_CLOSEWINDOW             43  //
 #define FUN_COMBOBOXCTLWNDPROC      344 // Internal
-#define FUN_COMPUPDATERECT      316 // Internal
-#define FUN_COMPUPDATERGN       317 // Internal
+#define FUN_COMPUPDATERECT          316 // Internal
+#define FUN_COMPUPDATERGN           317 // Internal
 #define FUN_CONTROLPANELINFO        273 // Internal
-#define FUN_CONTSCROLL          310 // Internal
-#define FUN_COPYRECT            74  //
+#define FUN_CONTSCROLL              310 // Internal
+#define FUN_COPYRECT                74  //
 #define FUN_COUNTCLIPBOARDFORMATS   143 //
-#define FUN_CREATECARET         163 //
-#define FUN_CREATECURSOR        406 //
-#define FUN_CREATECURSORICONINDIRECT    408 // Internal
-#define FUN_CREATEDIALOG        89  //
+#define FUN_CREATECARET             163 //
+#define FUN_CREATECURSOR            406 //
+#define FUN_CREATECURSORICONINDIRECT 408 // Internal
+#define FUN_CREATEDIALOG            89  //
 #define FUN_CREATEDIALOGINDIRECT    219 //
-#define FUN_CREATEDIALOGINDIRECTPARAM   242 //
+#define FUN_CREATEDIALOGINDIRECTPARAM 242 //
 #define FUN_CREATEDIALOGPARAM       241 //
-#define FUN_CREATEICON          407 //
-#define FUN_CREATEMENU          151 //
-#define FUN_CREATEPOPUPMENU     415 //
-#define FUN_CREATEWINDOW        41  //
-#define FUN_CREATEWINDOWEX      452 //
-#define FUN_DEFDLGPROC          308 //
-#define FUN_DEFDLGPROCTHUNK     534 //
-#define FUN_DEFERWINDOWPOS      260 // Internal, proto
-#define FUN_DEFFRAMEPROC        445 //
-#define FUN_DEFHOOKPROC         235 //
-#define FUN_DEFMDICHILDPROC     447 //
-#define FUN_DEFWINDOWPROC       107 //
-#define FUN_DELETEMENU          413 //
-#define FUN_DESKTOPWNDPROC      305 // Internal
-#define FUN_DESTROYCARET        164 //
-#define FUN_DESTROYCURSOR       458 //
-#define FUN_DESTROYICON         457 //
-#define FUN_DESTROYMENU         152 //
-#define FUN_DESTROYWINDOW       53  //
-#define FUN_DIALOGBOX           87  //
+#define FUN_CREATEICON              407 //
+#define FUN_CREATEMENU              151 //
+#define FUN_CREATEPOPUPMENU         415 //
+#define FUN_CREATEWINDOW            41  //
+#define FUN_CREATEWINDOWEX          452 //
+#define FUN_DEFDLGPROC              308 //
+#define FUN_DEFERWINDOWPOS          260 // Internal, proto
+#define FUN_DEFFRAMEPROC            445 //
+#define FUN_DEFHOOKPROC             235 //
+#define FUN_DEFMDICHILDPROC         447 //
+#define FUN_DEFWINDOWPROC           107 //
+#define FUN_DELETEMENU              413 //
+#define FUN_DESKTOPWNDPROC          305 // Internal
+#define FUN_DESTROYCARET            164 //
+#define FUN_DESTROYCURSOR           458 //
+#define FUN_DESTROYICON             457 //
+#define FUN_DESTROYMENU             152 //
+#define FUN_DESTROYWINDOW           53  //
+#define FUN_DIALOGBOX               87  //
 #define FUN_DIALOGBOXINDIRECT       218 //
 #define FUN_DIALOGBOXINDIRECTPARAM  240 //
-#define FUN_DIALOGBOXPARAM      239 //
-#define FUN_DISABLEOEMLAYER     4   // Internal
-#define FUN_DISPATCHMESSAGE     114 //
-#define FUN_DLGDIRLIST          100 //
+#define FUN_DIALOGBOXPARAM          239 //
+#define FUN_DISABLEOEMLAYER         4   // Internal
+#define FUN_DISPATCHMESSAGE         114 //
+#define FUN_DLGDIRLIST              100 //
 #define FUN_DLGDIRLISTCOMBOBOX      195 //
-#define FUN_DLGDIRSELECT        99  //
+#define FUN_DLGDIRSELECT            99  //
 #define FUN_DLGDIRSELECTCOMBOBOX    194 //
-#define FUN_DRAGDETECT          465 // Internal
-#define FUN_DRAGOBJECT          464 // Internal
-#define FUN_DRAWFOCUSRECT       466 //
-#define FUN_DRAWICON            84  //
-#define FUN_DRAWMENUBAR         160 //
-#define FUN_DRAWTEXT            85  //
-#define FUN_DUMPICON            459 // Internal
-#define FUN_EDITWNDPROC         301 // Internal
-#define FUN_EMPTYCLIPBOARD      139 //
+#define FUN_DRAGDETECT              465 // Internal
+#define FUN_DRAGOBJECT              464 // Internal
+#define FUN_DRAWFOCUSRECT           466 //
+#define FUN_DRAWICON                84  //
+#define FUN_DRAWMENUBAR             160 //
+#define FUN_DRAWTEXT                85  //
+#define FUN_DUMPICON                459 // Internal
+#define FUN_EDITWNDPROC             301 // Internal
+#define FUN_EMPTYCLIPBOARD          139 //
 #define FUN_ENABLEHARDWAREINPUT     331 //
-#define FUN_ENABLEMENUITEM      155 //
-#define FUN_ENABLEOEMLAYER      3   // Internal
-#define FUN_ENABLEWINDOW        34  //
+#define FUN_ENABLEMENUITEM          155 //
+#define FUN_ENABLEOEMLAYER          3   // Internal
+#define FUN_ENABLEWINDOW            34  //
 #define FUN_ENDDEFERWINDOWPOS       261 // Internal, proto
-#define FUN_ENDDIALOG           88  //
-#define FUN_ENDMENU         187 // Internal
-#define FUN_ENDPAINT            40  //
+#define FUN_ENDDIALOG               88  //
+#define FUN_ENDMENU                 187 // Internal
+#define FUN_ENDPAINT                40  //
 #define FUN_ENUMCHILDWINDOWS        55  //
 #define FUN_ENUMCLIPBOARDFORMATS    144 //
-#define FUN_ENUMPROPS           27  //
-#define FUN_ENUMTASKWINDOWS     225 //
-#define FUN_ENUMWINDOWS         54  //
-#define FUN_EQUALRECT           244 //
+#define FUN_ENUMPROPS               27  //
+#define FUN_ENUMTASKWINDOWS         225 //
+#define FUN_ENUMWINDOWS             54  //
+#define FUN_EQUALRECT               244 //
 #define FUN_ESCAPECOMMFUNCTION      214 //
 #define FUN_EXCLUDEUPDATERGN        238 //
-#define FUN_EXITWINDOWS         7   // Internal, proto
+#define FUN_EXITWINDOWS             7   // Internal, proto
 #define FUN_FARCALLNETDRIVER        500 // Internal
-#define FUN_FILEPORTDLGPROC     346 // Internal
-#define FUN_FILLRECT            81  //
-#define FUN_FILLWINDOW          324 // Internal
-#define FUN_FINALUSERINIT       400 // Internal
-#define FUN_FINDWINDOW          50  //
-#define FUN_FLASHWINDOW         105 //
-#define FUN_FLUSHCOMM           215 //
-#define FUN_FRAMERECT           83  //
-#define FUN_GETACTIVEWINDOW     60  //
+#define FUN_FILEPORTDLGPROC         346 // Internal
+#define FUN_FILLRECT                81  //
+#define FUN_FILLWINDOW              324 // Internal
+#define FUN_FINALUSERINIT           400 // Internal
+#define FUN_FINDWINDOW              50  //
+#define FUN_FLASHWINDOW             105 //
+#define FUN_FLUSHCOMM               215 //
+#define FUN_FRAMERECT               83  //
+#define FUN_GETACTIVEWINDOW         60  //
 #define FUN_GETASYNCKEYSTATE        249 //
-#define FUN_GETCAPTURE          236 //
+#define FUN_GETCAPTURE              236 //
 #define FUN_GETCARETBLINKTIME       169 //
-#define FUN_GETCARETPOS         183 //
-#define FUN_GETCLASSINFO        404 //
-#define FUN_GETCLASSLONG        131 //
-#define FUN_GETCLASSNAME        58  //
-#define FUN_GETCLASSWORD        129 //
-#define FUN_GETCLIENTRECT       33  //
+#define FUN_GETCARETPOS             183 //
+#define FUN_GETCLASSINFO            404 //
+#define FUN_GETCLASSLONG            131 //
+#define FUN_GETCLASSNAME            58  //
+#define FUN_GETCLASSWORD            129 //
+#define FUN_GETCLIENTRECT           33  //
 #define FUN_GETCLIPBOARDDATA        142 //
 #define FUN_GETCLIPBOARDFORMATNAME  146 //
 #define FUN_GETCLIPBOARDOWNER       140 //
 #define FUN_GETCLIPBOARDVIEWER      148 //
-#define FUN_GETCOMMERROR        203 //
+#define FUN_GETCOMMERROR            203 //
 #define FUN_GETCOMMEVENTMASK        209 //
-#define FUN_GETCOMMSTATE        202 //
-#define FUN_GETCONTROLBRUSH     326 // Internal
-#define FUN_GETCURRENTTIME      15  //
-#define FUN_GETSYSTEMMSECCOUNT  15  //  This system.drv rtn gets thunked to GetCurrentTime
-#define FUN_GETCURSORPOS        17  //
-#define FUN_GETDC           66  //
-#define FUN_GETDESKTOPHWND      278 // Internal, proto
+#define FUN_GETCOMMSTATE            202 //
+#define FUN_GETCONTROLBRUSH         326 // Internal
+#define FUN_GETCURRENTTIME          15  //
+#define FUN_GETSYSTEMMSECCOUNT      15  //  This system.drv rtn gets thunked to GetCurrentTime
+#define FUN_GETCURSORPOS            17  //
+#define FUN_GETDC                   66  //
+#define FUN_GETDESKTOPHWND          278 // Internal, proto
 #define FUN_GETDESKTOPWINDOW        286 //
 #define FUN_GETDIALOGBASEUNITS      243 //
-#define FUN_GETDLGCTRLID        277 // Internal, proto
-#define FUN_GETDLGITEM          91  //
-#define FUN_GETDLGITEMINT       95  //
-#define FUN_GETDLGITEMTEXT      93  //
+#define FUN_GETDLGCTRLID            277 // Internal, proto
+#define FUN_GETDLGITEM              91  //
+#define FUN_GETDLGITEMINT           95  //
+#define FUN_GETDLGITEMTEXT          93  //
 #define FUN_GETDOUBLECLICKTIME      21  //
-#define FUN_GETFILEPORTNAME     343 // Internal
-#define FUN_GETFOCUS            23  //
-#define FUN_GETICONID           455 // Internal
-#define FUN_GETINPUTSTATE       335 //
+#define FUN_GETFILEPORTNAME         343 // Internal
+#define FUN_GETFOCUS                23  //
+#define FUN_GETICONID               455 // Internal
+#define FUN_GETINPUTSTATE           335 //
 #define FUN_GETINTERNALWINDOWPOS    460 // Internal
 #define FUN_GETKEYBOARDSTATE        222 //
-#define FUN_GETKEYSTATE         106 //
+#define FUN_GETKEYSTATE             106 //
 #define FUN_GETLASTACTIVEPOPUP      287 //
-#define FUN_GETMENU         157 //
+#define FUN_GETMENU                 157 //
 #define FUN_GETMENUCHECKMARKDIMENSIONS  417 //
 #define FUN_GETMENUITEMCOUNT        263 //
-#define FUN_GETMENUITEMID       264 //
-#define FUN_GETMENUSTATE        250 //
-#define FUN_GETMENUSTRING       161 //
-#define FUN_GETMESSAGE          108 //
-#define FUN_GETMESSAGE2         323 // Internal
-#define FUN_GETMESSAGEPOS       119 //
-#define FUN_GETMESSAGETIME      120 //
+#define FUN_GETMENUITEMID           264 //
+#define FUN_GETMENUSTATE            250 //
+#define FUN_GETMENUSTRING           161 //
+#define FUN_GETMESSAGE              108 //
+#define FUN_GETMESSAGE2             323 // Internal
+#define FUN_GETMESSAGEPOS           119 //
+#define FUN_GETMESSAGETIME          120 //
 #define FUN_GETMOUSEEVENTPROC       337 // Internal
 #define FUN_GETNEXTDLGGROUPITEM     227 //
 #define FUN_GETNEXTDLGTABITEM       228 //
 #define FUN_GETNEXTQUEUEWINDOW      274 // Internal
-#define FUN_GETNEXTWINDOW       230 //
-#define FUN_GETPARENT           46  //
+#define FUN_GETNEXTWINDOW           230 //
+#define FUN_GETPARENT               46  //
 #define FUN_GETPRIORITYCLIPBOARDFORMAT  402 //
-#define FUN_GETPROP         25  //
-#define FUN_GETQUEUESTATUS      334 // Internal
-#define FUN_GETSCROLLPOS        63  //
-#define FUN_GETSCROLLRANGE      65  //
-#define FUN_GETSUBMENU          159 //
-#define FUN_GETSYSCOLOR         180 //
+#define FUN_GETPROP                 25  //
+#define FUN_GETQUEUESTATUS          334 // Internal
+#define FUN_GETSCROLLPOS            63  //
+#define FUN_GETSCROLLRANGE          65  //
+#define FUN_GETSUBMENU              159 //
+#define FUN_GETSYSCOLOR             180 //
 #define FUN_GETSYSMODALWINDOW       189 //
-#define FUN_GETSYSTEMMENU       156 //
+#define FUN_GETSYSTEMMENU           156 //
 #define FUN_GETSYSTEMMETRICS        179 //
 #define FUN_GETTABBEDTEXTEXTENT     197 //
-#define FUN_GETTASKFROMHWND     117 // Internal
-#define FUN_GETTICKCOUNT        13  //
+#define FUN_GETTICKCOUNT            13  //
 #define FUN_GETTIMERRESOLUTION      14  // Internal
-#define FUN_GETTOPWINDOW        229 //
-#define FUN_GETUPDATERECT       190 //
-#define FUN_GETUPDATERGN        237 //
-#define FUN_GETWC2          318 // Internal
-#define FUN_GETWINDOW           262 //
-#define FUN_GETWINDOWDC         67  //
-#define FUN_GETWINDOWLONG       135 //
-#define FUN_GETWINDOWRECT       32  //
-#define FUN_GETWINDOWTASK       224 //
-#define FUN_GETWINDOWTEXT       36  //
+#define FUN_GETTOPWINDOW            229 //
+#define FUN_GETUPDATERECT           190 //
+#define FUN_GETUPDATERGN            237 //
+#define FUN_GETWC2                  318 // Internal
+#define FUN_GETWINDOW               262 //
+#define FUN_GETWINDOWDC             67  //
+#define FUN_GETWINDOWLONG           135 //
+#define FUN_GETWINDOWRECT           32  //
+#define FUN_GETWINDOWTASK           224 //
+#define FUN_GETWINDOWTEXT           36  //
 #define FUN_GETWINDOWTEXTLENGTH     38  //
-#define FUN_GETWINDOWWORD       133 //
-#define FUN_GLOBALADDATOM       268 //
+#define FUN_GETWINDOWWORD           133 //
+#define FUN_GLOBALADDATOM           268 //
 #define FUN_GLOBALDELETEATOM        269 //
-#define FUN_GLOBALFINDATOM      270 //
+#define FUN_GLOBALFINDATOM          270 //
 #define FUN_GLOBALGETATOMNAME       271 //
-#define FUN_GRAYSTRING          185 //
-#define FUN_HIDECARET           166 //
-#define FUN_HILITEMENUITEM      162 //
-#define FUN_ICONSIZE            86  // Internal
-#define FUN_INFLATERECT         78  //
-#define FUN_INITAPP         5   // No proto
-#define FUN_INSENDMESSAGE       192 //
-#define FUN_INSERTMENU          410 //
-#define FUN_INTERSECTRECT       79  //
-#define FUN_INVALIDATERECT      125 //
-#define FUN_INVALIDATERGN       126 //
-#define FUN_INVERTRECT          82  //
-#define FUN_ISCHARALPHA         433 //
+#define FUN_GRAYSTRING              185 //
+#define FUN_HIDECARET               166 //
+#define FUN_HILITEMENUITEM          162 //
+#define FUN_ICONSIZE                86  // Internal
+#define FUN_INFLATERECT             78  //
+#define FUN_INITAPP                 5   // No proto
+#define FUN_INSENDMESSAGE           192 //
+#define FUN_INSERTMENU              410 //
+#define FUN_INTERSECTRECT           79  //
+#define FUN_INVALIDATERECT          125 //
+#define FUN_INVALIDATERGN           126 //
+#define FUN_INVERTRECT              82  //
+#define FUN_ISCHARALPHA             433 //
 #define FUN_ISCHARALPHANUMERIC      434 //
-#define FUN_ISCHARLOWER         436 //
-#define FUN_ISCHARUPPER         435 //
-#define FUN_ISCHILD         48  //
+#define FUN_ISCHARLOWER             436 //
+#define FUN_ISCHARUPPER             435 //
+#define FUN_ISCHILD                 48  //
 #define FUN_ISCLIPBOARDFORMATAVAILABLE  193 //
-#define FUN_ISDIALOGMESSAGE     90  //
+#define FUN_ISDIALOGMESSAGE         90  //
 #define FUN_ISDLGBUTTONCHECKED      98  //
-#define FUN_ISICONIC            31  //
-#define FUN_ISRECTEMPTY         75  //
+#define FUN_ISICONIC                31  //
+#define FUN_ISRECTEMPTY             75  //
 #define FUN_ISTWOBYTECHARPREFIX     51  // Internal, proto
-#define FUN_ISUSERIDLE          333 // Internal
-#define FUN_ISWINDOW            47  //
-#define FUN_ISWINDOWENABLED     35  //
-#define FUN_ISWINDOWVISIBLE     49  //
-#define FUN_ISZOOMED            272 //
-#define FUN_KILLSYSTEMTIMER     182 // Internal
-#define FUN_KILLTIMER           12  //
-#define FUN_KILLTIMER2          327 // Internal
+#define FUN_ISUSERIDLE              333 // Internal
+#define FUN_ISWINDOW                47  //
+#define FUN_ISWINDOWENABLED         35  //
+#define FUN_ISWINDOWVISIBLE         49  //
+#define FUN_ISZOOMED                272 //
+#define FUN_KILLSYSTEMTIMER         182 // Internal
+#define FUN_KILLTIMER               12  //
+#define FUN_KILLTIMER2              327 // Internal
 #define FUN_LBOXCARETBLINKER        453 // Internal
-#define FUN_LBOXCTLWNDPROC      307 // Internal
+#define FUN_LBOXCTLWNDPROC          307 // Internal
 #define FUN_LOADACCELERATORS        177 //
-#define FUN_LOADBITMAP          175 //
-#define FUN_LOADCURSOR          173 //
+#define FUN_LOADBITMAP              175 //
+#define FUN_LOADCURSOR              173 //
 #define FUN_LOADCURSORICONHANDLER   336 // Internal
 #define FUN_LOADDIBCURSORHANDLER    356 // Internal
 #define FUN_LOADDIBICONHANDLER      357 // Internal
-#define FUN_LOADICON            174 //
-#define FUN_LOADICONHANDLER     456 // Internal
-#define FUN_LOADMENU            150 //
+#define FUN_LOADICON                174 //
+#define FUN_LOADICONHANDLER         456 // Internal
+#define FUN_LOADMENU                150 //
 #define FUN_LOADMENUINDIRECT        220 //
-#define FUN_LOADSTRING          176 //
-#define FUN_LOCKMYTASK          276 // Internal
+#define FUN_LOADSTRING              176 //
+#define FUN_LOCKMYTASK              276 // Internal
 #define FUN_LOOKUPMENUHANDLE        217 // Internal
-#define FUN_LSTRCMP         430 //
-#define FUN_LSTRCMPI            471 //
-#define FUN_MAPDIALOGRECT       103 //
-#define FUN_MB_DLGPROC          409 // Internal
+#define FUN_LSTRCMP                 430 //
+#define FUN_LSTRCMPI                471 //
+#define FUN_MAPDIALOGRECT           103 //
+#define FUN_MB_DLGPROC              409 // Internal
 #define FUN_MDICLIENTWNDPROC        444 // Internal
-#define FUN_MENUITEMSTATE       329 // Internal
-#define FUN_MENUWNDPROC         306 // Internal
-#define FUN_MESSAGEBEEP         104 //
-#define FUN_MESSAGEBOX          1   //
-#define FUN_MODIFYMENU          414 //
-#define FUN_MOVEWINDOW          56  //
-#define FUN_OFFSETRECT          77  //
-#define FUN_OLDEXITWINDOWS      2   // Internal
-#define FUN_OPENCLIPBOARD       137 //
-#define FUN_OPENCOMM            200 //
-#define FUN_OPENICON            44  //
-#define FUN_PAINTRECT           325 // Internal
-#define FUN_PEEKMESSAGE         109 //
-#define FUN_POSTAPPMESSAGE      116 //
-#define FUN_POSTMESSAGE         110 //
-#define FUN_POSTMESSAGE2        313 // Internal
-#define FUN_POSTQUITMESSAGE     6   //
-#define FUN_PTINRECT            76  //
-#define FUN_READCOMM            204 //
-#define FUN_REALIZEPALETTE      283 //
-#define FUN_REGISTERCLASS       57  //
+#define FUN_MENUITEMSTATE           329 // Internal
+#define FUN_MENUWNDPROC             306 // Internal
+#define FUN_MESSAGEBEEP             104 //
+#define FUN_MESSAGEBOX              1   //
+#define FUN_MODIFYMENU              414 //
+#define FUN_MOVEWINDOW              56  //
+#define FUN_OFFSETRECT              77  //
+#define FUN_OLDEXITWINDOWS          2   // Internal
+#define FUN_OPENCLIPBOARD           137 //
+#define FUN_OPENCOMM                200 //
+#define FUN_OPENICON                44  //
+#define FUN_PAINTRECT               325 // Internal
+#define FUN_PEEKMESSAGE             109 //
+#define FUN_POSTAPPMESSAGE          116 //
+#define FUN_POSTMESSAGE             110 //
+#define FUN_POSTMESSAGE2            313 // Internal
+#define FUN_POSTQUITMESSAGE         6   //
+#define FUN_PTINRECT                76  //
+#define FUN_READCOMM                204 //
+#define FUN_REALIZEPALETTE          283 //
+#define FUN_REGISTERCLASS           57  //
 #define FUN_REGISTERCLIPBOARDFORMAT 145 //
 #define FUN_REGISTERWINDOWMESSAGE   118 //
-#define FUN_RELEASECAPTURE      19  //
-#define FUN_RELEASEDC           68  //
-#define FUN_REMOVEMENU          412 //
-#define FUN_REMOVEPROP          24  //
-#define FUN_REPAINTSCREEN       275 // No proto
-#define FUN_REPLYMESSAGE        115 //
-#define FUN_SBWNDPROC           304 // Internal
-#define FUN_SCREENTOCLIENT      29  //
-#define FUN_SCROLLCHILDREN      463 // Internal
-#define FUN_SCROLLDC            221 //
-#define FUN_SCROLLWINDOW        61  //
-#define FUN_SELECTPALETTE       282 //
+#define FUN_RELEASECAPTURE          19  //
+#define FUN_RELEASEDC               68  //
+#define FUN_REMOVEMENU              412 //
+#define FUN_REMOVEPROP              24  //
+#define FUN_REPAINTSCREEN           275 // No proto
+#define FUN_REPLYMESSAGE            115 //
+#define FUN_SBWNDPROC               304 // Internal
+#define FUN_SCREENTOCLIENT          29  //
+#define FUN_SCROLLCHILDREN          463 // Internal
+#define FUN_SCROLLDC                221 //
+#define FUN_SCROLLWINDOW            61  //
+#define FUN_SELECTPALETTE           282 //
 #define FUN_SENDDLGITEMMESSAGE      101 //
-#define FUN_SENDMESSAGE         111 //
-#define FUN_SENDMESSAGE2        312 // Internal
-#define FUN_SETACTIVEWINDOW     59  //
-#define FUN_SETCAPTURE          18  //
+#define FUN_SENDMESSAGE             111 //
+#define FUN_SENDMESSAGE2            312 // Internal
+#define FUN_SETACTIVEWINDOW         59  //
+#define FUN_SETCAPTURE              18  //
 #define FUN_SETCARETBLINKTIME       168 //
-#define FUN_SETCARETPOS         165 //
-#define FUN_SETCLASSLONG        132 //
-#define FUN_SETCLASSWORD        130 //
+#define FUN_SETCARETPOS             165 //
+#define FUN_SETCLASSLONG            132 //
+#define FUN_SETCLASSWORD            130 //
 #define FUN_SETCLIPBOARDDATA        141 //
 #define FUN_SETCLIPBOARDVIEWER      147 //
-#define FUN_SETCOMMBREAK        210 //
+#define FUN_SETCOMMBREAK            210 //
 #define FUN_SETCOMMEVENTMASK        208 //
-#define FUN_SETCOMMSTATE        201 //
-#define FUN_SETCURSOR           69  //
-#define FUN_SETCURSORPOS        70  //
-#define FUN_SETDESKPATTERN      279 // Internal
+#define FUN_SETCOMMSTATE            201 //
+#define FUN_SETCURSOR               69  //
+#define FUN_SETCURSORPOS            70  //
+#define FUN_SETDESKPATTERN          279 // Internal
 #define FUN_SETDESKWALLPAPER        285 // Internal
-#define FUN_SETDLGITEMINT       94  //
-#define FUN_SETDLGITEMTEXT      92  //
+#define FUN_SETDLGITEMINT           94  //
+#define FUN_SETDLGITEMTEXT          92  //
 #define FUN_SETDOUBLECLICKTIME      20  //
-#define FUN_SETEVENTHOOK        321 // Internal
-#define FUN_SETFOCUS            22  //
-#define FUN_SETGETKBDSTATE      330 // Internal
+#define FUN_SETEVENTHOOK            321 // Internal
+#define FUN_SETFOCUS                22  //
+#define FUN_SETGETKBDSTATE          330 // Internal
 #define FUN_SETGRIDGRANULARITY      284 // Internal
 #define FUN_SETINTERNALWINDOWPOS    461 // Internal
 #define FUN_SETKEYBOARDSTATE        223 //
-#define FUN_SETMENU         158 //
+#define FUN_SETMENU                 158 //
 #define FUN_SETMENUITEMBITMAPS      418 //
-#define FUN_SETMESSAGEQUEUE     266 //
-#define FUN_SETPARENT           233 //
-#define FUN_SETPROP         26  //
-#define FUN_SETRECT         72  //
-#define FUN_SETRECTEMPTY        73  //
-#define FUN_SETSCROLLPOS        62  //
-#define FUN_SETSCROLLRANGE      64  //
-#define FUN_SETSYSCOLORS        181 //
+#define FUN_SETMESSAGEQUEUE         266 //
+#define FUN_SETPARENT               233 //
+#define FUN_SETPROP                 26  //
+#define FUN_SETRECT                 72  //
+#define FUN_SETRECTEMPTY            73  //
+#define FUN_SETSCROLLPOS            62  //
+#define FUN_SETSCROLLRANGE          64  //
+#define FUN_SETSYSCOLORS            181 //
 #define FUN_SETSYSMODALWINDOW       188 //
-#define FUN_SETSYSTEMMENU       280 // Internal
-#define FUN_SETSYSTEMTIMER      11  // Internal
-#define FUN_SETTIMER            10  //
-#define FUN_SETTIMER2           328 // Internal
-#define FUN_SETWC2          319 // Internal
-#define FUN_SETWINDOWLONG       136 //
-#define FUN_SETWINDOWPOS        232 //
-#define FUN_SETWINDOWSHOOKINTERNAL 121 // Internal
-#define FUN_SETWINDOWTEXT       37  //
-#define FUN_SETWINDOWWORD       134 //
-#define FUN_SHOWCARET           167 //
-#define FUN_SHOWCURSOR          71  //
-#define FUN_SHOWOWNEDPOPUPS     265 //
-#define FUN_SHOWSCROLLBAR       267 //
-#define FUN_SHOWWINDOW          42  //
-#define FUN_SIGNALPROC          314 // Internal
-#define FUN_SNAPWINDOW          281 // Internal
-#define FUN_STATICWNDPROC       302 // Internal
-#define FUN_STRINGFUNC          470 // Internal
-#define FUN_SWAPMOUSEBUTTON     186 //
+#define FUN_SETSYSTEMMENU           280 // Internal
+#define FUN_SETSYSTEMTIMER          11  // Internal
+#define FUN_SETTIMER                10  //
+#define FUN_SETTIMER2               328 // Internal
+#define FUN_SETWC2                  319 // Internal
+#define FUN_SETWINDOWLONG           136 //
+#define FUN_SETWINDOWPOS            232 //
+#define FUN_SETWINDOWSHOOKINTERNAL  121 // Internal
+#define FUN_SETWINDOWTEXT           37  //
+#define FUN_SETWINDOWWORD           134 //
+#define FUN_SHOWCARET               167 //
+#define FUN_SHOWCURSOR              71  //
+#define FUN_SHOWOWNEDPOPUPS         265 //
+#define FUN_SHOWSCROLLBAR           267 //
+#define FUN_SHOWWINDOW              42  //
+#define FUN_SIGNALPROC              314 // Internal
+#define FUN_SNAPWINDOW              281 // Internal
+#define FUN_STATICWNDPROC           302 // Internal
+#define FUN_STRINGFUNC              470 // Internal
+#define FUN_SWAPMOUSEBUTTON         186 //
 #define FUN_SWITCHTOTHISWINDOW      172 // Internal
-#define FUN_SWITCHWNDPROC       347 // Internal
-#define FUN_SYSERRORBOX         320 // Internal
-#define FUN_TABBEDTEXTOUT       196 //
+#define FUN_SWITCHWNDPROC           347 // Internal
+#define FUN_SYSERRORBOX             320 // Internal
+#define FUN_TABBEDTEXTOUT           196 //
 #define FUN_TABTHETEXTOUTFORWIMPS   354 // Internal
 #define FUN_TILECHILDWINDOWS        199 // Internal
-#define FUN_TITLEWNDPROC        345 // Internal
-#define FUN_TRACKPOPUPMENU      416 //
+#define FUN_TITLEWNDPROC            345 // Internal
+#define FUN_TRACKPOPUPMENU          416 //
 #define FUN_TRANSLATEACCELERATOR    178 //
 #define FUN_TRANSLATEMDISYSACCEL    451 //
 #define FUN_TRANSLATEMESSAGE        113 //
 #define FUN_TRANSMITCOMMCHAR        206 //
-#define FUN_UNGETCOMMCHAR       212 //
+#define FUN_UNGETCOMMCHAR           212 //
 #define FUN_UNHOOKWINDOWSHOOK       234 //
-#define FUN_UNIONRECT           80  //
-#define FUN_UNREGISTERCLASS     403 //
-#define FUN_UPDATEWINDOW        124 //
-#define FUN_USERYIELD           332 // Internal
-#define FUN_VALIDATERECT        127 //
-#define FUN_VALIDATERGN         128 //
-#define FUN_WAITMESSAGE         112 //
-#define FUN_WINDOWFROMPOINT     30  //
-#define FUN_WINFARFRAME         340 // Internal
-#define FUN_WINHELP         171 //
+#define FUN_UNIONRECT               80  //
+#define FUN_UNREGISTERCLASS         403 //
+#define FUN_UPDATEWINDOW            124 //
+#define FUN_USERYIELD               332 // Internal
+#define FUN_VALIDATERECT            127 //
+#define FUN_VALIDATERGN             128 //
+#define FUN_WAITMESSAGE             112 //
+#define FUN_WINDOWFROMPOINT         30  //
+#define FUN_WINFARFRAME             340 // Internal
+#define FUN_WINHELP                 171 //
 #define FUN_WINOLDAPPHACKOMATIC     322 // Internal
 #define FUN_WNETADDCONNECTION       517 // Internal
 #define FUN_WNETBROWSEDIALOG        515 // Internal
 #define FUN_WNETCANCELCONNECTION    518 // Internal
-#define FUN_WNETCANCELJOB       506 // Internal
-#define FUN_WNETCLOSEJOB        502 // Internal
-#define FUN_WNETDEVICEMODE      514 // Internal
-#define FUN_WNETGETCAPS         513 // Internal
+#define FUN_WNETCANCELJOB           506 // Internal
+#define FUN_WNETCLOSEJOB            502 // Internal
+#define FUN_WNETDEVICEMODE          514 // Internal
+#define FUN_WNETGETCAPS             513 // Internal
 #define FUN_WNETGETCONNECTION       512 // Internal
-#define FUN_WNETGETERROR        519 // Internal
+#define FUN_WNETGETERROR            519 // Internal
 #define FUN_WNETGETERRORTEXT        520 // Internal
-#define FUN_WNETGETUSER         516 // Internal
-#define FUN_WNETHOLDJOB         504 // Internal
+#define FUN_WNETGETUSER             516 // Internal
+#define FUN_WNETHOLDJOB             504 // Internal
 #define FUN_WNETLOCKQUEUEDATA       510 // Internal
-#define FUN_WNETOPENJOB         501 // Internal
-#define FUN_WNETRELEASEJOB      505 // Internal
+#define FUN_WNETOPENJOB             501 // Internal
+#define FUN_WNETRELEASEJOB          505 // Internal
 #define FUN_WNETSETJOBCOPIES        507 // Internal
 #define FUN_WNETUNLOCKQUEUEDATA     511 // Internal
 #define FUN_WNETUNWATCHQUEUE        509 // Internal
-#define FUN_WNETWATCHQUEUE      508 // Internal
-#define FUN_WRITECOMM           205 //
-#define FUN_WVSPRINTF           421 //
-#define FUN_XCSTODS         315 // Internal
-#define FUN__FFFE_FARFRAME      341 // No proto
-#define FUN__WSPRINTF           420 //
-#define FUN_SETWINDOWSHOOKEX    291 // win31 api
-#define FUN_UNHOOKWINDOWSHOOKEX 292 // win31 api
-#define FUN_CALLNEXTHOOKEX      293 // win31 api
+#define FUN_WNETWATCHQUEUE          508 // Internal
+#define FUN_WRITECOMM               205 //
+#define FUN_WVSPRINTF               421 //
+#define FUN_XCSTODS                 315 // Internal
+#define FUN__FFFE_FARFRAME          341 // No proto
+#define FUN__WSPRINTF               420 //
+#define FUN_SETWINDOWSHOOKEX        291 // win31 api
+#define FUN_UNHOOKWINDOWSHOOKEX     292 // win31 api
+#define FUN_CALLNEXTHOOKEX          293 // win31 api
 #define FUN_CLOSEDRIVER             253
 #define FUN_COPYCURSOR              369
 #define FUN_COPYICON                368
@@ -414,52 +412,51 @@
 #define FUN_ENABLESCROLLBAR         482
 #define FUN_GETCLIPCURSOR           309
 #define FUN_GETCURSOR               247
-#define FUN_GETDCEX             359
-#define FUN_GETDRIVERMODULEHANDLE       254
+#define FUN_GETDCEX                 359
+#define FUN_GETDRIVERMODULEHANDLE   254
 #define FUN_GETDRIVERINFO           256
-#define FUN_GETFREESYSTEMRESOURCES      284
+#define FUN_GETFREESYSTEMRESOURCES  284
 #define FUN_GETMESSAGEEXTRAINFO         288
-#define FUN_GETNEXTDRIVER           257
+#define FUN_GETNEXTDRIVER               257
 #define FUN_GETOPENCLIPBOARDWINDOW      248
-#define FUN_GETQUEUESTATUS          334
+#define FUN_GETQUEUESTATUS              334
 #define FUN_GETSYSTEMDEBUGSTATE         231
 #define FUN_GETTIMERRESOLUTION          14
 #define FUN_GETWINDOWPLACEMENT          370
-#define FUN_ISMENU              358
-#define FUN_LOCKINPUT               226
+#define FUN_ISMENU                      358
+#define FUN_LOCKINPUT                   226
 #define FUN_LOCKWINDOWUPDATE            294
-#define FUN_MAPWINDOWPOINTS         258
-#define FUN_OPENDRIVER              252
+#define FUN_MAPWINDOWPOINTS             258
+#define FUN_OPENDRIVER                  252
 #define FUN_QUERYSENDMESSAGE            184
-#define FUN_REDRAWWINDOW            290
-#define FUN_SCROLLWINDOWEX          319
+#define FUN_REDRAWWINDOW                290
+#define FUN_SCROLLWINDOWEX              319
 #define FUN_SENDDRIVERMESSAGE           251
 #define FUN_SETWINDOWPLACEMENT          371
-#define FUN_SUBTRACTRECT            373
+#define FUN_SUBTRACTRECT                373
 #define FUN_SYSTEMPARAMETERSINFO        483
 
 #define FUN_TILECHILDWzINDOWS           199
-#define FUN_USERSEEUSERDO           216
+#define FUN_USERSEEUSERDO               216
 #define FUN_ENABLECOMMNOTIFICATION      245
-#define FUN_EXITWINDOWSEXEC         246
+#define FUN_EXITWINDOWSEXEC             246
 #define FUN_OLDSETDESKPATTERN           279
 #define FUN_OLDSETDESKWALLPAPER         285
-#define FUN_KEYBD_EVENT             289
-#define FUN_MOUSE_EVENT             299
-#define FUN_BOZOSLIVEHERE           301
-#define FUN_MENUWINDOWPROC          306
+#define FUN_KEYBD_EVENT                 289
+#define FUN_MOUSE_EVENT                 299
+#define FUN_BOZOSLIVEHERE               301
 #define FUN_GETINTERNALICONHEADER       372
-#define FUN_DLGDIRSELECTEX          422
+#define FUN_DLGDIRSELECTEX              422
 #define FUN_DLGDIRSELECTCOMBOBOXEX      423
 #define FUN_GETUSERLOCALOBJTYPE         480
-#define FUN_HARDWARE_EVENT          481
-#define FUN_DCHOOK              362
-#define FUN_WNETERRORTEXT           499
-#define FUN_WNETABORTJOB            503
-#define FUN_WNETENABLE              521
-#define FUN_WNETDISABLE             522
+#define FUN_HARDWARE_EVENT              481
+#define FUN_DCHOOK                      362
+#define FUN_WNETERRORTEXT               499
+#define FUN_WNETABORTJOB                503
+#define FUN_WNETENABLE                  521
+#define FUN_WNETDISABLE                 522
 #define FUN_WNETRESTORECONNECTION       523
-#define FUN_WNETWRITEJOB            524
+#define FUN_WNETWRITEJOB                524
 #define FUN_WNETCONNECTDIALOG           525
 #define FUN_WNETDISCONNECTDIALOG        526
 #define FUN_WNETCONNECTIONDIALOG        527
@@ -468,11 +465,116 @@
 #define FUN_WNETGETDIRECTORYTYPE        530
 #define FUN_WNETDIRECTORYNOTIFY         531
 #define FUN_WNETGETPROPERTYTEXT         532
-#define FUN_NOTIFYWOW                   533
-#define FUN_WOWGETIDFROMDIRECTORY       534
-#define FUN_WOWWORDBREAKPROC            535
-#define FUN_MOUSEEVENT                  537
-#define FUN_KEYBDEVENT                  538
+
+/* New in Win95 user16 */
+
+#define FUN_ACTIVATEKEYBOARDLAYOUT      562  // export 650
+#define FUN_BROADCASTSYSTEMMESSAGE      554  // export 604
+#define FUN_CALLMSGFILTER32             589  // export 823
+#define FUN_CASCADEWINDOWS              429
+#define FUN_CHANGEDISPLAYSETTINGS       557  // export 620
+#define FUN_CHECKMENURADIOITEM          576  // export 666
+#define FUN_CHILDWINDOWFROMPOINTEX      399
+#define FUN_CHOOSECOLOR_CALLBACK16      584  // export 804
+#define FUN_CHOOSEFONT_CALLBACK16       580  // export 800
+#define FUN_COPYIMAGE                   390
+#define FUN_CREATEICONFROMRESOURCEEX    450
+#define FUN_DESTROYICON32               553  // export 610
+#define FUN_DISPATCHINPUT               569  // export 658
+#define FUN_DISPATCHMESSAGE32           588  // export 822
+#define FUN_DLLENTRYPOINT               374
+#define FUN_DOHOTKEYSTUFF               541  // export 601, export 541 NewSignalProc not thunked
+#define FUN_DRAWANIMATEDRECTS           448
+#define FUN_DRAWCAPTION                 571  // export 660
+#define FUN_DRAWCAPTIONTEMP             568  // export 657
+#define FUN_DRAWEDGE                    570  // export 659
+#define FUN_DRAWFRAMECONTROL            567  // export 656
+#define FUN_DRAWICONEX                  394
+#define FUN_DRAWMENUBARTEMP             573  // export 662
+#define FUN_DRAWSTATE                   449
+#define FUN_DRAWTEXTEX                  375
+#define FUN_ENUMDISPLAYSETTINGS         560  // export 621
+#define FUN_FINDREPLACE_CALLBACK16      581  // export 801
+#define FUN_FINDWINDOWEX                427
+#define FUN_FORMATMESSAGE               556  // export 606
+#define FUN_GETAPPVER                   498
+#define FUN_GETCLASSINFOEX              398
+#define FUN_GETFOREGROUNDWINDOW         558  // export 608
+#define FUN_GETICONINFO                 395
+#define FUN_GETKEYBOARDLAYOUT           563  // export 651
+#define FUN_GETKEYBOARDLAYOUTLIST       564  // export 652
+#define FUN_GETKEYBOARDLAYOUTNAME       477
+#define FUN_GETMENUCONTEXTHELPID        385
+#define FUN_GETMENUDEFAULTITEM          574  // export 663
+#define FUN_GETMENUITEMINFO             443
+#define FUN_GETMENUITEMRECT             575  // export 665
+#define FUN_GETMESSAGE32                586  // export 820
+#define FUN_GETPROPEX                   379
+#define FUN_GETSCROLLINFO               476
+#define FUN_GETSHELLWINDOW              540  // export 600
+#define FUN_GETSYSCOLORBRUSH            281
+#define FUN_GETWINDOWCONTEXTHELPID      383
+#define FUN_GETWINDOWRGN                579  // export 669
+#define FUN_HACKTASKMONITOR             555  // export 605
+#define FUN_INITTHREADINPUT             409
+#define FUN_INSERTMENUITEM              441
+#define FUN_INSTALLIMT                  594  // export 890
+#define FUN_ISDIALOGMESSAGE32           590  // export 824
+#define FUN_LOADIMAGE                   389
+#define FUN_LOADKEYBOARDLAYOUT          478
+#define FUN_LOOKUPICONIDFROMDIRECTORYEX 364
+#define FUN_MENUITEMFROMPOINT           479
+#define FUN_MESSAGEBOXINDIRECT          593  // export 827
+#define FUN_MSGWAITFORMULTIPLEOBJECTS   561  // export 640
+#define FUN_OPENFILENAME_CALLBACK16     582  // export 802
+#define FUN_PEEKMESSAGE32               585  // export 819
+#define FUN_PLAYSOUNDEVENT              8
+#define FUN_POSTMESSAGE32               591  // export 825
+#define FUN_POSTPOSTEDMESSAGES          566  // export 655
+#define FUN_POSTTHREADMESSAGE32         592  // export 826
+#define FUN_PRINTDLG_CALLBACK16         583  // export 803
+#define FUN_REGISTERCLASSEX             397
+#define FUN_REMOVEPROPEX                380
+#define FUN_SETCHECKCURSORTIMER         542  // export 602
+#define FUN_SETFOREGROUNDWINDOW         559  // export 609
+#define FUN_SETMENUCONTEXTHELPID        384
+#define FUN_SETMENUDEFAULTITEM          543  // export 664
+#define FUN_SETMENUITEMINFO             446
+#define FUN_SETMESSAGEEXTRAINFO         376
+#define FUN_SETPROPEX                   378
+#define FUN_SETSCROLLINFO               475
+#define FUN_SETSYSCOLORSTEMP            572  // export 661
+#define FUN_SETWINDOWCONTEXTHELPID      382
+#define FUN_SETWINDOWRGN                578  // export 668
+#define FUN_SIGNALPROC32                391
+#define FUN_TILEWINDOWS                 428
+#define FUN_TRACKPOPUPMENUEX            577  // export 667
+#define FUN_TRANSLATEMESSAGE32          587  // export 821
+#define FUN_UNINSTALLIMT                595  // export 891
+#define FUN_UNLOADINSTALLABLEDRIVERS    300
+#define FUN_UNLOADKEYBOARDLAYOUT        565  // export 654
+#define FUN_WINDOWFROMDC                117
+#define FUN_WNETINITIALIZE              533
+#define FUN_WNETLOGON                   534
+
+
+/* WOW private thunks in USER */
+
+#define FUN_NOTIFYWOW                   535
+#define FUN_DEFDLGPROCTHUNK             536  // used by walias.c, not in thunk table
+#define FUN_WOWWORDBREAKPROC            537
+#define FUN_MOUSEEVENT                  538
+#define FUN_KEYBDEVENT                  539
+#define FUN_WIN32WINHELP                596  
+
+/* NotifyWOW ID's */
+#define NW_LOADICON          1
+#define NW_LOADCURSOR        2
+#define NW_LOADACCELERATORS  3
+#define NW_FINALUSERINIT     4
+#define NW_KRNL386SEGS       5
+#define NW_WINHELP           6
+
 
 /* XLATOFF */
 #pragma pack(2)
@@ -1657,11 +1759,6 @@ typedef struct _GETTABBEDTEXTEXTENT16 {     /* u197 */
 } GETTABBEDTEXTEXTENT16;
 typedef GETTABBEDTEXTEXTENT16 UNALIGNED *PGETTABBEDTEXTEXTENT16;
 
-typedef struct _GETTASKFROMHWND16 {     /* u117 */
-    HWND16  f1;
-} GETTASKFROMHWND16;
-typedef GETTASKFROMHWND16 UNALIGNED *PGETTASKFROMHWND16;
-
 #ifdef NULLSTRUCT
 typedef struct _GETTICKCOUNT16 {        /* u13 */
 } GETTICKCOUNT16;
@@ -1954,7 +2051,7 @@ typedef struct _KEYBD_EVENT16 {         /* u289 */
 typedef KEYBD_EVENT16 UNALIGNED *PKEYBD_EVENT16;
 #endif
 
-typedef struct _KEYBDEVENT16 {          /* u538 */
+typedef struct _KEYBDEVENT16 {          /* u539 */
     DWORD dwExtraInfo;
     WORD bScanCode;
     WORD bVirtualKey;
@@ -2143,7 +2240,7 @@ typedef struct _MOUSE_EVENT16 {         /* u299 */
 typedef MOUSE_EVENT16 UNALIGNED *PMOUSE_EVENT16;
 #endif
 
-typedef struct _MOUSEEVENT16 {          /* u537 */
+typedef struct _MOUSEEVENT16 {          /* u538 */
     DWORD dwExtraInfo;
     WORD cButtons;
     WORD dy;
@@ -2858,6 +2955,15 @@ typedef struct _WINHELP16 {         /* u171 */
 } WINHELP16;
 typedef WINHELP16 UNALIGNED *PWINHELP16;
 
+typedef struct _WIN32WINHELP16 {         /* ??? */
+    DWORD f4;
+    WORD f3;
+    VPSTR f2;
+    HWND16 f1;
+} WIN32WINHELP16;
+typedef WIN32WINHELP16 UNALIGNED *PWIN32WINHELP16;
+
+
 typedef struct _WINOLDAPPHACKOMATIC16 { /* u322 */
     LONG    f1;
 } WINOLDAPPHACKOMATIC16;
@@ -3140,7 +3246,7 @@ typedef struct _LOADACCEL16 {    /* ldaccel */
 } LOADACCEL16;
 typedef LOADACCEL16 UNALIGNED FAR *PLOADACCEL16;
 
-typedef struct _NOTIFYWOW16 { /* notewow */
+typedef struct _NOTIFYWOW16 {           /* u535 */
     VPVOID pData;
     WORD   Id;
 } NOTIFYWOW16;
@@ -3184,20 +3290,726 @@ typedef struct _WINDOWPLACEMENT16 {              /* wp16wow32only */
 } WINDOWPLACEMENT16;
 typedef WINDOWPLACEMENT16 UNALIGNED *LPWINDOWPLACEMENT16;
 
-typedef struct _WOWGETIDFROMDIRECTORY16 { /* u534 */
-    WORD   f2;
-    VPVOID f1;
-} WOWGETIDFROMDIRECTORY16;
-typedef WOWGETIDFROMDIRECTORY16 UNALIGNED *PWOWGETIDFROMDIRECTORY16;
 
-typedef struct _WORDBREAKPROC16 {   /* wordbreakproc */
+/* New in Win95 user16 */
+
+
+typedef struct _ACTIVATEKEYBOARDLAYOUT16 {       /* u562 */
+    WORD    wFlags;
+    DWORD   lcid;
+} ACTIVATEKEYBOARDLAYOUT16;
+typedef ACTIVATEKEYBOARDLAYOUT16 UNALIGNED *PACTIVATEKEYBOARDLAYOUT16;
+
+typedef struct _BROADCASTSYSTEMMESSAGE16 {       /* u554 */
+    DWORD   lParam;
+    WORD    wParam;
+    WORD    wMsg;
+    VPDWORD lpdwRecipients;
+    DWORD   dwFlags;
+} BROADCASTSYSTEMMESSAGE16;
+typedef BROADCASTSYSTEMMESSAGE16 UNALIGNED *PBROADCASTSYSTEMMESSAGE16;
+
+typedef struct _CALLMSGFILTER3216 {              /* u589 */
+    WORD    fMsg32;
+    WORD    wContext;
+    VPVOID  lpMsg32;
+} CALLMSGFILTER3216;
+typedef CALLMSGFILTER3216 UNALIGNED *PCALLMSGFILTER3216;
+
+typedef struct _CASCADEWINDOWS16 {               /* u429 */
+    VPVOID   ahwnd;
+    WORD     chwnd;
+    VPRECT16 lpRect;
+    WORD     wFlags;
+    HWND16   hwndParent;
+} CASCADEWINDOWS16;
+typedef CASCADEWINDOWS16 UNALIGNED *PCASCADEWINDOWS16;
+
+typedef struct _CHANGEDISPLAYSETTINGS16 {        /* u557 */
+    DWORD       dwFlags;
+    VPDEVMODE31 lpDevMode;
+} CHANGEDISPLAYSETTINGS16;
+typedef CHANGEDISPLAYSETTINGS16 UNALIGNED *PCHANGEDISPLAYSETTINGS16;
+
+typedef struct _CHECKMENURADIOITEM16 {           /* u576 */
+    WORD      wFlags;
+    WORD      wIDCheck;
+    WORD      wIDLast;
+    WORD      wIDFirst;
+    HMENU16   hmenu;
+} CHECKMENURADIOITEM16;
+typedef CHECKMENURADIOITEM16 UNALIGNED *PCHECKMENURADIOITEM16;
+
+typedef struct _CHILDWINDOWFROMPOINTEX16 {              /* u399 */
+    WORD      wFlags;
+    POINT16   pt;
+    HWND16    hwnd;
+} CHILDWINDOWFROMPOINTEX16;
+typedef CHILDWINDOWFROMPOINTEX16 UNALIGNED *PCHILDWINDOWFROMPOINTEX16;
+
+typedef struct _CHOOSECOLOR_CALLBACK1616 {              /* u584 */
+    DWORD     lParam;
+    WORD      wParam;
+    WORD      wMsg;
+    HWND16    hwnd;
+} CHOOSECOLOR_CALLBACK1616;
+typedef CHOOSECOLOR_CALLBACK1616 UNALIGNED *PCHOOSECOLOR_CALLBACK1616;
+
+typedef struct _CHOOSEFONT_CALLBACK1616 {              /* u580 */
+    DWORD     lParam;
+    WORD      wParam;
+    WORD      wMsg;
+    HWND16    hwnd;
+} CHOOSEFONT_CALLBACK1616;
+typedef CHOOSEFONT_CALLBACK1616 UNALIGNED *PCHOOSEFONT_CALLBACK1616;
+
+typedef struct _COPYIMAGE16 {              /* u390 */
+    WORD      wFlags;
+    SHORT     cyNew;
+    SHORT     cxNew;
+    WORD      wType;
+    HAND16    hImage;
+    HINST16   hinstOwner;
+} COPYIMAGE16;
+typedef COPYIMAGE16 UNALIGNED *PCOPYIMAGE16;
+
+typedef struct _CREATEICONFROMRESOURCEEX16 {              /* u450 */
+    WORD      lrDesired;
+    WORD      cyDesired;
+    WORD      cxDesired;
+    DWORD     dwVer;
+    BOOL16    fIcon;
+    DWORD     cbRes;
+    VPVOID    lpRes;
+} CREATEICONFROMRESOURCEEX16;
+typedef CREATEICONFROMRESOURCEEX16 UNALIGNED *PCREATEICONFROMRESOURCEEX16;
+
+typedef struct _DESTROYICON3216 {              /* u553 */
+    WORD      wFlags;
+    HICON16   hicon;
+} DESTROYICON3216;
+typedef DESTROYICON3216 UNALIGNED *PDESTROYICON3216;
+
+#ifdef NULLSTRUCT
+typedef struct _DISPATCHINPUT16 {              /* u569 */
+} DISPATCHINPUT16;
+typedef DISPATCHINPUT16 UNALIGNED *PDISPATCHINPUT16;
+#endif
+
+typedef struct _DISPATCHMESSAGE3216 {              /* u588 */
+    BOOL16 fMsg32;
+    VPVOID lpMsg32;
+} DISPATCHMESSAGE3216;
+typedef DISPATCHMESSAGE3216 UNALIGNED *PDISPATCHMESSAGE3216;
+
+typedef struct _DLLENTRYPOINT16 {              /* u374 */
+    WORD  f6;
+    DWORD f5;
+    WORD  f4;
+    WORD  f3;
+    WORD  f2;
+    DWORD f1;
+} DLLENTRYPOINT16;
+typedef DLLENTRYPOINT16 UNALIGNED *PDLLENTRYPOINT16;
+
+typedef struct _DOHOTKEYSTUFF16 {              /* u541 */
+    WORD  fsModifiers;
+    WORD  vk;
+} DOHOTKEYSTUFF16;
+typedef DOHOTKEYSTUFF16 UNALIGNED *PDOHOTKEYSTUFF16;
+
+typedef struct _DRAWANIMATEDRECTS16 {              /* u448 */
+    VPRECT16 lprcEnd;
+    VPRECT16 lprcStart;
+    SHORT    idAnimation;
+    HWND16   hwndClip;
+} DRAWANIMATEDRECTS16;
+typedef DRAWANIMATEDRECTS16 UNALIGNED *PDRAWANIMATEDRECTS16;
+
+typedef struct _DRAWCAPTION16 {              /* u571 */
+    WORD     wFlags;
+    VPRECT16 lprc;
+    HDC16    hdc;
+    HWND16   hwnd;
+} DRAWCAPTION16;
+typedef DRAWCAPTION16 UNALIGNED *PDRAWCAPTION16;
+
+typedef struct _DRAWCAPTIONTEMP16 {              /* u568 */
+    WORD     wFlags;
+    VPSTR    lpText;
+    HICON16  hicon;
+    HFONT16  hfont;
+    VPRECT16 lprc;
+    HDC16    hdc;
+    HWND16   hwnd;
+} DRAWCAPTIONTEMP16;
+typedef DRAWCAPTIONTEMP16 UNALIGNED *PDRAWCAPTIONTEMP16;
+
+typedef struct _DRAWEDGE16 {              /* u570 */
+    WORD     wFlags;
+    WORD     wEdge;
+    VPRECT16 lprc;
+    HDC16    hdc;
+} DRAWEDGE16;
+typedef DRAWEDGE16 UNALIGNED *PDRAWEDGE16;
+
+typedef struct _DRAWFRAMECONTROL16 {              /* u567 */
+    WORD     wState;
+    WORD     wType;
+    VPRECT16 lprc;
+    HDC16    hdc;
+} DRAWFRAMECONTROL16;
+typedef DRAWFRAMECONTROL16 UNALIGNED *PDRAWFRAMECONTROL16;
+
+typedef struct _DRAWICONEX16 {              /* u394 */
+    WORD     wFlags;
+    HAND16   hbr;
+    WORD     wStepIfAni;
+    SHORT    cy;
+    SHORT    cx;
+    HICON16  hicon;
+    SHORT    y;
+    SHORT    x;
+    HDC16    hdc;
+} DRAWICONEX16;
+typedef DRAWICONEX16 UNALIGNED *PDRAWICONEX16;
+
+typedef struct _DRAWMENUBARTEMP16 {              /* u573 */
+    HFONT16  hfont;
+    HMENU16  hmenu;
+    VPRECT16 lprc;
+    HDC16    hdc;
+    HWND16   hwnd;
+} DRAWMENUBARTEMP16;
+typedef DRAWMENUBARTEMP16 UNALIGNED *PDRAWMENUBARTEMP16;
+
+typedef struct _DRAWSTATE16 {              /* u449 */
+    WORD            uFlags;
+    SHORT           cy;
+    SHORT           cx;
+    SHORT           y;
+    SHORT           x;
+    WORD            wData;
+    DWORD           lData;
+    VPPROC          pfnCallBack;
+    HAND16          hbrFore;
+    HDC16           hdcDraw;
+} DRAWSTATE16;
+typedef DRAWSTATE16 UNALIGNED *PDRAWSTATE16;
+
+
+typedef struct _DRAWTEXTPARAMS16 {      /* dtp16 */
+    WORD  cbSize;
+    SHORT iTabLength;
+    SHORT iLeftMargin;
+    SHORT iRightMargin;
+    WORD  uiLengthDrawn;
+} DRAWTEXTPARAMS16;
+typedef DRAWTEXTPARAMS16 UNALIGNED *PDRAWTEXTPARAMS16;
+
+typedef struct _DRAWTEXTEX16 {              /* u375 */
+    VPVOID            lpDTparams;     // see DRAWTEXTPARAMS16 above
+    DWORD             dwDTformat;
+    VPRECT16          lprc;
+    SHORT             cchText;
+    VPSTR             lpchText;
+    HDC16             hdc;
+} DRAWTEXTEX16;
+typedef DRAWTEXTEX16 UNALIGNED *PDRAWTEXTEX16;
+
+typedef struct _ENUMDISPLAYSETTINGS16 {              /* u560 */
+    VPDEVMODE31   lpdm;
+    DWORD         dwModeNum;
+    VPSTR         lpszDeviceName;
+} ENUMDISPLAYSETTINGS16;
+typedef ENUMDISPLAYSETTINGS16 UNALIGNED *PENUMDISPLAYSETTINGS16;
+
+typedef struct _FINDREPLACE_CALLBACK1616 {              /* u581 */
+    DWORD     lParam;
+    WORD      wParam;
+    WORD      wMsg;
+    HWND16    hwnd;
+} FINDREPLACE_CALLBACK1616;
+typedef FINDREPLACE_CALLBACK1616 UNALIGNED *PFINDREPLACE_CALLBACK1616;
+
+typedef struct _FINDWINDOWEX16 {              /* u427 */
+    VPSTR     lpszName;
+    VPSTR     lpszClass;
+    HWND16    hwndChild;
+    HWND16    hwndParent;
+} FINDWINDOWEX16;
+typedef FINDWINDOWEX16 UNALIGNED *PFINDWINDOWEX16;
+
+typedef struct _FORMATMESSAGE16 {              /* u556 */
+    VPDWORD   rglArgs;
+    WORD      cbResultMax;
+    VPSTR     lpResult;
+    WORD      idLanguage;
+    WORD      idMessage;
+    VPVOID    lpSource;
+    DWORD     dwFlags;
+} FORMATMESSAGE16;
+typedef FORMATMESSAGE16 UNALIGNED *PFORMATMESSAGE16;
+
+#ifdef NULLSTRUCT
+typedef struct _GETAPPVER16 {              /* u498 */
+} GETAPPVER16;
+typedef GETAPPVER16 UNALIGNED *PGETAPPVER16;
+#endif
+
+typedef struct _GETCLASSINFOEX16 {              /* u398 */
+    VPVOID    lpwc;
+    VPSTR     lpszClassName;
+    HINST16   hinst;
+} GETCLASSINFOEX16;
+typedef GETCLASSINFOEX16 UNALIGNED *PGETCLASSINFOEX16;
+
+#ifdef NULLSTRUCT
+typedef struct _GETFOREGROUNDWINDOW16 {              /* u558 */
+} GETFOREGROUNDWINDOW16;
+typedef GETFOREGROUNDWINDOW16 UNALIGNED *PGETFOREGROUNDWINDOW16;
+#endif
+
+typedef struct _ICONINFO16 {     /* ii16 */
+   BOOL16  fIcon;
+   SHORT   xHotspot;
+   SHORT   yHotspot;
+   HBM16   hbmMask;
+   HBM16   hbmColor;
+} ICONINFO16;
+typedef ICONINFO16 UNALIGNED *PICONINFO16;
+
+typedef struct _GETICONINFO16 {              /* u395 */
+    VPVOID    lpiconinfo;          // see ICONINFO16 structure above
+    HICON16   hicon;
+} GETICONINFO16;
+typedef GETICONINFO16 UNALIGNED *PGETICONINFO16;
+
+typedef struct _GETKEYBOARDLAYOUT16 {              /* u563 */
+    DWORD     dwThreadID;
+} GETKEYBOARDLAYOUT16;
+typedef GETKEYBOARDLAYOUT16 UNALIGNED *PGETKEYBOARDLAYOUT16;
+
+typedef struct _GETKEYBOARDLAYOUTLIST16 {              /* u564 */
+    VPDWORD   lpdwHandleArray;
+    WORD      cElements;
+} GETKEYBOARDLAYOUTLIST16;
+typedef GETKEYBOARDLAYOUTLIST16 UNALIGNED *PGETKEYBOARDLAYOUTLIST16;
+
+typedef struct _GETKEYBOARDLAYOUTNAME16 {              /* u477 */
+    VPSTR lpszLayoutName;
+} GETKEYBOARDLAYOUTNAME16;
+typedef GETKEYBOARDLAYOUTNAME16 UNALIGNED *PGETKEYBOARDLAYOUTNAME16;
+
+typedef struct _GETMENUCONTEXTHELPID16 {              /* u385 */
+    HMENU16   hmenu;
+} GETMENUCONTEXTHELPID16;
+typedef GETMENUCONTEXTHELPID16 UNALIGNED *PGETMENUCONTEXTHELPID16;
+
+typedef struct _GETMENUDEFAULTITEM16 {              /* u574 */
+    WORD       wFlags;
+    BOOL16     fByPosition;
+    HMENU16    hmenu;
+} GETMENUDEFAULTITEM16;
+typedef GETMENUDEFAULTITEM16 UNALIGNED *PGETMENUDEFAULTITEM16;
+
+typedef struct _MENUITEMINFO16 {  /* mii16 */
+    DWORD   cbSize;
+    DWORD   fMask;
+    WORD    fType;
+    WORD    fState;
+    WORD    wID;
+    HMENU16 hSubMenu;
+    HBM16   hbmpChecked;
+    HBM16   hbmpUnchecked;
+    DWORD   dwItemData;
+    VPSTR   dwTypeData;
+    WORD    cch;
+} MENUITEMINFO16;
+typedef MENUITEMINFO16 UNALIGNED *PMENUITEMINFO16;
+
+typedef struct _GETMENUITEMINFO16 {              /* u443 */
+    VPVOID       lpmii;   // see MENUITEMINFO16 above
+    BOOL16       fByPosition;
+    WORD         wIndex;
+    HMENU16      hmenu;
+} GETMENUITEMINFO16;
+typedef GETMENUITEMINFO16 UNALIGNED *PGETMENUITEMINFO16;
+
+typedef struct _GETMENUITEMRECT16 {              /* u575 */
+    VPRECT16     lprcScreen;
+    WORD         wIndex;
+    HMENU16      hmenu;
+    HWND16       hwnd;
+} GETMENUITEMRECT16;
+typedef GETMENUITEMRECT16 UNALIGNED *PGETMENUITEMRECT16;
+
+typedef struct _GETMESSAGE3216 {              /* u586 */
+    WORD         fMsg32;
+    WORD         wLast;
+    WORD         wFirst;
+    HWND16       hwnd16;
+    VPVOID       lpMsg32;
+} GETMESSAGE3216;
+typedef GETMESSAGE3216 UNALIGNED *PGETMESSAGE3216;
+
+typedef struct _GETPROPEX16 {              /* u379 */
+    VPSTR        lpszKey;
+    HWND16       hwnd;
+} GETPROPEX16;
+typedef GETPROPEX16 UNALIGNED *PGETPROPEX16;
+
+typedef struct _GETSCROLLINFO16 {              /* u476 */
+    VPVOID       lpsi;
+    WORD         wCode;
+    HWND16       hwnd;
+} GETSCROLLINFO16;
+typedef GETSCROLLINFO16 UNALIGNED *PGETSCROLLINFO16;
+
+#ifdef NULLSTRUCT
+typedef struct _GETSHELLWINDOW16 {              /* u540 */
+} GETSHELLWINDOW16;
+typedef GETSHELLWINDOW16 UNALIGNED *PGETSHELLWINDOW16;
+#endif
+
+typedef struct _GETSYSCOLORBRUSH16 {              /* u281 */
+    WORD  wIndex;
+} GETSYSCOLORBRUSH16;
+typedef GETSYSCOLORBRUSH16 UNALIGNED *PGETSYSCOLORBRUSH16;
+
+typedef struct _GETWINDOWCONTEXTHELPID16 {              /* u383 */
+    HWND16       hwnd;
+} GETWINDOWCONTEXTHELPID16;
+typedef GETWINDOWCONTEXTHELPID16 UNALIGNED *PGETWINDOWCONTEXTHELPID16;
+
+typedef struct _GETWINDOWRGN16 {              /* u579 */
+    HRGN16       hrgn;
+    HWND16       hwnd;
+} GETWINDOWRGN16;
+typedef GETWINDOWRGN16 UNALIGNED *PGETWINDOWRGN16;
+
+typedef struct _HACKTASKMONITOR16 {              /* u555 */
+    SHORT        iMonitor;
+} HACKTASKMONITOR16;
+typedef HACKTASKMONITOR16 UNALIGNED *PHACKTASKMONITOR16;
+
+typedef struct _INITTHREADINPUT16 {              /* u409 */
+    WORD         wFlags;
+    HAND16       hq;
+} INITTHREADINPUT16;
+typedef INITTHREADINPUT16 UNALIGNED *PINITTHREADINPUT16;
+
+typedef struct _INSERTMENUITEM16 {              /* u441 */
+    VPVOID       lpmii;   // see MENUITEMINFO16 above
+    BOOL16       fByPosition;
+    WORD         wIndex;
+    HMENU16      hmenu;
+} INSERTMENUITEM16;
+typedef INSERTMENUITEM16 UNALIGNED *PINSERTMENUITEM16;
+
+typedef struct _INSTALLIMT16 {              /* u594 */
+    WORD         wMsgHi;
+    WORD         wMsgLo;
+    VPPROC       pfnDispatcher;
+    VPSTR        lpszClassName;
+} INSTALLIMT16;
+typedef INSTALLIMT16 UNALIGNED *PINSTALLIMT16;
+
+typedef struct _ISDIALOGMESSAGE3216 {              /* u590 */
+    BOOL16       fMsg32;
+    VPVOID       lpMsg32;
+    HWND16       hwnd;
+} ISDIALOGMESSAGE3216;
+typedef ISDIALOGMESSAGE3216 UNALIGNED *PISDIALOGMESSAGE3216;
+
+typedef struct _LOADIMAGE16 {              /* u389 */
+    WORD         wFlags;
+    SHORT        cyDesired;
+    SHORT        cxDesired;
+    WORD         wType;
+    VPSTR        lpszName;
+    HINST16      hinst;
+} LOADIMAGE16;
+typedef LOADIMAGE16 UNALIGNED *PLOADIMAGE16;
+
+typedef struct _LOADKEYBOARDLAYOUT16 {              /* u478 */
+    WORD         wFlags;
+    VPSTR        lpszLayoutName;
+} LOADKEYBOARDLAYOUT16;
+typedef LOADKEYBOARDLAYOUT16 UNALIGNED *PLOADKEYBOARDLAYOUT16;
+
+typedef struct _LOOKUPICONIDFROMDIRECTORYEX16 {              /* u364 */
+    WORD         lrDesired;
+    SHORT        cyDesired;
+    SHORT        cxDesired;
+    BOOL16       fIcon;
+    VPVOID       lpnh;
+} LOOKUPICONIDFROMDIRECTORYEX16;
+typedef LOOKUPICONIDFROMDIRECTORYEX16 UNALIGNED *PLOOKUPICONIDFROMDIRECTORYEX16;
+
+typedef struct _MENUITEMFROMPOINT16 {              /* u479 */
+    POINT16      ptScreen;
+    HMENU16      hmenu;
+    HWND16       hwnd;
+} MENUITEMFROMPOINT16;
+typedef MENUITEMFROMPOINT16 UNALIGNED *PMENUITEMFROMPOINT16;
+
+typedef struct _MSGBOXPARAMS16 {                    /* mbp16 */
+    DWORD       cbSize;
+    HWND16      hwndOwner;
+    HINST16     hInstance;
+    VPSTR       lpszText;
+    VPSTR       lpszCaption;
+    DWORD       dwStyle;
+    VPSTR       lpszIcon;
+    DWORD       dwContextHelpId;
+    DWORD       vpfnMsgBoxCallback;
+    DWORD       dwLanguageId;
+} MSGBOXPARAMS16;
+typedef MSGBOXPARAMS16 UNALIGNED *PMSGBOXPARAMS16;
+
+typedef struct _MESSAGEBOXINDIRECT16 {              /* u593 */
+    VPVOID       lpmbp;
+} MESSAGEBOXINDIRECT16;
+typedef MESSAGEBOXINDIRECT16 UNALIGNED *PMESSAGEBOXINDIRECT16;
+
+typedef struct _MSGWAITFORMULTIPLEOBJECTS16 {              /* u561 */
+    DWORD   dwWakeMask;
+    DWORD   dwMilliseconds;
+    BOOL16  fWaitAll;
+    VPDWORD lpHandles;
+    DWORD   dwHandleCount;
+} MSGWAITFORMULTIPLEOBJECTS16;
+typedef MSGWAITFORMULTIPLEOBJECTS16 UNALIGNED *PMSGWAITFORMULTIPLEOBJECTS16;
+
+typedef struct _OPENFILENAME_CALLBACK1616 {              /* u582 */
+    DWORD     lParam;
+    WORD      wParam;
+    WORD      wMsg;
+    HWND16    hwnd;
+} OPENFILENAME_CALLBACK1616;
+typedef OPENFILENAME_CALLBACK1616 UNALIGNED *POPENFILENAME_CALLBACK1616;
+
+typedef struct _PEEKMESSAGE3216 {              /* u585 */
+    BOOL16    fMsg32;
+    WORD      wFlags;
+    WORD      wLast;
+    WORD      wFirst;
+    HWND16    hwnd;
+    VPVOID    lpMsg32;
+} PEEKMESSAGE3216;
+typedef PEEKMESSAGE3216 UNALIGNED *PPEEKMESSAGE3216;
+
+typedef struct _PLAYSOUNDEVENT16 {              /* u8 */
+    SHORT     iSoundId;
+} PLAYSOUNDEVENT16;
+typedef PLAYSOUNDEVENT16 UNALIGNED *PPLAYSOUNDEVENT16;
+
+typedef struct _POSTMESSAGE3216 {              /* u591 */
+    WORD      wParamHi;
+    DWORD     lParam;
+    WORD      wParamLo;
+    WORD      wMsg;
+    HWND16    hwnd;
+} POSTMESSAGE3216;
+typedef POSTMESSAGE3216 UNALIGNED *PPOSTMESSAGE3216;
+
+#ifdef NULLSTRUCT
+typedef struct _POSTPOSTEDMESSAGES16 {              /* u566 */
+} POSTPOSTEDMESSAGES16;
+typedef POSTPOSTEDMESSAGES16 UNALIGNED *PPOSTPOSTEDMESSAGES16;
+#endif
+
+typedef struct _POSTTHREADMESSAGE3216 {              /* u592 */
+    WORD      wParamHi;
+    DWORD     lParam;
+    WORD      wParamLo;
+    WORD      wMsg;
+    DWORD     dwThreadID;
+} POSTTHREADMESSAGE3216;
+typedef POSTTHREADMESSAGE3216 UNALIGNED *PPOSTTHREADMESSAGE3216;
+
+typedef struct _PRINTDLG_CALLBACK1616 {              /* u583 */
+    DWORD     lParam;
+    WORD      wParam;
+    WORD      wMsg;
+    HWND16    hwnd;
+} PRINTDLG_CALLBACK1616;
+typedef PRINTDLG_CALLBACK1616 UNALIGNED *PPRINTDLG_CALLBACK1616;
+
+typedef struct _REGISTERCLASSEX16 {              /* u397 */
+    VPVOID    lpwcex;
+} REGISTERCLASSEX16;
+typedef REGISTERCLASSEX16 UNALIGNED *PREGISTERCLASSEX16;
+
+typedef struct _REMOVEPROPEX16 {              /* u380 */
+    VPSTR     lpszKey;
+    HWND16    hwnd;
+} REMOVEPROPEX16;
+typedef REMOVEPROPEX16 UNALIGNED *PREMOVEPROPEX16;
+
+typedef struct _SETCHECKCURSORTIMER16 {              /* u542 */
+    SHORT     iTime;
+} SETCHECKCURSORTIMER16;
+typedef SETCHECKCURSORTIMER16 UNALIGNED *PSETCHECKCURSORTIMER16;
+
+typedef struct _SETFOREGROUNDWINDOW16 {              /* u559 */
+    HWND16    hwnd;
+} SETFOREGROUNDWINDOW16;
+typedef SETFOREGROUNDWINDOW16 UNALIGNED *PSETFOREGROUNDWINDOW16;
+
+typedef struct _SETMENUCONTEXTHELPID16 {              /* u384 */
+    DWORD     dwContextHelpId;
+    HMENU16   hmenu;
+} SETMENUCONTEXTHELPID16;
+typedef SETMENUCONTEXTHELPID16 UNALIGNED *PSETMENUCONTEXTHELPID16;
+
+typedef struct _SETMENUDEFAULTITEM16 {              /* u543 */
+    BOOL16    fByPosition;
+    WORD      wIndex;
+    HMENU16   hmenu;
+} SETMENUDEFAULTITEM16;
+typedef SETMENUDEFAULTITEM16 UNALIGNED *PSETMENUDEFAULTITEM16;
+
+typedef struct _SETMENUITEMINFO16 {              /* u446 */
+    VPVOID    lpmii;   // see MENUITEMINFO16 above
+    BOOL16    fByPosition;
+    WORD      wIndex;
+    HMENU16   hmenu;
+} SETMENUITEMINFO16;
+typedef SETMENUITEMINFO16 UNALIGNED *PSETMENUITEMINFO16;
+
+typedef struct _SETMESSAGEEXTRAINFO16 {              /* u376 */
+    DWORD     dwExtraInfo;
+} SETMESSAGEEXTRAINFO16;
+typedef SETMESSAGEEXTRAINFO16 UNALIGNED *PSETMESSAGEEXTRAINFO16;
+
+typedef struct _SETPROPEX16 {              /* u378 */
+    DWORD     dwValue;
+    VPSTR     lpszKey;
+    HWND16    hwnd;
+} SETPROPEX16;
+typedef SETPROPEX16 UNALIGNED *PSETPROPEX16;
+
+typedef struct _SETSCROLLINFO16 {              /* u475 */
+    BOOL16    fRedraw;
+    VPVOID    lpsi;
+    SHORT     iCode;
+    HWND16    hwnd;
+} SETSCROLLINFO16;
+typedef SETSCROLLINFO16 UNALIGNED *PSETSCROLLINFO16;
+
+typedef struct _SETSYSCOLORSTEMP16 {              /* u572 */
+    WORD      wBrushCount;
+    VPWORD    lpBrushes;
+    VPDWORD   lpRGBs;
+} SETSYSCOLORSTEMP16;
+typedef SETSYSCOLORSTEMP16 UNALIGNED *PSETSYSCOLORSTEMP16;
+
+typedef struct _SETWINDOWCONTEXTHELPID16 {              /* u382 */
+    DWORD     dwContextID;
+    HWND16    hwnd;
+} SETWINDOWCONTEXTHELPID16;
+typedef SETWINDOWCONTEXTHELPID16 UNALIGNED *PSETWINDOWCONTEXTHELPID16;
+
+typedef struct _SETWINDOWRGN16 {              /* u578 */
+    BOOL16    fRedraw;
+    HRGN16    hrgn;
+    HWND16    hwnd;
+} SETWINDOWRGN16;
+typedef SETWINDOWRGN16 UNALIGNED *PSETWINDOWRGN16;
+
+typedef struct _SIGNALPROC3216 {              /* u391 */
+    DWORD     dwSignalID;
+    DWORD     dwID;
+    DWORD     dwFlags;
+    HTASK16   htask;
+} SIGNALPROC3216;
+typedef SIGNALPROC3216 UNALIGNED *PSIGNALPROC3216;
+
+typedef struct _TILEWINDOWS16 {              /* u428 */
+    VPWORD    ahwnd;
+    WORD      chwnd;
+    VPRECT16  lprc;
+    WORD      wFlags;
+    HWND16    hwndParent;
+} TILEWINDOWS16;
+typedef TILEWINDOWS16 UNALIGNED *PTILEWINDOWS16;
+
+typedef struct _TPMPARAMS16 {                     /* tpmp */
+    WORD   cbSize;
+    RECT16 rcExclude;
+} TPMPARAMS16;
+typedef TPMPARAMS16 UNALIGNED *PTPMPARAMS16;
+
+typedef struct _TRACKPOPUPMENUEX16 {              /* u577 */
+    VPVOID    lpTpm;                              /* see TPMPARAMS16 above */
+    HWND16    hwndOwner;
+    SHORT     y;
+    SHORT     x;
+    WORD      wFlags;
+    HMENU16   hmenu;
+} TRACKPOPUPMENUEX16;
+typedef TRACKPOPUPMENUEX16 UNALIGNED *PTRACKPOPUPMENUEX16;
+
+typedef struct _TRANSLATEMESSAGE3216 {              /* u587 */
+    BOOL16    fMsg32;
+    VPVOID    lpMsg32;
+} TRANSLATEMESSAGE3216;
+typedef TRANSLATEMESSAGE3216 UNALIGNED *PTRANSLATEMESSAGE3216;
+
+typedef struct _UNINSTALLIMT16 {              /* u595 */
+    WORD      wMsgHi;
+    WORD      wMsgLo;
+    VPPROC    pfnDispatcher;
+    VPSTR     lpszClassName;
+} UNINSTALLIMT16;
+typedef UNINSTALLIMT16 UNALIGNED *PUNINSTALLIMT16;
+
+typedef struct _UNLOADINSTALLABLEDRIVERS16 {              /* u300 */
+    SHORT     iCode;
+} UNLOADINSTALLABLEDRIVERS16;
+typedef UNLOADINSTALLABLEDRIVERS16 UNALIGNED *PUNLOADINSTALLABLEDRIVERS16;
+
+typedef struct _UNLOADKEYBOARDLAYOUT16 {              /* u565 */
+    DWORD     lcid;
+} UNLOADKEYBOARDLAYOUT16;
+typedef UNLOADKEYBOARDLAYOUT16 UNALIGNED *PUNLOADKEYBOARDLAYOUT16;
+
+typedef struct _WINDOWFROMDC16 {              /* u117 */
+    HDC16     hdc;
+} WINDOWFROMDC16;
+typedef WINDOWFROMDC16 UNALIGNED *PWINDOWFROMDC16;
+
+#ifdef NULLSTRUCT
+typedef struct _WNETINITIALIZE16 {              /* u533 */
+} WNETINITIALIZE16;
+typedef WNETINITIALIZE16 UNALIGNED *PWNETINITIALIZE16;
+#endif
+
+typedef struct _WNETLOGON16 {              /* u534 */
+    HWND16     hwndOwner;
+    VPSTR      lpszProvider;
+} WNETLOGON16;
+typedef WNETLOGON16 UNALIGNED *PWNETLOGON16;
+
+
+/* WOW private thunks in USER */
+
+
+typedef struct _WOWWORDBREAKPROC16 {   /* u537 */
     SHORT   action;
     SHORT   cbEditText;
     SHORT   ichCurrentWord;
     VPVOID  lpszEditText;
-} WORDBREAKPROC16;
-typedef WORDBREAKPROC16 UNALIGNED *PWORDBREAKPROC16;
+} WOWWORDBREAKPROC16;
+typedef WOWWORDBREAKPROC16 UNALIGNED *PWOWWORDBREAKPROC16;
 
+
+
+// NOTE: these structs are also in mvdm\wow16\user\init.c 
+//       UserInit16 && Krnl386Segs
+//       - they must be the same!!!
 typedef struct _USERCLIENTGLOBALS {   /* uclg */
     WORD             hInstance;
     BYTE UNALIGNED **lpgpsi;
@@ -3206,8 +4018,19 @@ typedef struct _USERCLIENTGLOBALS {   /* uclg */
     VPWORD           lpwMaxDWPMsg;
     VPSTR            lpDWPBits;
     WORD             cbDWPBits;
+    WORD             wUnusedPadding;
+    DWORD            pfnGetProcModule;
+    DWORD UNALIGNED *lpHighestAddress;
 } USERCLIENTGLOBALS;
 typedef USERCLIENTGLOBALS UNALIGNED *PUSERCLIENTGLOBALS;
+
+typedef struct _KRNL386SEGS {   /* uclg */
+    WORD CodeSeg1;
+    WORD CodeSeg2;
+    WORD CodeSeg3;
+    WORD DataSeg1;
+} KRNL386SEGS;
+typedef KRNL386SEGS UNALIGNED *PKRNL386SEGS;
 
 /* XLATOFF */
 #pragma pack()

@@ -23,101 +23,21 @@
 MODNAME(wgpal.c);
 
 
-ULONG FASTCALL WG32AnimatePalette(PVDMFRAME pFrame)
-{
-    PPALETTEENTRY t4;
-    register PANIMATEPALETTE16 parg16;
-
-    GETARGPTR(pFrame, sizeof(ANIMATEPALETTE16), parg16);
-    GETPALETTEENTRY16(parg16->f4, parg16->f3, t4);
-
-    if( t4 ) {
-        AnimatePalette(HPALETTE32(parg16->f1),
-                                  WORD32(parg16->f2),
-                                  WORD32(parg16->f3),
-                                  t4);
-        FREEPALETTEENTRY16(t4);
-    }
-
-    FREEARGPTR(parg16);
-
-    RETURN(0);
-}
-
-
-ULONG FASTCALL WG32CreatePalette(PVDMFRAME pFrame)
-{
-    ULONG ul = 0L;
-    PLOGPALETTE t1;
-    register PCREATEPALETTE16 parg16;
-
-    GETARGPTR(pFrame, sizeof(CREATEPALETTE16), parg16);
-    GETLOGPALETTE16(parg16->f1, t1);
-
-    if( t1 ) {
-        ul = GETHPALETTE16(CreatePalette(t1));
-        WOW32APIWARN(ul, "CreatePalette");
-        FREELOGPALETTE16(t1);
-    }
-
-    FREEARGPTR(parg16);
-
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32GetNearestPaletteIndex(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETNEARESTPALETTEINDEX16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETNEARESTPALETTEINDEX16), parg16);
-
-    ul = GETWORD16(GetNearestPaletteIndex(HPALETTE32(parg16->f1),
-                                          DWORD32(parg16->f2)));
-
-    FREEARGPTR(parg16);
-
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32GetPaletteEntries(PVDMFRAME pFrame)
-{
-    ULONG ul = 0L;
-    PPALETTEENTRY t4;
-    register PGETPALETTEENTRIES16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETPALETTEENTRIES16), parg16);
-
-    if( t4 = malloc_w((parg16->f3) * sizeof(PALETTEENTRY)) ) {
-
-        ul = GETWORD16(GetPaletteEntries(HPALETTE32(parg16->f1),
-                                         WORD32(parg16->f2),
-                                         WORD32(parg16->f3),
-                                         t4));
-
-        PUTPALETTEENTRY16(parg16->f4, parg16->f3, t4);
-        FREEPALETTEENTRY16(t4);
-    }
-
-    FREEARGPTR(parg16);
-
-    RETURN(ul);
-}
-
-
 ULONG FASTCALL WG32GetSystemPaletteEntries(PVDMFRAME pFrame)
 {
     ULONG ul = 0L;
     PPALETTEENTRY ppal;
+    HANDLE   hdc32;
     register PGETSYSTEMPALETTEENTRIES16 parg16;
 
     GETARGPTR(pFrame, sizeof(GETSYSTEMPALETTEENTRIES16), parg16);
 
-    if( ppal = malloc_w((parg16->f3) * sizeof(PALETTEENTRY)) ) {
+    GETVDMPTR(parg16->f4, parg16->f3 * sizeof(PALETTEENTRY), ppal);
 
-        ul = GETWORD16(GetSystemPaletteEntries(HDC32(parg16->f1),
+    if( ppal ) {
+
+        hdc32 = HDC32(parg16->f1);
+        ul = GETWORD16(GetSystemPaletteEntries(hdc32,
                                                WORD32(parg16->f2),
                                                WORD32(parg16->f3),
                                                ppal));
@@ -126,7 +46,7 @@ ULONG FASTCALL WG32GetSystemPaletteEntries(PVDMFRAME pFrame)
         // WIN31 just calls Escape(hdc,GETCOLORTABLE) which on NT just calls
         // GetSysteemPaletteEntries().
 
-        if (!ul && (GetDeviceCaps(HDC32(parg16->f1),BITSPIXEL) > 8))
+        if (!ul && (GetDeviceCaps(hdc32, BITSPIXEL) > 8))
         {
             if (parg16->f4 == 0)
             {
@@ -167,124 +87,8 @@ ULONG FASTCALL WG32GetSystemPaletteEntries(PVDMFRAME pFrame)
             }
         }
 
-        PUTPALETTEENTRY16(parg16->f4, ul, ppal);
-        FREEPALETTEENTRY16(ppal);
+        FREEVDMPTR(ppal);
     }
-
-    FREEARGPTR(parg16);
-
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32GetSystemPaletteUse(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PGETSYSTEMPALETTEUSE16 parg16;
-
-    GETARGPTR(pFrame, sizeof(GETSYSTEMPALETTEUSE16), parg16);
-
-    ul = GETWORD16(GetSystemPaletteUse(HDC32(parg16->f1)));
-
-    FREEARGPTR(parg16);
-
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WU32RealizePalette(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PREALIZEPALETTE16 parg16;
-
-    GETARGPTR(pFrame, sizeof(REALIZEPALETTE16), parg16);
-
-    ul = GETWORD16(RealizePalette(HDC32(parg16->f1)));
-
-    FREEARGPTR(parg16);
-
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32ResizePalette(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PRESIZEPALETTE16 parg16;
-
-    GETARGPTR(pFrame, sizeof(RESIZEPALETTE16), parg16);
-
-    ul = GETBOOL16(ResizePalette(HPALETTE32(parg16->f1), WORD32(parg16->f2)));
-
-    FREEARGPTR(parg16);
-
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WU32SelectPalette(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PSELECTPALETTE16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SELECTPALETTE16), parg16);
-
-    ul = GETHPALETTE16(SelectPalette(HDC32(parg16->f1),
-                                     HPALETTE32(parg16->f2),
-                                     BOOL32(parg16->f3)));
-
-    FREEARGPTR(parg16);
-
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32SetPaletteEntries(PVDMFRAME pFrame)
-{
-    ULONG ul = 0;
-    PPALETTEENTRY t4;
-    register PSETPALETTEENTRIES16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETPALETTEENTRIES16), parg16);
-    GETPALETTEENTRY16(parg16->f4, parg16->f3, t4);
-
-    if( t4 ) {
-        ul = GETWORD16(SetPaletteEntries(HPALETTE32(parg16->f1),
-                                         WORD32(parg16->f2),
-                                         WORD32(parg16->f3),
-                                         t4));
-        FREEPALETTEENTRY16(t4);
-    }
-
-    FREEARGPTR(parg16);
-
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32SetSystemPaletteUse(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PSETSYSTEMPALETTEUSE16 parg16;
-
-    GETARGPTR(pFrame, sizeof(SETSYSTEMPALETTEUSE16), parg16);
-
-    ul = GETWORD16(SetSystemPaletteUse(HDC32(parg16->f1), WORD32(parg16->f2)));
-
-    FREEARGPTR(parg16);
-
-    RETURN(ul);
-}
-
-
-ULONG FASTCALL WG32UpdateColors(PVDMFRAME pFrame)
-{
-    ULONG ul;
-    register PUPDATECOLORS16 parg16;
-
-    GETARGPTR(pFrame, sizeof(UPDATECOLORS16), parg16);
-
-    ul = GETINT16(UpdateColors(HDC32(parg16->f1)));
 
     FREEARGPTR(parg16);
 

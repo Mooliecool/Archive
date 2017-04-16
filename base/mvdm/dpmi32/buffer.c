@@ -23,6 +23,8 @@ Revision History:
 #include "precomp.h"
 #pragma hdrstop
 #include "softpc.h"
+#include "..\softpc.new\host\inc\host_rrr.h"
+#include "..\softpc.new\host\inc\nt_uis.h"
 
 PUCHAR
 DpmiMapAndCopyBuffer(
@@ -58,7 +60,6 @@ Return Value:
     }
 
     NewBuffer = DpmiAllocateBuffer(BufferLength);
-
     CopyMemory(NewBuffer, Buffer, BufferLength);
 
     return NewBuffer;
@@ -105,29 +106,6 @@ Return Value:
     DpmiFreeBuffer(Source, BufferLength);
 }
 
-VOID
-DpmiUnmapBuffer(
-    PUCHAR Buffer,
-    USHORT BufferLength
-    )
-/*++
-
-Routine Description:
-
-    This routine frees the buffer.
-
-Arguments:
-
-    Buffer -- Supplies the buffer
-
-Return Value:
-
-    None.
-
---*/
-{
-    DpmiFreeBuffer(Buffer, BufferLength);
-}
 
 USHORT
 DpmiCalcFcbLength(
@@ -175,7 +153,7 @@ Arguments:
 
 Return Value:
 
-    Pointer to the buffered string
+    Pointer to the buffered string or NULL in error case
 
 ;   NOTE:
 ;       DOS has a tendency to look one byte past the end of the string "\"
@@ -185,23 +163,21 @@ Return Value:
 --*/
 {
     USHORT CurrentChar = 0;
-    PUCHAR String;
+    PUCHAR String, NewString = NULL;
     ULONG Limit;
+    BOOL SetNull = FALSE;
 
-    String = Sim32GetVDMPointer(
-        ((ULONG)StringSeg << 16),
-        1,
-        TRUE
-        );
-
-    String += StringOff;
-
+    String = VdmMapFlat(StringSeg, StringOff, VDM_PM);
 
     //
     // Scan string for NULL
     //
 
-    GET_SELECTOR_LIMIT(StringSeg, Limit);
+    GET_SHADOW_SELECTOR_LIMIT(StringSeg, Limit);
+    if (Limit == 0 || StringOff >= Limit) {
+        return NULL;
+    }
+
     Limit -= StringOff;
     while (CurrentChar <= (USHORT)Limit) {
         if (String[CurrentChar] == '\0') {
@@ -210,26 +186,34 @@ Return Value:
         CurrentChar++;
     }
 
-    //
-    // If we didn't reach the end of the segment, we stopped because
-    // of the null, and need to include that in the string
-    //
-    if (CurrentChar < (USHORT)Limit) {
-        CurrentChar++;
+    if (CurrentChar > (USHORT)Limit) {
+
+        //
+        // If we didn't find the end, move CurrentChar back to the end
+        // of the segmen and only copy 100h bytes maximum.
+        //
+
+        SetNull = TRUE;
+        CurrentChar--;
+        if (CurrentChar > 0x100) {
+            CurrentChar = 0x100;
+        }
     }
 
     //
-    // If we didn't find the end, copy 100h bytes
+    // CurrentChar points to the last char that we need to copy and
+    // most importantly CurrentChar is still within the segment.
     //
-    if ((String[CurrentChar] != '\0') && CurrentChar > 0x100) {
-        CurrentChar = 0x100;
-    }
+
+    ASSERT (CurrentChar <= (USHORT)Limit);
 
     //
     // If there are 3 bytes after the string, copy the extra 3 bytes
     //
     if ((CurrentChar + 3) <= (USHORT)Limit) {
         CurrentChar += 3;
+    } else {
+        CurrentChar = (USHORT)Limit;
     }
 
     //
@@ -237,108 +221,11 @@ Return Value:
     //
     *Length = CurrentChar + 1;
 
-    return DpmiMapAndCopyBuffer(String, (USHORT) (CurrentChar + 1));
-
-}
-
-VOID
-DpmiUnmapString(
-    PUCHAR String,
-    USHORT Length
-    )
-{
-    DpmiUnmapBuffer(String, Length);
-    return;
-}
-
-USHORT
-DpmiSegmentToSelector(
-    USHORT Segment
-    )
-/*++
-
-Routine Description:
-
-    This routine converts a specfied segment to a Data selector.  If there
-    is a approprate selector in the LDT, that is returned.  If not a new
-    selector is created.  This routine can only be called in protectedmode.
-
-Arguments:
-
-    Segment -- Segment to convert
-
-Return Value:
-
-    Selector for the specified segment
-
---*/
-{
-    USHORT ClientAX, ClientBX, ClientCS, ClientIP, ClientDS, ClientES, Selector;
-    PWORD16 Stack;
-    VSAVEDSTATE State;
-
-    ASSERT(getMSW() & MSW_PE);
-
-    DpmiSaveSegmentsAndStack(&State);
-    ClientAX = getAX();
-    ClientBX = getBX();
-    ClientCS = getCS();
-    ClientIP = getIP();
-    ClientDS = getDS();
-    ClientES = getES();
-
-    DpmiSwitchToDosxStack(TRUE);
-
-    //
-    // Make room for return address
-    //
-    setSP(getSP() - 4);
-
-    //
-    // Push a return to a bop
-    //
-    Stack = (PWORD16)Sim32GetVDMPointer(
-        ((ULONG)getSS() << 16) | getSP(),
-        1,
-        TRUE
-        );
-
-    *Stack = (USHORT)(RmBopFe & 0x0000FFFF);
-    *(Stack + 1) = DosxRmCodeSelector;
-
-    //
-    // Set up the parameters
-    //
-    setAX(Segment);
-    setBX(0xF2);
-    if (CurrentAppFlags & DPMI_32BIT) {
-        setBX(getBX() | 0xF000);
+    NewString = DpmiMapAndCopyBuffer(String, (USHORT) (CurrentChar + 1));
+    if (SetNull) {
+        NewString[CurrentChar] = '\0';
     }
-
-    //
-    // Make the call
-    //
-    setES(0);
-    setCS((USHORT) (DosxSegmentToSelector >> 16));
-    setIP((USHORT) (DosxSegmentToSelector & 0xFFFF));
-    setDS(DosxPmDataSelector);
-
-    host_simulate();
-
-    if (!getCF()) {
-        Selector = getAX();
-    } else {
-        Selector = 0xFFF0;  // Guaranteed non-existant GDT selector
-    }
-
-    DpmiSwitchFromDosxStack();
-    setAX(ClientAX);
-    setBX(ClientBX);
-    setIP(ClientIP);
-    setCS(ClientCS);
-    DpmiRestoreSegmentsAndStack();
-
-    return Selector;
+    return NewString;
 
 }
 
@@ -360,6 +247,8 @@ Arguments:
 Return Value:
 
     Returns pointer to the buffer space allocated
+    Note, this routine never fails.  If we are out of buffer space, this is
+    considered as a BugCheck condition for NTVDM.  NtVdm will be terminated.
 
 --*/
 {
@@ -377,12 +266,12 @@ Return Value:
     }
 
     //
-    // Whoops!  No buffer space available.  Bomb with a predictable
-    // address.
+    // Whoops!  No buffer space available.
+    // This is an internal error.  Terminate ntvdm.
     //
     ASSERT(0);      // this is an internal error
+    DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
     return (PUCHAR)0xf00df00d;
-
 }
 
 VOID
@@ -444,4 +333,3 @@ Return Value:
     SmallBufferInUse = FALSE;
     LargeBufferInUseCount = 0;
 }
-

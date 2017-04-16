@@ -47,9 +47,9 @@ GLOBAL BOOL  bPointerOff=FALSE;
 GLOBAL MOUSE_STATUS os_pointer_data;
 
 IMPORT word         DRAW_FS_POINTER_SEGMENT, DRAW_FS_POINTER_OFFSET;
-IMPORT word	    POINTER_OFF_SEGMENT, POINTER_OFF_OFFSET;
-IMPORT word	    POINTER_ON_SEGMENT, POINTER_ON_OFFSET;
-IMPORT word	    CP_X_S, CP_X_O, CP_Y_S, CP_Y_O;
+IMPORT word         POINTER_OFF_SEGMENT, POINTER_OFF_OFFSET;
+IMPORT word         POINTER_ON_SEGMENT, POINTER_ON_OFFSET;
+IMPORT word         CP_X_S, CP_X_O, CP_Y_S, CP_Y_O;
 IMPORT sys_addr     conditional_off_sysaddr;
 
 IMPORT word         F9_SEGMENT,F9_OFFSET;
@@ -59,8 +59,11 @@ IMPORT word         savedtextoffset,savedtextsegment;
 IMPORT sys_addr     mouseCFsysaddr;   // sas address of internal cursor flag
 IMPORT word         button_off,button_seg;
 IMPORT boolean mouse_io_interrupt_busy;
+#ifdef JAPAN
+IMPORT sys_addr     saved_ac_sysaddr, saved_ac_flag_sysaddr;
+#endif // JAPAN
 
-#define cursor_in_black_hole(cpx, cpy)	\
+#define cursor_in_black_hole(cpx, cpy)  \
     (cpx >= black_hole.top_left.x && \
      cpx <= black_hole.bottom_right.x && \
      cpy >= black_hole.top_left.y && \
@@ -78,8 +81,8 @@ RECT                 WarpBorderRect;     // in screen coordinates
 RECT                 WarpClientRect;     // in client coordinates
 
 LOCAL POINT          pMiddle; // centre point of the current Console window
-LOCAL POINT	     pLast = {0,0};
-LOCAL BOOL	     bAlertMessage=TRUE;
+LOCAL POINT          pLast = {0,0};
+LOCAL BOOL           bAlertMessage=TRUE;
 LOCAL BOOL           b256mode=FALSE;
 LOCAL int            old_x=319;    // previous pointer state (position)
 LOCAL int            old_y=99;     // in virtual coordinates.
@@ -135,6 +138,9 @@ void LazyMouseInterrupt();
 VOID MouseEoiHook(int IrqLine, int CallCount);
 BOOLEAN bSuspendMouseInterrupts=FALSE;
 
+#ifdef JAPAN
+extern int is_us_mode();
+#endif // JAPAN
 
 GLOBAL   HOSTMOUSEFUNCS   the_mouse_funcs =
 {
@@ -181,7 +187,8 @@ LOCAL half_word TextOrGraphicsModeLUT[] =
    NOTHING,      GRAPHICS_MODE,GRAPHICS_MODE,GRAPHICS_MODE
    };
 
-
+#define DEFAULT_VIDEO_MODE 0x14
+half_word Max_Standard_Mode = 0x13;
 LOCAL int VirtualScrCtrLUTx[] =
    {
    319,         // mode 0
@@ -203,7 +210,10 @@ LOCAL int VirtualScrCtrLUTx[] =
    319,         // mode 10
    319,         // mode 11
    319,         // mode 12
-   159          // mode 13
+   159,         // mode 13
+   319          // Unknown Mode (default to mode 12)
+                // NOTE, we really needs to find out what is the resolution for
+                // the non-standard mode
    };
 LOCAL int VirtualScrCtrLUTy[] =
    {
@@ -226,7 +236,10 @@ LOCAL int VirtualScrCtrLUTy[] =
    174,        // mode 10
    239,        // mode 11
    239,        // mode 12
-   99          // mode 13
+   99,         // mode 13
+   239         // Unknown Mode (deault to mode 12)
+               // NOTE, we really needs to find out what is the resolution for
+               // the non-standard mode
    };
 
 //
@@ -319,7 +332,11 @@ void dummy(short *pooh1,short *pooh2, unsigned short *pooh3)
 
 GLOBAL BOOL mouse_in_use()
 {
+#if defined(NEC_98)
+return(TRUE);
+#else  // !NEC_98
 return(mouse_state == INSTALLED && in_text_mode() == FALSE);
+#endif // !NEC_98
 }
 
 GLOBAL void mouse_reset()
@@ -335,7 +352,7 @@ word xx,yy;
 // so do I.
 //
 
-sas_store(mouseCFsysaddr,0xff);	// cursor hidden
+sas_store(mouseCFsysaddr,0xff); // cursor hidden
 
 //
 // Set the fast track position words in the 16 bit driver.
@@ -344,6 +361,12 @@ sas_store(mouseCFsysaddr,0xff);	// cursor hidden
 //
 
 sas_load(0x449,&vm);
+#ifdef JAPAN
+    vm = (is_us_mode()) ? vm : ((vm == 0x72) ? 0x12 : 3);
+#endif // JAPAN
+if (vm > Max_Standard_Mode) {
+    vm = DEFAULT_VIDEO_MODE;
+}
 xx = (word)VirtualScrCtrLUTx[vm];
 yy = (word)VirtualScrCtrLUTy[vm];
 
@@ -387,7 +410,7 @@ m2pY = 16;
 GLOBAL void mouse_set_position IFN2(USHORT, newx, USHORT, newy)
 {
 #ifdef X86GFX
-word	  currentCS, currentIP, currentCX, currentDX;
+word      currentCS, currentIP, currentCX, currentDX;
 boolean   currentIF;
 half_word internalCF;
 
@@ -440,42 +463,42 @@ else if(sc.ScreenState == FULLSCREEN)
    if(!internalCF)
       {
       /* if conditional off is diabled or the cursor is outside the
-       *	 conditional off rectangle, move the cursor
+       *         conditional off rectangle, move the cursor
        */
 
       if (sas_hw_at_no_check(conditional_off_sysaddr) == 0 ||
-	  !cursor_in_black_hole(newx, newy))
-	  {
-	  currentCS=getCS();
-	  currentIP=getIP();
-	  currentCX=getCX();
-	  currentDX=getDX();
-	  currentIF=getIF();
-	  setCS(DRAW_FS_POINTER_SEGMENT); // sacrificial data
-	  setIP(DRAW_FS_POINTER_OFFSET);
-	  setCX((word)newx);
-	  setDX((word)newy);
-	  setIF(FALSE);
-	  //
-	  // call back to 16bits move cursor code.
-	  //
+          !cursor_in_black_hole(newx, newy))
+          {
+          currentCS=getCS();
+          currentIP=getIP();
+          currentCX=getCX();
+          currentDX=getDX();
+          currentIF=getIF();
+          setCS(DRAW_FS_POINTER_SEGMENT); // sacrificial data
+          setIP(DRAW_FS_POINTER_OFFSET);
+          setCX((word)newx);
+          setDX((word)newy);
+          setIF(FALSE);
+          //
+          // call back to 16bits move cursor code.
+          //
 
-	  host_simulate();
+          host_simulate();
 
-	  //
-	  // Tidy up
-	  //
+          //
+          // Tidy up
+          //
 
-	  setCX(currentCX);
-	  setDX(currentDX);
-	  setCS(currentCS);
-	  setIP(currentIP);
-	  setIF(currentIF);
+          setCX(currentCX);
+          setDX(currentDX);
+          setCS(currentCS);
+          setIP(currentIP);
+          setIF(currentIF);
       }
       else {
-	  /* the cursor was moved into the conditional rectangle, hide it */
-	  sas_store(mouseCFsysaddr, 0xff);
-	  host_hide_pointer();
+          /* the cursor was moved into the conditional rectangle, hide it */
+          sas_store(mouseCFsysaddr, 0xff);
+          host_hide_pointer();
       }
    }
    newF4x = (IS16)newx;
@@ -505,24 +528,24 @@ GLOBAL void mouse_cursor_mode_change()
 }
 
 
-GLOBAL	void host_mouse_conditional_off_enabled(void)
+GLOBAL  void host_mouse_conditional_off_enabled(void)
 {
 #ifdef X86GFX
     word x, y;
 
-    /*	hide the cursor if
-     *	(1). we are in full screen  and
-     *	(2). the cursor is on and is in the conditional area
+    /*  hide the cursor if
+     *  (1). we are in full screen  and
+     *  (2). the cursor is on and is in the conditional area
      */
     if (sc.ScreenState == FULLSCREEN &&
-	!sas_hw_at_no_check(mouseCFsysaddr)) {
+        !sas_hw_at_no_check(mouseCFsysaddr)) {
 
-	x = sas_w_at_no_check(effective_addr(CP_X_S, CP_X_O));
-	y = sas_w_at_no_check(effective_addr(CP_Y_S, CP_Y_O));
-	if (cursor_in_black_hole(x, y)) {
-	    sas_store(mouseCFsysaddr, 0xff);
-	    host_hide_pointer();
-	}
+        x = sas_w_at_no_check(effective_addr(CP_X_S, CP_X_O));
+        y = sas_w_at_no_check(effective_addr(CP_Y_S, CP_Y_O));
+        if (cursor_in_black_hole(x, y)) {
+            sas_store(mouseCFsysaddr, 0xff);
+            host_hide_pointer();
+        }
     }
 #endif
 
@@ -624,80 +647,88 @@ else
       static half_word hwLastModeType;
 
       if (sas_hw_at_no_check(conditional_off_sysaddr) == 0 ||
-	  !cursor_in_black_hole(mcs->position.x, mcs->position.y))
+          !cursor_in_black_hole(mcs->position.x, mcs->position.y))
       {
-	  //
-	  // Get the current BIOS video mode a la B.D.A.
-	  //
+          //
+          // Get the current BIOS video mode a la B.D.A.
+          //
 
-	  sas_load(0x449,&v);
+          sas_load(0x449,&v);
 
-	  if((hwLastModeType = TextOrGraphicsModeLUT[v]) == GRAPHICS_MODE)
-	     {
-	     word currentCS,currentIP;	   // save those interesting Intel registers
-	     word currentCX,currentDX;
-	     boolean   currentIF;
+#ifdef JAPAN
+          if (!is_us_mode() ||
+             (hwLastModeType = TextOrGraphicsModeLUT[v]) == GRAPHICS_MODE)
+#else // !JAPAN
+          if (v > Max_Standard_Mode) {
+              v = DEFAULT_VIDEO_MODE;
+          }
+          if((hwLastModeType = TextOrGraphicsModeLUT[v]) == GRAPHICS_MODE)
+#endif // !JAPAN
+             {
+             word currentCS,currentIP;     // save those interesting Intel registers
+             word currentCX,currentDX;
+             boolean   currentIF;
 
-	     //
-	     // Do the host simulate here to draw the cursor image
-	     // for the full screen graphics
-	     //
+             //
+             // Do the host simulate here to draw the cursor image
+             // for the full screen graphics
+             //
 
-	     currentCS=getCS();
-	     currentIP=getIP();
-	     currentCX=getCX();
-	     currentDX=getDX();
-	     currentIF=getIF();
-	     setCS(DRAW_FS_POINTER_SEGMENT);
-	     setIP(DRAW_FS_POINTER_OFFSET);
-	     setCX(mcs->position.x);
-	     setDX(mcs->position.y);
-	     setIF(FALSE);
-	     //
-	     // call to 16bits move cursor code
-	     //
+             currentCS=getCS();
+             currentIP=getIP();
+             currentCX=getCX();
+             currentDX=getDX();
+             currentIF=getIF();
+             setCS(DRAW_FS_POINTER_SEGMENT);
+             setIP(DRAW_FS_POINTER_OFFSET);
+             setCX(mcs->position.x);
+             setDX(mcs->position.y);
+             setIF(FALSE);
+             //
+             // call to 16bits move cursor code
+             //
 
-	     host_simulate();
+             host_simulate();
 
-	     //
-	     // Restore the 16 bit context.
-	     //
+             //
+             // Restore the 16 bit context.
+             //
 
-	     setCX(currentCX);
-	     setDX(currentDX);
-	     setCS(currentCS);
-	     setIP(currentIP);
-	     setIF(currentIF);
-	     }
-	  else // TEXT_MODE
-	     {
-	     //
-	     // if there has been a switch from graphics mode to text mode
-	     // then there cannot have been a backround saved.
-	     //
+             setCX(currentCX);
+             setDX(currentDX);
+             setCS(currentCS);
+             setIP(currentIP);
+             setIF(currentIF);
+             }
+          else // TEXT_MODE
+             {
+             //
+             // if there has been a switch from graphics mode to text mode
+             // then there cannot have been a backround saved.
+             //
 
-	     if(hwLastModeType == GRAPHICS_MODE)
-		{
-		bFullscTextBkgrndSaved = FALSE;
-		hwLastModeType = TEXT_MODE;
-		}
+             if(hwLastModeType == GRAPHICS_MODE)
+                {
+                bFullscTextBkgrndSaved = FALSE;
+                hwLastModeType = TEXT_MODE;
+                }
 
-	     //
-	     // Use some 32 bit code to draw the text pointer because
-	     // no hardware i/o is involved and we need only to write to
-	     // the display buffer (16 bit code is needed to do video
-	     // i/os in fullscreen mode).
-	     //
+             //
+             // Use some 32 bit code to draw the text pointer because
+             // no hardware i/o is involved and we need only to write to
+             // the display buffer (16 bit code is needed to do video
+             // i/os in fullscreen mode).
+             //
 
-	     FullscTextPtr(mcs->position.x,mcs->position.y);
-	     }
-	}
-	else {
-	    sas_store(mouseCFsysaddr, 0xff);
-	    host_hide_pointer();
-	}
+             FullscTextPtr(mcs->position.x,mcs->position.y);
+             }
+        }
+        else {
+            sas_store(mouseCFsysaddr, 0xff);
+            host_hide_pointer();
+        }
     }
-#endif	   // X86GFX
+#endif     // X86GFX
    }
 
 
@@ -883,6 +914,12 @@ counter->y = (MOUSE_SCALAR)vector.y;
 //
 
 sas_load(0x449,&video_mode);
+#ifdef JAPAN
+video_mode = (is_us_mode()) ? video_mode : ( (video_mode == 0x72) ? 0x12 : 3);
+#endif // JAPAN
+if (video_mode > Max_Standard_Mode) {
+    video_mode = DEFAULT_VIDEO_MODE;
+}
 
 //
 // checkout some global flags with indicate if one of the int 33h
@@ -910,8 +947,8 @@ else if(bFunctionFour)
    // Tell the internal cartesian coordinate system about this.
    //
 
-   internalX = newF4x;	// This is where the pointer was set to
-   internalY = newF4y;	// by the app on the last pending call to f4
+   internalX = newF4x;  // This is where the pointer was set to
+   internalY = newF4y;  // by the app on the last pending call to f4
 
    //
    // Don't come in here again until the next function 4.
@@ -991,7 +1028,7 @@ old_y = *outy;
 //==============================================================================
 void FullscreenWarpSystemPointer(POINT *vector)
 {
-static POINT pLast;	    // System pointer position data from last time through
+static POINT pMyLast;         // System pointer position data from last time through
 POINT  pCurrent;
 
 //
@@ -1005,8 +1042,8 @@ GetCursorPos(&pCurrent);
 // the last call to this function.
 //
 
-vector->x = pCurrent.x - pLast.x;
-vector->y = pCurrent.y - pLast.y;
+vector->x = pCurrent.x - pMyLast.x;
+vector->y = pCurrent.y - pMyLast.y;
 
 //
 // Has the system pointer hit a border? If so, warp the system pointer
@@ -1023,8 +1060,8 @@ if(pCurrent.x >= (LONG)1000 || pCurrent.x <= (LONG)-1000 ||
    //
 
    SetCursorPos(0,0);
-   pLast.x = 0L;	// prevent a crazy warp
-   pLast.y = 0L;
+   pMyLast.x = 0L;        // prevent a crazy warp
+   pMyLast.y = 0L;
    }
 else
    {
@@ -1032,7 +1069,7 @@ else
    // update the last position data of the
    // system pointer for next time through.
    //
-   pLast = pCurrent;
+   pMyLast = pCurrent;
    }
 }
 
@@ -1049,13 +1086,18 @@ else
 //=========================================================================
 
 void ScaleToWindowedVirtualCoordinates(IS16 *outx,IS16 *outy,
-				       MOUSE_VECTOR *counter)
+                                       MOUSE_VECTOR *counter)
 {
 half_word video_mode,textorgraphics;
 SAVED SHORT last_text_good_x = 0, last_text_good_y = 0;
 
 sas_load(0x449,&video_mode);
-
+#ifdef JAPAN
+video_mode = (is_us_mode()) ? video_mode : ( (video_mode == 0x72) ? 0x12 : 3);
+#endif // JAPAN
+if (video_mode > Max_Standard_Mode) {
+    video_mode = DEFAULT_VIDEO_MODE;
+}
 //
 // Follow different code paths if the user has the system pointer
 // hidden or displayed.
@@ -1083,23 +1125,23 @@ if(!bPointerOff)
       //
 
       if(os_pointer_data.x > 87)
-	 {
-	 *outx = last_text_good_x;
-	 }
+         {
+         *outx = last_text_good_x;
+         }
       else
-	 {
-	 *outx = ConsoleTextCellToVPCellLUT[os_pointer_data.x];
-	 last_text_good_x = *outx;
-	 }
+         {
+         *outx = (IS16)ConsoleTextCellToVPCellLUT[os_pointer_data.x];
+         last_text_good_x = *outx;
+         }
       if(os_pointer_data.y > 87)
-	 {
-	 *outy = last_text_good_y;
-	 }
+         {
+         *outy = last_text_good_y;
+         }
       else
-	 {
-	 *outy = ConsoleTextCellToVPCellLUT[os_pointer_data.y];
-	 last_text_good_y = *outy;
-	 }
+         {
+         *outy = (IS16)ConsoleTextCellToVPCellLUT[os_pointer_data.y];
+         last_text_good_y = *outy;
+         }
       }
    else // GRAPHICS_MODE
       {
@@ -1117,7 +1159,7 @@ if(!bPointerOff)
       //
 
       WindowedGraphicsScale(video_mode,(IS16)(os_pointer_data.x),
-			    (IS16)(os_pointer_data.y),outx,outy);
+                            (IS16)(os_pointer_data.y),outx,outy);
       }
 
    //
@@ -1182,8 +1224,8 @@ else
       // No recorded movement of the mouse.
       //
 
-      *outx = old_x;
-      *outy = old_y;
+      *outx = (IS16)old_x;
+      *outy = (IS16)old_y;
       counter->x = counter->y = 0;
       bPointerInSamePlace = TRUE;
       }
@@ -1514,6 +1556,7 @@ switch(vm)
    //
    case(0x11):
    case(0x12):
+   case(DEFAULT_VIDEO_MODE):
       {
       if(confine.bF7)
          {
@@ -1697,6 +1740,10 @@ switch(vm)
 
 void WindowedGraphicsScale(half_word vm,IS16 iX,IS16 iY,IS16 *oX, IS16 *oY)
 {
+//#if !defined(i386) && defined(JAPAN) //DEC-J Dec. 21 1993 TakeS
+//in use of $disp.sys, mouse cursor cannot move correctly.
+//if( is_us_mode() ){
+//#endif // _ALPHA_ && JAPAN
 switch(vm)
    {
    //
@@ -1715,10 +1762,14 @@ switch(vm)
       // must divide the y value by 2 to scale appropriately.
       //
 
-      iY >> 1;
+      iY >>= 1;
       break;
       }
    }
+//#if !defined(i386) && defined(JAPAN) //DEC-J Dec. 21 1993 TakeS
+//}else
+//  iY >>= 1;
+//#endif // _ALPHA_ && JAPAN
 //
 // prepare the cartesian coordinate values to return.
 //
@@ -1744,28 +1795,35 @@ if(sc.ScreenState == FULLSCREEN)
    half_word v;
    sas_load(0x449,&v);
 
+#ifdef JAPAN
+   if (!is_us_mode() || TextOrGraphicsModeLUT[v] == GRAPHICS_MODE)
+#else // !JAPAN
+   if (v > Max_Standard_Mode) {
+       v = DEFAULT_VIDEO_MODE;
+   }
    if(TextOrGraphicsModeLUT[v] == GRAPHICS_MODE)
+#endif // !JAPAN
    {
-	  word currentCS,currentIP; // save those interesting Intel registers
-	  boolean currentIF;
+          word currentCS,currentIP; // save those interesting Intel registers
+          boolean currentIF;
 
-	  sas_storew(effective_addr(CP_X_S,CP_X_O),(word)old_x);
-	  sas_storew(effective_addr(CP_Y_S,CP_Y_O),(word)old_y);
-	  currentCS=getCS();
-	  currentIP=getIP();
-	  currentIF=getIF();
-	  setCS(POINTER_ON_SEGMENT);
-	  setIP(POINTER_ON_OFFSET);
-	  setIF(FALSE);
-	  host_simulate();
+          sas_storew(effective_addr(CP_X_S,CP_X_O),(word)old_x);
+          sas_storew(effective_addr(CP_Y_S,CP_Y_O),(word)old_y);
+          currentCS=getCS();
+          currentIP=getIP();
+          currentIF=getIF();
+          setCS(POINTER_ON_SEGMENT);
+          setIP(POINTER_ON_OFFSET);
+          setIF(FALSE);
+          host_simulate();
 
-	  setCS(currentCS);
-	  setIP(currentIP);
-	  setIF(currentIF);
+          setCS(currentCS);
+          setIP(currentIP);
+          setIF(currentIF);
     }
     else //TEXT_MODE
     {
-	  FullscTextPtr(old_x,old_y);
+          FullscTextPtr(old_x,old_y);
     }
 
    LazyMouseInterrupt();
@@ -1791,7 +1849,14 @@ if(sc.ScreenState == FULLSCREEN)
 
    sas_load(0x449,&v);
 
+#ifdef JAPAN
+   if (!is_us_mode() || TextOrGraphicsModeLUT[v] == GRAPHICS_MODE)
+#else // !JAPAN
+   if (v > Max_Standard_Mode) {
+       v = DEFAULT_VIDEO_MODE;
+   }
    if(TextOrGraphicsModeLUT[v] == GRAPHICS_MODE)
+#endif // !JAPAN
       {
       word currentCS,currentIP; // save those interesting Intel registers
       boolean currentIF;
@@ -1851,7 +1916,7 @@ if(!bMouseMenuItemAdded)
    //
 
    hM = ConsoleMenuControl(hBuff,IDM_POINTER,IDM_POINTER);
-   AppendMenu(hM,MF_STRING,IDM_POINTER,szHideMouseMenuStr);
+   AppendMenuW(hM,MF_STRING,IDM_POINTER,wszHideMouseMenuStr);
    bMouseMenuItemAdded=TRUE;
 
    //
@@ -1903,8 +1968,8 @@ hOld = hBuff;
 void MouseHide(void)
 {
 
-ModifyMenu(hM,IDM_POINTER,MF_BYCOMMAND,IDM_POINTER,
-	   (LPTSTR)szDisplayMouseMenuStr);
+ModifyMenuW(hM,IDM_POINTER,MF_BYCOMMAND,IDM_POINTER,
+            wszDisplayMouseMenuStr);
 
 //
 // Clip the pointer to a region inside the console window
@@ -1920,8 +1985,8 @@ bPointerOff=TRUE;
 void MouseDisplay(void)
 {
 
-ModifyMenu(hM,IDM_POINTER,MF_BYCOMMAND,IDM_POINTER,
-	  (LPTSTR)szHideMouseMenuStr);
+ModifyMenuW(hM,IDM_POINTER,MF_BYCOMMAND,IDM_POINTER,
+            wszHideMouseMenuStr);
 
 //
 // Let the pointer move anywhere on the screen
@@ -2007,8 +2072,8 @@ r->bottom = pt.y;
 //
 //  Function - EmulateCoordinates.
 //  Purpose  - When the mouse is hidden by the user in windowed mode, this
-//	       function generate absolute x,y values from the relative motion
-//	       of the system pointer between mouse hardware interrupts
+//             function generate absolute x,y values from the relative motion
+//             of the system pointer between mouse hardware interrupts
 //
 //  Returns  - Nothing.
 //
@@ -2104,10 +2169,10 @@ m2pY = *(short *)DX;
 //
 //  Function - WarpSystem Pointer
 //  Purpose  - Allows movement vectors to be calculated from the movement of
-//	       the operating system pointer. This function will not let the
-//	       the system pointer move out of the client area. This, plus the
-//	       warping mechanism ensures that the emulated pointer can move
-//	       forever in any given direction.
+//             the operating system pointer. This function will not let the
+//             the system pointer move out of the client area. This, plus the
+//             warping mechanism ensures that the emulated pointer can move
+//             forever in any given direction.
 //
 //  Returns  - TRUE if the system pointer has moved, FALSE if not.
 //
@@ -2326,13 +2391,13 @@ ShowConsoleCursor(sc.ActiveOutputBufferHandle, TRUE);
 void MouseSystemMenuON (void)
 {
     if (bPointerOff)
-	ClipCursor(NULL);
+        ClipCursor(NULL);
 }
 /* system menu off, restore clipping */
 void MouseSystemMenuOFF(void)
 {
     if (bPointerOff)
-	ClipCursor(&WarpBorderRect);
+        ClipCursor(&WarpBorderRect);
 }
 void ResetMouseOnBlock(void)
 {
@@ -2367,13 +2432,35 @@ host_ica_unlock();
 void CleanUpMousePointer()
 {
 half_word vm;
+#ifdef JAPAN
+half_word columns;
+word       saved_ac_offset;
+IMPORT  sys_addr DosvVramPtr;
+#endif // JAPAN
 
 //
 // Only execute this routine fully if in TEXT mode
 //
 
 sas_load(0x449,&vm); // Get the current video mode according to the B.D.A.
-
+#ifdef JAPAN
+if (!is_us_mode() && saved_ac_flag_sysaddr != 0){
+    if (vm != 0x72 && sas_w_at_no_check(saved_ac_flag_sysaddr) == 0) {
+        columns =  sas_hw_at_no_check(effective_addr(0x40, 0x4A));
+        columns <<= (vm == 0x73) ? 2 : 1;
+        saved_ac_offset = sas_w_at_no_check(effective_addr(0x40, 0x4E)) +
+                          ((word)old_y >> 3) * (word)columns +
+                          ((word)old_x >> ( (vm == 0x73) ? 1 : 2)) ;
+        sas_storew((sys_addr)saved_ac_offset + (sys_addr)DosvVramPtr,
+                   sas_w_at_no_check(saved_ac_sysaddr));
+    }
+    sas_storew(saved_ac_flag_sysaddr, 1);
+    return;
+}
+#endif // JAPAN
+if (vm > Max_Standard_Mode) {
+    vm = DEFAULT_VIDEO_MODE;
+}
 if(TextOrGraphicsModeLUT[(int)vm] != TEXT_MODE)
    return;
 
@@ -2409,7 +2496,7 @@ void FullscTextPtr(int x,int y)
 {
 #ifdef X86GFX
 sys_addr text_addr;
-word	 current_display_page;
+word     current_display_page;
 
 //
 // Work out the offset to the current video display page.
@@ -2488,6 +2575,7 @@ void host_x_range(word *blah, word *blah2,word *CX,word *DX)
 confine.bF7 = TRUE;
 confine.xmin = *CX;
 confine.xmax = *DX;
+VirtualScrCtrLUTx[DEFAULT_VIDEO_MODE] = (*CX + *DX) / 2;
 
 //
 // Force a mouse interrupt to make it happen.
@@ -2506,6 +2594,7 @@ void host_y_range(word *blah, word *blah2,word *CX,word *DX)
 confine.bF8 = TRUE;
 confine.ymin = *CX;
 confine.ymax = *DX;
+VirtualScrCtrLUTy[DEFAULT_VIDEO_MODE] = (*CX + *DX) / 2;
 
 //
 // Force a mouse interrupt to make it happen.

@@ -38,10 +38,12 @@ The following tables and routines are defined:
 char szDoomMsg[MAX_PATH]="";
 char szSysErrMsg[MAX_PATH]="";
 #ifdef X86GFX
-char szFrozenString[32];
+wchar_t wszFrozenString[32];
 #endif
-char szHideMouseMenuStr[64];
-char szDisplayMouseMenuStr[64];
+
+/* Use Unicode to work properly with NT's MUI technology */
+wchar_t wszHideMouseMenuStr[64];
+wchar_t wszDisplayMouseMenuStr[64];
 
 
 
@@ -98,24 +100,24 @@ void nls_init(void)
 		       )
 #ifdef X86GFX
 	 ||
-	!LoadString(GetModuleHandle(NULL),
-		    IDS_BURRRR,
-		    szFrozenString,
-		    sizeof(szFrozenString)/sizeof(CHAR)
-		    )
+	!LoadStringW(GetModuleHandle(NULL),
+		     IDS_BURRRR,
+		     wszFrozenString,
+		     sizeof(wszFrozenString)/sizeof(wchar_t)
+		     )
 #endif
 	 ||
-	!LoadString(GetModuleHandle(NULL),
-		   SM_HIDE_MOUSE,
-		   szHideMouseMenuStr,
-		   sizeof(szHideMouseMenuStr)/sizeof(char)
-		   )
+	!LoadStringW(GetModuleHandle(NULL),
+		     SM_HIDE_MOUSE,
+		     wszHideMouseMenuStr,
+		     sizeof(wszHideMouseMenuStr)/sizeof(wchar_t)
+		     )
 	 ||
-	!LoadString(GetModuleHandle(NULL),
-		    SM_DISPLAY_MOUSE,
-		    szDisplayMouseMenuStr,
-		    sizeof(szDisplayMouseMenuStr)/sizeof(char)
-		    ))
+	!LoadStringW(GetModuleHandle(NULL),
+		     SM_DISPLAY_MOUSE,
+		     wszDisplayMouseMenuStr,
+		     sizeof(wszDisplayMouseMenuStr)/sizeof(wchar_t)
+		     ))
            {
             RaiseException((DWORD)STATUS_INSUFFICIENT_RESOURCES,
                            EXCEPTION_NONCONTINUABLE,

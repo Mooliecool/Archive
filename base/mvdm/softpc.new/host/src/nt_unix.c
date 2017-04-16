@@ -367,39 +367,25 @@ char *path;
  * windows system directory. The full path to the first one found is returned
  * in the 'full_path' variable, and as the result of the function.
  */
-char *host_find_file(file,full_path,display_error)
-char *file,*full_path;
-int display_error;
+char *host_find_file(char *file,char *full_path,int display_error)
 {
     char buffer[MAXPATHLEN];
     WIN32_FIND_DATA match;
     HANDLE gotit;
-    static char sysdir[MAX_PATH];
-    static int first = 1;
+    ULONG ulLen=strlen(file);
 
-    if (first)
+    if (ulLen + 1 + ulSystem32PathLen + 1 <= MAXPATHLEN)
     {
-	first = 0;
-	if (GetSystemDirectory(sysdir, MAXPATHLEN) == 0)
-	{
-	    sysdir[0] = '\0';
-	    host_error(EG_SYS_MISSING_FILE, ERR_QUIT, file);
-	    return(NULL);
-	}
-    }
+	    memcpy(buffer, pszSystem32Path, ulSystem32PathLen);
+        buffer[ulSystem32PathLen] = '\\';
+	    memcpy(buffer+ulSystem32PathLen+1, file, ulLen+1);
 
-    if (sysdir[0] != '\0')
-    {
-	strcpy(buffer, sysdir);
-	strcat(buffer, "\\");
-	strcat(buffer, file);
-    }
-
-    if ((gotit = FindFirstFile(buffer, &match)) != (HANDLE)-1)
-    {
-	FindClose(gotit);       // should check (BOOL) return & then ??
-	strcpy(full_path, buffer);
-	return (full_path);
+        if ((gotit = FindFirstFile(buffer, &match)) != (HANDLE)-1)
+        {
+	    FindClose(gotit);       // should check (BOOL) return & then ??
+	    memcpy(full_path, buffer, ulSystem32PathLen + ulLen + 1 + 1);
+	    return (full_path);
+        }
     }
 
     /* Haven't managed to find the file. Oh dear... */

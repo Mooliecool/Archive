@@ -106,7 +106,7 @@ void illegal_op_int()
 
 #else /* NTVDM */
 #ifdef PROD
-#if define(MONITOR) || define(CPU_40_STYLE)
+#if defined(MONITOR) || defined(CPU_40_STYLE)
         host_error(EG_BAD_OP, ERR_QU_CO_RE, string);
 #else
         ea = effective_addr(cs, ip);
@@ -125,12 +125,12 @@ void illegal_op_int()
 	/* we don't know how many bytes this instr should be, so guess 1 */
 	if (ip == 0xffff) {
 		cs ++;
-		sas_store (stack+2, cs & 0xff);
-		sas_store (stack+3, (cs >> 8) & 0xff);
+		sas_store (stack+2, (IU8)(cs & 0xff));
+		sas_store (stack+3, (IU8)((cs >> 8) & 0xff));
 	}
 	ip ++;
-	sas_store (stack , ip & 0xff);
-	sas_store (stack+1, (ip >> 8) & 0xff);
+	sas_store (stack , (IU8)(ip & 0xff));
+	sas_store (stack+1, (IU8)((ip >> 8) & 0xff));
 	unexpected_int();
 }
 
@@ -213,7 +213,7 @@ GLOBAL void trace_msg_bop IFN0()
 {
 	sys_addr ea, ofs;
 
-	/* 
+	/*
 	Stack frame expected:
 	N.B. VxDs lives in a flat segment, (mostly) protected mode world!
 	This code expects the address to have been converted to a base-0
@@ -264,7 +264,7 @@ LOCAL void print_msg IFN1( IU32, ofs )
 			p[1] = sas_hw_at(ofs+1);
 			if (('A' <= p[1]) && (p[1] <= 'Z'))
 				p[1] += 'a' - 'A';
-			if (p[0] == 'e') 
+			if (p[0] == 'e')
 			{
 				/* may be esp, esi, eax, etc... */
 

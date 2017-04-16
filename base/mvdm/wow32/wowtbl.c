@@ -17,17 +17,17 @@
 --*/
 #include "precomp.h"
 #pragma hdrstop
+#ifdef FE_IME
+#include "winnls32.h"
+#include "wownls.h"
+#include "wnman.h"
+#endif // FE_IME
+#ifdef FE_SB // suports WIFE API (MiscGetEUDCLeadByteRange)
+#include "wowwife.h"
+#include "wwmman.h"
+#endif // FE_SB
 
-
-
-
-
-
-
-
-
-
-
+#include "wowit.h"
 
 MODNAME(wowtbl.c);
 
@@ -67,15 +67,24 @@ W32 aw32WOW[] = {
     {W32FUN((LPFNW32)-1,                 "TABLESEPARATOR",            0,      0)},
 
 #include "wcmdgtbl.h"
-    {W32FUN((LPFNW32)-1,                 "TABLESEPARATOR",            0,      0)}
+    {W32FUN((LPFNW32)-1,                 "TABLESEPARATOR",            0,      0)},
+#ifdef FE_SB
+#ifdef FE_IME
+#include "wntbl2.h"
+    {W32FUN((LPFNW32)-1,                 "TABLESEPARATOR",            0,      0)},
+#endif // FE_IME
+#include "wwmtbl2.h"
+    {W32FUN((LPFNW32)-1,                 "TABLESEPARATOR",            0,      0)},
+#endif // !FE_SB
 };
 
 
 TABLEOFFSETS tableoffsets;
 
-#ifdef DEBUG_OR_WOWPROFILE
+// REMOVECODE Remove comments below before shipping NT 5.  See Also WOW32Unimplemented95API in wow32.c and wowtbl.h
+// #ifdef DEBUG_OR_WOWPROFILE
 INT cAPIThunks;
-#endif
+// #endif
 
 #ifdef WOWPROFILE
 PW32   pawThunkTable = aw32WOW;
@@ -84,7 +93,7 @@ PW32   pawThunkTable = aw32WOW;
 
 VOID InitThunkTableOffsets(VOID)
 {
-    UINT    current;
+    WORD    current;
     WORD    offsetarray[(MOD_LAST - MOD_KERNEL) / FUN_MASK + 1];
     UINT    i;
 
@@ -111,6 +120,12 @@ VOID InitThunkTableOffsets(VOID)
     tableoffsets.toolhelp = offsetarray[MOD_TOOLHELP / FUN_MASK];
     tableoffsets.mmedia = offsetarray[MOD_MMEDIA / FUN_MASK];
     tableoffsets.commdlg = offsetarray[MOD_COMMDLG / FUN_MASK];
+#ifdef FE_IME
+    tableoffsets.winnls = offsetarray[MOD_WINNLS / FUN_MASK];
+#endif // FE_IME
+#ifdef FE_SB
+    tableoffsets.wifeman = offsetarray[MOD_WIFEMAN / FUN_MASK];
+#endif // FE_SB
 
 #ifdef DEBUG_OR_WOWPROFILE
     cAPIThunks = sizeof(aw32WOW) / sizeof(aw32WOW[0]);
@@ -122,6 +137,7 @@ VOID InitThunkTableOffsets(VOID)
 
 
 #ifdef DEBUG_OR_WOWPROFILE
+
 
 INT ModFromCallID(INT iFun)
 {
@@ -155,13 +171,32 @@ INT ModFromCallID(INT iFun)
         return(MOD_MMEDIA);
     }
 
+#if defined(FE_SB)
+  #if defined(FE_IME)
+    if (iFun < pto->winnls)
+        return MOD_COMMDLG;
+    if (iFun < pto->wifeman)
+        return MOD_WINNLS;
+    if (iFun < cAPIThunks)
+        return MOD_WIFEMAN;
+  #else
+    if (iFun < pto->wifeman)
+        return MOD_COMMDLG;
+    if (iFun < cAPIThunks)
+        return MOD_WIFEMAN;
+  #endif
+#elif defined(FE_IME)
+    if (iFun < pto->winnls)
+        return MOD_COMMDLG;
+    if (iFun < cAPIThunks)
+        return MOD_WINNLS;
+#else
     if (iFun < cAPIThunks)
         return MOD_COMMDLG;
+#endif
 
     return -1;
 }
-
-
 
 PSZ apszModNames[] = { "Kernel",
                        "User",
@@ -173,6 +208,12 @@ PSZ apszModNames[] = { "Kernel",
                        "Toolhelp",
                        "MMedia",
                        "Commdlg"
+#ifdef FE_IME
+                       ,"WinNLS"
+#endif
+#ifdef FE_SB
+                       ,"WifeMan"
+#endif
                      };
 
 INT nModNames = NUMEL(apszModNames);
@@ -192,6 +233,7 @@ PSZ GetModName(INT iFun)
     return apszModNames[nMod];
 
 }
+
 
 INT GetOrdinal(INT iFun)
 {
@@ -213,7 +255,7 @@ INT TableOffsetFromName(PSZ szTab)
     PTABLEOFFSETS pto = &tableoffsets;
 
     for (i = 0; i < NUMEL(apszModNames); i++) {
-        if (!strcmp(szTab, apszModNames[i]))
+        if (!WOW32_strcmp(szTab, apszModNames[i]))
             break;
     }
 
@@ -250,6 +292,16 @@ INT TableOffsetFromName(PSZ szTab)
 
     case MOD_COMMDLG:
         return(pto->commdlg);
+
+#ifdef FE_IME
+    case MOD_WINNLS:
+        return pto->winnls;
+#endif
+
+#ifdef FE_SB
+    case MOD_WIFEMAN:
+        return pto->wifeman;
+#endif
 
     default:
         return(-1);

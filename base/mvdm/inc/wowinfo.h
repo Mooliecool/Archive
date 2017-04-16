@@ -55,4 +55,5 @@ typedef WOWINFO UNALIGNED *PWOWINFO;
 
 #define WM_WOWEXECSTARTAPP         (WM_USER)    // also in windows\inc\vdmapi.h
 #define WM_WOWEXECHEARTBEAT        (WM_USER+1)  // To deliver timer ticks
-#define WM_WOWEXECEXITEXEC         (WM_USER+2)  // To help do ExitWindowsExec()
+#define WM_WOWEXEC_START_TASK      (WM_USER+2)  // vdmdbg.dll sends this
+#define WM_WOWEXECSTARTTIMER       (WM_USER+3)  // see WK32WowShutdownTimer

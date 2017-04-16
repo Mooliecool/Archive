@@ -31,19 +31,21 @@
 #include "nt_event.h"
 #include "nt_reset.h"
 #include "config.h"
+#include "sndblst.h"
 #include <nt_vdd.h>   // DO NOT USE vddsvc.h
 #include <nt_vddp.h>
 #include <host_emm.h>
 #include "emm.h"
 #include <demexp.h>
 #include <vint.h>
+#include "xmsexp.h"
+#include "dbgexp.h"
+#include "cmdsvc.h"
 
 PMEM_HOOK_DATA MemHookHead = NULL;
 PVDD_USER_HANDLERS UserHookHead= NULL;
 
-extern BOOL CMDInit (int argc,char *argv[]);
-extern BOOL XMSInit (int argc,char *argv[]);
-extern BOOL DBGInit (int argc,char *argv[]);
+extern VOID DpmiEnableIntHooks (VOID);
 extern DWORD TlsDirectError;
 extern VOID FloppyTerminatePDB(USHORT PDB);
 extern VOID FdiskTerminatePDB(USHORT PDB);
@@ -54,7 +56,6 @@ void AddSystemFiles(void);
 
 void scs_init(int argc, char **argv)
 {
-    PSZ psz;
     BOOL IsFirst;
 
     IsFirst = GetNextVDMCommand(NULL);
@@ -64,37 +65,41 @@ void scs_init(int argc, char **argv)
 
     // Initialize SCS
 
-    CMDInit (argc,argv);
+    CMDInit ();
 
     // Initialize DOSEm
 
-    if(!DemInit (argc,argv)) {
-        host_error(EG_OWNUP, ERR_QUIT, "NTVDM:DemInit fails");
-        TerminateVDM();
-    }
+    DemInit ();
 
     // Initialize XMS
 
-    if(!XMSInit (argc,argv)) {
+    if(!XMSInit ()) {
         host_error(EG_OWNUP, ERR_QUIT, "NTVDM:XMSInit fails");
         TerminateVDM();
     }
 
     // Initialize DBG
 
-    if(!DBGInit (argc,argv)) {
+    if(!DBGInit ()) {
 #ifndef PROD
         printf("NTVDM:DBGInit fails\n");
         HostDebugBreak();
 #endif
         TerminateVDM();
     }
+
+    //
+    // have dpmi do the interrupt dispatching
+    //
+    DpmiEnableIntHooks();
 }
 
 //
 // This routine contains the Dos Emulation initialisation code, called from
 // main(). We currently do not support container files.
 //
+
+extern boolean lim_page_frame_init(PLIM_CONFIG_DATA);
 
 
 InitialiseDosEmulation(int argc, char **argv)
@@ -103,11 +108,14 @@ InitialiseDosEmulation(int argc, char **argv)
     DWORD    FileSize;
     DWORD    BytesRead;
     DWORD    dw;
-    ULONG    fVirtualInt;
+    ULONG    fVirtualInt, fTemp;
     host_addr  pDOSAddr;
     CHAR  buffer[MAX_PATH*2];
 #ifdef LIM
     LIM_CONFIG_DATA lim_config_data;
+#endif
+#ifdef FE_SB
+    LANGID   LcId = GetSystemDefaultLangID();
 #endif
 
     //
@@ -125,6 +133,7 @@ InitialiseDosEmulation(int argc, char **argv)
 #else
     fVirtualInt &=  ~MIPS_BIT_MASK;
 #endif
+    fVirtualInt &= ~VDM_BREAK_DEBUGGER;
     sas_storedw((ULONG)FIXED_NTVDMSTATE_LINEAR,fVirtualInt);
 
     io_init();
@@ -147,6 +156,13 @@ InitialiseDosEmulation(int argc, char **argv)
     reset();
 
     SetupInstallableVDD ();
+
+    //
+    // Initialize internal SoundBlaster VDD after the intallable VDDs
+    //
+
+    SbInitialize ();
+
     /* reserve lim block after all vdd are installed.
        the pif file settings tell us if it is necessary to
        reserve the block
@@ -158,21 +174,50 @@ InitialiseDosEmulation(int argc, char **argv)
        reserve the block.
     */
     if (get_lim_configuration_data(&lim_config_data))
-	lim_page_frame_init(&lim_config_data);
+        lim_page_frame_init(&lim_config_data);
 
 #endif
 
      scs_init(argc, argv);           // Initialise single command shell
 
+     //
+     // Routines called in scs_init may have added bits to the vdmstate flags.
+     // read it in so we can preserve the state
+     //
+
+     sas_loads((ULONG)FIXED_NTVDMSTATE_LINEAR,
+              (PCHAR)&fTemp,
+              FIXED_NTVDMSTATE_SIZE
+              );
+
+     fVirtualInt |= fTemp;
+
      /*................................................. Load DOSEM code */
 
-     dw = GetSystemDirectory(buffer, sizeof(buffer));
-     if (!dw || dw >= sizeof(buffer)) {
-         host_error(EG_OWNUP, ERR_QUIT, "NTVDM:InitialiseDosEmulation fails");
-         TerminateVDM();
-         }
+     memcpy(buffer, pszSystem32Path, ulSystem32PathLen);
 
-     strcat(buffer, "\\ntio.sys");
+#ifdef FE_SB
+        switch (LcId) {
+            case MAKELANGID(LANG_JAPANESE,SUBLANG_DEFAULT):
+                memcpy (buffer+ulSystem32PathLen, NTIO_411, strlen(NTIO_411) + 1);
+                break;
+            case MAKELANGID(LANG_KOREAN,SUBLANG_DEFAULT):
+                memcpy (buffer+ulSystem32PathLen, NTIO_412, strlen(NTIO_412) + 1);
+                break;
+            case MAKELANGID(LANG_CHINESE,SUBLANG_CHINESE_TRADITIONAL):
+                memcpy (buffer+ulSystem32PathLen, NTIO_404, strlen(NTIO_404) + 1);
+                break;
+            case MAKELANGID(LANG_CHINESE,SUBLANG_CHINESE_SIMPLIFIED):
+            case MAKELANGID(LANG_CHINESE,SUBLANG_CHINESE_HONGKONG):
+                memcpy (buffer+ulSystem32PathLen, NTIO_804, strlen(NTIO_804) + 1);
+                break;
+            default:
+                memcpy (buffer+ulSystem32PathLen, NTIO_409, strlen(NTIO_409) + 1);
+                break;
+        }
+#else
+     memcpy(buffer+ulSystem32PathLen, NTIO_409, strlen(NTIO_409) + 1);
+#endif
 
      hFile = CreateFile(buffer,
                         GENERIC_READ,
@@ -318,38 +363,41 @@ void AddSystemFiles(void)
  * the following syntax:
  * EMM=[a=altregs][b=segment][i=segment1-segment2][x=segment1-segment2] [RAM]
  * where "a=altregs" specifies how many alternative mapping register set
- *	 "b=segment" specifies the backfill starting segment address.
- *	 "RAM" indicates that the system should only allocate 64KB from
- *	 UMB to use as EMM page frame.
- *	 "i=segment1 - segment2" specifies a particular range of
- *	 address that the system should include as EMM page frame
- *	 "x=segment1 - segment2" specifies a particular range of
- *	 address that the system should NOT use as page frame.
+ *       "b=segment" specifies the backfill starting segment address.
+ *       "RAM" indicates that the system should only allocate 64KB from
+ *       UMB to use as EMM page frame.
+ *       "i=segment1 - segment2" specifies a particular range of
+ *       address that the system should include as EMM page frame
+ *       "x=segment1 - segment2" specifies a particular range of
+ *       address that the system should NOT use as page frame.
  *
  *  input: pointer to LIM_PARAMS
  *  output: LIM_PARAMS is filled with data
  *
  */
 
-#define IS_EOL_CHAR(c)	    (c == '\n' || c == '\r' || c == '\0')
-#define SKIP_WHITE_CHARS(size, ptr)	while (size && isspace(*ptr)) \
-					{ ptr++; size--; }
+#define IS_EOL_CHAR(c)      (c == '\n' || c == '\r' || c == '\0')
+#define SKIP_WHITE_CHARS(size, ptr)     while (size && isspace(*ptr)) \
+                                        { ptr++; size--; }
 
-#define TOINT(c)	    ((c >= '0' && c <= '9') ? (c - '0') : \
-			     ((c >= 'A' && c <= 'F') ? (c - 'A' + 10) :	\
-			      ((c >= 'a' && c <= 'f') ? (c - 'a' + 10) : 0) \
-			     )\
-			    )
+#define TOINT(c)            ((c >= '0' && c <= '9') ? (c - '0') : \
+                             ((c >= 'A' && c <= 'F') ? (c - 'A' + 10) : \
+                              ((c >= 'a' && c <= 'f') ? (c - 'a' + 10) : 0) \
+                             )\
+                            )
+
+
+extern void GetPIFConfigFiles(int, char *, int);
 
 boolean init_lim_configuration_data(PLIM_CONFIG_DATA lim_data)
 {
-    char config_sys_pathname[MAX_PATH];
+    char config_sys_pathname[MAX_PATH+13];
     HANDLE  handle;
     DWORD   file_size, bytes_read, size;
     char    *buffer, *ptr;
     short   lim_size, base_segment, total_altreg_sets;
     boolean ram_flag_found, reserve_umb_status, parsing_error;
-    sys_addr	page_frame;
+    sys_addr    page_frame;
     int     i;
 
 
@@ -360,182 +408,184 @@ boolean init_lim_configuration_data(PLIM_CONFIG_DATA lim_data)
 
     parsing_error = FALSE;
 
-    /* if we can not find config.nt, we can not go on */
-    GetPIFConfigFiles(TRUE, config_sys_pathname);
+    /* if we can not find config.nt, we can not go on. */
+
+    GetPIFConfigFiles(TRUE, config_sys_pathname, TRUE);
+
     if (*config_sys_pathname == '\0')
-	return FALSE;
+        return FALSE;
 
     handle = CreateFile(config_sys_pathname,
-			GENERIC_READ,
-			FILE_SHARE_READ,
-			NULL,
-			OPEN_EXISTING,
-			FILE_ATTRIBUTE_NORMAL,
-			NULL
-			);
+                        GENERIC_READ,
+                        FILE_SHARE_READ,
+                        NULL,
+                        OPEN_EXISTING,
+                        FILE_ATTRIBUTE_NORMAL,
+                        NULL
+                        );
     if (handle == INVALID_HANDLE_VALUE)
-	return FALSE;
+        return FALSE;
 
     file_size = GetFileSize(handle, NULL);
     if (file_size == 0 || file_size == 0xFFFFFFFF) {
-	CloseHandle(handle);
-	return FALSE;
+        CloseHandle(handle);
+        return FALSE;
     }
     buffer = malloc(file_size);
     if (buffer == NULL) {
-	CloseHandle(handle);
-	host_error(EG_MALLOC_FAILURE, ERR_QUIT, "");
-	return FALSE;
+        CloseHandle(handle);
+        host_error(EG_MALLOC_FAILURE, ERR_QUIT, "");
+        return FALSE;
     }
     if (!ReadFile(handle, buffer, file_size, &bytes_read, NULL) ||
-	bytes_read != file_size)
+        bytes_read != file_size)
     {
-	CloseHandle(handle);
-	free(buffer);
-	return FALSE;
+        CloseHandle(handle);
+        free(buffer);
+        return FALSE;
     }
     CloseHandle(handle);
 
     ptr = buffer;
 
     while(file_size) {
-	/* skip leading white characters on each line */
-	SKIP_WHITE_CHARS(file_size, ptr);
-	/* nothing meaningful in the file, break */
-	if (!file_size)
-	    break;
-	/* looking for EMM */
-	if (file_size < 3 || toupper(ptr[0]) != 'E' ||
-	    toupper(ptr[1]) != 'M' || toupper(ptr[2]) != 'M')
-	{
-	    /* we don't want this line, skip it by looking for the first EOL
-	     * char in the line
-	     */
-	    do {
-		file_size--;
-		ptr++;
-	    } while(file_size && !IS_EOL_CHAR(*ptr));
+        /* skip leading white characters on each line */
+        SKIP_WHITE_CHARS(file_size, ptr);
+        /* nothing meaningful in the file, break */
+        if (!file_size)
+            break;
+        /* looking for EMM */
+        if (file_size < 3 || toupper(ptr[0]) != 'E' ||
+            toupper(ptr[1]) != 'M' || toupper(ptr[2]) != 'M')
+        {
+            /* we don't want this line, skip it by looking for the first EOL
+             * char in the line
+             */
+            do {
+                file_size--;
+                ptr++;
+            } while(file_size && !IS_EOL_CHAR(*ptr));
 
-	    /* either there are nothing left in the file  or we have EOL
-	     * char(s) in the line, loop through to skip all consecutive
-	     * EOL char(s)
-	     */
-	    while(file_size && IS_EOL_CHAR(*ptr)) {
-		file_size--;
-		ptr++;
-	    }
-	}
-	else {
-	    /* got "EMM", looking for '=' */
-	    file_size -= 3;
-	    ptr += 3;
-	    SKIP_WHITE_CHARS(file_size, ptr);
-	    if (!file_size || *ptr != '=')
-		parsing_error = TRUE;
-	    else {
-		file_size--;
-		ptr++;
-		SKIP_WHITE_CHARS(file_size, ptr);
-		/* "EMM=" is a valid EMM command line */
-	    }
-	    break;
-	}
+            /* either there are nothing left in the file  or we have EOL
+             * char(s) in the line, loop through to skip all consecutive
+             * EOL char(s)
+             */
+            while(file_size && IS_EOL_CHAR(*ptr)) {
+                file_size--;
+                ptr++;
+            }
+        }
+        else {
+            /* got "EMM", looking for '=' */
+            file_size -= 3;
+            ptr += 3;
+            SKIP_WHITE_CHARS(file_size, ptr);
+            if (!file_size || *ptr != '=')
+                parsing_error = TRUE;
+            else {
+                file_size--;
+                ptr++;
+                SKIP_WHITE_CHARS(file_size, ptr);
+                /* "EMM=" is a valid EMM command line */
+            }
+            break;
+        }
     }
     /* we have three possibilities here:
      * (1). we found pasring error while we were looking for "EMM="
      * (2). no "EMM=" line was found
      * (3). "EMM=" was found and ptr points to the first nonwhite
-     *	    char after '='.
+     *      char after '='.
      */
     while (file_size && !parsing_error && !IS_EOL_CHAR(*ptr)) {
-	SKIP_WHITE_CHARS(file_size, ptr);
-	switch (*ptr) {
-	    case 'a':
-	    case 'A':
+        SKIP_WHITE_CHARS(file_size, ptr);
+        switch (*ptr) {
+            case 'a':
+            case 'A':
 
-		/* no white chars allowed between 'a' and its
-		 * parameter
-		 */
-		if (!(--file_size) || *(++ptr) != '='){
-		    parsing_error = TRUE;
-		    break;
-		}
-		file_size--;
-		ptr++;
-		/* about to parsing 'a=' switch, reset the preset value to 0 */
-		total_altreg_sets = 0;
+                /* no white chars allowed between 'a' and its
+                 * parameter
+                 */
+                if (!(--file_size) || *(++ptr) != '='){
+                    parsing_error = TRUE;
+                    break;
+                }
+                file_size--;
+                ptr++;
+                /* about to parsing 'a=' switch, reset the preset value to 0 */
+                total_altreg_sets = 0;
 
-		while(file_size && isdigit(*ptr)) {
-		    total_altreg_sets = total_altreg_sets * 10 + (*ptr - '0');
-		    file_size--;
-		    ptr++;
-		    if (total_altreg_sets > 255) {
-			parsing_error = TRUE;
-			break;
-		    }
-		}
-		if (!total_altreg_sets || total_altreg_sets > 255)
-		    parsing_error = TRUE;
-		break;
+                while(file_size && isdigit(*ptr)) {
+                    total_altreg_sets = total_altreg_sets * 10 + (*ptr - '0');
+                    file_size--;
+                    ptr++;
+                    if (total_altreg_sets > 255) {
+                        parsing_error = TRUE;
+                        break;
+                    }
+                }
+                if (!total_altreg_sets || total_altreg_sets > 255)
+                    parsing_error = TRUE;
+                break;
 
-	    case 'b':
-	    case 'B':
-		/* no white chars allowed between 'b' and its
-		 * parameter
-		 */
-		if (!(--file_size) || *(++ptr) != '='){
-		    parsing_error = TRUE;
-		    break;
-		}
-		file_size--;
-		ptr++;
-		base_segment = 0;
-		while(file_size && isxdigit(*ptr)) {
-		    base_segment = (base_segment << 4) + TOINT(*ptr);
-		    file_size--;
-		    ptr++;
-		    if (base_segment > 0x4000) {
-			parsing_error = TRUE;
-			break;
-		    }
-		}
-		/*  x01000 <= base_segment <= 0x4000 */
+            case 'b':
+            case 'B':
+                /* no white chars allowed between 'b' and its
+                 * parameter
+                 */
+                if (!(--file_size) || *(++ptr) != '='){
+                    parsing_error = TRUE;
+                    break;
+                }
+                file_size--;
+                ptr++;
+                base_segment = 0;
+                while(file_size && isxdigit(*ptr)) {
+                    base_segment = (base_segment << 4) + TOINT(*ptr);
+                    file_size--;
+                    ptr++;
+                    if (base_segment > 0x4000) {
+                        parsing_error = TRUE;
+                        break;
+                    }
+                }
+                /*  x01000 <= base_segment <= 0x4000 */
 
-		if (base_segment >= 0x1000 && base_segment <= 0x4000)
-		    /* round down the segment to  EMM_PAGE_SIZE boundary */
-		    base_segment = ((((ULONG)base_segment * 16) / EMM_PAGE_SIZE)
-				     * EMM_PAGE_SIZE) / 16;
-		else
-		    parsing_error = TRUE;
-		break;
+                if (base_segment >= 0x1000 && base_segment <= 0x4000)
+                    /* round down the segment to  EMM_PAGE_SIZE boundary */
+                    base_segment = (short)(((((ULONG)base_segment * 16) / EMM_PAGE_SIZE)
+                                     * EMM_PAGE_SIZE) / 16);
+                else
+                    parsing_error = TRUE;
+                break;
 
-	    case 'r':
-	    case 'R':
-		if (file_size >= 3 &&
-		    (ptr[1] == 'a' || ptr[1] == 'A') &&
-		    (ptr[2] == 'm' || ptr[2] == 'M'))
-		{
-		    file_size -= 3;
-		    ptr += 3;
-		    ram_flag_found = TRUE;
-		    break;
-		}
-		/* fall through if it is not RAM */
+            case 'r':
+            case 'R':
+                if (file_size >= 3 &&
+                    (ptr[1] == 'a' || ptr[1] == 'A') &&
+                    (ptr[2] == 'm' || ptr[2] == 'M'))
+                {
+                    file_size -= 3;
+                    ptr += 3;
+                    ram_flag_found = TRUE;
+                    break;
+                }
+                /* fall through if it is not RAM */
 
-	    default:
-		parsing_error = TRUE;
-		break;
-	} /* switch */
+            default:
+                parsing_error = TRUE;
+                break;
+        } /* switch */
 
     } /* while */
 
     free(buffer);
     if (parsing_error) {
-	host_error(EG_BAD_EMM_LINE, ERR_QUIT, "");
-	/* reset parameters because the emm command line is not reliable */
-	base_segment = 0x4000;
-	total_altreg_sets = 8;
-	ram_flag_found = FALSE;
+        host_error(EG_BAD_EMM_LINE, ERR_QUIT, "");
+        /* reset parameters because the emm command line is not reliable */
+        base_segment = 0x4000;
+        total_altreg_sets = 8;
+        ram_flag_found = FALSE;
     }
 
     /* we got here if (1). no parsing error or (2). user opted to ignore
@@ -551,15 +601,15 @@ boolean init_lim_configuration_data(PLIM_CONFIG_DATA lim_data)
 
 #ifdef EMM_DEBUG
     printf("base segment=%x, backfill =%lx; altreg sets=%d\n",
-	   base_segment, lim_data->backfill, total_altreg_sets);
+           base_segment, lim_data->backfill, total_altreg_sets);
 #endif
 
     return TRUE;
 }
 
 unsigned short get_lim_page_frames(USHORT * page_table,
-				   PLIM_CONFIG_DATA lim_data
-				   )
+                                   PLIM_CONFIG_DATA lim_data
+                                   )
 {
 
     USHORT  total_phys_pages, base_segment, i;
@@ -585,15 +635,15 @@ unsigned short get_lim_page_frames(USHORT * page_table,
      * available in the UMB area
      */
     if (!reserve_umb_status) {
-	page_frame = 0;
-	size  = 0x10000;
-	reserve_umb_status = ReserveUMB(UMB_OWNER_EMM, (PVOID *)&page_frame, &size);
+        page_frame = 0;
+        size  = 0x10000;
+        reserve_umb_status = ReserveUMB(UMB_OWNER_EMM, (PVOID *)&page_frame, &size);
     }
     if (!reserve_umb_status) {
 #ifdef EMM_DEBUG
-	printf("couldn't find primary page frame\n");
+        printf("couldn't find primary page frame\n");
 #endif
-	return FALSE;
+        return FALSE;
     }
     page_table[0] = (short)(page_frame / 16);
     page_table[1] = (short)((page_frame + 1 * EMM_PAGE_SIZE) / 16);
@@ -604,33 +654,33 @@ unsigned short get_lim_page_frames(USHORT * page_table,
     total_phys_pages = 4;
 
     /* now add back fill page frames */
-    for (i = lim_data->backfill / EMM_PAGE_SIZE; i != 0 ; i--) {
-	page_table[total_phys_pages++] = base_segment;
-	base_segment += EMM_PAGE_SIZE / 16;
+    for (i = (USHORT)(lim_data->backfill / EMM_PAGE_SIZE); i != 0 ; i--) {
+        page_table[total_phys_pages++] = base_segment;
+        base_segment += EMM_PAGE_SIZE / 16;
     }
 
     /* RAM is not specified in the command line, grab every possible
      * page frame from UMB
      */
     if (lim_data->use_all_umb) {
-	while (TRUE) {
-	    page_frame = 0;
-	    size = EMM_PAGE_SIZE;
-	    if (ReserveUMB(UMB_OWNER_EMM, (PVOID *)&page_frame, &size))
-	       page_table[total_phys_pages++] = (short)(page_frame / 16);
-	    else
-		break;
-	}
+        while (TRUE) {
+            page_frame = 0;
+            size = EMM_PAGE_SIZE;
+            if (ReserveUMB(UMB_OWNER_EMM, (PVOID *)&page_frame, &size))
+               page_table[total_phys_pages++] = (short)(page_frame / 16);
+            else
+                break;
+        }
     }
 
 #ifdef EMM_DEBUG
     printf("page frames:\n");
     for (i = 0; i < total_phys_pages; i++)
-	printf("page number %d, segment %x\n",i, page_table[i]);
+        printf("page number %d, segment %x\n",i, page_table[i]);
 #endif
     return total_phys_pages;
 }
-#endif	/* LIM */
+#endif  /* LIM */
 
 
 VOID SetupInstallableVDD (VOID)
@@ -647,10 +697,10 @@ PCHAR  pKeyName = "SYSTEM\\CurrentControlSet\\Control\\VirtualDeviceDrivers";
 
     if (RegOpenKeyEx ( HKEY_LOCAL_MACHINE,
                        pKeyName,
-		       0,
-		       KEY_QUERY_VALUE,
-		       &VDDKey
-		     ) != ERROR_SUCCESS){
+                       0,
+                       KEY_QUERY_VALUE,
+                       &VDDKey
+                     ) != ERROR_SUCCESS){
         RcErrorDialogBox(ED_REGVDD, pKeyName, NULL);
         return;
     }
@@ -659,21 +709,21 @@ PCHAR  pKeyName = "SYSTEM\\CurrentControlSet\\Control\\VirtualDeviceDrivers";
 
         // get size of VDD value
     if (RegQueryInfoKey (VDDKey,
-			 (LPTSTR)szClass,
-			 &dwClassLen,
-			 NULL,
-			 &nKeys,
-			 &cbMaxKey,
-			 &cbMaxClass,
-			 &nValues,
-			 &cbMaxValueName,
-			 &cbMaxValueData,
-			 &dwSec,
-			 &ft
-			) != ERROR_SUCCESS) {
+                         (LPTSTR)szClass,
+                         &dwClassLen,
+                         NULL,
+                         &nKeys,
+                         &cbMaxKey,
+                         &cbMaxClass,
+                         &nValues,
+                         &cbMaxValueName,
+                         &cbMaxValueData,
+                         &dwSec,
+                         &ft
+                        ) != ERROR_SUCCESS) {
         RcErrorDialogBox(ED_REGVDD, pKeyName, pszName);
         RegCloseKey (VDDKey);
-	return;
+        return;
     }
 
 
@@ -681,22 +731,22 @@ PCHAR  pKeyName = "SYSTEM\\CurrentControlSet\\Control\\VirtualDeviceDrivers";
     if ((pszValue = (PCHAR) malloc (cbMaxValueData)) == NULL) {
         RcErrorDialogBox(ED_MEMORYVDD, pKeyName, pszName);
         RegCloseKey (VDDKey);
-	return;
+        return;
     }
 
 
          // finally get the VDD value (multi-string)
     if (RegQueryValueEx (VDDKey,
-			 (LPTSTR)pszName,
-			 NULL,
+                         (LPTSTR)pszName,
+                         NULL,
                          &dwType,
-			 (LPBYTE)pszValue,
-			 &cbMaxValueData
+                         (LPBYTE)pszValue,
+                         &cbMaxValueData
                         ) != ERROR_SUCCESS || dwType != REG_MULTI_SZ) {
         RcErrorDialogBox(ED_REGVDD, pKeyName, pszName);
         RegCloseKey (VDDKey);
-	free (pszValue);
-	return;
+        free (pszValue);
+        return;
     }
 
     pszName = pszValue;
@@ -714,39 +764,39 @@ PCHAR  pKeyName = "SYSTEM\\CurrentControlSet\\Control\\VirtualDeviceDrivers";
 }
 
 /*** VDDInstallMemoryHook - This service is provided for VDDs to hook the
- *			    Memory Mapped IO addresses they are resposible
- *			    for.
+ *                          Memory Mapped IO addresses they are resposible
+ *                          for.
  *
  * INPUT:
- *	hVDD	: VDD Handle
+ *      hVDD    : VDD Handle
  *      addr    : Starting linear address
  *      count   : Number of bytes
- *	MemoryHandler : VDD handler for the memory addresses
+ *      MemoryHandler : VDD handler for the memory addresses
  *
  *
  * OUTPUT
- *	SUCCESS : Returns TRUE
- *	FAILURE : Returns FALSE
- *		  GetLastError has the extended error information.
+ *      SUCCESS : Returns TRUE
+ *      FAILURE : Returns FALSE
+ *                GetLastError has the extended error information.
  *
  * NOTES
- *	1. The first one to hook an address will get the control. There
- *	   is no concept of chaining the hooks. VDD should grab the
- *	   memory range in its initialization routine. After all
- *	   the VDDs are loaded, EMM will eat up all the remaining
- *	   memory ranges for UMB support.
+ *      1. The first one to hook an address will get the control. There
+ *         is no concept of chaining the hooks. VDD should grab the
+ *         memory range in its initialization routine. After all
+ *         the VDDs are loaded, EMM will eat up all the remaining
+ *         memory ranges for UMB support.
  *
- *	2. Memory handler will be called with the address on which the
+ *      2. Memory handler will be called with the address on which the
  *         page fault occured. It wont say whether it was a read operation
- *	   or write operation or what were the operand value. If a VDD
- *	   is interested in such information it has to get the CS:IP and
- *	   decode the instruction.
+ *         or write operation or what were the operand value. If a VDD
+ *         is interested in such information it has to get the CS:IP and
+ *         decode the instruction.
  *
- *	3. On returning from the hook handler it will be assumed that
- *	   the page fault was handled and the return will go back to the
- *	   VDM.
+ *      3. On returning from the hook handler it will be assumed that
+ *         the page fault was handled and the return will go back to the
+ *         VDM.
  *
- *	4. Installing a hook on a memory range will result in the
+ *      4. Installing a hook on a memory range will result in the
  *         consumption of memory based upon page boundaries. The Starting
  *         address is rounded down, and the count is rounded up to the
  *         next page boundary. The VDD's memory hook handler will be
@@ -755,10 +805,10 @@ PCHAR  pKeyName = "SYSTEM\\CurrentControlSet\\Control\\VirtualDeviceDrivers";
  *         longer be available for use by NTVDM or other VDDs. The VDD is
  *         permitted to manipulate the memory (commit, free, etc) as needed.
  *
- *	5. After calling the MemoryHandler, NTVDM will return to the
- *	   faulting cs:ip in the 16bit app. If the VDD does'nt want
- *	   that to happen it should adjust cs:ip appropriatly by using
- *	   setCS and setIP.
+ *      5. After calling the MemoryHandler, NTVDM will return to the
+ *         faulting cs:ip in the 16bit app. If the VDD does'nt want
+ *         that to happen it should adjust cs:ip appropriatly by using
+ *         setCS and setIP.
  */
 
 BOOL VDDInstallMemoryHook (
@@ -774,8 +824,8 @@ PMEM_HOOK_DATA pmh = MemHookHead,pmhNew,pmhLast=NULL;
 
 
     if (count == 0 || pStart == (PVOID)NULL || count > 0x20000) {
-	SetLastError(ERROR_INVALID_PARAMETER);
-	return FALSE;
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
     }
        // round addr down to next page boundary
        // round count up to next page boundary
@@ -789,29 +839,29 @@ PMEM_HOOK_DATA pmh = MemHookHead,pmhNew,pmhLast=NULL;
         }
 
     while (pmh) {
-	// the requested block can never be overlapped with any other
-	// existing blocks
-	if(dwStart >= pmh->StartAddr + pmh->Count ||
-	   dwStart + count <= pmh->StartAddr){
-	    pmhLast = pmh;
-	    pmh = pmh->next;
-	    continue;
-	}
+        // the requested block can never be overlapped with any other
+        // existing blocks
+        if(dwStart >= pmh->StartAddr + pmh->Count ||
+           dwStart + count <= pmh->StartAddr){
+            pmhLast = pmh;
+            pmh = pmh->next;
+            continue;
+        }
 
-	// failure case
-	SetLastError (ERROR_ACCESS_DENIED);
-	return FALSE;
+        // failure case
+        SetLastError (ERROR_ACCESS_DENIED);
+        return FALSE;
     }
     if ((pmhNew = (PMEM_HOOK_DATA) malloc (sizeof(MEM_HOOK_DATA))) == NULL) {
-	SetLastError (ERROR_OUTOFMEMORY);
-	return FALSE;
+        SetLastError (ERROR_OUTOFMEMORY);
+        return FALSE;
     }
     // the request block is not overlapped with existing blocks,
     // request the UMB managing function to allocate the block
     if (!ReserveUMB(UMB_OWNER_VDD, (PVOID *)&dwStart, &count)) {
-	free(pmhNew);
-	SetLastError(ERROR_ACCESS_DENIED);
-	return FALSE;
+        free(pmhNew);
+        SetLastError(ERROR_ACCESS_DENIED);
+        return FALSE;
     }
     // now set up  the new node to get to know it
     pmhNew->Count = count;
@@ -822,8 +872,8 @@ PMEM_HOOK_DATA pmh = MemHookHead,pmhNew,pmhLast=NULL;
 
     // Check if the record is to be added in the begining
     if (MemHookHead == NULL || pmhLast == NULL) {
-	MemHookHead = pmhNew;
-	return TRUE;
+        MemHookHead = pmhNew;
+        return TRUE;
     }
 
     pmhLast->next = pmhNew;
@@ -831,18 +881,18 @@ PMEM_HOOK_DATA pmh = MemHookHead,pmhNew,pmhLast=NULL;
 }
 
 /*** VDDDeInstallMemoryHook - This service is provided for VDDs to unhook the
- *			      Memory Mapped IO addresses.
+ *                            Memory Mapped IO addresses.
  *
  * INPUT:
- *	hVDD	: VDD Handle
- *	addr	: Starting linear address
- *	count	: Number of addresses
+ *      hVDD    : VDD Handle
+ *      addr    : Starting linear address
+ *      count   : Number of addresses
  *
  * OUTPUT
- *	None
+ *      None
  *
  * NOTES
- *	1. On Deinstalling a hook, the memory range becomes invalid.
+ *      1. On Deinstalling a hook, the memory range becomes invalid.
  *         VDM's access of this memory range will cause a page fault.
  *
  */
@@ -858,8 +908,8 @@ PMEM_HOOK_DATA pmh = MemHookHead,pmhLast=NULL;
     DWORD dwStart;
 
     if (count == 0 || pStart == (PVOID)NULL || count > 0x20000) {
-	SetLastError(ERROR_INVALID_PARAMETER);
-	return FALSE;
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
     }
 
        // round addr down to next page boundary
@@ -868,32 +918,32 @@ PMEM_HOOK_DATA pmh = MemHookHead,pmhLast=NULL;
     count  += (DWORD)pStart - dwStart;
     count   = (count + HOST_PAGE_SIZE - 1) & ~(HOST_PAGE_SIZE-1);
     while (pmh) {
-	if (pmh->hvdd == hVDD &&
+        if (pmh->hvdd == hVDD &&
             pmh->StartAddr == dwStart &&
-	    pmh->Count == count ) {
-	    if (pmhLast)
-		pmhLast->next = pmh->next;
-	    else
+            pmh->Count == count ) {
+            if (pmhLast)
+                pmhLast->next = pmh->next;
+            else
                 MemHookHead = pmh->next;
 
-	    // free the UMB for other purpose.
-	    // Note that VDDs may have committed memory for their memory
-	    // hook and forgot to decommit the memory before calling
-	    // this function. If that is the case, the ReleaseUMB will take
-	    // care of this. It is because we want to maintain a single
-	    // version of VDD support routines while move platform depedend
-	    // routines into the other module.
-	    if (ReleaseUMB(UMB_OWNER_VDD,(PVOID)dwStart, count)) {
-	       // free the node.
-	       free(pmh);
-	       return TRUE;
-	    }
-	    else {
+            // free the UMB for other purpose.
+            // Note that VDDs may have committed memory for their memory
+            // hook and forgot to decommit the memory before calling
+            // this function. If that is the case, the ReleaseUMB will take
+            // care of this. It is because we want to maintain a single
+            // version of VDD support routines while move platform depedend
+            // routines into the other module.
+            if (ReleaseUMB(UMB_OWNER_VDD,(PVOID)dwStart, count)) {
+               // free the node.
+               free(pmh);
+               return TRUE;
+            }
+            else {
                 printf("Failed to release VDD memory\n");
-	    }
+            }
         }
         pmhLast = pmh;
-	pmh = pmh->next;
+        pmh = pmh->next;
     }
     SetLastError (ERROR_INVALID_PARAMETER);
     return FALSE;
@@ -903,17 +953,17 @@ PMEM_HOOK_DATA pmh = MemHookHead,pmhLast=NULL;
 
 BOOL
 VDDAllocMem(
-HANDLE	hVDD,
-PVOID	pStart,
-DWORD	count
+HANDLE  hVDD,
+PVOID   pStart,
+DWORD   count
 )
 {
     PMEM_HOOK_DATA  pmh = MemHookHead;
     DWORD dwStart;
 
     if (count == 0 || pStart == (PVOID)NULL || count > 0x20000) {
-	SetLastError(ERROR_INVALID_ADDRESS);
-	return FALSE;
+        SetLastError(ERROR_INVALID_ADDRESS);
+        return FALSE;
     }
     // round addr down to next page boundary
     // round count up to next page boundary
@@ -922,11 +972,11 @@ DWORD	count
     count   = (count + HOST_PAGE_SIZE - 1) & ~(HOST_PAGE_SIZE-1);
 
     while(pmh) {
-	if (pmh->hvdd == hVDD &&
-	    pmh->StartAddr <= dwStart &&
-	    pmh->StartAddr + pmh->Count >= dwStart + count)
-	    return(VDDCommitUMB((PVOID)dwStart, count));
-	pmh = pmh->next;
+        if (pmh->hvdd == hVDD &&
+            pmh->StartAddr <= dwStart &&
+            pmh->StartAddr + pmh->Count >= dwStart + count)
+            return(VDDCommitUMB((PVOID)dwStart, count));
+        pmh = pmh->next;
     }
     SetLastError(ERROR_INVALID_ADDRESS);
     return FALSE;
@@ -935,9 +985,9 @@ DWORD	count
 
 BOOL
 VDDFreeMem(
-HANDLE	hVDD,
-PVOID	pStart,
-DWORD	count
+HANDLE  hVDD,
+PVOID   pStart,
+DWORD   count
 )
 {
     PMEM_HOOK_DATA  pmh = MemHookHead;
@@ -945,8 +995,8 @@ DWORD	count
 
 
     if (count == 0 || pStart == (PVOID)NULL || count > 0x20000) {
-	SetLastError(ERROR_INVALID_ADDRESS);
-	return FALSE;
+        SetLastError(ERROR_INVALID_ADDRESS);
+        return FALSE;
     }
     // round addr down to next page boundary
     // round count up to next page boundary
@@ -955,32 +1005,32 @@ DWORD	count
     count   = (count + HOST_PAGE_SIZE - 1) & ~(HOST_PAGE_SIZE-1);
 
     while(pmh) {
-	if (pmh->hvdd == hVDD &&
-	    pmh->StartAddr <= dwStart &&
-	    pmh->StartAddr + pmh->Count >= dwStart + count)
-	    return(VDDDeCommitUMB((PVOID)dwStart, count));
-	pmh = pmh->next;
+        if (pmh->hvdd == hVDD &&
+            pmh->StartAddr <= dwStart &&
+            pmh->StartAddr + pmh->Count >= dwStart + count)
+            return(VDDDeCommitUMB((PVOID)dwStart, count));
+        pmh = pmh->next;
     }
     SetLastError(ERROR_INVALID_ADDRESS);
     return FALSE;
 }
 
 
-	// Will publish the following two functions someday.
-	// Please change ntvdm.def, nt_vdd.h and nt_umb.c
-	// if you remove the #if 0
+        // Will publish the following two functions someday.
+        // Please change ntvdm.def, nt_vdd.h and nt_umb.c
+        // if you remove the #if 0
 BOOL
 VDDIncludeMem(
-HANDLE	hVDD,
-PVOID	pStart,
-DWORD	count
+HANDLE  hVDD,
+PVOID   pStart,
+DWORD   count
 )
 {
     DWORD   dwStart;
 
     if (count == 0 || pStart == NULL){
-	SetLastError(ERROR_INVALID_ADDRESS);
-	return FALSE;
+        SetLastError(ERROR_INVALID_ADDRESS);
+        return FALSE;
     }
        // round addr down to next page boundary
        // round count up to next page boundary
@@ -992,17 +1042,17 @@ DWORD	count
 
 BOOL
 VDDExcludeMem(
-HANDLE	hVDD,
-PVOID	pStart,
-DWORD	count
+HANDLE  hVDD,
+PVOID   pStart,
+DWORD   count
 )
 {
 
     DWORD dwStart;
 
     if (count == 0 || pStart == NULL) {
-	SetLastError(ERROR_INVALID_ADDRESS);
-	return FALSE;
+        SetLastError(ERROR_INVALID_ADDRESS);
+        return FALSE;
     }
        // round addr down to next page boundary
        // round count up to next page boundary
@@ -1031,25 +1081,25 @@ PMEM_HOOK_DATA pmh = MemHookHead;
     FaultAddr -= (ULONG)Sim32GetVDMPointer(0, 0, FALSE);
     // Find the VDD and its handler which is to be called for this fault
     while (pmh) {
-	if (pmh->StartAddr <= FaultAddr &&
+        if (pmh->StartAddr <= FaultAddr &&
             FaultAddr <= (pmh->StartAddr + pmh->Count)) {
 
             // Call the VDD's memory hook handler
             (*pmh->MemHandler) ((PVOID)FaultAddr, RWMode);
             return;
         }
-	else {
-	    pmh = pmh->next;
-	    continue;
-	}
+        else {
+            pmh = pmh->next;
+            continue;
+        }
     }
 
     // A page fault occured on an address for which we could'nt find a
     // VDD. Raise the exception.
     RaiseException ((DWORD)STATUS_ACCESS_VIOLATION,
-		    EXCEPTION_NONCONTINUABLE,
+                    EXCEPTION_NONCONTINUABLE,
                     0,
-		    NULL);
+                    NULL);
 
 }
 
@@ -1076,8 +1126,8 @@ void nt_std_handle_notification (BOOL fIsRedirection)
 
     if( !fIsRedirection && sc.ScreenState==FULLSCREEN )
     {
-	half_word mode = 3,
-		  lines = 0;
+        half_word mode = 3,
+                  lines = 0;
 
         //
         // WORD 6 and other apps cause this code path to be followed
@@ -1090,17 +1140,17 @@ void nt_std_handle_notification (BOOL fIsRedirection)
         // from here. Andy!
 
         if(sc.ModeType == TEXT)
-        { 
+        {
            sas_load(0x484,&lines);
 
            //
            // The value is pulled from the BIOS data area.
-           // This is one less than the number of rows. So 
-           // increment to give SelectMouseBuffer what it 
+           // This is one less than the number of rows. So
+           // increment to give SelectMouseBuffer what it
            // expects. Let this function do the necessary
            // handling of non 25, 43 and 50 values.
            //
-           
+
            lines++;
         }
 
@@ -1128,7 +1178,7 @@ void nt_std_handle_notification (BOOL fIsRedirection)
  *  worker threads.
  *
  *    INPUT:
- *	hVDD	:	 VDD Handle
+ *      hVDD    :        VDD Handle
  *      Ucr_handler:     handle on creating function    (OPTIONAL)
  *          Entry - 16bit DOS PDB
  *          EXIT  - None
@@ -1143,12 +1193,12 @@ void nt_std_handle_notification (BOOL fIsRedirection)
  *          EXIT  - None
  *
  *    OUTPUT
- *	SUCCESS : Returns TRUE
- *	FAILURE : Returns FALSE
- *		  GetLastError has the extended error information.
+ *      SUCCESS : Returns TRUE
+ *      FAILURE : Returns FALSE
+ *                GetLastError has the extended error information.
  *
  *    NOTES:
- *	If hvdd in not valid it will return ERROR_INVALID_PARAMETER.
+ *      If hvdd in not valid it will return ERROR_INVALID_PARAMETER.
  *      VDD can provide whatever event hook they may choose. Not providing
  *      any handler has no effect. There are lots of requests in DOS world
  *      for which there is no explicit Close operation. For instance
@@ -1158,25 +1208,25 @@ void nt_std_handle_notification (BOOL fIsRedirection)
  */
 
 BOOL VDDInstallUserHook (
-     HANDLE		hVDD,
-     PFNVDD_UCREATE	Ucr_Handler,
-     PFNVDD_UTERMINATE	Uterm_Handler,
-     PFNVDD_UBLOCK	Ublock_handler,
-     PFNVDD_URESUME	Uresume_handler
+     HANDLE             hVDD,
+     PFNVDD_UCREATE     Ucr_Handler,
+     PFNVDD_UTERMINATE  Uterm_Handler,
+     PFNVDD_UBLOCK      Ublock_handler,
+     PFNVDD_URESUME     Uresume_handler
 )
 {
     PVDD_USER_HANDLERS puh = UserHookHead;
     PVDD_USER_HANDLERS puhNew;
 
 
-    if (!hVDD)	{
-	SetLastError(ERROR_INVALID_PARAMETER);
-	return FALSE;
+    if (!hVDD)  {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
     }
 
     if ((puhNew = (PVDD_USER_HANDLERS) malloc (sizeof(VDD_USER_HANDLERS))) == NULL) {
-	SetLastError (ERROR_OUTOFMEMORY);
-	return FALSE;
+        SetLastError (ERROR_OUTOFMEMORY);
+        return FALSE;
     }
 
     // now set up  the new node to get to know it
@@ -1188,9 +1238,9 @@ BOOL VDDInstallUserHook (
 
     // Check if the record is to be added in the begining
     if (UserHookHead == NULL) {
-	puhNew->next = NULL;
-	UserHookHead = puhNew;
-	return TRUE;
+        puhNew->next = NULL;
+        UserHookHead = puhNew;
+        return TRUE;
     }
 
     puhNew->next = UserHookHead;
@@ -1203,12 +1253,12 @@ BOOL VDDInstallUserHook (
  *   This service is provided for VDDs to unhook callback events.
  *
  *    INPUT:
- *	hVDD	: VDD Handle
+ *      hVDD    : VDD Handle
  *
  *    OUTPUT
- *	SUCCESS : Returns TRUE
- *	FAILURE : Returns FALSE
- *		  GetLastError has the extended error information.
+ *      SUCCESS : Returns TRUE
+ *      FAILURE : Returns FALSE
+ *                GetLastError has the extended error information.
  *
  *    NOTES
  *      This service will deinstall all the events hooked earlier
@@ -1224,23 +1274,23 @@ BOOL VDDDeInstallUserHook (
 
 
     if (!hVDD) {
-	SetLastError(ERROR_INVALID_PARAMETER);
-	return FALSE;
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
     }
 
     while (puh) {
-	if (puh->hvdd == hVDD) {
+        if (puh->hvdd == hVDD) {
 
-	    if (puhLast)
-		puhLast->next = puh->next;
-	    else
-		UserHookHead = puh->next;
+            if (puhLast)
+                puhLast->next = puh->next;
+            else
+                UserHookHead = puh->next;
 
-	    free(puh);
-	    return TRUE;
+            free(puh);
+            return TRUE;
         }
-	puhLast = puh;
-	puh = puh->next;
+        puhLast = puh;
+        puh = puh->next;
     }
 
     SetLastError (ERROR_INVALID_PARAMETER);
@@ -1248,13 +1298,13 @@ BOOL VDDDeInstallUserHook (
 }
 
 /*** VDDTerminateUserHook - This service is provided for VDDs to hook
- *			      for callback services
+ *                            for callback services
  *
  * INPUT:
- *	USHORT DosPDB
+ *      USHORT DosPDB
  *
  * OUTPUT
- *	None
+ *      None
  *
  */
 
@@ -1264,21 +1314,21 @@ VOID VDDTerminateUserHook(USHORT DosPDB)
     PVDD_USER_HANDLERS puh = UserHookHead;
 
     while(puh) {
-	if(puh->uterm_handler)
-	    (puh->uterm_handler)(DosPDB);
-	puh = puh->next;
+        if(puh->uterm_handler)
+            (puh->uterm_handler)(DosPDB);
+        puh = puh->next;
     }
     return;
 }
 
 /*** VDDCreateUserHook - This service is provided for VDDs to hook
- *			      for callback services
+ *                            for callback services
  *
  * INPUT:
- *	USHORT DosPDB
+ *      USHORT DosPDB
  *
  * OUTPUT
- *	None
+ *      None
  *
  */
 
@@ -1288,21 +1338,21 @@ VOID VDDCreateUserHook(USHORT DosPDB)
     PVDD_USER_HANDLERS puh = UserHookHead;
 
     while(puh) {
-	if(puh->ucr_handler)
-	    (puh->ucr_handler)(DosPDB);
-	puh = puh->next;
+        if(puh->ucr_handler)
+            (puh->ucr_handler)(DosPDB);
+        puh = puh->next;
     }
     return;
 }
 
 /*** VDDBlockUserHook - This service is provided for VDDs to hook
- *			      for callback services
+ *                            for callback services
  *
  * INPUT:
- *	None
+ *      None
  *
  * OUTPUT
- *	None
+ *      None
  *
  */
 
@@ -1312,21 +1362,21 @@ VOID VDDBlockUserHook(VOID)
     PVDD_USER_HANDLERS puh = UserHookHead;
 
     while(puh) {
-	if(puh->ublock_handler)
-	    (puh->ublock_handler)();
-	puh = puh->next;
+        if(puh->ublock_handler)
+            (puh->ublock_handler)();
+        puh = puh->next;
     }
     return;
 }
 
 /*** VDDResumeUserHook - This service is provided for VDDs to hook
- *			      for callback services
+ *                            for callback services
  *
  * INPUT:
- *	None
+ *      None
  *
  * OUTPUT
- *	None
+ *      None
  *
  */
 
@@ -1336,9 +1386,9 @@ VOID VDDResumeUserHook(VOID)
     PVDD_USER_HANDLERS puh = UserHookHead;
 
     while(puh) {
-	if(puh->uresume_handler)
-	    (puh->uresume_handler)();
-	puh = puh->next;
+        if(puh->uresume_handler)
+            (puh->uresume_handler)();
+        puh = puh->next;
     }
     return;
 }

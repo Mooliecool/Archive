@@ -19,19 +19,19 @@
 
 ULONG FASTCALL   WK32DirectedYield(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32InitTask(PVDMFRAME pFrame);
-ULONG FASTCALL   WK32KernelTrace(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32WOWKernelTrace(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32ExitKernel(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32FatalExit(PVDMFRAME pFrame);
-VOID  FASTCALL   WK32KillRemoteTask(PVDMFRAME pFrame);
-VOID  FASTCALL   WK32KillTask(PVDMFRAME pFrame);
-ULONG FASTCALL   WK32LoadModule32(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32KillRemoteTask(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32WOWKillTask(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32WOWLoadModule32(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32RegisterShellWindowHandle(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32WOWInitTask(PVDMFRAME pFrame);
-VOID  FASTCALL   WK32WOWNotifyWOW32(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32WOWNotifyWOW32(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32WOWOutputDebugString(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32WOWQueryPerformanceCounter(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32WaitEvent(PVDMFRAME pFrame);
-VOID  FASTCALL   WK32WowCloseComPort(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32WowCloseComPort(PVDMFRAME pFrame);
 DWORD FASTCALL   WK32WowDelFile(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32WowFailedExec(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32WowFailedExec(PVDMFRAME pFrame);
@@ -41,16 +41,19 @@ ULONG FASTCALL   WK32WowSetIdleHook(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32Yield(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32OldYield(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32WowWaitForMsgAndEvent(PVDMFRAME pFrame);
-VOID  FASTCALL   WK32WowMsgBox(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32WowMsgBox(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32DosWowInit(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32CheckUserGdi(PVDMFRAME pFrame);
 ULONG FASTCALL   WK32WowPartyByNumber(PVDMFRAME pFrame);
-ULONG FASTCALL   WK32WowShouldWeSayWin95(PVDMFRAME pFrame);
-ULONG FASTCALL   WK32GetVersionEx(PVDMFRAME pFrame);
-ULONG FASTCALL WK32WowGetModuleHandle(PVDMFRAME pFrame);
-ULONG FASTCALL WK32GetShortPathName(PVDMFRAME pFrame);
-ULONG FASTCALL WK32FindAndReleaseDib(PVDMFRAME pvf); /* in wdib.c */
-ULONG FASTCALL WK32WowReserveHtask(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32WowGetModuleHandle(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32FindAndReleaseDib(PVDMFRAME pvf); /* in wdib.c */
+ULONG FASTCALL   WK32WowReserveHtask(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32WOWLFNEntry(PVDMFRAME pFrame); /* in wkman.c */
+ULONG FASTCALL   WK32WowShutdownTimer(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32WowTrimWorkingSet(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32SetAppCompatFlags(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32WowSyncTask(PVDMFRAME pFrame);
+ULONG FASTCALL   WK32WowDivideOverflowEx(PVDMFRAME pFrame);
 
 
 BOOL    WK32InitializeHungAppSupport(VOID);
@@ -60,14 +63,22 @@ DWORD   W32Thread(LPVOID vpInitialSSSP);
 VOID    W32DestroyTask( PTD ptd);
 VOID    W32EndTask(VOID);
 ULONG   W32GetAppCompatFlags(HTASK16 hTask16);
-ULONG   W32ReadWOWCompatFlags(HTASK16 htask16, DWORD *pdwWOWXCompatFlagsEx);
+BOOL    W32ReadWOWCompatFlags(HTASK16 htask16, PTD pTD);
+VOID    W32Init9xSpecialPath();
+BOOL    W32Map9xSpecialPath(PSZ lpPathName, PSZ lpMapPathName, DWORD dwMapPathSize);
+
+#ifdef FE_SB
+ULONG   W32ReadWOWCompatFlags2(HTASK16 htask16);
+#endif // FE_SB
 VOID    WK32DeleteTask(PTD ptdDelete);
 VOID    WK32InitWowIsKnownDLL(HANDLE hKeyWow);
 LRESULT CALLBACK WK32ForegroundIdleHook(int code, WPARAM wParam, LPARAM lParam);
 VOID    W32RefreshCurrentDirectories (PCHAR lpszzEnv);
 BOOL FASTCALL WowGetProductNameVersion(PSZ pszExePath, PSZ pszProductName,
                                        DWORD cbProductName, PSZ pszProductVersion,
-                                       DWORD cbProductVersion);
+                                       DWORD cbProductVersion,
+                                       PSZ pszParamName, PSZ pszParamValue,
+                                       DWORD cbParamValue);
 BOOL FASTCALL WowDoNameVersionMatch(PSZ pszExePath, PSZ pszProductName,
                                     PSZ pszProductVersion);
 
@@ -136,5 +147,10 @@ extern VPVOID  vptopPDB;
 VOID CleanseSharedList( VOID );
 VOID AddProcessSharedList( VOID );
 VOID RemoveProcessSharedList( VOID );
-WORD AddTaskSharedList( HTASK16, HAND16, PSZ, PSZ );
+WORD AddTaskSharedList( PTD, PSZ, PSZ);
 VOID RemoveTaskSharedList( VOID );
+ULONG FASTCALL WK32WowPassEnvironment(PVDMFRAME);
+
+extern   HANDLE ghTaskAppHelp;      // hProcess from apphelp (see WK32SyncTask)
+extern   BOOL   gfTaskContinue;     // indicates whether child thread should continue without waiting for apphelp 
+extern   const  CHAR   szSystem[];  // "\\system" 

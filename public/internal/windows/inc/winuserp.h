@@ -82,7 +82,7 @@ WINUSERAPI VOID WINAPI RegisterSystemThread(DWORD flags, DWORD reserved);
 #define GWL_WOWDWORD3       (-32)
 #define GCL_WOWWORDS        (-27)
 #define GCL_WOWDWORD1       (-28)
-#define GCL_WOWDWORD2       (-29)
+#define GCL_WOWMENUNAME     (-29)
 #define WM_SIZEWAIT                     0x0004
 #define WM_SETVISIBLE                   0x0009
 #define WM_SYSTEMERROR                  0x0017
@@ -229,6 +229,9 @@ WINUSERAPI VOID WINAPI RegisterSystemThread(DWORD flags, DWORD reserved);
                               WS_EX_CONTROLPARENT  | \
                               WS_EX_STATICEDGE     | \
                               WS_EX_APPWINDOW)
+
+#define WF_DIALOG_WINDOW      0x00010000     // used in WOW32 -- this is a state flag, not a style flag
+
 #define CS_OEMCHARS         0x0010  /* reserved (see user\server\usersrv.h) */
 #define CS_LVB              0x0400
 #define CS_SYSTEM           0x8000

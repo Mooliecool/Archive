@@ -412,105 +412,16 @@ typedef interface    IRpcChannelBuffer  IRpcChannelBuffer;
 #include <unknwn.h>
 #include <objidl.h>
 
-
-// macros to define byte pattern for a GUID.
-//      Example: DEFINE_GUID(GUID_XXX, a, b, c, ...);
-//
-// Each dll/exe must initialize the GUIDs once.  This is done in one of
-// two ways.  If you are not using precompiled headers for the file(s) which
-// initializes the GUIDs, define INITGUID before including objbase.h.  This
-// is how OLE builds the initialized versions of the GUIDs which are included
-// in ole2.lib.  The GUIDs in ole2.lib are all defined in the same text
-// segment GUID_TEXT.
-//
-// The alternative (which some versions of the compiler don't handle properly;
-// they wind up with the initialized GUIDs in a data, not a text segment),
-// is to use a precompiled version of objbase.h and then include initguid.h
-// after objbase.h followed by one or more of the guid defintion files.
-
-#ifndef INITGUID
-#define DEFINE_GUID(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) \
-    EXTERN_C const GUID FAR name
-#else
-
-#define DEFINE_GUID(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) \
-        EXTERN_C const GUID name \
-                = { l, w1, w2, { b1, b2,  b3,  b4,  b5,  b6,  b7,  b8 } }
-#endif // INITGUID
-
-#define DEFINE_OLEGUID(name, l, w1, w2) \
-    DEFINE_GUID(name, l, w1, w2, 0xC0,0,0,0,0,0,0,0x46)
-
 #ifdef _OLE32_
-
-
-// Faster (but makes code fatter) inline version...use sparingly
-#ifdef __cplusplus
-inline BOOL  InlineIsEqualGUID(REFGUID rguid1, REFGUID rguid2)
-{
-   return (
-      ((PLONG) &rguid1)[0] == ((PLONG) &rguid2)[0] &&
-      ((PLONG) &rguid1)[1] == ((PLONG) &rguid2)[1] &&
-      ((PLONG) &rguid1)[2] == ((PLONG) &rguid2)[2] &&
-      ((PLONG) &rguid1)[3] == ((PLONG) &rguid2)[3]);
-}
-#else   // ! __cplusplus
-#define InlineIsEqualGUID(rguid1, rguid2)  \
-        (((PLONG) rguid1)[0] == ((PLONG) rguid2)[0] &&   \
-        ((PLONG) rguid1)[1] == ((PLONG) rguid2)[1] &&    \
-        ((PLONG) rguid1)[2] == ((PLONG) rguid2)[2] &&    \
-        ((PLONG) rguid1)[3] == ((PLONG) rguid2)[3])
-#endif  // __cplusplus
-
 #ifdef _OLE32PRIV_
 BOOL _fastcall wIsEqualGUID(REFGUID rguid1, REFGUID rguid2);
 #define IsEqualGUID(rguid1, rguid2) wIsEqualGUID(rguid1, rguid2)
 #else
-#define IsEqualGUID(rguid1, rguid2) InlineIsEqualGUID(rguid1, rguid2)
+#define __INLINE_ISEQUAL_GUID
 #endif  // _OLE32PRIV_
+#endif  // _OLE32_
 
-#else   // ! _OLE32_
-#ifdef __cplusplus
-inline BOOL IsEqualGUID(REFGUID rguid1, REFGUID rguid2)
-{
-    return !memcmp(&rguid1, &rguid2, sizeof(GUID));
-}
-#else   //  ! __cplusplus
-#define IsEqualGUID(rguid1, rguid2) (!memcmp(rguid1, rguid2, sizeof(GUID)))
-#endif  //  __cplusplus
-#endif  //  _OLE32_
-
-#define IsEqualIID(riid1, riid2) IsEqualGUID(riid1, riid2)
-#define IsEqualCLSID(rclsid1, rclsid2) IsEqualGUID(rclsid1, rclsid2)
-
-#ifdef __cplusplus
-
-// because GUID is defined elsewhere in WIN32 land, the operator == and !=
-// are moved outside the class to global scope.
-
-#ifdef _OLE32_
-inline BOOL operator==(const GUID& guidOne, const GUID& guidOther)
-{
-    return IsEqualGUID(guidOne,guidOther);
-}
-#else   // !_OLE32_
-inline BOOL operator==(const GUID& guidOne, const GUID& guidOther)
-{
-#ifdef _WIN32
-    return !memcmp(&guidOne,&guidOther,sizeof(GUID));
-#else
-    return !_fmemcmp(&guidOne,&guidOther,sizeof(GUID)); }
-#endif
-}
-#endif // _OLE32_
-
-inline BOOL operator!=(const GUID& guidOne, const GUID& guidOther)
-{
-    return !(guidOne == guidOther);
-}
-
-#endif // __cpluscplus
-
+#include <guiddef.h>
 
 #ifndef INITGUID
 #include <cguid.h>

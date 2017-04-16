@@ -12,8 +12,8 @@
  *  Created.
 --*/
 
-extern BOOL DBGInit( int, char *[] );
-extern VOID DBGDispatch( void );
+extern BOOL DBGInit( VOID );
+extern VOID DBGDispatch( VOID );
 extern VOID DBGNotifyNewTask( LPVOID pNTFrame, UINT uFrameSize );
 extern VOID DBGNotifyRemoteThreadAddress( LPVOID lpAddress, DWORD lpBlock );
 extern VOID DBGNotifyDebugged( BOOL fDebugged );

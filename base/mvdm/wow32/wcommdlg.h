@@ -24,3 +24,16 @@ ULONG FASTCALL   WCD32ReplaceText(PVDMFRAME pFrame);
 
 LONG APIENTRY WCD32UpdateFindReplaceTextAndFlags(HWND hwnd, LPARAM lParam);
 
+VOID Multi_strcpy(LPSTR  dst, LPCSTR src);
+
+INT  Multi_strlen(LPCSTR str);
+
+VOID FASTCALL WOWTellWOWThehDlg(HWND hDlg);
+
+VOID Check_ComDlg_pszptr(PCOMMDLGTD ptd, VPVOID vp);
+VOID Ssync_WOW_CommDlg_Structs(PCOMMDLGTD pTD, BOOL f16to32, VPVOID wThunkCSIP);
+
+// these flags are combined to form the dwStat parameter in
+// Ssync_WOW_CommDlg_Structs() calls
+#define  w32to16     0
+#define  w16to32     1 

@@ -1,3 +1,9 @@
+#if defined(NEC_98)
+#include "nt.h"
+#include "ntrtl.h"
+#include "nturtl.h"
+#include "windows.h"
+#endif   //NEC_98
 #include "windows.h"   /* included for Sleep() */
 
 
@@ -84,7 +90,10 @@ static char SccsID[]="@(#)time_day.c	1.27 4/20/94 Copyright Insignia Solutions L
  * Local static data and defines
  * ===========================================================================
  */
-
+#if defined(NEC_98)
+LOCAL word bin2bcd();
+LOCAL word bcd2bin();
+#else   //NEC_98
 
 #ifdef XTSFD
 #    define DAY_COUNT	BIOS_VAR_START + 0xCE
@@ -116,6 +125,7 @@ LOCAL void write_host_timestamp();
 LOCAL void TimeToTicks();
 LOCAL void get_host_time();
 #endif /* ANSI */
+#endif   //NEC_98
 
 #define TICKS_PER_HOUR      65543L
 #define TICKS_PER_MIN       1092L
@@ -129,6 +139,152 @@ LOCAL void get_host_time();
 
 void time_of_day()
 {
+#if defined(NEC_98)
+    SYSTEMTIME  now;
+    DWORD       DataBuffer;
+    WORD        tmp;
+    NTSTATUS    Status;
+    HANDLE      Token;
+    BYTE        OldPriv[1024];
+    PBYTE       pbOldPriv;
+    LUID        LuidPrivilege;
+    PTOKEN_PRIVILEGES   NewPrivileges;
+    ULONG       cbNeeded;
+
+    switch(getAH()) {
+        case 0:
+            GetLocalTime(&now);
+            DataBuffer = (getES() << 4) + getBX();
+            now.wYear = now.wYear - ( now.wYear / 100 ) * 100;
+            sas_store(DataBuffer, bin2bcd(now.wYear));
+            sas_store(DataBuffer + 1, (now.wMonth << 4) | now.wDayOfWeek);
+            sas_store(DataBuffer + 2, bin2bcd(now.wDay));
+            sas_store(DataBuffer + 3, bin2bcd(now.wHour));
+            sas_store(DataBuffer + 4, bin2bcd(now.wMinute));
+            sas_store(DataBuffer + 5, bin2bcd(now.wSecond));
+            break;
+        case 1:
+            tmp = 0;
+            DataBuffer = (getES() << 4) + getBX();
+            sas_load(DataBuffer, &tmp);
+            if(bcd2bin(tmp) > 79)
+                now.wYear = bcd2bin(tmp) + 1900;
+            else
+                now.wYear = bcd2bin(tmp) + 2000;
+            sas_load(DataBuffer + 1, &tmp);
+            now.wMonth = tmp >> 4;
+            now.wDayOfWeek = tmp & 0x0F;
+            sas_load(DataBuffer + 2, &tmp);
+            now.wDay = bcd2bin(tmp);
+            sas_load(DataBuffer + 3, &tmp);
+            now.wHour = bcd2bin(tmp);
+            sas_load(DataBuffer + 4, &tmp);
+            now.wMinute = bcd2bin(tmp);
+            sas_load(DataBuffer + 5, &tmp);
+            now.wSecond = bcd2bin(tmp);
+            now.wMilliseconds = 0;
+
+            Status = NtOpenProcessToken(
+                        NtCurrentProcess(),
+                        TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+                        &Token
+                        );
+
+            if ( !NT_SUCCESS( Status )) {
+                break;
+            }
+
+            pbOldPriv = OldPriv;
+
+    //
+    // Initialize the privilege adjustment structure
+    //
+
+//          LuidPrivilege = RtlConvertLongToLargeInteger(SE_SYSTEMTIME_PRIVILEGE);
+            LuidPrivilege.LowPart  = SE_SYSTEMTIME_PRIVILEGE;
+            LuidPrivilege.HighPart = 0L;
+
+            NewPrivileges = (PTOKEN_PRIVILEGES)malloc(sizeof(TOKEN_PRIVILEGES) +
+                (1 - ANYSIZE_ARRAY) * sizeof(LUID_AND_ATTRIBUTES));
+            if (NewPrivileges == NULL) {
+                CloseHandle(Token);
+                break;
+            }
+
+            NewPrivileges->PrivilegeCount = 1;
+            NewPrivileges->Privileges[0].Luid = LuidPrivilege;
+            NewPrivileges->Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+
+    //
+    // Enable the privilege
+    //
+
+            cbNeeded = 1024;
+
+            Status = NtAdjustPrivilegesToken (
+                Token,
+                FALSE,
+                NewPrivileges,
+                cbNeeded,
+                (PTOKEN_PRIVILEGES)pbOldPriv,
+                &cbNeeded
+                );
+
+            if ( Status == STATUS_BUFFER_TOO_SMALL ) {
+                pbOldPriv = malloc(cbNeeded);
+
+                if ( pbOldPriv == NULL ) {
+                    CloseHandle(Token);
+                    free(NewPrivileges);
+                    break;
+                }
+
+                Status = NtAdjustPrivilegesToken (
+                        Token,
+                        FALSE,
+                        NewPrivileges,
+                        cbNeeded,
+                        (PTOKEN_PRIVILEGES)pbOldPriv,
+                        &cbNeeded
+                        );
+
+            }
+
+    //
+    // STATUS_NOT_ALL_ASSIGNED means that the privilege isn't
+    // in the token, so we can't proceed.
+    //
+    // This is a warning level status, so we must check
+    // for it explicitly.
+    //
+
+            if ( !NT_SUCCESS( Status ) || (Status == STATUS_NOT_ALL_ASSIGNED) ) {
+
+                CloseHandle( Token );
+                free(NewPrivileges);
+                free(pbOldPriv);
+                break;
+            }
+
+            SetLocalTime(&now);
+
+
+            (VOID) NtAdjustPrivilegesToken (
+                Token,
+                FALSE,
+                (PTOKEN_PRIVILEGES)pbOldPriv,
+                0,
+                NULL,
+                NULL
+                );
+
+            CloseHandle( Token );
+            free(NewPrivileges);
+            free(pbOldPriv);
+            break;
+    }
+#else    //NEC_98
+
     /*
      * BIOS function to return the number of PC interrupts since boot.
      */
@@ -235,7 +391,7 @@ void time_of_day()
 		else
 		{
 			setDH( cmos_read( CMOS_SECONDS ) );
-			setDL( cmos_read( CMOS_REG_B ) & 1 );	/* DSE bit	*/
+			setDL( (UCHAR)(cmos_read( CMOS_REG_B ) & 1) );	/* DSE bit	*/
 			setCL( cmos_read( CMOS_MINUTES ) );
 			setCH( cmos_read( CMOS_HOURS ) );
 			setCF(0);
@@ -398,11 +554,32 @@ void time_of_day()
 #ifdef BSD4_2
     host_release_timer();
 #endif
+#endif   //NEC_98
 }
 
+#if defined(NEC_98)
+LOCAL word bin2bcd(word i)
+{
+    word        bcd_h,bcd_l;
+
+    bcd_h = i / 10;
+    bcd_l = i - bcd_h * 10;
+    return((bcd_h << 4) + bcd_l);
+}
+
+LOCAL word bcd2bin(half_word i)
+{
+    word        bcd_h,bcd_l;
+
+    bcd_h = (half_word)(i >> 4);
+    bcd_l = (half_word)(i & 0x0F);
+    return(bcd_h * 10 + bcd_l);
+}
+#endif   //NEC_98
 
 void time_int()
 {
+#ifndef NEC_98
     /*
      * NT port does everything in 16 bit int08 handler
      */
@@ -472,7 +649,7 @@ void time_int()
 
 
 	/*
-	 * Provided FLA is not busy, then actually turn the motor off.  
+	 * Provided FLA is not busy, then actually turn the motor off.
 	 */
 
   	if (!fla_busy)
@@ -490,6 +667,7 @@ void time_int()
 				  USER_TIMER_INT_OFFSET);
 	}
 #endif	/* NTVDM */
+#endif   //NEC_98
 }
 
 /*
@@ -563,9 +741,9 @@ half_word *overflow;
     /*
 	 * TMM 8/1/92:
 	 * -----------
-	 * 
+	 *
 	 * If someone changes the date forwards by >= 24 hours then we should set
-	 * the overflow flag and ensure that we don't return an interval greater 
+	 * the overflow flag and ensure that we don't return an interval greater
 	 * than 24 hours. If the date has changed by >= 48 hours then we will have
 	 * lost a day. So we put up a panel to tell the user.
 	 *
@@ -587,11 +765,11 @@ half_word *overflow;
      */
 
 	days = interval.tv_sec / (24 * 60 * 60);
-    
+
 	if (days >= 1)
     {
 		/*
-		 * Someone has set the clock forwards, or we have been frozen for a 
+		 * Someone has set the clock forwards, or we have been frozen for a
 		 * couple of days. Ensure that the interval is not more than 24 hours,
 		 * adjust the time_stamp to take care of the lost days.
 		 */
@@ -736,6 +914,7 @@ int *h, *m, *s; /* hours, minutes and secs */
     *s = tp->tm_sec;
 }
 
+#ifndef NEC_98
 /*
 ** Take a normal time in hours, minutes and seconds then
 ** transmutate it into PC ticks since the beginning of the day.
@@ -761,12 +940,14 @@ word *low, *hi;		/* outputs */
     *low  = ticks & 0xffff;
     *hi = ticks >> 16;
 }
+#endif   //NEC_98
 
 #endif  /* ifndef NTVDM */
 
 
 void time_of_day_init()
 {
+#ifndef NEC_98
 #ifndef NTVDM
     int hour, minutes, sec;		/* Current host time */
     word low, hi;		/* Host time in PC ticks */
@@ -799,10 +980,12 @@ void time_of_day_init()
     user_timer_int_vector = BIOS_USER_TIMER_INT * 4;
 
 #endif  /* NTVDM */
+#endif   //NEC_98
 }
 
 
 
+#ifndef NEC_98
 #ifdef NTVDM
 
 /*
@@ -826,3 +1009,4 @@ BOOL UpDateInProgress(void)
 
 }
 #endif
+#endif   //NEC_98

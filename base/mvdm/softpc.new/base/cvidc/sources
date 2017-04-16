@@ -27,15 +27,10 @@ MAJORCOMP=spclib
 MINORCOMP=ccpu
 
 TARGETNAME=Cvidc
-
 TARGETPATH=obj
-
-
-NTPROFILEINPUT=yes
-
-# Pick one of the following and delete the others
 TARGETTYPE=LIBRARY
 
+NTPROFILEINPUT=yes
 
 TARGETLIBS=
 
@@ -46,47 +41,46 @@ INCLUDES=$(SOFTPC_TREE)\base\jcode\hdigest\c;$(SOFTPC_TREE)\host\inc;$(SOFTPC_TR
 GPSIZE=32
 
 
-
-SOURCES=     		SINIT011.c	\
-			SINIT012.c	\
-			SINIT013.c	\
-			SEVID000.c	\
-			SEVID001.c	\
-			SEVID002.c	\
-			SEVID003.c	\
-			SEVID004.c	\
-			SEVID005.c	\
-			SEVID006.c	\
-			SEVID007.c	\
-			SEVID008.c	\
-			SEVID009.c	\
-			SEVID010.c	\
-			SEVID011.c	\
-			SEVID012.c	\
-			SEVID013.c	\
-			SEVID014.c	\
-			SEVID015.c	\
-			SEVID016.c	\
-			SEVID017.c	\
-			SEVID018.c	\
-			SEVID019.c	\
-			SEVID020.c	\
-			SEVID021.c	\
-			SEVID022.c	\
-			SEVID023.c	\
-			SEVID024.c	\
-			SEVID025.c	\
-			SEVID026.c	\
-			SEVID027.c	\
-			SEVID028.c	\
-			SEVID029.c  \
-			SEVID030.c  \
-			ev_glue.c  \
-			evidfunc.c \
-			j_c_lang.c   \
-                        accessfn.c  \
-			vglfunc.c
-
+SOURCES=SINIT011.c  \
+        SINIT012.c  \
+        SINIT013.c  \
+        SEVID000.c  \
+        SEVID001.c  \
+        SEVID002.c  \
+        SEVID003.c  \
+        SEVID004.c  \
+        SEVID005.c  \
+        SEVID006.c  \
+        SEVID007.c  \
+        SEVID008.c  \
+        SEVID009.c  \
+        SEVID010.c  \
+        SEVID011.c  \
+        SEVID012.c  \
+        SEVID013.c  \
+        SEVID014.c  \
+        SEVID015.c  \
+        SEVID016.c  \
+        SEVID017.c  \
+        SEVID018.c  \
+        SEVID019.c  \
+        SEVID020.c  \
+        SEVID021.c  \
+        SEVID022.c  \
+        SEVID023.c  \
+        SEVID024.c  \
+        SEVID025.c  \
+        SEVID026.c  \
+        SEVID027.c  \
+        SEVID028.c  \
+        SEVID029.c  \
+        SEVID030.c  \
+        ev_glue.c  \
+        evidfunc.c \
+        j_c_lang.c   \
+        accessfn.c  \
+        vglfunc.c
 
 !INCLUDE ccpudefs.inc
+
 UMTYPE=console

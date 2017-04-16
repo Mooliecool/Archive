@@ -75,7 +75,7 @@ typedef unsigned long        IU32;		/* 32 bit unsigned int */
 typedef long                 ISM32;		/* 32 bit signed int */
 typedef unsigned long        IUM32;		/* 32 bit unsigned int */
 typedef void *               IHP;		/* a generic pointer type */
-typedef unsigned int         IHPE;	    /* an integer the same size as a IHP */ 
+typedef unsigned int         IHPE;	    /* an integer the same size as a IHP */
 typedef int                  ISH;	    /* Host register sized signed quantity */
 typedef unsigned int         IUH;	    /* Host register sized unsigned quantity */
 #define LONG_SHIFT	2
@@ -89,7 +89,9 @@ typedef unsigned int         IUH;	    /* Host register sized unsigned quantity *
 #define TRUE            (!FALSE)        /* Boolean truth value */
 #endif
 
-#define STRINGIFY(x)	#x
+#ifndef STRINGIFY
+#define STRINGIFY(x)    #x
+#endif
 
 #if !defined(_WINDOWS_) && !defined(NT_INCLUDED)   /* Types already defined by windows */
 //typedef int INT;
@@ -222,5 +224,6 @@ typedef int BOOL;	/* only defined in windows */
 
 #endif  /* ANSI */
 
+#pragma warning (3:4013)
 
 #endif /* _INSIGNIA_H */

@@ -34,27 +34,27 @@ typedef unsigned char FDC_RESULT_BLOCK;
 
 /* the command itself	     */
 #define get_type_cmd(ptr) (ptr[0] & 0x1f)
-#define put_type_cmd(ptr,val) ptr[0] = (ptr[0] & ~0x1f) | ((val << 0) & 0x1f)
+#define put_type_cmd(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x1f) | ((val << 0) & 0x1f))
 /* ...and the drive no	     */
 #define get_type_drive(ptr) (ptr[1] & 0x3)
 #define put_type_drive(ptr,val) ptr[1] = (ptr[1] & ~0x3) | ((val << 0) & 0x3)
 
-/* 
- * Class 0 - read data, read deleted data, all scans 
+/*
+ * Class 0 - read data, read deleted data, all scans
  */
 
 /* multi-track		     */
 #define get_c0_MT(ptr) ((ptr[0] & 0x80) >> 7)
-#define put_c0_MT(ptr,val) ptr[0] = (ptr[0] & ~0x80) | ((val << 7) & 0x80)
+#define put_c0_MT(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x80) | ((val << 7) & 0x80))
 /* always 1 - FM not used    */
 #define get_c0_MFM(ptr) ((ptr[0] & 0x40) >> 6)
-#define put_c0_MFM(ptr,val) ptr[0] = (ptr[0] & ~0x40) | ((val << 6) & 0x40)
+#define put_c0_MFM(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x40) | ((val << 6) & 0x40))
 /* skip data 		     */
 #define get_c0_skip(ptr) ((ptr[0] & 0x20) >> 5)
-#define put_c0_skip(ptr,val) ptr[0] = (ptr[0] & ~0x20) | ((val << 5) & 0x20)
+#define put_c0_skip(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x20) | ((val << 5) & 0x20))
 /* the command itself 	     */
 #define get_c0_cmd(ptr) (ptr[0] & 0x1f)
-#define put_c0_cmd(ptr,val) ptr[0] = (ptr[0] & ~0x1f) | ((val << 0) & 0x1f)
+#define put_c0_cmd(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x1f) | ((val << 0) & 0x1f))
 /* padding */
 #define get_c0_pad(ptr) ((ptr[1] & 0xf8) >> 3)
 #define put_c0_pad(ptr,val) ptr[1] = (ptr[1] & ~0xf8) | ((val << 3) & 0xf8)
@@ -86,22 +86,22 @@ typedef unsigned char FDC_RESULT_BLOCK;
 #define get_c0_DTL(ptr) ptr[8]
 #define put_c0_DTL(ptr,val) ptr[8] = val
 
-/* 
+/*
  * Class 1 - write data, write deleted data
  */
 
 /* multi-track		     */
 #define get_c1_MT(ptr) ((ptr[0] & 0x80) >> 7)
-#define put_c1_MT(ptr,val) ptr[0] = (ptr[0] & ~0x80) | ((val << 7) & 0x80)
+#define put_c1_MT(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x80) | ((val << 7) & 0x80))
 /* always 1 - FM not used    */
 #define get_c1_MFM(ptr) ((ptr[0] & 0x40) >> 6)
-#define put_c1_MFM(ptr,val) ptr[0] = (ptr[0] & ~0x40) | ((val << 6) & 0x40)
+#define put_c1_MFM(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x40) | ((val << 6) & 0x40))
 /* padding */
 #define get_c1_pad(ptr) ((ptr[0] & 0x20) >> 5)
-#define put_c1_pad(ptr,val) ptr[0] = (ptr[0] & ~0x20) | ((val << 5) & 0x20)
+#define put_c1_pad(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x20) | ((val << 5) & 0x20))
 /* the command itself 	     */
 #define get_c1_cmd(ptr) (ptr[0] & 0x1f)
-#define put_c1_cmd(ptr,val) ptr[0] = (ptr[0] & ~0x1f) | ((val << 0) & 0x1f)
+#define put_c1_cmd(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x1f) | ((val << 0) & 0x1f))
 /* padding */
 #define get_c1_pad1(ptr) ((ptr[1] & 0xf8) >> 3)
 #define put_c1_pad1(ptr,val) ptr[1] = (ptr[1] & ~0xf8) | ((val << 3) & 0xf8)
@@ -133,7 +133,7 @@ typedef unsigned char FDC_RESULT_BLOCK;
 #define get_c1_DTL(ptr) ptr[8]
 #define put_c1_DTL(ptr,val) ptr[8] = val
 
-/* 
+/*
  * Class 2 - read a track
  */
 
@@ -149,7 +149,7 @@ typedef unsigned char FDC_RESULT_BLOCK;
 /* padding */
 /* padding */
 #define get_c2_pad1(ptr) ((ptr[1] & 0xf8) >> 3)
-#define put_c2_pad1(ptr,val) ptr[1] = (ptr[1] & ~0xf8) | ((val << 3) & 0xf8)
+#define put_c2_pad1(ptr,val) ptr[1] = (unsigned char)((ptr[1] & ~0xf8) | ((val << 3) & 0xf8))
 /* which head 		     */
 #define get_c2_head(ptr) ((ptr[1] & 0x4) >> 2)
 #define put_c2_head(ptr,val) ptr[1] = (ptr[1] & ~0x4) | ((val << 2) & 0x4)
@@ -178,22 +178,22 @@ typedef unsigned char FDC_RESULT_BLOCK;
 #define get_c2_DTL(ptr) ptr[8]
 #define put_c2_DTL(ptr,val) ptr[8] = val
 
-/* 
+/*
  * Class 3 - format a track
  */
 
 /* padding */
 #define get_c3_pad(ptr) ((ptr[0] & 0x80) >> 7)
-#define put_c3_pad(ptr,val) ptr[0] = (ptr[0] & ~0x80) | ((val << 7) & 0x80)
+#define put_c3_pad(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x80) | ((val << 7) & 0x80))
 /* always 1 - FM not used    */
 #define get_c3_MFM(ptr) ((ptr[0] & 0x40) >> 6)
-#define put_c3_MFM(ptr,val) ptr[0] = (ptr[0] & ~0x40) | ((val << 6) & 0x40)
+#define put_c3_MFM(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x40) | ((val << 6) & 0x40))
 /* padding */
 #define get_c3_pad1(ptr) ((ptr[0] & 0x20) >> 5)
-#define put_c3_pad1(ptr,val) ptr[0] = (ptr[0] & ~0x20) | ((val << 5) & 0x20)
+#define put_c3_pad1(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x20) | ((val << 5) & 0x20))
 /* the command itself 	     */
 #define get_c3_cmd(ptr) (ptr[0] & 0x1f)
-#define put_c3_cmd(ptr,val) ptr[0] = (ptr[0] & ~0x1f) | ((val << 0) & 0x1f)
+#define put_c3_cmd(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x1f) | ((val << 0) & 0x1f))
 /* padding */
 #define get_c3_pad2(ptr) ((ptr[1] & 0xf8) >> 3)
 #define put_c3_pad2(ptr,val) ptr[1] = (ptr[1] & ~0xf8) | ((val << 3) & 0xf8)
@@ -216,25 +216,25 @@ typedef unsigned char FDC_RESULT_BLOCK;
 #define get_c3_filler(ptr) ptr[5]
 #define put_c3_filler(ptr,val) ptr[5] = val
 
-/* 
+/*
  * Class 4 - read ID
  */
 
 /* padding */
 #define get_c4_pad(ptr) ((ptr[0] & 0x80) >> 7)
-#define put_c4_pad(ptr,val) ptr[0] = (ptr[0] & ~0x80) | ((val << 7) & 0x80)
+#define put_c4_pad(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x80) | ((val << 7) & 0x80))
 /* always 1 - FM not used    */
 #define get_c4_MFM(ptr) ((ptr[0] & 0x40) >> 6)
-#define put_c4_MFM(ptr,val) ptr[0] = (ptr[0] & ~0x40) | ((val << 6) & 0x40)
+#define put_c4_MFM(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x40) | ((val << 6) & 0x40))
 /* padding */
 #define get_c4_pad1(ptr) ((ptr[0] & 0x20) >> 5)
-#define put_c4_pad1(ptr,val) ptr[0] = (ptr[0] & ~0x20) | ((val << 5) & 0x20)
+#define put_c4_pad1(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x20) | ((val << 5) & 0x20))
 /* the command itself 	     */
 #define get_c4_cmd(ptr) (ptr[0] & 0x1f)
-#define put_c4_cmd(ptr,val) ptr[0] = (ptr[0] & ~0x1f) | ((val << 0) & 0x1f)
+#define put_c4_cmd(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x1f) | ((val << 0) & 0x1f))
 /* padding */
 #define get_c4_pad2(ptr) ((ptr[1] & 0xf8) >> 3)
-#define put_c4_pad2(ptr,val) ptr[1] = (ptr[1] & ~0xf8) | ((val << 3) & 0xf8)
+#define put_c4_pad2(ptr,val) ptr[1] = (unsigned char)((ptr[1] & ~0xf8) | ((val << 3) & 0xf8))
 /* which head 		     */
 #define get_c4_head(ptr) ((ptr[1] & 0x4) >> 2)
 #define put_c4_head(ptr,val) ptr[1] = (ptr[1] & ~0x4) | ((val << 2) & 0x4)
@@ -242,24 +242,24 @@ typedef unsigned char FDC_RESULT_BLOCK;
 #define get_c4_drive(ptr) (ptr[1] & 0x3)
 #define put_c4_drive(ptr,val) ptr[1] = (ptr[1] & ~0x3) | ((val << 0) & 0x3)
 
-/* 
+/*
  * Class 5 - recalibrate
  */
 
 /* padding */
 #define get_c5_pad(ptr) ((ptr[0] & 0xe0) >> 5)
-#define put_c5_pad(ptr,val) ptr[0] = (ptr[0] & ~0xe0) | ((val << 5) & 0xe0)
+#define put_c5_pad(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0xe0) | ((val << 5) & 0xe0))
 /* the command itself 	     */
 #define get_c5_cmd(ptr) (ptr[0] & 0x1f)
-#define put_c5_cmd(ptr,val) ptr[0] = (ptr[0] & ~0x1f) | ((val << 0) & 0x1f)
+#define put_c5_cmd(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x1f) | ((val << 0) & 0x1f))
 /* padding */
 #define get_c5_pad1(ptr) ((ptr[1] & 0xfc) >> 2)
-#define put_c5_pad1(ptr,val) ptr[1] = (ptr[1] & ~0xfc) | ((val << 2) & 0xfc)
+#define put_c5_pad1(ptr,val) ptr[1] = (unsigned char)((ptr[1] & ~0xfc) | ((val << 2) & 0xfc))
 /* drive unit */
 #define get_c5_drive(ptr) (ptr[1] & 0x3)
 #define put_c5_drive(ptr,val) ptr[1] = (ptr[1] & ~0x3) | ((val << 0) & 0x3)
 
-/* 
+/*
  * Class 6 - specify
  */
 
@@ -277,9 +277,9 @@ typedef unsigned char FDC_RESULT_BLOCK;
 #define put_c6_HLT(ptr,val) ptr[2] = (ptr[2] & ~0xfe) | ((val << 1) & 0xfe)
 /* non-dma mode - not supp.  */
 #define get_c6_ND(ptr) (ptr[2] & 0x1)
-#define put_c6_ND(ptr,val) ptr[2] = (ptr[2] & ~0x1) | ((val << 0) & 0x1)
+#define put_c6_ND(ptr,val) ptr[2] = (unsigned char)((ptr[2] & ~0x1) | ((val << 0) & 0x1))
 
-/* 
+/*
  * Class 7 - sense drive status
  */
 
@@ -293,22 +293,22 @@ typedef unsigned char FDC_RESULT_BLOCK;
 #define get_c7_drive(ptr) (ptr[1] & 0x3)
 #define put_c7_drive(ptr,val) ptr[1] = (ptr[1] & ~0x3) | ((val << 0) & 0x3)
 
-/* 
+/*
  * Class 8 - seek
  */
 
 /* padding */
 #define get_c8_pad(ptr) ((ptr[0] & 0xe0) >> 5)
-#define put_c8_pad(ptr,val) ptr[0] = (ptr[0] & ~0xe0) | ((val << 5) & 0xe0)
+#define put_c8_pad(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0xe0) | ((val << 5) & 0xe0))
 /* the command itself 	     */
 #define get_c8_cmd(ptr) (ptr[0] & 0x1f)
-#define put_c8_cmd(ptr,val) ptr[0] = (ptr[0] & ~0x1f) | ((val << 0) & 0x1f)
+#define put_c8_cmd(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x1f) | ((val << 0) & 0x1f))
 /* padding */
 #define get_c8_pad1(ptr) ((ptr[1] & 0xf8) >> 3)
-#define put_c8_pad1(ptr,val) ptr[1] = (ptr[1] & ~0xf8) | ((val << 3) & 0xf8)
+#define put_c8_pad1(ptr,val) ptr[1] = (unsigned char)((ptr[1] & ~0xf8) | ((val << 3) & 0xf8))
 /* which head 		     */
 #define get_c8_head(ptr) ((ptr[1] & 0x4) >> 2)
-#define put_c8_head(ptr,val) ptr[1] = (ptr[1] & ~0x4) | ((val << 2) & 0x4)
+#define put_c8_head(ptr,val) ptr[1] = (unsigned char)((ptr[1] & ~0x4) | ((val << 2) & 0x4))
 /* drive unit */
 #define get_c8_drive(ptr) (ptr[1] & 0x3)
 #define put_c8_drive(ptr,val) ptr[1] = (ptr[1] & ~0x3) | ((val << 0) & 0x3)
@@ -320,9 +320,9 @@ typedef unsigned char FDC_RESULT_BLOCK;
 
 /* START: FDC RESULT BLOCK DEFINITIONS >>>>>>>>>>>>>>>>>>>>>>>>>>>> */
 
-/* 
- * Class 0 - read/write data, read/write deleted data, 
- *    	     all scans, read/format a track 
+/*
+ * Class 0 - read/write data, read/write deleted data,
+ *    	     all scans, read/format a track
  */
 
 /* status register 0         */
@@ -354,19 +354,19 @@ typedef unsigned char FDC_RESULT_BLOCK;
 
 /* Termination code  */
 #define get_r1_ST0_int_code(ptr) ((ptr[0] & 0xc0) >> 6)
-#define put_r1_ST0_int_code(ptr,val) ptr[0] = (ptr[0] & ~0xc0) | ((val << 6) & 0xc0)
+#define put_r1_ST0_int_code(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0xc0) | ((val << 6) & 0xc0))
 /* End of seek cmd   */
 #define get_r1_ST0_seek_end(ptr) ((ptr[0] & 0x20) >> 5)
-#define put_r1_ST0_seek_end(ptr,val) ptr[0] = (ptr[0] & ~0x20) | ((val << 5) & 0x20)
+#define put_r1_ST0_seek_end(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x20) | ((val << 5) & 0x20))
 /* Equipment fault   */
 #define get_r1_ST0_equipment(ptr) ((ptr[0] & 0x10) >> 4)
-#define put_r1_ST0_equipment(ptr,val) ptr[0] = (ptr[0] & ~0x10) | ((val << 4) & 0x10)
+#define put_r1_ST0_equipment(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x10) | ((val << 4) & 0x10))
 /* Device not ready  */
 #define get_r1_ST0_not_ready(ptr) ((ptr[0] & 0x8) >> 3)
 #define put_r1_ST0_not_ready(ptr,val) ptr[0] = (ptr[0] & ~0x8) | ((val << 3) & 0x8)
 /* State of head     */
 #define get_r1_ST0_head_address(ptr) ((ptr[0] & 0x4) >> 2)
-#define put_r1_ST0_head_address(ptr,val) ptr[0] = (ptr[0] & ~0x4) | ((val << 2) & 0x4)
+#define put_r1_ST0_head_address(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x4) | ((val << 2) & 0x4))
 /* Which drive	     */
 #define get_r1_ST0_unit(ptr) (ptr[0] & 0x3)
 #define put_r1_ST0_unit(ptr,val) ptr[0] = (ptr[0] & ~0x3) | ((val << 0) & 0x3)
@@ -381,13 +381,13 @@ typedef unsigned char FDC_RESULT_BLOCK;
 #define put_r1_ST1_over_run(ptr,val) ptr[1] = (ptr[1] & ~0x10) | ((val << 4) & 0x10)
 /* sector not found  */
 #define get_r1_ST1_no_data(ptr) ((ptr[1] & 0x4) >> 2)
-#define put_r1_ST1_no_data(ptr,val) ptr[1] = (ptr[1] & ~0x4) | ((val << 2) & 0x4)
+#define put_r1_ST1_no_data(ptr,val) ptr[1] = (unsigned char)((ptr[1] & ~0x4) | ((val << 2) & 0x4))
 /* write protected   */
 #define get_r1_ST1_write_protected(ptr) ((ptr[1] & 0x2) >> 1)
-#define put_r1_ST1_write_protected(ptr,val) ptr[1] = (ptr[1] & ~0x2) | ((val << 1) & 0x2)
+#define put_r1_ST1_write_protected(ptr,val) ptr[1] = (unsigned char)((ptr[1] & ~0x2) | ((val << 1) & 0x2))
 /* Cannot find adress mask/ID  		*/
 #define get_r1_ST1_no_address_mark(ptr) (ptr[1] & 0x1)
-#define put_r1_ST1_no_address_mark(ptr,val) ptr[1] = (ptr[1] & ~0x1) | ((val << 0) & 0x1)
+#define put_r1_ST1_no_address_mark(ptr,val) ptr[1] = (unsigned char)((ptr[1] & ~0x1) | ((val << 0) & 0x1))
 /* Deleted data found in Read/Scan	*/
 #define get_r1_ST2_control_mark(ptr) ((ptr[2] & 0x40) >> 6)
 #define put_r1_ST2_control_mark(ptr,val) ptr[2] = (ptr[2] & ~0x40) | ((val << 6) & 0x40)
@@ -410,33 +410,33 @@ typedef unsigned char FDC_RESULT_BLOCK;
 #define get_r1_ST2_no_address_mark(ptr) (ptr[2] & 0x1)
 #define put_r1_ST2_no_address_mark(ptr,val) ptr[2] = (ptr[2] & ~0x1) | ((val << 0) & 0x1)
 
-/* 
+/*
  * Class 2 - sense drive status
  */
 
 /* Device fault      		*/
 #define get_r2_ST3_fault(ptr) ((ptr[0] & 0x80) >> 7)
-#define put_r2_ST3_fault(ptr,val) ptr[0] = (ptr[0] & ~0x80) | ((val << 7) & 0x80)
+#define put_r2_ST3_fault(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x80) | ((val << 7) & 0x80))
 /* Write protected diskette	*/
 #define get_r2_ST3_write_protected(ptr) ((ptr[0] & 0x40) >> 6)
 #define put_r2_ST3_write_protected(ptr,val) ptr[0] = (ptr[0] & ~0x40) | ((val << 6) & 0x40)
 /* Device is ready		*/
 #define get_r2_ST3_ready(ptr) ((ptr[0] & 0x20) >> 5)
-#define put_r2_ST3_ready(ptr,val) ptr[0] = (ptr[0] & ~0x20) | ((val << 5) & 0x20)
+#define put_r2_ST3_ready(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x20) | ((val << 5) & 0x20))
 /* Track zero found		*/
 #define get_r2_ST3_track_0(ptr) ((ptr[0] & 0x10) >> 4)
 #define put_r2_ST3_track_0(ptr,val) ptr[0] = (ptr[0] & ~0x10) | ((val << 4) & 0x10)
 /* Double sided diskette	*/
 #define get_r2_ST3_two_sided(ptr) ((ptr[0] & 0x8) >> 3)
-#define put_r2_ST3_two_sided(ptr,val) ptr[0] = (ptr[0] & ~0x8) | ((val << 3) & 0x8)
+#define put_r2_ST3_two_sided(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x8) | ((val << 3) & 0x8))
 /* Side address signal		*/
 #define get_r2_ST3_head_address(ptr) ((ptr[0] & 0x4) >> 2)
-#define put_r2_ST3_head_address(ptr,val) ptr[0] = (ptr[0] & ~0x4) | ((val << 2) & 0x4)
+#define put_r2_ST3_head_address(ptr,val) ptr[0] = (unsigned char)((ptr[0] & ~0x4) | ((val << 2) & 0x4))
 /* Which unit is selected	*/
 #define get_r2_ST3_unit(ptr) (ptr[0] & 0x3)
 #define put_r2_ST3_unit(ptr,val) ptr[0] = (ptr[0] & ~0x3) | ((val << 0) & 0x3)
 
-/* 
+/*
  * Class 3 - sense interrupt status
  */
 
@@ -447,7 +447,7 @@ typedef unsigned char FDC_RESULT_BLOCK;
 #define get_r3_PCN(ptr) ptr[1]
 #define put_r3_PCN(ptr,val) ptr[1] = val
 
-/* 
+/*
  * Class 4 - invalid codes
  */
 
@@ -461,9 +461,9 @@ typedef unsigned char FDC_RESULT_BLOCK;
 /*
  * An entry data structure that holds information describing the number of bytes
  * in the fdc command/result phases. The index is the fdc command code, see
- * the INTEL Application note on the 8272A for a full description.  
+ * the INTEL Application note on the 8272A for a full description.
  *
- * The "result_byte" is the number of bytes in the standard FDC result phase 
+ * The "result_byte" is the number of bytes in the standard FDC result phase
  * while "gfi_result_byte" is the number of bytes in the pseudo result phase
  * used by GFI and its server modules (ie some commands that do not normally
  * have a result phase, use an implicit Sense Interrupt Status result phase).
@@ -507,10 +507,10 @@ typedef struct {
 
 /***************************************************************************
 **
-**      Definitions and prototypes for the gfi_function_table, 
+**      Definitions and prototypes for the gfi_function_table,
 **  the functions therein, and the orthogonal floppy interface functions.
 **  Using the typedef'd prototypes should make it much easier to avoid
-**  definition clashes. 
+**  definition clashes.
 **	This is now the only base floppy header file, and if you use the
 **  generic unix_flop.c module, the only floppy header anywhere. The generic
 **  code is meant to help a new unix port get quick floppy support; it is
@@ -525,8 +525,8 @@ typedef struct {
 **
 ** The GFI has a structure containing pointers to functions that provide
 ** the diskette support for all possible drives (0-1) and drive types.
-**  Each floppy emmulator module has a function for loading this table 
-** with the module's own local functions which can then be used by the 
+**  Each floppy emmulator module has a function for loading this table
+** with the module's own local functions which can then be used by the
 ** gfi system to emmulate the sort of device the module was designed for.
 **
 ** 	This table (of two structures - one for each possible drive)
@@ -580,25 +580,25 @@ typedef struct
 **  to the other functions gfi needs is via the gfi_function_table.
 */
 
-IMPORT SHORT host_gfi_rdiskette_valid  
+IMPORT SHORT host_gfi_rdiskette_valid
 	IPT3(UTINY,hostID,ConfigValues *,vals,CHAR *,err);
 
-IMPORT SHORT host_gfi_rdiskette_active 
+IMPORT SHORT host_gfi_rdiskette_active
 	IPT3(UTINY, hostID, BOOL, active, CHAR, *err);
 
-IMPORT SHORT gfi_empty_active 
+IMPORT SHORT gfi_empty_active
 	IPT3(UTINY, hostID, BOOL, active, CHAR, *err);
 
-IMPORT VOID  host_gfi_rdiskette_change 
+IMPORT VOID  host_gfi_rdiskette_change
 	IPT2(UTINY, hostID, BOOL, apply);
 
 #ifndef host_rflop_drive_type
-/* new function to say what kind of drive we have 
+/* new function to say what kind of drive we have
 */
 IMPORT SHORT host_rflop_drive_type IPT2 (INT, fd, CHAR *, name);
 #endif /* host_rflop_drive_type */
 
-/*  The gfi global functions. These need to be global because they are the 
+/*  The gfi global functions. These need to be global because they are the
 ** interface to the private host dependant floppy functions. Each one does
 ** little more than call the real function via the table.
 */
@@ -612,7 +612,7 @@ IMPORT SHORT gfi_drive_off IPT1( UTINY, drive );
 IMPORT SHORT gfi_low IPT1( UTINY, drive );
 IMPORT SHORT gfi_drive_type IPT1( UTINY, drive );
 IMPORT SHORT gfi_change IPT1( UTINY, drive );
-IMPORT VOID gfi_init IPT0();  
+IMPORT VOID gfi_init IPT0();
 IMPORT SHORT gfi_reset IPT2( FDC_RESULT_BLOCK *, res, UTINY, drive );
 IMPORT SHORT gfi_high IPT2( UTINY, drive, half_word, n);
 IMPORT SHORT gfi_fdc_command IPT2( FDC_CMD_BLOCK *, ip, FDC_RESULT_BLOCK *, res );

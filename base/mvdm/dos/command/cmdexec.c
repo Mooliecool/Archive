@@ -65,9 +65,10 @@ BOOL IsWowAppRunnable(LPSTR lpAppName)
     else
         pStrt++;
 
-    if ( (pEnd = strchr (pStrt, '.')) == NULL)
+    if ( (pEnd = strchr (pStrt, '.')) == NULL) {
         strncpy (szModName, pStrt, 9);
-
+        szModName[8] = '\0';
+    }
     else {
         len = (SHORT) (pEnd - pStrt);
         if (len>8) goto Cleanup;
@@ -138,7 +139,7 @@ VOID cmdCheckBinary (VOID)
 {
 
     LPSTR  lpAppName;
-    ULONG  BinaryType;
+    ULONG  BinaryType = SCS_DOS_BINARY;
     PPARAMBLOCK lpParamBlock;
     PCHAR  lpCommandTail,lpTemp;
     ULONG  AppNameLen,CommandTailLen = 0;
@@ -260,7 +261,9 @@ VOID cmdCheckBinary (VOID)
                                         AppNameLen +
                                         CommandTailLen);
     RtlCopyMemory ((PCHAR)&pSCSInfo->SCS_CmdTail[1],"/z ",3);
-    strcpy ((PCHAR)&pSCSInfo->SCS_CmdTail[4],lpAppName);
+    strncpy ((PCHAR)&pSCSInfo->SCS_CmdTail[4],lpAppName,124);
+    pSCSInfo->SCS_CmdTail[127] = '\0';
+
     if (CommandTailLen) {
         pSCSInfo->SCS_CmdTail[4+AppNameLen] = ' ';
         RtlCopyMemory ((PCHAR)((ULONG)&pSCSInfo->SCS_CmdTail[4]+AppNameLen+1),
@@ -303,7 +306,7 @@ VOID cmdCheckBinary (VOID)
 
 #define MAX_DIR 68
 
-VOID cmdCreateProcess ( VOID )
+VOID cmdCreateProcess ( PSTD_HANDLES pStdHandles )
 {
 
     VDMINFO VDMInfoForCount;
@@ -317,9 +320,8 @@ VOID cmdCreateProcess ( VOID )
     BOOL  Status;
     NTSTATUS NtStatus;
     UNICODE_STRING Unicode;
-    OEM_STRING	   OemString;
+    OEM_STRING     OemString;
     LPVOID lpNewEnv=NULL;
-    PSTD_HANDLES pStdHandles;
     ANSI_STRING Env_A;
 
     // we have one more 32 executable active
@@ -337,9 +339,8 @@ VOID cmdCreateProcess ( VOID )
     dwRet = GetEnvironmentVariable (CurDirVar,Buffer,MAX_DIR);
 
     if (dwRet == 0 || dwRet == MAX_DIR)
-	CurDir = NULL;
+        CurDir = NULL;
 
-    pStdHandles = (PSTD_HANDLES) GetVDMAddr (getSS(), getBP());
     if ((hStd16In = (HANDLE) FETCHDWORD(pStdHandles->hStdIn)) != (HANDLE)-1)
         SetStdHandle (STD_INPUT_HANDLE, hStd16In);
 
@@ -371,24 +372,23 @@ VOID cmdCreateProcess ( VOID )
         Status = FALSE;
         }
     else {
-	if (pEnv32 != NULL && !cmdXformEnvironment (pEnv32, &Env_A)) {
-	    SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-	    Status = FALSE;
-	}
-	else {
-
-	    Status = CreateProcess (
+        if (pEnv32 != NULL && !cmdXformEnvironment (pEnv32, &Env_A)) {
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            Status = FALSE;
+        }
+        else {
+            Status = CreateProcess (
                            NULL,
                            (LPTSTR)pCommand32,
                            NULL,
                            NULL,
                            TRUE,
                            CREATE_SUSPENDED | CREATE_DEFAULT_ERROR_MODE,
-			   Env_A.Buffer,
+                           Env_A.Buffer,
                            (LPTSTR)CurDir,
                            &StartupInfo,
-			   &ProcessInformation);
-	}
+                           &ProcessInformation);
+        }
     }
 
     if (Status == FALSE)
@@ -404,7 +404,7 @@ VOID cmdCreateProcess ( VOID )
         SetStdHandle (STD_ERROR_HANDLE, SCS_hStdErr);
 
     if (Status) {
-	ResumeThread (ProcessInformation.hThread);
+        ResumeThread (ProcessInformation.hThread);
         WaitForSingleObject(ProcessInformation.hProcess, (DWORD)-1);
         GetExitCodeProcess (ProcessInformation.hProcess, &dwExitCode32);
         CloseHandle (ProcessInformation.hProcess);
@@ -412,7 +412,7 @@ VOID cmdCreateProcess ( VOID )
     }
 
     if (Env_A.Buffer)
-	RtlFreeAnsiString(&Env_A);
+        RtlFreeAnsiString(&Env_A);
 
     // Decrement the Re-enterancy count for the VDM
     VDMInfoForCount.VDMState = DECREMENT_REENTER_COUNT;
@@ -431,6 +431,7 @@ VOID cmdExec32 (PCHAR pCmd32, PCHAR pEnv)
 
     DWORD dwThreadId;
     HANDLE hThread;
+    PSTD_HANDLES pStdHandles;
 
     pCommand32 = pCmd32;
     pEnv32 = pEnv;
@@ -442,14 +443,16 @@ VOID cmdExec32 (PCHAR pCmd32, PCHAR pEnv)
     fSoftpcRedirectionOnShellOut = fSoftpcRedirection;
     fBlock = TRUE;
 
+
+    pStdHandles = (PSTD_HANDLES) GetVDMAddr (getSS(), getBP());
     if((hThread = CreateThread (NULL,
                      0,
                      (LPTHREAD_START_ROUTINE)cmdCreateProcess,
-                     NULL,
+                     pStdHandles,
                      0,
                      &dwThreadId)) == FALSE) {
         setCF(0);
-	setAL((UCHAR)GetLastError());
+        setAL((UCHAR)GetLastError());
         nt_resume_event_thread();
         nt_std_handle_notification(fSoftpcRedirectionOnShellOut);
         fBlock = FALSE;
@@ -461,14 +464,8 @@ VOID cmdExec32 (PCHAR pCmd32, PCHAR pEnv)
         CloseHandle (hThread);
 
     // Wait for next command to be re-entered
+    RtlZeroMemory(&VDMInfo, sizeof(VDMINFO));
     VDMInfo.VDMState = NO_PARENT_TO_WAKE | RETURN_ON_NO_COMMAND;
-    VDMInfo.EnviornmentSize = 0;
-    VDMInfo.ErrorCode = 0;
-    VDMInfo.CmdSize = 0;
-    VDMInfo.TitleLen = 0;
-    VDMInfo.ReservedLen = 0;
-    VDMInfo.DesktopLen = 0;
-    VDMInfo.CurDirectoryLen = 0;
     GetNextVDMCommand (&VDMInfo);
     if (VDMInfo.CmdSize > 0){
         setCF(1);
@@ -509,8 +506,8 @@ VOID cmdExecComspec32 (VOID)
 
     if (dwRet == 0 || dwRet >= MAX_PATH){
         setCF(0);
-	setAL((UCHAR)ERROR_BAD_ENVIRONMENT);
-	return;
+        setAL((UCHAR)ERROR_BAD_ENVIRONMENT);
+        return;
     }
 
     pEnv = (PCHAR) GetVDMAddr ((USHORT)getES(),0);
@@ -601,18 +598,12 @@ VOID cmdExec (VOID)
 
 VOID cmdReturnExitCode (VOID)
 {
-VDMINFO VDMInfo;
+VDMINFO MyVDMInfo;
 PREDIRCOMPLETE_INFO pRdrInfo;
 
-    VDMInfo.VDMState = RETURN_ON_NO_COMMAND;
-    VDMInfo.EnviornmentSize = 0;
-    VDMInfo.ErrorCode = (ULONG)getDX();
-    VDMInfo.CmdSize = 0;
-    VDMInfo.TitleLen = 0;
-    VDMInfo.ReservedLen = 0;
-    VDMInfo.DesktopLen = 0;
-    VDMInfo.CurDirectoryLen = 0;
-
+    RtlZeroMemory(&MyVDMInfo, sizeof(VDMINFO));
+    MyVDMInfo.VDMState = RETURN_ON_NO_COMMAND;
+    MyVDMInfo.ErrorCode = (ULONG)getDX();
 
     CntrlHandlerState = (CntrlHandlerState & ~CNTRL_SHELLCOUNT) |
                          (((WORD)(CntrlHandlerState & CNTRL_SHELLCOUNT))+1);
@@ -627,11 +618,11 @@ PREDIRCOMPLETE_INFO pRdrInfo;
     // Check for any copying needed for redirection
     pRdrInfo = (PREDIRCOMPLETE_INFO) (((ULONG)getBX() << 16) + (ULONG)getCX());
 
-    if (cmdCheckCopyForRedirection (pRdrInfo) == FALSE)
-            VDMInfo.ErrorCode = ERROR_NOT_ENOUGH_MEMORY;
+    if (!cmdCheckCopyForRedirection (pRdrInfo, FALSE))
+            MyVDMInfo.ErrorCode = ERROR_NOT_ENOUGH_MEMORY;
 
-    GetNextVDMCommand (&VDMInfo);
-    if (VDMInfo.CmdSize > 0){
+    GetNextVDMCommand (&MyVDMInfo);
+    if (MyVDMInfo.CmdSize > 0){
         setCF(1);
         IsRepeatCall = TRUE;
     }

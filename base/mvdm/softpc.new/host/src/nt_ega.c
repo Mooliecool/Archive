@@ -598,16 +598,16 @@ void nt_ega_lo_graph_std(int offset, int screen_x, int screen_y,
     ** been closed, but still get a paint request.
     */
     if( sc.ScreenBufHandle == (HANDLE)NULL ){
-	assert0( NO, "VDM: rejected paint request due to NULL handle" );
-	return;
+   assert0( NO, "VDM: rejected paint request due to NULL handle" );
+   return;
     }
     /*
     ** Tim September 92, sanity check parameters, if they're too big
     ** it can cause a crash.
     */
     if( height>200 || width>40 ){
-	assert2( NO, "VDM: nt_ega_lo_graph_std() w=%d h=%d", width, height );
-	return;
+   assert2( NO, "VDM: nt_ega_lo_graph_std() w=%d h=%d", width, height );
+   return;
     }
 
 
@@ -686,9 +686,9 @@ void nt_ega_lo_graph_std(int offset, int screen_x, int screen_y,
     rect.Bottom = rect.Top + (height << 1) - 1;
 
     if( sc.ScreenBufHandle )
-	if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
-		assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
-			 GetLastError() );
+   if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
+      assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
+          GetLastError() );
         //DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
 }
 
@@ -722,16 +722,16 @@ void nt_ega_lo_graph_big(int offset, int screen_x, int screen_y,
     ** been closed, but still get a paint request.
     */
     if( sc.ScreenBufHandle == (HANDLE)NULL ){
-	assert0( NO, "VDM: rejected paint request due to NULL handle" );
-	return;
+   assert0( NO, "VDM: rejected paint request due to NULL handle" );
+   return;
     }
     /*
     ** Tim September 92, sanity check parameters, if they're too big
     ** it can cause a crash.
     */
     if( height>200 || width>40 ){
-	assert2( NO, "VDM: nt_ega_lo_graph_big() w=%d h=%d", width, height );
-	return;
+   assert2( NO, "VDM: nt_ega_lo_graph_big() w=%d h=%d", width, height );
+   return;
     }
 
 
@@ -834,9 +834,9 @@ void nt_ega_lo_graph_big(int offset, int screen_x, int screen_y,
 
     /* Display the DIB. */
     if( sc.ScreenBufHandle )
-	if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
-		assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
-			 GetLastError() );
+   if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
+      assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
+          GetLastError() );
         //DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
 #endif /* BIGWIN */
 }
@@ -873,16 +873,16 @@ void nt_ega_lo_graph_huge(int offset, int screen_x, int screen_y,
     ** been closed, but still get a paint request.
     */
     if( sc.ScreenBufHandle == (HANDLE)NULL ){
-	assert0( NO, "VDM: rejected paint request due to NULL handle" );
-	return;
+   assert0( NO, "VDM: rejected paint request due to NULL handle" );
+   return;
     }
     /*
     ** Tim September 92, sanity check parameters, if they're too big
     ** it can cause a crash.
     */
     if( height>200 || width>40 ){
-	assert2( NO, "VDM: nt_ega_lo_graph_huge() w=%d h=%d", width, height );
-	return;
+   assert2( NO, "VDM: nt_ega_lo_graph_huge() w=%d h=%d", width, height );
+   return;
     }
 
 
@@ -1010,9 +1010,9 @@ void nt_ega_lo_graph_huge(int offset, int screen_x, int screen_y,
 
     /* Display the DIB. */
     if( sc.ScreenBufHandle )
-	if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
-		assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
-			 GetLastError() );
+   if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
+      assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
+          GetLastError() );
         //DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
 #endif /* BIGWIN */
 }
@@ -1040,16 +1040,16 @@ void nt_ega_med_graph_std(int offset, int screen_x, int screen_y,
     ** been closed, but still get a paint request.
     */
     if( sc.ScreenBufHandle == (HANDLE)NULL ){
-	assert0( NO, "VDM: rejected paint request due to NULL handle" );
-	return;
+   assert0( NO, "VDM: rejected paint request due to NULL handle" );
+   return;
     }
     /*
     ** Tim September 92, sanity check parameters, if they're too big
     ** it can cause a crash.
     */
     if( height>200 || width>80 ){
-	assert2( NO, "VDM: nt_ega_med_graph_std() w=%d h=%d", width, height );
-	return;
+   assert2( NO, "VDM: nt_ega_med_graph_std() w=%d h=%d", width, height );
+   return;
     }
 
 
@@ -1085,15 +1085,15 @@ void nt_ega_med_graph_std(int offset, int screen_x, int screen_y,
     RelMutex(sc.ConsoleBufInfo.hMutex);
 
     /* Display the new image. */
-    rect.Left = screen_x;
+    rect.Left = (SHORT)screen_x;
     rect.Top = screen_y << 1;
     rect.Right = rect.Left + (width << 3) - 1;
     rect.Bottom = rect.Top + (height << 1) - 1;
 
     if( sc.ScreenBufHandle )
-	if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
-		assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
-			 GetLastError() );
+   if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
+      assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
+          GetLastError() );
         //DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
 }
 
@@ -1121,16 +1121,16 @@ void nt_ega_med_graph_big(int offset, int screen_x, int screen_y,
     ** been closed, but still get a paint request.
     */
     if( sc.ScreenBufHandle == (HANDLE)NULL ){
-	assert0( NO, "VDM: rejected paint request due to NULL handle" );
-	return;
+   assert0( NO, "VDM: rejected paint request due to NULL handle" );
+   return;
     }
     /*
     ** Tim September 92, sanity check parameters, if they're too big
     ** it can cause a crash.
     */
     if( height>200 || width>80 ){
-	assert2( NO, "VDM: nt_ega_med_graph_big() w=%d h=%d", width, height );
-	return;
+   assert2( NO, "VDM: nt_ega_med_graph_big() w=%d h=%d", width, height );
+   return;
     }
 
 
@@ -1167,9 +1167,9 @@ void nt_ega_med_graph_big(int offset, int screen_x, int screen_y,
     rect.Bottom = rect.Top + SCALE(height << 1) - 1;
 
     if( sc.ScreenBufHandle )
-	if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
-		assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
-			 GetLastError() );
+   if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
+      assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
+          GetLastError() );
         //DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
 #endif  /* BIGWIN */
 }
@@ -1198,16 +1198,16 @@ void nt_ega_med_graph_huge(int offset, int screen_x, int screen_y,
     ** been closed, but still get a paint request.
     */
     if( sc.ScreenBufHandle == (HANDLE)NULL ){
-	assert0( NO, "VDM: rejected paint request due to NULL handle" );
-	return;
+   assert0( NO, "VDM: rejected paint request due to NULL handle" );
+   return;
     }
     /*
     ** Tim September 92, sanity check parameters, if they're too big
     ** it can cause a crash.
     */
     if( height>200 || width>80 ){
-	assert2( NO, "VDM: nt_ega_med_graph_huge() w=%d h=%d", width, height );
-	return;
+   assert2( NO, "VDM: nt_ega_med_graph_huge() w=%d h=%d", width, height );
+   return;
     }
 
 
@@ -1244,9 +1244,9 @@ void nt_ega_med_graph_huge(int offset, int screen_x, int screen_y,
     rect.Bottom = rect.Top + SCALE(height << 1) - 1;
 
     if( sc.ScreenBufHandle )
-	if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
-		assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
-			 GetLastError() );
+   if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
+      assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
+          GetLastError() );
         //DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
 #endif /* BIGWIN */
 }
@@ -1274,16 +1274,16 @@ void nt_ega_hi_graph_std(int offset, int screen_x, int screen_y,
     ** been closed, but still get a paint request.
     */
     if( sc.ScreenBufHandle == (HANDLE)NULL ){
-	assert0( NO, "VDM: rejected paint request due to NULL handle" );
-	return;
+   assert0( NO, "VDM: rejected paint request due to NULL handle" );
+   return;
     }
     /*
     ** Tim September 92, sanity check parameters, if they're too big
     ** it can cause a crash.
     */
     if( height>480 || width>80 ){
-	assert2( NO, "VDM: nt_ega_hi_graph_std() w=%d h=%d", width, height );
-	return;
+   assert2( NO, "VDM: nt_ega_hi_graph_std() w=%d h=%d", width, height );
+   return;
     }
 
     /* Build up the device independent bitmap. */
@@ -1314,15 +1314,15 @@ void nt_ega_hi_graph_std(int offset, int screen_x, int screen_y,
     RelMutex(sc.ConsoleBufInfo.hMutex);
 
     /* Display the new image. */
-    rect.Left = screen_x;
-    rect.Top = screen_y;
+    rect.Left = (SHORT)screen_x;
+    rect.Top = (SHORT)screen_y;
     rect.Right = rect.Left + (width << 3) - 1;
     rect.Bottom = rect.Top + height - 1;
 
     if( sc.ScreenBufHandle )
-	if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
-		assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
-			 GetLastError() );
+   if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
+      assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
+          GetLastError() );
         //DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
 }
 
@@ -1354,16 +1354,16 @@ void nt_ega_hi_graph_big(int offset, int screen_x, int screen_y,
     ** been closed, but still get a paint request.
     */
     if( sc.ScreenBufHandle == (HANDLE)NULL ){
-	assert0( NO, "VDM: rejected paint request due to NULL handle" );
-	return;
+   assert0( NO, "VDM: rejected paint request due to NULL handle" );
+   return;
     }
     /*
     ** Tim September 92, sanity check parameters, if they're too big
     ** it can cause a crash.
     */
     if( height>480 || width>80 ){
-	assert2( NO, "VDM: nt_ega_hi_graph_big() w=%d h=%d", width, height );
-	return;
+   assert2( NO, "VDM: nt_ega_hi_graph_big() w=%d h=%d", width, height );
+   return;
     }
 
 
@@ -1439,14 +1439,14 @@ void nt_ega_hi_graph_big(int offset, int screen_x, int screen_y,
 
     /* Display the new image. */
     rect.Left = SCALE(screen_x);
-    rect.Top = local_screen_y;
+    rect.Top = (SHORT) local_screen_y;
     rect.Right = rect.Left + scale_width_in_bits - 1;
     rect.Bottom = rect.Top + local_height - 1;
 
     if( sc.ScreenBufHandle )
-	if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
-		assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
-			 GetLastError() );
+   if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
+      assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
+          GetLastError() );
         //DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
 #endif /* BIGWIN */
 }
@@ -1475,16 +1475,16 @@ void nt_ega_hi_graph_huge(int offset, int screen_x, int screen_y,
     ** been closed, but still get a paint request.
     */
     if( sc.ScreenBufHandle == (HANDLE)NULL ){
-	assert0( NO, "VDM: rejected paint request due to NULL handle" );
-	return;
+   assert0( NO, "VDM: rejected paint request due to NULL handle" );
+   return;
     }
     /*
     ** Tim September 92, sanity check parameters, if they're too big
     ** it can cause a crash.
     */
     if( height>480 || width>80 ){
-	assert2( NO, "VDM: nt_ega_hi_graph_huge() w=%d h=%d", width, height );
-	return;
+   assert2( NO, "VDM: nt_ega_hi_graph_huge() w=%d h=%d", width, height );
+   return;
     }
 
 
@@ -1523,9 +1523,9 @@ void nt_ega_hi_graph_huge(int offset, int screen_x, int screen_y,
     rect.Bottom = rect.Top + SCALE(height) - 1;
 
     if( sc.ScreenBufHandle )
-	if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
-		assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
-			 GetLastError() );
+   if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
+      assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
+          GetLastError() );
         //DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
 #endif /* BIGWIN */
 }
@@ -1671,24 +1671,24 @@ sub_note_trace5(EGA_HOST_VERBOSE,
 void nt_ega_lo_frozen_std(int offset, int screen_x, int screen_y,
                           int width, int height)
 {
-    UTINY	*plane1_ptr,
-		*plane2_ptr,
-		*plane3_ptr,
-		*plane4_ptr;
-    ULONG	*dest_ptr,
-		*save_dest_ptr,
-		 mem_loc,
-		 data0,
-		 data1,
-		 data2,
-		 data3,
-		 local_width,
-		 local_height,
-		 longs_per_scanline,
-		 bpl = get_bytes_per_line(),
-		 mem_x = screen_x >> 3,
-		 max_width = sc.PC_W_Width >> 4,
-		 max_height = sc.PC_W_Height >> 1;
+    UTINY   *plane1_ptr,
+      *plane2_ptr,
+      *plane3_ptr,
+      *plane4_ptr;
+    ULONG   *dest_ptr,
+      *save_dest_ptr,
+       mem_loc,
+       data0,
+       data1,
+       data2,
+       data3,
+       local_width,
+       local_height,
+       longs_per_scanline,
+       bpl = get_bytes_per_line(),
+       mem_x = screen_x >> 3,
+       max_width = sc.PC_W_Width >> 4,
+       max_height = sc.PC_W_Height >> 1;
     SMALL_RECT   rect;
     BOOL         fMutexTaken = FALSE;
 
@@ -1701,8 +1701,8 @@ void nt_ega_lo_frozen_std(int offset, int screen_x, int screen_y,
     ** been closed, but still get a paint request.
     */
     if( sc.ScreenBufHandle == (HANDLE)NULL ){
-	assert0( NO, "VDM: rejected paint request due to NULL handle" );
-	return;
+   assert0( NO, "VDM: rejected paint request due to NULL handle" );
+   return;
     }
 
     /* If the image is completely outside the display area do nothing. */
@@ -1754,7 +1754,7 @@ void nt_ega_lo_frozen_std(int offset, int screen_x, int screen_y,
         {
             local_width = width;
             dest_ptr = save_dest_ptr;
-	    mem_loc = offset;
+       mem_loc = offset;
             do
             {
                 data0 = *(plane1_ptr + mem_loc);
@@ -1785,11 +1785,11 @@ void nt_ega_lo_frozen_std(int offset, int screen_x, int screen_y,
                     = ega_lo_graph_0_0[data0] | ega_lo_graph_0_1[data1]
                             | ega_lo_graph_0_2[data2] | ega_lo_graph_0_3[data3];
                 dest_ptr++;
-	        mem_loc++;
+           mem_loc++;
             }
             while(--local_width);
             save_dest_ptr += 2 * longs_per_scanline;
-	    offset += bpl;
+       offset += bpl;
         }
         while(--local_height);
 
@@ -1805,9 +1805,9 @@ void nt_ega_lo_frozen_std(int offset, int screen_x, int screen_y,
         rect.Bottom = rect.Top + (height << 1) - 1;
 
         if( sc.ScreenBufHandle )
-	    if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
-		    assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
-			     GetLastError() );
+       if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
+          assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
+              GetLastError() );
     } except(EXCEPTION_EXECUTE_HANDLER)
       {
           assert0(NO, "Handled fault in nt_ega_lo_frozen_std. fs switch?");
@@ -1824,28 +1824,28 @@ void nt_ega_lo_frozen_std(int offset, int screen_x, int screen_y,
 void nt_ega_med_frozen_std(int offset, int screen_x, int screen_y,
                            int width, int height)
 {
-    ULONG	 local_height,
-		 local_width,
-		 longs_per_scanline,
-		*dest_ptr,
-		*ref_dest_ptr,
-		*lut0_ptr = ega_med_and_hi_graph_luts,
-		*lut1_ptr = lut0_ptr + LUT_OFFSET,
-		*lut2_ptr = lut1_ptr + LUT_OFFSET,
-		*lut3_ptr = lut2_ptr + LUT_OFFSET,
-		*l_ptr,
-		 hi_res,
-		 lo_res,
-		 mem_loc,
-		 bpl = get_bytes_per_line(),
-		 plane_mask = get_plane_mask(),
-		 mem_x = screen_x >> 3,
-		 max_width = sc.PC_W_Width >> 3,
-		 max_height = sc.PC_W_Height >> 1;
-    UTINY	*plane1_ptr,
-		*plane2_ptr,
-		*plane3_ptr,
-		*plane4_ptr;
+    ULONG    local_height,
+       local_width,
+       longs_per_scanline,
+      *dest_ptr,
+      *ref_dest_ptr,
+      *lut0_ptr = ega_med_and_hi_graph_luts,
+      *lut1_ptr = lut0_ptr + LUT_OFFSET,
+      *lut2_ptr = lut1_ptr + LUT_OFFSET,
+      *lut3_ptr = lut2_ptr + LUT_OFFSET,
+      *l_ptr,
+       hi_res,
+       lo_res,
+       mem_loc,
+       bpl = get_bytes_per_line(),
+       plane_mask = get_plane_mask(),
+       mem_x = screen_x >> 3,
+       max_width = sc.PC_W_Width >> 3,
+       max_height = sc.PC_W_Height >> 1;
+    UTINY   *plane1_ptr,
+      *plane2_ptr,
+      *plane3_ptr,
+      *plane4_ptr;
     SMALL_RECT   rect;
     BOOL        fMutexTaken = FALSE;
 
@@ -1859,8 +1859,8 @@ void nt_ega_med_frozen_std(int offset, int screen_x, int screen_y,
     ** been closed, but still get a paint request.
     */
     if( sc.ScreenBufHandle == (HANDLE)NULL ){
-	assert0( NO, "VDM: rejected paint request due to NULL handle" );
-	return;
+   assert0( NO, "VDM: rejected paint request due to NULL handle" );
+   return;
     }
 
     /* If the image is completely outside the display area do nothing. */
@@ -1894,8 +1894,8 @@ void nt_ega_med_frozen_std(int offset, int screen_x, int screen_y,
         plane4_ptr = GET_OFFSET(Plane4Offset);
         longs_per_scanline = LONGS_PER_SCANLINE(sc.ConsoleBufInfo.lpBitMapInfo);
         ref_dest_ptr = (ULONG *) sc.ConsoleBufInfo.lpBitMap +
-		       (screen_y << 1) * longs_per_scanline +
-		       (screen_x >> 2);
+             (screen_y << 1) * longs_per_scanline +
+             (screen_x >> 2);
 
         /* Grab the mutex. */
         GrabMutex(sc.ConsoleBufInfo.hMutex);
@@ -1906,56 +1906,56 @@ void nt_ega_med_frozen_std(int offset, int screen_x, int screen_y,
         local_height = height;
         do
         {
-	    dest_ptr = ref_dest_ptr;
-	    mem_loc = offset;
-	    local_width = width;
-	    do
-	    {
-	        hi_res = 0;
-	        lo_res = 0;
+       dest_ptr = ref_dest_ptr;
+       mem_loc = offset;
+       local_width = width;
+       do
+       {
+           hi_res = 0;
+           lo_res = 0;
 
-	        /* Get 8 bytes of output data from 1 byte of plane 0 data. */
-	        if (plane_mask & 1)
-	        {
-		    l_ptr = &lut0_ptr[*(plane1_ptr + mem_loc) << 1];
-		    hi_res = *l_ptr++;
-		    lo_res = *l_ptr;
-	        }
-    
-	        /* Or in the output data from plane 1 */
-	        if (plane_mask & 2)
-	        {
-		    l_ptr = &lut1_ptr[*(plane2_ptr + mem_loc) << 1];
-		    hi_res |= *l_ptr++;
-		    lo_res |= *l_ptr;
-	        }
+           /* Get 8 bytes of output data from 1 byte of plane 0 data. */
+           if (plane_mask & 1)
+           {
+          l_ptr = &lut0_ptr[*(plane1_ptr + mem_loc) << 1];
+          hi_res = *l_ptr++;
+          lo_res = *l_ptr;
+           }
 
-	        /* Or in the output data from plane 2 */
-	        if (plane_mask & 4)
-	        {
-		    l_ptr = &lut2_ptr[*(plane3_ptr + mem_loc) << 1];
-		    hi_res |= *l_ptr++;
-		    lo_res |= *l_ptr;
-	        }
-    
-	        /* Or in the output data from plane 3 */
-	        if (plane_mask & 8)
-	        {
-		    l_ptr = &lut3_ptr[*(plane4_ptr + mem_loc) << 1];
-		    hi_res |= *l_ptr++;
-		    lo_res |= *l_ptr;
-	        }
+           /* Or in the output data from plane 1 */
+           if (plane_mask & 2)
+           {
+          l_ptr = &lut1_ptr[*(plane2_ptr + mem_loc) << 1];
+          hi_res |= *l_ptr++;
+          lo_res |= *l_ptr;
+           }
 
-	        /* Now store it in the bitmap. */
-	        *(dest_ptr + longs_per_scanline) = *dest_ptr = hi_res;
-	        dest_ptr++;
-	        *(dest_ptr + longs_per_scanline) = *dest_ptr = lo_res;
-	        *dest_ptr++;
-	        mem_loc++;
-	    }
-	    while (--local_width);
+           /* Or in the output data from plane 2 */
+           if (plane_mask & 4)
+           {
+          l_ptr = &lut2_ptr[*(plane3_ptr + mem_loc) << 1];
+          hi_res |= *l_ptr++;
+          lo_res |= *l_ptr;
+           }
+
+           /* Or in the output data from plane 3 */
+           if (plane_mask & 8)
+           {
+          l_ptr = &lut3_ptr[*(plane4_ptr + mem_loc) << 1];
+          hi_res |= *l_ptr++;
+          lo_res |= *l_ptr;
+           }
+
+           /* Now store it in the bitmap. */
+           *(dest_ptr + longs_per_scanline) = *dest_ptr = hi_res;
+           dest_ptr++;
+           *(dest_ptr + longs_per_scanline) = *dest_ptr = lo_res;
+           dest_ptr++;
+           mem_loc++;
+       }
+       while (--local_width);
             ref_dest_ptr += 2 * longs_per_scanline;
-	    offset += bpl;
+       offset += bpl;
         }
         while(--local_height);
 
@@ -1965,15 +1965,15 @@ void nt_ega_med_frozen_std(int offset, int screen_x, int screen_y,
         fMutexTaken = FALSE;
 
         /* Display the new image. */
-        rect.Left = screen_x;
+        rect.Left = (SHORT)screen_x;
         rect.Top = screen_y << 1;
         rect.Right = rect.Left + (width << 3) - 1;
         rect.Bottom = rect.Top + (height << 1) - 1;
 
         if( sc.ScreenBufHandle )
-	    if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
-		    assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
-			     GetLastError() );
+       if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
+          assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
+              GetLastError() );
     } except(EXCEPTION_EXECUTE_HANDLER)
       {
           assert0(NO, "Handled fault in nt_ega_med_frozen_std. fs switch?");
@@ -1990,28 +1990,28 @@ void nt_ega_med_frozen_std(int offset, int screen_x, int screen_y,
 void nt_ega_hi_frozen_std(int offset, int screen_x, int screen_y,
                           int width, int height)
 {
-    ULONG	 local_height,
-		 local_width,
-		 longs_per_scanline,
-		*dest_ptr,
-		*ref_dest_ptr,
-		*lut0_ptr = ega_med_and_hi_graph_luts,
-		*lut1_ptr = lut0_ptr + LUT_OFFSET,
-		*lut2_ptr = lut1_ptr + LUT_OFFSET,
-		*lut3_ptr = lut2_ptr + LUT_OFFSET,
-		*l_ptr,
-		 hi_res,
-		 lo_res,
-		 mem_loc,
-		 bpl = get_bytes_per_line(),
-		 plane_mask = get_plane_mask(),
-		 mem_x = screen_x >> 3,
-		 max_width = sc.PC_W_Width >> 3,
-		 max_height = sc.PC_W_Height;
-    UTINY	*plane1_ptr,
-		*plane2_ptr,
-		*plane3_ptr,
-		*plane4_ptr;
+    ULONG    local_height,
+       local_width,
+       longs_per_scanline,
+      *dest_ptr,
+      *ref_dest_ptr,
+      *lut0_ptr = ega_med_and_hi_graph_luts,
+      *lut1_ptr = lut0_ptr + LUT_OFFSET,
+      *lut2_ptr = lut1_ptr + LUT_OFFSET,
+      *lut3_ptr = lut2_ptr + LUT_OFFSET,
+      *l_ptr,
+       hi_res,
+       lo_res,
+       mem_loc,
+       bpl = get_bytes_per_line(),
+       plane_mask = get_plane_mask(),
+       mem_x = screen_x >> 3,
+       max_width = sc.PC_W_Width >> 3,
+       max_height = sc.PC_W_Height;
+    UTINY   *plane1_ptr,
+      *plane2_ptr,
+      *plane3_ptr,
+      *plane4_ptr;
     SMALL_RECT   rect;
     BOOL        fMutexTaken = FALSE;
 
@@ -2025,8 +2025,8 @@ void nt_ega_hi_frozen_std(int offset, int screen_x, int screen_y,
     ** been closed, but still get a paint request.
     */
     if( sc.ScreenBufHandle == (HANDLE)NULL ){
-	assert0( NO, "VDM: rejected paint request due to NULL handle" );
-	return;
+   assert0( NO, "VDM: rejected paint request due to NULL handle" );
+   return;
     }
 
     /* If the image is completely outside the display area do nothing. */
@@ -2050,7 +2050,7 @@ void nt_ega_hi_frozen_std(int offset, int screen_x, int screen_y,
     /* memory involved here liable to be suddenly removed due to fs switch */
     try
     {
-    
+
         /* Build up the device independent bitmap. */
         local_height = height;
         plane1_ptr = GET_OFFSET(Plane1Offset);
@@ -2059,8 +2059,8 @@ void nt_ega_hi_frozen_std(int offset, int screen_x, int screen_y,
         plane4_ptr = GET_OFFSET(Plane4Offset);
         longs_per_scanline = LONGS_PER_SCANLINE(sc.ConsoleBufInfo.lpBitMapInfo);
         ref_dest_ptr = (ULONG *) sc.ConsoleBufInfo.lpBitMap +
-		       screen_y * longs_per_scanline +
-		       (screen_x >> 2);
+             screen_y * longs_per_scanline +
+             (screen_x >> 2);
 
         /* Grab the mutex. */
         GrabMutex(sc.ConsoleBufInfo.hMutex);
@@ -2069,70 +2069,70 @@ void nt_ega_hi_frozen_std(int offset, int screen_x, int screen_y,
 
         do
         {
-	    dest_ptr = ref_dest_ptr;
-	    local_width = width;
-	    mem_loc = offset;
-	    do
-	    {
+       dest_ptr = ref_dest_ptr;
+       local_width = width;
+       mem_loc = offset;
+       do
+       {
 
-	        /* Get 8 bytes of output data from 1 byte of plane 0 data. */
-	        if (plane_mask & 1)
-	        {
-		    l_ptr = &lut0_ptr[*(plane1_ptr + mem_loc) << 1];
-		    hi_res = *l_ptr++;
-		    lo_res = *l_ptr;
-	        }
-    
-	        /* Or in the output data from plane 1 */
-	        if (plane_mask & 2)
-	        {
-		    l_ptr = &lut1_ptr[*(plane2_ptr + mem_loc) << 1];
-		    hi_res |= *l_ptr++;
-		    lo_res |= *l_ptr;
-	        }
+           /* Get 8 bytes of output data from 1 byte of plane 0 data. */
+           if (plane_mask & 1)
+           {
+          l_ptr = &lut0_ptr[*(plane1_ptr + mem_loc) << 1];
+          hi_res = *l_ptr++;
+          lo_res = *l_ptr;
+           }
 
-	        /* Or in the output data from plane 2 */
-	        if (plane_mask & 4)
-	        {
-		    l_ptr = &lut2_ptr[*(plane3_ptr + mem_loc) << 1];
-		    hi_res |= *l_ptr++;
-		    lo_res |= *l_ptr;
-	        }
+           /* Or in the output data from plane 1 */
+           if (plane_mask & 2)
+           {
+          l_ptr = &lut1_ptr[*(plane2_ptr + mem_loc) << 1];
+          hi_res |= *l_ptr++;
+          lo_res |= *l_ptr;
+           }
 
-	        /* Or in the output data from plane 3 */
-	        if (plane_mask & 8)
-	        {
-		    l_ptr = &lut3_ptr[*(plane4_ptr + mem_loc) << 1];
-		    hi_res |= *l_ptr++;
-		    lo_res |= *l_ptr;
-	        }
+           /* Or in the output data from plane 2 */
+           if (plane_mask & 4)
+           {
+          l_ptr = &lut2_ptr[*(plane3_ptr + mem_loc) << 1];
+          hi_res |= *l_ptr++;
+          lo_res |= *l_ptr;
+           }
 
-	        /* Now store it in the bitmap. */
-	        *dest_ptr++ = hi_res;
-	        *dest_ptr++ = lo_res;
-	        mem_loc++;
-	    }
-	    while (--local_width);
+           /* Or in the output data from plane 3 */
+           if (plane_mask & 8)
+           {
+          l_ptr = &lut3_ptr[*(plane4_ptr + mem_loc) << 1];
+          hi_res |= *l_ptr++;
+          lo_res |= *l_ptr;
+           }
+
+           /* Now store it in the bitmap. */
+           *dest_ptr++ = hi_res;
+           *dest_ptr++ = lo_res;
+           mem_loc++;
+       }
+       while (--local_width);
             ref_dest_ptr += longs_per_scanline;
-	    offset += bpl;
+       offset += bpl;
         }
         while( --local_height );
-    
+
         /* Release the mutex. */
         RelMutex(sc.ConsoleBufInfo.hMutex);
 
         fMutexTaken = FALSE;
 
         /* Display the new image. */
-        rect.Left = screen_x;
-        rect.Top = screen_y;
+        rect.Left = (SHORT)screen_x;
+        rect.Top = (SHORT)screen_y;
         rect.Right = rect.Left + (width << 3) - 1;
         rect.Bottom = rect.Top + height - 1;
 
         if( sc.ScreenBufHandle )
-	    if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
-		    assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
-			     GetLastError() );
+       if (!InvalidateConsoleDIBits(sc.ScreenBufHandle, &rect))
+          assert1( NO, "VDM: InvalidateConsoleDIBits() error:%#x",
+              GetLastError() );
     } except(EXCEPTION_EXECUTE_HANDLER)
       {
           assert0(NO, "Handled fault in nt_ega_hi_frozen_std. fs switch?");

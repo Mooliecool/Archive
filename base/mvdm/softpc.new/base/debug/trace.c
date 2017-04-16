@@ -81,8 +81,10 @@ void get_lar()
 
 {
 #ifndef PROD
+#ifndef NEC_98
 	printf( "There's no such thing as the last_address_read anymore.\n" );
 	printf( "Perhaps you'd like the latches instead: %x\n", getVideolatches() );
+#endif // !NEC_98
 #endif
 }
 
@@ -221,7 +223,7 @@ dump386Registers IFN2(FILE *, fp, IUM32, dump_info)
 		getTF(), getIF(), getDF(), getOF());
 
 		fprintf(fp, "NT:%1d IOPL:%1d WP:%1d NE:%1d ET:%1d TS:%1d EM:%1d MP:%1d PE:%1d CPL:%1d PG:%1d VM:%1d\n",
-		getNT(), getIOPL(), getWP(), getNE(), getET(), getTS(), getEM(), getMP(), getPE(), 
+		getNT(), getIOPL(), getWP(), getNE(), getET(), getTS(), getEM(), getMP(), getPE(),
 		getCPL(), getPG(),
 		getVM());
 	}
@@ -232,7 +234,7 @@ dump386Registers IFN2(FILE *, fp, IUM32, dump_info)
 		"C:%1d P:%1d A:%1d Z:%1d S:%1d T:%1d I:%1d D:%1d O:%1d\nNT:%1d IOPL:%1d TS:%1d EM:%1d MP:%1d PE:%1d CPL:%1d PG:%1d VM:%1d\n",
 		getCF(), getPF(), getAF(), getZF(), getSF(),
 		getTF(), getIF(), getDF(), getOF(),
-		getNT(), getIOPL(), getTS(), getEM(), getMP(), getPE(), 
+		getNT(), getIOPL(), getTS(), getEM(), getMP(), getPE(),
 		getCPL(), getPG(),
 		getVM()
 		);
@@ -252,7 +254,7 @@ int  dump_info;
 
     if (disk_trace != trace_state)	/* change of state */
     {
-	if (disk_trace == 1) 
+	if (disk_trace == 1)
 	{
 	    /* start of disk tracing */
 
@@ -304,7 +306,7 @@ int  dump_info;
  	IU32	cntl287	= get_287_control_word();
  	IU32	sp287	= get_287_sp();
  	IU32	tag287	= get_287_tag_word();
- 
+
  	fprintf(trace_file, "NPX Status:%04x Control:%04x ST:%d 287Tag:%04x\n", stat287, cntl287, sp287, tag287);
  	fprintf(trace_file, "NPX Stack: ");
 
@@ -358,7 +360,7 @@ int  dump_info;
  	int	cntl287	= get_287_control_word();
  	int	sp287	= get_287_sp();
  	int	tag287	= get_287_tag_word();
- 
+
  	fprintf(trace_file, "NPX Status:%04x Control:%04x ST:%d 287Tag:%04x\n", stat287, cntl287, sp287, tag287);
  	fprintf(trace_file, "NPX Stack: ");
  	for (i=0;i<8;i++)
@@ -374,9 +376,9 @@ int  dump_info;
     if (dump_info & DUMP_REG)
     {
 	fprintf(trace_file,"AX:%04x BX:%04x CX:%04x DX:%04x SP:%04x BP:%04x SI:%04x DI:%04x ",
-		       getAX(), getBX(), getCX(), getDX(),  
+		       getAX(), getBX(), getCX(), getDX(),
 		       getSP(), getBP(), getSI(), getDI());
-	fprintf(trace_file,"DS:%04x ES:%04x SS:%04x CS:%04x IP:%04x\n", 
+	fprintf(trace_file,"DS:%04x ES:%04x SS:%04x CS:%04x IP:%04x\n",
 		getDS(), getES(), getSS(), getCS(), getIP());
     }
 
@@ -390,7 +392,7 @@ int  dump_info;
 	fprintf(trace_file,"Code dump: Last 16 words\n\n");
  	i = getIP() - 31;
    	fprintf(trace_file, "%04x:  ", i);
-	for(; i < getIP() - 15; i+=2)
+	for(; i < (sys_addr)(getIP() - 15); i+=2)
         {
 	    sas_loadw(effective_addr(getCS(), i), &temp);
 	    fprintf(trace_file, "  %04x", temp);
@@ -486,7 +488,7 @@ void trace_init()
     start = host_getenv("TRACE_START");
     if(start == NULL)
       trace_start = 0;
-    else 
+    else
       trace_start = atoi(start);
   }
 #endif /* !PROD || HUNTER */

@@ -1,7 +1,5 @@
 NAME softpc
 
-DESCRIPTION 'softpc -- A Win32 Application'
-
 STUB 'WINSTUB.EXE'
 EXETYPE WINDOWS
 

@@ -83,15 +83,16 @@ CHAR	AppFullPathName[MAX_PATH + 1];
 					     MAX_PATH + 1
 					     );
             if (dw != 0 &&      dw <= MAX_PATH) {
-		dw = GetFullPathNameOem(FullPathName,
+		dw = GetFullPathNameOemSys(FullPathName,
 					MAX_PATH + 1,
 					pfdata.StartDir,
-					&pFilePart
+					&pFilePart,
+                    TRUE
                                         );
             }
 
 	    if (dw != 0 && dw <= MAX_PATH)
-		dw = GetFileAttributesOem(pfdata.StartDir);
+		dw = GetFileAttributesOemSys(pfdata.StartDir, TRUE);
 	    else
                 dw = 0;
 
@@ -123,7 +124,8 @@ CHAR	AppFullPathName[MAX_PATH + 1];
         }
 
 	if (pfdata.WinTitle) {
-	    strcpy(FullPathName, pfdata.WinTitle);
+	    strncpy(FullPathName, pfdata.WinTitle,sizeof(FullPathName));
+        FullPathName[sizeof(FullPathName)-1] = '\0';
 	    dw = cmdExpandEnvironmentStrings(NULL,
 					     FullPathName,
 					     pfdata.WinTitle,
@@ -150,7 +152,8 @@ CHAR	AppFullPathName[MAX_PATH + 1];
             }
 
 	    if (*pfdata.CmdLine) {
-		strcpy(FullPathName, pfdata.CmdLine);
+		strncpy(FullPathName, pfdata.CmdLine,sizeof(FullPathName));
+        FullPathName[sizeof(FullPathName)-1] = '\0';
 		dw = cmdExpandEnvironmentStrings(NULL,
 						 FullPathName,
 						 pfdata.CmdLine,
@@ -205,7 +208,7 @@ CHAR	AppFullPathName[MAX_PATH + 1];
             goto CleanUpAndReturn;
         }
 
-	dw = GetFileAttributesOem(AppFullPathName);
+	dw = GetFileAttributesOemSys(AppFullPathName, TRUE);
         if (dw == (DWORD)(-1) || (dw & FILE_ATTRIBUTE_DIRECTORY)) {
             RcMessageBox(EG_PIF_STARTFILE_ERR, NULL, NULL,
                          RMB_ICON_BANG | RMB_ABORT
@@ -246,7 +249,8 @@ CHAR	AppFullPathName[MAX_PATH + 1];
     // Copy in pif command tail if original command tail is empty
     //
     if (!*pCmdLine && pfdata.CmdLine) {
-        strcpy(FullPathName, pfdata.CmdLine);
+        strncpy(FullPathName, pfdata.CmdLine, sizeof(FullPathName)-sizeof("\x0d\x0a"));
+        FullPathName[sizeof(FullPathName)-sizeof("\x0d\x0a")-1] = '\0';
         strcat(FullPathName, "\x0d\x0a");
         if (strlen(FullPathName) >= 128 - 13) {
 	    // too bad, the command line is too long

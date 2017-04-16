@@ -66,6 +66,11 @@ PUMBNODE    UMBList;
 
 HANDLE	    UMBSectionHandle;
 
+#if defined(NEC_98)
+extern  BOOL    HIRESO_MODE;
+extern  sys_addr host_check_rs232cex();
+#endif // NEC_98
+
 // This function allocate a address space from the UMB area.
 // Depends on the requester, this function changes the given address
 // space reservation/commitment and ownership states of the block.
@@ -856,6 +861,7 @@ InitUMBList(VOID)
     PUMBNODE		UMB, UMBNew;
     USHORT		Index;
 
+#ifndef NEC_98
     UNICODE_STRING WorkString;
     UCHAR KeyValueBuffer[KEY_VALUE_BUFFER_SIZE];
     HANDLE RegistryHandle;
@@ -863,7 +869,32 @@ InitUMBList(VOID)
     OBJECT_ATTRIBUTES ObjectAttributes;
     PCM_FULL_RESOURCE_DESCRIPTOR        ResourceDescriptor;
     PCM_PARTIAL_RESOURCE_DESCRIPTOR     PartialResourceDescriptor;
+#endif // !NEC_98
     PCM_ROM_BLOCK   BiosBlock;
+
+#if defined(NEC_98)
+//  DWORD    ROMN[] = { 0xE0000, 0x08000, 0xE8000, 0x18000 };
+    DWORD    ROMN[6];
+    DWORD    ROMH[] = { 0xF0000, 0x10000 };
+    DWORD    UmbBaseAddress;
+    DWORD    rs232cex_rom_addr;
+
+//  if( getenv("UMB") == NULL)
+//      return FALSE;
+#else  // !NEC_98
+
+#ifdef ARCX86
+    CM_ROM_BLOCK RomBlock[2];
+
+    if (UseEmulationROM) {
+        RomBlock[0].Address = EGA_ROM_START;
+        RomBlock[0].Size = 0x8000;
+        RomBlock[1].Address = BIOS_START;
+        RomBlock[1].Size = 0x100000 - BIOS_START;
+        Index = 2;
+        BiosBlock = RomBlock;
+    } else {
+#endif /* ARCX86 */
 
     RtlInitUnicodeString(
         &WorkString,
@@ -915,7 +946,7 @@ InitUMBList(VOID)
 
     if (!NT_SUCCESS(Status)) {
 #if DBG
-        DbgPrint("InitUMBList: Got nothing from Configuration Data\n");
+	DbgPrint("InitUMBList: Got nothing from Configuration Data\n");
 #endif
         NtClose(RegistryHandle);
 	return FALSE;
@@ -958,6 +989,10 @@ InitUMBList(VOID)
                           sizeof(CM_ROM_BLOCK));
 
     }
+#ifdef ARCX86
+    }
+#endif /* ARCX86 */
+#endif // !NEC_98
 
     InitializeObjectAttributes(&UMBObjAttr,
 			       NULL,
@@ -966,8 +1001,37 @@ InitUMBList(VOID)
 			       NULL
 			      );
 
+#if defined(NEC_98)
+    if(HIRESO_MODE){
+        UMBSecSize.LowPart = 0x1B000;
+        BiosBlock = ROMH;
+        UmbBaseAddress = 0xE5000;
+        Index = 1;
+    } else {
+        UMBSecSize.LowPart = 0x40000;
+        BiosBlock = ROMN;
+        rs232cex_rom_addr = host_check_rs232cex();
+        if(rs232cex_rom_addr) {
+            ROMN[0] = rs232cex_rom_addr;
+            ROMN[1] = 0x04000;
+            ROMN[2] = 0xE0000;
+            ROMN[3] = 0x08000;
+            ROMN[4] = 0xE8000;
+            ROMN[5] = 0x18000;
+            Index = 3;
+        } else {
+            ROMN[0] = 0xE0000;
+            ROMN[1] = 0x08000;
+            ROMN[2] = 0xE8000;
+            ROMN[3] = 0x18000;
+            Index = 2;
+        }
+        UmbBaseAddress = 0xC0000;
+    };
+#else  // !NEC_98
 
     UMBSecSize.LowPart = UMB_MAX_OFFSET;
+#endif // !NEC_98
     UMBSecSize.HighPart = 0;
 
     // create a section for the UMB area. Note that the section
@@ -985,7 +1049,7 @@ InitUMBList(VOID)
     if (!NT_SUCCESS(Status)) {
 #if DBG
 	DbgPrint("UMB:Unable to create UMB section, Status = %lx\n",
-                 Status);
+		 Status);
 #endif
 	return(FALSE);
     }
@@ -995,7 +1059,11 @@ InitUMBList(VOID)
 
     // This global variable points to the first node in the list
     UMBList = NULL;
+#if defined(NEC_98)
+    CurAddress = UmbBaseAddress;
+#else  // !NEC_98
     CurAddress = UMB_BASE_ADDRESS;
+#endif // !NEC_98
 
     while (Index > 0) {
 	// round down address to the previous page boundary
@@ -1050,12 +1118,17 @@ InitUMBList(VOID)
 
 	UMB = UMBNew;
     }
+#if defined(NEC_98)
+    if (CurAddress < 0x100000) {
+        UMBNew = CreateNewUMBNode(CurAddress, 0x100000 - CurAddress, UMB_OWNER_NONE );
+#else  // !NEC_98
     if (CurAddress < UMB_BASE_ADDRESS + UMB_MAX_OFFSET) {
 
 	UMBNew = CreateNewUMBNode(CurAddress,
 				  UMB_BASE_ADDRESS + UMB_MAX_OFFSET - CurAddress,
 				  UMB_OWNER_NONE
 				  );
+#endif // !NEC_98
 	if (UMBNew == NULL)
 	    return FALSE;
 	if (UMBList == NULL)
@@ -1063,6 +1136,7 @@ InitUMBList(VOID)
 	else
 	    UMB->Next = UMBNew;
     }
+    return TRUE;
 }
 
 // create a new node for the new UMB block
@@ -1079,6 +1153,15 @@ WORD	Owner
     PUMBNODE	UMBNew;
     LARGE_INTEGER SectionOffset;
     NTSTATUS	Status;
+#if defined(NEC_98)
+    DWORD       UmbBaseAddress;
+
+    if(HIRESO_MODE){
+        UmbBaseAddress = 0xE5000;
+    } else {
+        UmbBaseAddress = 0xC0000;
+    };
+#endif // NEC_98
 
     if ((UMBNew = (PUMBNODE) malloc(sizeof(UMBNODE))) != NULL) {
 	UMBNew->Base = BaseAddress;
@@ -1088,8 +1171,28 @@ WORD	Owner
 	UMBNew->Next = NULL;
 
 	if (Owner == UMB_OWNER_NONE) {
+#if defined(NEC_98)
+            Status = NtFreeVirtualMemory(
+                                NtCurrentProcess(),
+                                &BaseAddress,
+                                &Size,
+                                MEM_RELEASE);
+
+            if (!NT_SUCCESS(Status)) {
+#if DBG
+                DbgPrint("InitUMBList failed to FreeVirtualMemory, Status = %lx\n",Status);
+#endif
+                free(UMBNew);
+                UMBNew = NULL;
+                return UMBNew;
+            }
+#endif // NEC_98
 	    SectionOffset.HighPart = 0;
+#if defined(NEC_98)
+            SectionOffset.LowPart = BaseAddress - UmbBaseAddress;
+#else  // !NEC_98
 	    SectionOffset.LowPart = BaseAddress - UMB_BASE_ADDRESS;
+#endif // !NEC_98
 	    Status = NtMapViewOfSection(UMBSectionHandle,
 					NtCurrentProcess(),
 					(PVOID *)&BaseAddress,
@@ -1102,10 +1205,10 @@ WORD	Owner
 					UMB_PAGE_PROTECTION
 					);
 
-            if (!NT_SUCCESS(Status)) {
+	    if (!NT_SUCCESS(Status)) {
 #if DBG
 		DbgPrint("InitUMBList failed to map, Status = %lx\n",
-                         Status);
+			 Status);
 #endif
 		free(UMBNew);
 		UMBNew = NULL;

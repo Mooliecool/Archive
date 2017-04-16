@@ -20,6 +20,29 @@ Revision History:
 #pragma hdrstop
 #include "softpc.h"
 
+#define W386_VCD_ID 0xe
+
+VOID
+GetVxDApiHandler(
+    USHORT VxdId
+    )
+{
+    DECLARE_LocalVdmContext;
+
+    if (VxdId == W386_VCD_ID) {
+
+        setES(HIWORD(DosxVcdPmSvcCall));
+        setDI(LOWORD(DosxVcdPmSvcCall));
+
+    } else {
+
+        setES(0);
+        setDI(0);
+
+    }
+
+}
+
 
 LONG
     VcdPmGetPortArray(
@@ -54,8 +77,8 @@ Return Value:
     DWORD       dwPortNum;
     DWORD       cbPortName;
     DWORD       cbPortValue;
-    CHAR        szPortName[16];
-    CHAR        szPortValue[16];
+    CHAR        szPortName[64];
+    CHAR        szPortValue[64];
     LONG        iPort;
     LONG        iStatus;
 
@@ -120,6 +143,8 @@ Return Value:
     Depends on API.
 --*/
 {
+    DECLARE_LocalVdmContext;
+
     switch (getDX()) {
         case VCD_PM_Get_Version:
             setAX(0x30A);

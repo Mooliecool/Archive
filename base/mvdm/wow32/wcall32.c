@@ -211,44 +211,6 @@ ULONG APIENTRY W32GetExpWinVer(HANDLE hInst)
 }
 
 
-/*
- *  VOID W32InitDlg(HWND hDlg, LONG lParam);
- *
- *  this function is called by USER during dialog creation
- *  before any messages are sent.
- */
-
-DWORD    APIENTRY W32InitDlg(HWND hDlg, LONG lParam)
-{
-    register PWW pww;
-
-    if (!lParam) {
-        LOGDEBUG(2,("    Warning: W32InitDlg called with null lParam\n"));
-        return (DWORD)0;
-    }
-
-    // FindPWW was here
-
-    if (!(pww = (PWW) GetWindowLong(hDlg, GWL_WOWWORDS))) {
-        LOGDEBUG(0,("    W32InitDlg ERROR: cannot create alias for window %08lx\n", hDlg));
-        WOW32ASSERT(pww);
-        return (DWORD)0;
-    }
-
-    // the reason we need the hmap.vpfnDlgProc field is because some
-    // dialogs have both a window proc and a dialog proc.  this happens
-    // when the dialog template has a class in it and the app also
-    // passes a dialog proc to CreateDialogxxx()
-    //
-
-    SETWL(hDlg, GWL_WOWiClassAndflState,
-            MAKECLASSANDSTATE(WOWCLASS_DIALOG, WWSTATE_ICLASSISSET));
-    SETWL(hDlg, GWL_WOWvpfnDlgProc, ((PDLGDATA)lParam)->vpfnDlgProc);
-
-    return ((PDLGDATA)lParam)->dwUserInitParam;
-}
-
-
 WORD    APIENTRY W32GlobalAlloc16(UINT uFlags, DWORD dwBytes)
 {
     return HIWORD(GlobalAllocLock16((WORD)uFlags, dwBytes, NULL));
@@ -275,18 +237,11 @@ int     APIENTRY W32EditNextWord (LPSZ lpszEditText, int ichCurrentWord,
     if (vpstr16 = malloc16 (cbEditText)) {
         GETMISCPTR (vpstr16, lpstr16);
         if (lpstr16) {
-            lstrcpy (lpstr16, lpszEditText);
+            lstrcpyn (lpstr16, lpszEditText, cbEditText);
+            lpstr16[cbEditText-1] = '\0';
 
-            vpfn = dwProc16 & WNDPROC_MASK;
-
-            //
-            // if the actual selector had the high bit on then we turned off
-            // bit 2 of the selector (the LDT bit, which will always be on)
-            //
-
-            if (!(vpfn & WOWCLASS_VIRTUAL_NOT_BIT31)) {
-                vpfn |= (WNDPROC_WOW | WOWCLASS_VIRTUAL_NOT_BIT31);
-            }
+            // take out the marker bits and fix the RPL bits
+            UnMarkWOWProc (dwProc16, vpfn);
 
             Parm16.WordBreakProc.action = GETINT16(action);
             Parm16.WordBreakProc.cbEditText = GETINT16(cbEditText);
@@ -337,6 +292,16 @@ if (((dwMajor == 3) && (dwMinor == 1)) || (dwMajor == 1)) {
     dwMajor = 0x3;
     dwMinor = 0xA;
 }
+#ifdef FE_SB
+    if (GetSystemDefaultLangID() == 0x411 &&
+        CURRENTPTD()->dwWOWCompatFlagsFE & WOWCF_FE_BCW45J_COMMDLG &&
+        dwMajor >= 4) {
+        // When application display win3.x style DialogBox,
+        // System requires return value of version 3.10
+        dwMajor = 0x3;
+        dwMinor = 0xA;
+    }
+#endif // FE_SB
 
 
     /*

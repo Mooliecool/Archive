@@ -254,7 +254,7 @@ BOOL W32InitHookState(HANDLE hMod)
                                                  sizeof(vaHookStateData[0]);
 
     for (i = 0; i < vaHookPPData.cHookProcs; i++) {
-         vaHookStateData[i].iIndex = i;
+         vaHookStateData[i].iIndex = (BYTE)i;
          vaHookStateData[i].hMod = hMod;
     }
 
@@ -472,9 +472,9 @@ LONG APIENTRY WU32StdHookProc(INT nCode, LONG wParam, LONG lParam, INT iFunc)
 
     if (CURRENTPTD()->dwFlags & TDF_IGNOREINPUT) {
         LOGDEBUG(LOG_ALWAYS,("WU32StdHookProc Ignoring Input\n"));
-        WOW32ASSERTMSG(!gfIgnoreInputAssertGiven,
-                       "WCD32CommonDialogProc: TDF_IGNOREINPUT hack was used, shouldn't be, "
-                       "please email DaveHart with repro instructions.  Hit 'g' to ignore this "
+        WOW32ASSERTMSG(gfIgnoreInputAssertGiven,
+                       "WU32StdHookProc: TDF_IGNOREINPUT hack was used, shouldn't be, "
+                       "please email DOSWOW with repro instructions.  Hit 'g' to ignore this "
                        "and suppress this assertion from now on.\n");
         gfIgnoreInputAssertGiven = TRUE;
         return FALSE;
@@ -579,6 +579,13 @@ LONG ThunkCallWndProcHook(INT nCode, LONG wParam, LPCWPSTRUCT lpCwpStruct,
 
     fMessageNeedsThunking =  (lpCwpStruct->message < 0x400) &&
                                   (aw32Msg[lpCwpStruct->message].lpfnM32 != WM32NoThunking);
+    // This call to stackalloc16() needs to occur before the call to the message
+    // thunking function call below ((wm32mpex.lpfnM32)(&wm32mpex)) because the
+    // message thunks for some messages may also call stackalloc16(). This will 
+    // ensure proper nesting of stackalloc16() & stackfree16() calls.
+    // Be sure allocation size matches stackfree16() size below
+    vp = stackalloc16(sizeof(CWPSTRUCT16));
+
     if (fMessageNeedsThunking) {
 
         LOGDEBUG(3,("%04X (%s)\n", CURRENTPTD()->htask16, (aw32Msg[lpCwpStruct->message].lpszW32)));
@@ -590,24 +597,33 @@ LONG ThunkCallWndProcHook(INT nCode, LONG wParam, LPCWPSTRUCT lpCwpStruct,
         wm32mpex.lParam = lpCwpStruct->lParam;
         wm32mpex.lpfnM32 = aw32Msg[wm32mpex.uMsg].lpfnM32;
         wm32mpex.pww = (PWW)NULL;
+        wm32mpex.fFree = TRUE;
+
+        // note: this may call stackalloc16() and/or callback into 16-bit code
         if (!(wm32mpex.lpfnM32)(&wm32mpex)) {
             LOGDEBUG(LOG_ALWAYS,("ThunkCallWndProcHook: cannot thunk 32-bit message %04x\n",
                     lpCwpStruct->message));
         }
     }
 
-    vp = stackalloc16(sizeof(CWPSTRUCT16));
-
+    // don't call GETMISCPTR(vp..) until after returning from the thunk function
+    // above.  If the thunk function calls back into 16-bit code, the flat ptr
+    // for vp could become invalid.
     GETMISCPTR(vp, pCwpStruct16);
 
-    STOREWORD(pCwpStruct16->hwnd, GETHWND16(lpCwpStruct->hwnd));
-    STOREWORD(pCwpStruct16->message, wm32mpex.Parm16.WndProc.wMsg  );
-    STOREWORD(pCwpStruct16->wParam,  wm32mpex.Parm16.WndProc.wParam);
-    STORELONG(pCwpStruct16->lParam,  wm32mpex.Parm16.WndProc.lParam);
+    if(pCwpStruct16) {
+        STOREWORD(pCwpStruct16->hwnd, GETHWND16(lpCwpStruct->hwnd));
+        STOREWORD(pCwpStruct16->message, wm32mpex.Parm16.WndProc.wMsg  );
+        STOREWORD(pCwpStruct16->wParam,  wm32mpex.Parm16.WndProc.wParam);
+        STORELONG(pCwpStruct16->lParam,  wm32mpex.Parm16.WndProc.lParam);
 
-    FLUSHVDMPTR(vp, sizeof(CWPSTRUCT16), pCwpStruct16);
-    FREEVDMPTR(pCwpStruct16);
-
+        FLUSHVDMPTR(vp, sizeof(CWPSTRUCT16), pCwpStruct16);
+        FREEVDMPTR(pCwpStruct16);
+    }
+    else {
+        WOW32WARNMSG((FALSE),"WOW::ThunkCallWndProcHook:can't get flat pointer to struct!\n");
+    }
+ 
     Parm16.HookProc.nCode = (SHORT)nCode;
     Parm16.HookProc.wParam = (SHORT)wParam;
     Parm16.HookProc.lParam = vp;
@@ -626,10 +642,19 @@ LONG ThunkCallWndProcHook(INT nCode, LONG wParam, LPCWPSTRUCT lpCwpStruct,
     if (fMessageNeedsThunking) {
 
         wm32mpex.fThunk = UNTHUNKMSG;
+
+        // Note: If the thunk of this message called stackalloc16() this unthunk
+        //       call should call stackfree16()
         (wm32mpex.lpfnM32)(&wm32mpex);
     }
 
-    stackfree16(vp);
+    if(vp) {
+
+        // this stackfree16() call must come after the above message unthunk
+        // call to give the unthunk the opportunity to call stackfree16() also.
+        // this will preserve proper nesting of stackalloc16 & stackfree16 calls
+        stackfree16(vp, sizeof(CWPSTRUCT16));
+    }
 
     return (LONG)FALSE;   // return value doesn't matter
 }
@@ -667,6 +692,8 @@ LONG ThunkCbtHook(INT nCode, LONG wParam, LONG lParam,
             // wParam = HWND, lParam = LPRECT
 
             Parm16.HookProc.wParam = GETHWND16(wParam);
+
+            // be sure allocation size matches stackfree16() size below
             vp = stackalloc16(sizeof(RECT16));
 
             PUTRECT16(vp, (LPRECT)lParam);
@@ -690,6 +717,12 @@ LONG ThunkCbtHook(INT nCode, LONG wParam, LONG lParam,
 
         case HCBT_CREATEWND:
 
+            // This stackalloc16() call needs to occur before the WM32Create()
+            // call below to ensure proper nesting of stackalloc16 & stackfree16
+            // calls.
+            // Be sure allocation size matches stackfree16() size(s) below
+            vp = stackalloc16(sizeof(CBT_CREATEWND16));
+
             // wParam = HWND, lParam = LPCBT_CREATEWND
 
             wm32mpex.fThunk = THUNKMSG;
@@ -700,13 +733,14 @@ LONG ThunkCbtHook(INT nCode, LONG wParam, LONG lParam,
             wm32mpex.pww = (PWW)GetWindowLong((HWND)wParam, GWL_WOWWORDS);
             /*
              * WM32Create now requires that pww be initialized
+             * WM32Create calls stackalloc16()!!
              */
-            if (!wm32mpex.pww || !WM32Create(&wm32mpex))
+            if (!wm32mpex.pww || !WM32Create(&wm32mpex)) {
+                stackfree16(vp, sizeof(CBT_CREATEWND16));
                 return FALSE;
+            }
             vpcs16 = wm32mpex.Parm16.WndProc.lParam;
             lReturn = wm32mpex.lReturn;
-
-            vp = stackalloc16(sizeof(CBT_CREATEWND16));
 
             GETMISCPTR(vp, pCbtCWnd16);
             STOREDWORD(pCbtCWnd16->vpcs, vpcs16);
@@ -731,6 +765,7 @@ LONG ThunkCbtHook(INT nCode, LONG wParam, LONG lParam,
 
             // wParam = HWND, lParam = LPCBTACTIVATESTRUCT
 
+            // be sure allocation size matches stackfree16() size below
             vp = stackalloc16(sizeof(CBTACTIVATESTRUCT16));
 
             GETMISCPTR(vp, pCbtAStruct16);
@@ -747,6 +782,7 @@ LONG ThunkCbtHook(INT nCode, LONG wParam, LONG lParam,
 
             // wParam = mouse message, lParam = LPMOUSEHOOKSTRUCT
 
+            // be sure allocation size matches stackfree16() size below
             vp = stackalloc16(sizeof(MOUSEHOOKSTRUCT16));
 
             GETMISCPTR(vp, pMHStruct16);
@@ -789,7 +825,7 @@ LONG ThunkCbtHook(INT nCode, LONG wParam, LONG lParam,
         case HCBT_MOVESIZE:
 
             GETRECT16(vp, (LPRECT)lParam);
-            stackfree16(vp);
+            stackfree16(vp, sizeof(RECT16));
             break;
 
         case HCBT_CREATEWND:
@@ -799,9 +835,10 @@ LONG ThunkCbtHook(INT nCode, LONG wParam, LONG lParam,
             FREEVDMPTR(pCbtCWnd16);
             wm32mpex.fThunk = UNTHUNKMSG;
             wm32mpex.lReturn = lReturn;
-            WM32Create(&wm32mpex);
+            WM32Create(&wm32mpex);  // this calls stackfree16()!!!
             lReturn = wm32mpex.lReturn;
-            stackfree16(vp);
+            // this must be after call to WM32Create()
+            stackfree16(vp, sizeof(CBT_CREATEWND16));
             break;
 
 
@@ -810,7 +847,7 @@ LONG ThunkCbtHook(INT nCode, LONG wParam, LONG lParam,
             GETMISCPTR(vp, pCbtAStruct16);
             GETCBTACTIVATESTRUCT16(pCbtAStruct16, (LPCBTACTIVATESTRUCT)lParam);
             FREEVDMPTR(pCbtAStruct16);
-            stackfree16(vp);
+            stackfree16(vp, sizeof(CBTACTIVATESTRUCT16));
             break;
 
         case HCBT_CLICKSKIPPED:
@@ -818,7 +855,7 @@ LONG ThunkCbtHook(INT nCode, LONG wParam, LONG lParam,
             GETMISCPTR(vp, pMHStruct16);
             GETMOUSEHOOKSTRUCT16(pMHStruct16, (LPMOUSEHOOKSTRUCT)lParam);
             FREEVDMPTR(pMHStruct16);
-            stackfree16(vp);
+            stackfree16(vp, sizeof(MOUSEHOOKSTRUCT16));
             break;
 
         // case HCBT_MINMAX:
@@ -1047,7 +1084,7 @@ LONG ThunkMsgFilterHook(INT nCode, LONG wParam, LPMSG lpMsg,
         mpex.Parm16.WndProc.wMsg = pMsg16->message;
         mpex.Parm16.WndProc.wParam = pMsg16->wParam;
         mpex.Parm16.WndProc.lParam = pMsg16->lParam,
-        mpex.iMsgThunkClass = WOWCLASS_UNKNOWN;
+        mpex.iMsgThunkClass = WOWCLASS_WIN16;
         hwnd32 = ThunkMsg16(&mpex);
 
         //
@@ -1122,8 +1159,9 @@ LONG ThunkJournalHook(INT nCode, LONG wParam, LPEVENTMSG lpEventMsg,
     PARM16 Parm16;
 
     if ( lpEventMsg ) {
-        vp = stackalloc16(sizeof(EVENTMSG16));
 
+        // be sure allocation size matches stackfree16() size below
+        vp = stackalloc16(sizeof(EVENTMSG16));
 
         // The WIN32 EVENTMSG structure has an additional field 'hwnd', which
         // is not there in WIN31 EVENTMSG structure. This field can be ignored
@@ -1155,6 +1193,23 @@ LONG ThunkJournalHook(INT nCode, LONG wParam, LPEVENTMSG lpEventMsg,
 
         if (lpHSData->iHook == WH_JOURNALPLAYBACK) {
             GetEventMessage16(pEventMsg16, lpEventMsg);
+#ifdef FE_SB
+            switch (lpEventMsg->message) {
+                case WM_CHAR:
+                case WM_CHARTOITEM:
+                case WM_DEADCHAR:
+                case WM_KEYDOWN:
+                case WM_KEYUP:
+                case WM_MENUCHAR:
+                case WM_SYSCHAR:
+                case WM_SYSDEADCHAR:
+                case WM_SYSKEYDOWN:
+                case WM_SYSKEYUP:
+                case WM_VKEYTOITEM:
+                    // only virtual key, not use scan code
+                    lpEventMsg->paramL &= 0x0ff;
+            }
+#endif // FE_SB
 
 #ifdef  DEBUG
             if (MessageNeedsThunking(lpEventMsg->message)) {
@@ -1175,7 +1230,9 @@ LONG ThunkJournalHook(INT nCode, LONG wParam, LPEVENTMSG lpEventMsg,
         }
 
         FREEVDMPTR(pEventMsg16);
-        stackfree16(vp);
+        if(vp) {
+            stackfree16(vp, sizeof(EVENTMSG16));
+        }
     }
 
     return lReturn;
@@ -1228,6 +1285,7 @@ LONG ThunkMouseHook(INT nCode, LONG wParam, LPMOUSEHOOKSTRUCT lpMHStruct,
     PMOUSEHOOKSTRUCT16 pMHStruct16;
     PARM16 Parm16;
 
+    // be sure allocation size matches stackfree16() size below
     vp = stackalloc16(sizeof(MOUSEHOOKSTRUCT16));
 
     GETMISCPTR(vp, pMHStruct16);
@@ -1245,7 +1303,9 @@ LONG ThunkMouseHook(INT nCode, LONG wParam, LPMOUSEHOOKSTRUCT lpMHStruct,
     GETMISCPTR(vp, pMHStruct16);
     GETMOUSEHOOKSTRUCT16(pMHStruct16, lpMHStruct);
     FREEVDMPTR(pMHStruct16);
-    stackfree16(vp);
+    if(vp) {
+       stackfree16(vp, sizeof(MOUSEHOOKSTRUCT16));
+    }
     return (LONG)(BOOL)LOWORD(lReturn);
 }
 
@@ -1444,7 +1504,7 @@ LONG ThunkCallWndProcHook16(INT nCode, LONG wParam, VPVOID  vpCwpStruct,
     mpex.Parm16.WndProc.wMsg = pCwpStruct16->message;
     mpex.Parm16.WndProc.wParam = pCwpStruct16->wParam;
     mpex.Parm16.WndProc.lParam = pCwpStruct16->lParam,
-    mpex.iMsgThunkClass = WOWCLASS_UNKNOWN;
+    mpex.iMsgThunkClass = WOWCLASS_WIN16;
 
     mpex.hwnd = ThunkMsg16(&mpex);
     // memory may have moved
@@ -1484,196 +1544,208 @@ LONG ThunkCbtHook16(INT nCode, LONG wParam, VPVOID lParam,
     LPARAM lParamNew;
     MSGPARAMEX mpex;
 
-    PMOUSEHOOKSTRUCT16 pMHStruct16;
+    PMOUSEHOOKSTRUCT16   pMHStruct16;
     PCBTACTIVATESTRUCT16 pCbtAStruct16;
     PCBT_CREATEWND16     pCbtCWnd16;
+    PRECT16              pRect16;
 
     MOUSEHOOKSTRUCT      MHStruct;
     RECT                 Rect;
     CBTACTIVATESTRUCT    CbtAStruct;
     CBT_CREATEWND        CbtCWnd;
 
-    // SudeepB 28-May-1996
+    // SudeepB 28-May-1996 updated DaveHart 16-July-96 to fix limit assertions.
     //
     // Some apps like SureTrack project management package are passing
-    // corrupted values in lParam. GETMISCPTR returns 0 for such an lParam.
+    // corrupted values in lParam. GETVDMPTR returns 0 for such an lParam.
     // Using this 0 on X86 causes corruption of IVT and on RISC causes an
     // AV in wow32 as zero is not a valid linear address.  Such apps get
     // away from such criminal acts on win3.1/Win95 as no thunking is needed
-    // there. The below check separates out such cases and handles them in
-    // the simplest possible way without any thunking.
+    // there.  So all the thunking below explicitly checks for GETVDMPTR
+    // returning 0 and in that case just leaves lParam unthunked.
 
-    GETMISCPTR(lParam, pCbtCWnd16);
-    if (!pCbtCWnd16 ) {
-        lReturn = CallNextHookEx(lpHSData->hHook, nCode,
-                                 wParam, (LPARAM)lParam);
-        return (LONG)(BOOL)LOWORD(lReturn);
-    }
-
-    wParamNew = wParam;
-    lParamNew = lParam;
+    wParamNew = (WPARAM) wParam;
+    lParamNew = (LPARAM) lParam;
 
     switch(nCode) {
-        case HCBT_MOVESIZE:
-            // wParam = HWND, lParam = LPRECT
 
-            wParamNew = (WPARAM)HWND32(wParam);
-            lParamNew = (LPARAM)&Rect;
+        //
+        // These don't have a pointer in lParam.
+        //
 
-            GETRECT16(lParam, &Rect);
+        case HCBT_SETFOCUS:           // wParam = HWND, lParam = HWND
+            // fall through to set wParamNew & lParamNew,
+            // this counts on HWND32 zero-extending.
 
+        case HCBT_MINMAX:             // wParam = HWND, lParam = SW_*  --- a command
+            // fall through to set wParamNew & lParamNew.
+            // this counts on HWND32 zero-extending.
+
+        case HCBT_DESTROYWND:         // wParam = HWND, lParam = 0
+            // fall through to set wParamNew & lParamNew.
+            // this counts on HWND32 zero-extending.
+            WOW32ASSERTMSG((HWND32(0x1234) == (HWND)0x1234),
+                "Code depending on HWND32 zero-extending needs revision.\n");
+
+        case HCBT_QS:                 // wParam = 0, lParam = 0
+        case HCBT_KEYSKIPPED:         // wParam = VK_ keycode, lParam = WM_KEYUP/DOWN lParam
+        case HCBT_SYSCOMMAND:         // wParam = SC_ syscomand, lParam = DWORD(x,y) if mouse
+            // lParamNew and wParamNew are initialized above with no thunking.
+            break;
+
+        //
+        // These use lParam as a pointer.
+        //
+
+        case HCBT_MOVESIZE:           // wParam = HWND, lParam = LPRECT
+
+            #if 0    // HWND32 is a no-op, wParamNew already initialized.
+                wParamNew = (WPARAM) HWND32(wParam);
+            #endif
+
+            GETVDMPTR(lParam, sizeof(*pRect16), pRect16);
+            if (pRect16) {
+                GETRECT16(lParam, &Rect);
+                lParamNew = (LPARAM)&Rect;
+                FREEVDMPTR(pRect16);
+            }
             break;
 
 
-        case HCBT_MINMAX:
-            // wParam = HWND, lParam = SW_*  --- a command
+        case HCBT_CREATEWND:          // wParam = HWND, lParam = LPCBT_CREATEWND
 
-            wParamNew = (WPARAM)HWND32(wParam);
-            break;
+            #if 0    // HWND32 is a no-op, wParamNew already initialized.
+                wParamNew = (WPARAM) HWND32(wParam);
+            #endif
 
-        case HCBT_QS:
+            GETVDMPTR(lParam, sizeof(*pCbtCWnd16), pCbtCWnd16);
+            if (pCbtCWnd16) {
+                lParamNew = (LPARAM)&CbtCWnd;
 
-            break;
+                mpex.Parm16.WndProc.hwnd = LOWORD(wParam);
+                mpex.Parm16.WndProc.wMsg = WM_CREATE;
+                mpex.Parm16.WndProc.wParam = 0;
+                mpex.Parm16.WndProc.lParam = FETCHDWORD(pCbtCWnd16->vpcs);
+                mpex.iMsgThunkClass = 0;
 
-        case HCBT_CREATEWND:
-            // wParam = HWND, lParam = LPCBT_CREATEWND
+                ThunkMsg16(&mpex);
 
-            lParamNew = (LPARAM)&CbtCWnd;
+                //
+                // Memory movement can occur on the 16-bit side.
+                //
 
-            mpex.Parm16.WndProc.hwnd = LOWORD(wParam);
-            mpex.Parm16.WndProc.wMsg = WM_CREATE;
-            mpex.Parm16.WndProc.wParam = 0;
-            mpex.Parm16.WndProc.lParam = FETCHDWORD(pCbtCWnd16->vpcs);
-            mpex.iMsgThunkClass = 0;
+                FREEVDMPTR(pCbtCWnd16);
+                GETVDMPTR(lParam, sizeof(*pCbtCWnd16), pCbtCWnd16);
 
-            ThunkMsg16(&mpex);
-
-            //
-            // Memory movement can occur on the 16-bit side.
-            //
-
-            FREEVDMPTR(pCbtCWnd16);
-            GETMISCPTR(lParam, pCbtCWnd16);
-
-            (LONG)CbtCWnd.lpcs = mpex.lParam;
-
-            wParamNew = (WPARAM)HWND32(wParam);
-            CbtCWnd.hwndInsertAfter =
+                (LONG)CbtCWnd.lpcs = mpex.lParam;
+                CbtCWnd.hwndInsertAfter =
                                HWNDIA32(FETCHWORD(pCbtCWnd16->hwndInsertAfter));
 
-            FREEVDMPTR(pCbtCWnd16);
+                FREEVDMPTR(pCbtCWnd16);
+            }
+            break;
+
+        case HCBT_ACTIVATE:           // wParam = HWND, lParam = LPCBTACTIVATESTRUCT
+
+            #if 0    // HWND32 is a no-op, wParamNew already initialized.
+                wParamNew = (WPARAM) HWND32(wParam);
+            #endif
+
+            GETVDMPTR(lParam, sizeof(*pCbtAStruct16), pCbtAStruct16);
+            if (pCbtAStruct16) {
+                lParamNew = (LPARAM)&CbtAStruct;
+                GETCBTACTIVATESTRUCT16(pCbtAStruct16, &CbtAStruct);
+                FREEVDMPTR(pCbtAStruct16);
+            }
 
             break;
 
-        case HCBT_DESTROYWND:
+        case HCBT_CLICKSKIPPED:       // wParam = mouse message, lParam = LPMOUSEHOOKSTRUCT
 
-            // wParam = HWND, lParam = 0
-
-            wParamNew = (WPARAM)HWND32(wParam);
-            break;
-
-        case HCBT_ACTIVATE:
-
-            // wParam = HWND, lParam = LPCBTACTIVATESTRUCT
-
-            wParamNew = (WPARAM)HWND32(wParam);
-            lParamNew = (LPARAM)&CbtAStruct;
-
-            GETMISCPTR(lParam, pCbtAStruct16);
-            GETCBTACTIVATESTRUCT16(pCbtAStruct16, &CbtAStruct);
-            FREEVDMPTR(pCbtAStruct16);
-
-            break;
-
-        case HCBT_CLICKSKIPPED:
-
-            // wParam = mouse message, lParam = LPMOUSEHOOKSTRUCT
-
-            lParamNew = (LPARAM)&MHStruct;
-
-            GETMISCPTR(lParam, pMHStruct16);
-            GETMOUSEHOOKSTRUCT16(pMHStruct16, &MHStruct);
-            FREEVDMPTR(pMHStruct16);
-            break;
-
-        case HCBT_KEYSKIPPED:
-
-            // wParam, lParam   -- keyup/down message params
-
-            break;
-
-        case HCBT_SYSCOMMAND:
-
-            // wParam = SC_ syscomand, lParam = DWORD(x,y)
-
-            break;
-
-        case HCBT_SETFOCUS:
-
-            // wParam = HWND, lParam = HWND
-
-            wParamNew = (WPARAM)HWND32(wParam);
-            lParamNew = (WPARAM)HWND32(lParam);
+            GETVDMPTR(lParam, sizeof(*pMHStruct16), pMHStruct16);
+            if (pMHStruct16) {
+                lParamNew = (LPARAM)&MHStruct;
+                GETMOUSEHOOKSTRUCT16(pMHStruct16, &MHStruct);
+                FREEVDMPTR(pMHStruct16);
+            }
             break;
 
         default:
-            LOGDEBUG(LOG_ALWAYS, ("ThunkCbtHook: Unknown HCBT_ code\n"));
+            LOGDEBUG(LOG_ALWAYS, ("ThunkCbtHook: Unknown HCBT_ code 0x%x\n", nCode));
             break;
     }
 
+    //
+    // Call the hook, memory movement can occur.
+    //
 
-    lReturn = CallNextHookEx(lpHSData->hHook, nCode,
-                                                 wParamNew, (LPARAM)lParamNew);
+    lReturn = CallNextHookEx(lpHSData->hHook, nCode, wParamNew, lParamNew);
+
 
     switch(nCode) {
-        case HCBT_MOVESIZE:
+
+        //
+        // These don't have a pointer in lParam.
+        //
+
+        // case HCBT_SETFOCUS:           // wParam = HWND, lParam = HWND
+        // case HCBT_MINMAX:             // wParam = HWND, lParam = SW_*  --- a command
+        // case HCBT_DESTROYWND:         // wParam = HWND, lParam = 0
+        // case HCBT_QS:                 // wParam = 0, lParam = 0
+        // case HCBT_KEYSKIPPED:         // wParam = VK_ keycode, lParam = WM_KEYUP/DOWN lParam
+        // case HCBT_SYSCOMMAND:         // wParam = SC_ syscomand, lParam = DWORD(x,y) if mouse
+        //     break;
+
+        //
+        // These use lParam as a pointer.
+        //
+
+        case HCBT_MOVESIZE:           // wParam = HWND, lParam = LPRECT
 
             PUTRECT16(lParam, (LPRECT)lParamNew);
             break;
 
-        case HCBT_CREATEWND:
-            GETMISCPTR(lParam, pCbtCWnd16);
-            mpex.lParam = (LONG)CbtCWnd.lpcs;
-            mpex.lReturn = lReturn;
-            WOW32ASSERT(MSG16NEEDSTHUNKING(&mpex));
-            (mpex.lpfnUnThunk16)(&mpex);
-            lReturn = mpex.lReturn;
+        case HCBT_CREATEWND:          // wParam = HWND, lParam = LPCBT_CREATEWND
 
-            STOREWORD(pCbtCWnd16->hwndInsertAfter,
-                      GETHWNDIA16(((LPCBT_CREATEWND)lParamNew)->
-                                                             hwndInsertAfter));
-            FLUSHVDMPTR((VPVOID)lParam, sizeof(CBT_CREATEWND16), pCbtCWnd16);
-            FREEVDMPTR(pCbtCWnd16);
+            GETVDMPTR(lParam, sizeof(*pCbtCWnd16), pCbtCWnd16);
+            if (pCbtCWnd16) {
+                mpex.lParam = (LONG)CbtCWnd.lpcs;
+                mpex.lReturn = lReturn;
+                WOW32ASSERT(MSG16NEEDSTHUNKING(&mpex));
+                (mpex.lpfnUnThunk16)(&mpex);
+                lReturn = mpex.lReturn;
+
+                STOREWORD(pCbtCWnd16->hwndInsertAfter,
+                          GETHWNDIA16(((LPCBT_CREATEWND)lParamNew)->
+                                                         hwndInsertAfter));
+                FLUSHVDMPTR((VPVOID)lParam, sizeof(CBT_CREATEWND16), pCbtCWnd16);
+                FREEVDMPTR(pCbtCWnd16);
+            }
             break;
 
 
-        case HCBT_ACTIVATE:
+        case HCBT_ACTIVATE:           // wParam = HWND, lParam = LPCBTACTIVATESTRUCT
 
-            GETMISCPTR(lParam, pCbtAStruct16);
-            PUTCBTACTIVATESTRUCT16(pCbtAStruct16, (LPCBTACTIVATESTRUCT)lParamNew);
-            FLUSHVDMPTR((VPVOID)lParam, sizeof(CBTACTIVATESTRUCT16),
-                                                                 pCbtAStruct16);
-            FREEVDMPTR(pCbtAStruct16);
+            GETVDMPTR(lParam, sizeof(*pCbtAStruct16), pCbtAStruct16);
+            if (pCbtAStruct16) {
+                PUTCBTACTIVATESTRUCT16(pCbtAStruct16, (LPCBTACTIVATESTRUCT)lParamNew);
+                FLUSHVDMPTR((VPVOID)lParam, sizeof(CBTACTIVATESTRUCT16),
+                                    pCbtAStruct16);
+                FREEVDMPTR(pCbtAStruct16);
+            }
             break;
 
-        case HCBT_CLICKSKIPPED:
+        case HCBT_CLICKSKIPPED:       // wParam = mouse message, lParam = LPMOUSEHOOKSTRUCT
 
-            GETMISCPTR(lParam, pMHStruct16);
-            PUTMOUSEHOOKSTRUCT16(pMHStruct16, (LPMOUSEHOOKSTRUCT)lParamNew);
-            FLUSHVDMPTR((VPVOID)lParam, sizeof(MOUSEHOOKSTRUCT16),
-                                                                 pMHStruct16);
-            FREEVDMPTR(pMHStruct16);
+            GETVDMPTR(lParam, sizeof(*pMHStruct16), pMHStruct16);
+            if (pMHStruct16) {
+                PUTMOUSEHOOKSTRUCT16(pMHStruct16, (LPMOUSEHOOKSTRUCT)lParamNew);
+                FLUSHVDMPTR((VPVOID)lParam, sizeof(MOUSEHOOKSTRUCT16),
+                                    pMHStruct16);
+                FREEVDMPTR(pMHStruct16);
+            }
             break;
 
-        // case HCBT_MINMAX:
-        // case HCBT_QS:
-        // case HCBT_DESTROYWND:
-        // case HCBT_KEYSKIPPED:
-        // case HCBT_SYSCOMMAND:
-        // case HCBT_SETFOCUS:
-
-        default:
-            break;
     }
 
     // the value in LOWORD is the valid return value
@@ -1729,6 +1801,7 @@ LONG ThunkMsgFilterHook16(INT nCode, LONG wParam, VPVOID vpMsg,
 
     fThunkDDEmsg = FALSE;
 
+    
     mpex.Parm16.WndProc.hwnd = pMsg16->hwnd;
     mpex.Parm16.WndProc.wMsg = pMsg16->message;
     mpex.Parm16.WndProc.wParam = pMsg16->wParam;
@@ -1764,8 +1837,9 @@ LONG ThunkMsgFilterHook16(INT nCode, LONG wParam, VPVOID vpMsg,
         mpex.uMsg   = Msg.message;
         mpex.uParam = Msg.wParam;
         mpex.lParam = Msg.lParam;
+        FREEVDMPTR(pMsg16);  // invalidate 16-bit ptr: memory may move
         (mpex.lpfnUnThunk16)(&mpex);
-	GETMISCPTR(vpMsg, pMsg16);
+        GETMISCPTR(vpMsg, pMsg16); // refresh 16-bit ptr
     }
 
     STORELONG(pMsg16->time, Msg.time);

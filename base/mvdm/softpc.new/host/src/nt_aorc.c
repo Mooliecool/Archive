@@ -631,11 +631,11 @@ void setEFLAGS(val)  {(*(Cpu.SetEFLAGS))(val); }
 #undef setFLAGS
 void setFLAGS(val) {(*(Cpu.SetEFLAGS))(val); }
 #undef setSTATUS
-void setSTATUS(val)  {(*(Cpu.SetSTATUS))(val); }
+void setSTATUS(val)  {(*(Cpu.SetSTATUS))((IU16)val); }
 #undef setIOPL
-void setIOPL(val)  {(*(Cpu.SetIOPL))(val); }
+void setIOPL(val)  {(*(Cpu.SetIOPL))((IU8)val); }
 #undef setMSW
-void setMSW(val)  {(*(Cpu.SetMSW))(val); }
+void setMSW(val)  {(*(Cpu.SetMSW))((IU16)val); }
 #undef setCR0
 void setCR0(val)  {(*(Cpu.SetCR0))(val); }
 #undef setCR2
@@ -679,9 +679,9 @@ void setTS(IU16 val)  {(*(Cpu.SetTS))(val); }
 #undef setPG
 void setPG(IU16 val)  {(*(Cpu.SetPG))(val); }
 #undef setLDT_SELECTOR
-void setLDT_SELECTOR(val)  {(*(Cpu.SetLDT_SELECTOR))(val); }
+void setLDT_SELECTOR(val)  {(*(Cpu.SetLDT_SELECTOR))((IU16)val); }
 #undef setTR_SELECTOR
-void setTR_SELECTOR(val)  {(*(Cpu.SetTR_SELECTOR))(val); }
+void setTR_SELECTOR(val)  {(*(Cpu.SetTR_SELECTOR))((IU16)val); }
 
 #undef getAL
 IU8  getAL()  { return (*(Cpu.GetAL))(); }
@@ -821,13 +821,13 @@ IU16 getLDT_SELECTOR()  { return (*(Cpu.GetLDT_SELECTOR))(); }
 #undef getLDT_BASE
 IU32 getLDT_BASE()  { return (*(Cpu.GetLDT_BASE))(); }
 #undef getLDT_LIMIT
-IU16 getLDT_LIMIT()  { return (*(Cpu.GetLDT_LIMIT))(); }
+IU16 getLDT_LIMIT()  { return (IU16)(*(Cpu.GetLDT_LIMIT))(); }
 #undef getTR_SELECTOR
 IU16 getTR_SELECTOR()  { return (*(Cpu.GetTR_SELECTOR))(); }
 #undef getTR_BASE
 IU32 getTR_BASE()  { return (*(Cpu.GetTR_BASE))(); }
 #undef getTR_LIMIT
-IU16 getTR_LIMIT()  { return (*(Cpu.GetTR_LIMIT))(); }
+IU16 getTR_LIMIT()  { return (IU16)(*(Cpu.GetTR_LIMIT))(); }
 #undef getTR_AR
 IU16 getTR_AR()  { return (*(Cpu.GetTR_AR))(); }
 #undef setCPL

@@ -28,31 +28,31 @@ char achTmp[MAXSTR+1];
 
 
 DWORD
-_CRTAPI1
+__cdecl
 main( void)
 {
    DWORD dw;
 
-   dw = GetEnvironmentVariableOem("TMP", achEnvTMP, MAXSTR);
-   if (!dw || dw > MAXSTR-1)
+   dw = GetEnvironmentVariableOem("TMP", achEnvTMP, MAX_PATH);
+   if (!dw || dw > MAXPATH-1)
        printf("GetEnvironmentVariableOem(TMP) failed dw=%ld\n",dw);
    else
        printf("TMP=<%s>\n",achEnvTMP);
 
-   dw = GetWindowsDirectoryOem(achWinDir, MAXSTR);
-   if (!dw || dw > MAXSTR-1)
+   dw = GetWindowsDirectoryOem(achWinDir, MAX_PATH);
+   if (!dw || dw > MAXPATH-1)
        printf("GetWindowsDirectory failed dw=%ld\n",dw);
    else
        printf("WinDir=<%s>\n",achWinDir);
 
-   dw = GetSystemDirectoryOem(achSysDir, MAXSTR);
-   if (!dw || dw > MAXSTR-1)
+   dw = GetSystemDirectoryOem(achSysDir, MAX_PATH);
+   if (!dw || dw > MAX_PATH-1)
        printf("GetSystemDirectory(achSysDir failed dw=%ld\n",dw);
    else
        printf("SysDir=<%s>\n",achWinDir);
 
-   dw = GetCurrentDirectory(MAXSTR, achCurDir);
-   if (!dw || dw > MAXSTR-1)
+   dw = GetCurrentDirectory(MAX_PATH, achCurDir);
+   if (!dw || dw > MAXPATH-1)
        printf("GetCurrentDirectory(achCurDir dw=%ld\n",dw);
    else
        printf("CurDir=<%s>\n",achWinDir);
@@ -70,8 +70,8 @@ main( void)
    Pause();
 
 
-   dw = GetTempPathOem(MAXSTR, ach);
-   if (!dw || dw > MAXSTR)
+   dw = GetTempPathOem(MAX_PATH, ach);
+   if (!dw || dw > MAX_PATH)
        printf("GetTempPathOem - Failed\n");
    else {
        printf("GetTempPathOem<%s>\n",ach);

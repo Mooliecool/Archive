@@ -21,5 +21,6 @@ Abstract:
 #include <dpmi.h>
 #include <vint.h>
 #include <mvdm.h>
-#include <dpmidata.h>
-#include <dpmi32p.h>
+#include <dpmi32.h>
+#include <dbgsvc.h>
+#include <nt_vdd.h>

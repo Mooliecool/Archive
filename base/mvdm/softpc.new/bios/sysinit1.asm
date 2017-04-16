@@ -1780,7 +1780,7 @@ MovDOSHi	endp
 
 
 MovDOSLo	proc	near
-	call	AllocMemForDOS			; incestuosly!!!
+	call	AllocMemForDOS			; 
 	mov	es, ax				; pass the segment to MovBIOS
 	call	MovBIOS
 ;

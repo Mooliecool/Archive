@@ -41,6 +41,7 @@
 #include "keyba.h"
 #include "idetect.h"
 #include "gmi.h"
+#include "egamode.h"
 #include "gfx_upd.h"
 #include "nt_graph.h"
 #include "nt_uis.h"
@@ -55,8 +56,10 @@
 
 #include "nt_mouse.h"
 #include "nt_event.h"
+#include "nt_det.h"
 #include "nt_vdd.h"
 #include "nt_timer.h"
+#include "nt_sb.h"
 
 #include "host.h"
 #include "host_hfx.h"
@@ -86,6 +89,8 @@ VOID KbdResume(VOID);
 VOID RaiseAllDownKeys(VOID);
 int IsKeyDown(int Key);
 
+// defined in nt_devs.c
+VOID nt_devices_block_or_terminate(VOID);
 HANDLE hWndConsole;
 HANDLE hKbdHdwMutex;
 ULONG  KbdHdwFull;         // contains num of keys in 6805 buffer
@@ -101,6 +106,13 @@ ULONG  CntrlHandlerState=0;
 
 IMPORT void RestoreKbdLed(void);
 
+#if defined(JAPAN) || defined(KOREA)
+extern UINT ConsoleInputCP;
+extern UINT ConsoleOutputCP;
+extern DWORD ConsoleNlsMode;
+#endif // JAPAN || KOREA
+extern PVOID  CurrentMonitorTeb;
+extern RTL_CRITICAL_SECTION IcaLock;
 
 /*::::::::::::::::::::::::::::::::::: Key history control variables/defines */
 
@@ -133,16 +145,15 @@ void nt_process_screen_scale(void);
 //
 // keyboard control state syncronization
 //
-KEY_EVENT_RECORD fake_shift = { TRUE, 1, VK_SHIFT, 0x2a, 0, SHIFT_PRESSED };
-KEY_EVENT_RECORD fake_caps = { TRUE, 1, VK_CAPITAL, 0x3a, 0, CAPSLOCK_ON };
-KEY_EVENT_RECORD fake_ctl = { TRUE, 1, VK_CONTROL, 0x1d, 0, 0 };
-KEY_EVENT_RECORD fake_alt = { TRUE, 1, VK_MENU, 0x38, 0, 0 };
-KEY_EVENT_RECORD fake_numlck = { TRUE, 1, VK_NUMLOCK, 0x45, 0, ENHANCED_KEY };
+KEY_EVENT_RECORD fake_shift = { TRUE, 1, VK_SHIFT, 0x2a, 0, SHIFT_PRESSED};
+KEY_EVENT_RECORD fake_caps = { TRUE, 1, VK_CAPITAL, 0x3a, 0, CAPSLOCK_ON};
+KEY_EVENT_RECORD fake_ctl = { TRUE, 1, VK_CONTROL, 0x1d, 0, 0};
+KEY_EVENT_RECORD fake_alt = { TRUE, 1, VK_MENU, 0x38, 0, 0};
+KEY_EVENT_RECORD fake_numlck = { TRUE, 1, VK_NUMLOCK, 0x45, 0, ENHANCED_KEY};
 KEY_EVENT_RECORD fake_scroll = { TRUE, 1, VK_SCROLL, 0x46, 0, 0};
 DWORD ToggleKeyState = NUMLOCK_ON;   // default state on dos boot up
 
 void AltUpDownUp(void);
-
 
 /*::::::::::::::::::::::::::::::::::: Key message passing control variables */
 
@@ -172,6 +183,7 @@ struct
 ULONG NoMouseTics;
 
 ULONG event_thread_blocked_reason = 0xFFFFFFFF;
+ULONG EventThreadKeepMode = 0;
 
 
 HCURSOR cur_cursor = NULL;     /* Current cursor handle */
@@ -191,7 +203,8 @@ BOOL bGreyed=FALSE;
 
 #define KEY_QUEUE_SIZE (25)
 
-typedef struct { BYTE ATcode; BOOL UpKey; } KeyQEntry;
+typedef struct
+{BYTE ATcode; BOOL UpKey;} KeyQEntry;
 
 typedef struct
 {
@@ -202,18 +215,17 @@ typedef struct
 } KeyQueueData;
 
 static KeyQueueData KeyQueue;
-
-
-
-
 static volatile BOOL InitComplete;
 
-/*:::::: Variables used to control blocking and unblocking the event thread */
+/*:::::: Variables used to control blocking and unblocking the application & event threads */
 
-BOOL fEventThreadBlock = FALSE;     /* Event thread blocked ??? */
-HANDLE hConsoleWait;            /* Console block mutex */
-HANDLE hConsoleWaitStall;           /* Object used to sync threads on block */
-HANDLE hConsoleSuspend;
+HANDLE hSuspend;             /* request both app and console threads to be suspened */
+HANDLE hResume;              /* Signal that console and app threads can continue */
+HANDLE hConsoleSuspended;    /* Signal console thread is suspended */
+HANDLE hMainThreadSuspended; /* Signal app thread is suspended */
+HANDLE hConsoleStop;
+HANDLE hConsoleStopped;
+HANDLE hConsoleResume;
 /*::::::::::::: Variable to hold current screen scale ::::::::::::::::::::::*/
 
 int savedScale;
@@ -237,24 +249,52 @@ void nt_start_event_thread(void)
     //
     // create kbd hardware mutex and kbd not full event
     //
-    if(!(hKbdHdwMutex = CreateMutex(NULL, FALSE, NULL)))
+    if (!(hKbdHdwMutex = CreateMutex(NULL, FALSE, NULL)))
+        DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
+
+    //
+    // events to block\resume console and app threads
+    //      hResume:             Manual, init= signaled
+    //      hSuspend:            Manual, init= Not signaled
+    //      hConsoleSuspended:   Manual, init= Signaled
+    //      hMainThreadSuspened: Manual, init= Not Signaled
+    //
+    if (!(hResume = CreateEvent(NULL, TRUE, TRUE, NULL)))
+        DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
+
+    if (!(hSuspend = CreateEvent(NULL, TRUE, FALSE, NULL)))
+        DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
+
+    if (!(hConsoleSuspended = CreateEvent(NULL, TRUE, TRUE, NULL)))
+        DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
+
+    if (!(hMainThreadSuspended = CreateEvent(NULL, TRUE, FALSE, NULL)))
         DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
 
     //
     // Create Event Thread,
-    //        events to block\resume console input
     //        event queue
     //
     // The Event Thread is created suspended to prevent us
     // from receiving input before the DOS is ready
     //
-    if (!VDMForWOW) {
+    if (!VDMForWOW)
+    {
 
-	//
-	//  Register Control 'C' handler, for DOS only
-	//
-	if(!SetConsoleCtrlHandler((PHANDLER_ROUTINE)CntrlHandler,TRUE))
-	    DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
+        if (!(hConsoleResume = CreateEvent(NULL, FALSE, FALSE, NULL)))
+            DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
+
+        if (!(hConsoleStop = CreateEvent(NULL, FALSE, FALSE, NULL)))
+            DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
+
+        if (!(hConsoleStopped = CreateEvent(NULL, FALSE, FALSE, NULL)))
+            DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
+
+        //
+        //  Register Control 'C' handler, for DOS only
+        //
+        if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)CntrlHandler,TRUE))
+            DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
 
         ThreadInfo.EventMgr.Handle = CreateThread(NULL,
                                                   8192,
@@ -262,24 +302,14 @@ void nt_start_event_thread(void)
                                                   NULL,
                                                   CREATE_SUSPENDED,
                                                   &ThreadInfo.EventMgr.ID);
-
-        if(!ThreadInfo.EventMgr.Handle)
-            DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
-
-        if(!(hConsoleWait = CreateEvent(NULL, FALSE, FALSE, NULL)))
-            DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
-
-        if(!(hConsoleWaitStall = CreateEvent(NULL, FALSE, FALSE, NULL)))
-            DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
-
-    if(!(hConsoleSuspend = CreateEvent(NULL, FALSE, FALSE, NULL)))
+        if (!ThreadInfo.EventMgr.Handle)
             DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
 
 
         InitQueue();
         check_malloc(key_history,MAX_KEY_EVENTS,KEY_EVENT_RECORD);
         InitKeyHistory();
-        }
+    }
 
     return;
 }
@@ -290,53 +320,89 @@ void nt_start_event_thread(void)
 
 void nt_remove_event_thread(void)
 {
-    /* Must make sure that the thread has terminated */
-    if (!VDMForWOW && ThreadInfo.EventMgr.Handle)  {
-        NtAlertThread(ThreadInfo.EventMgr.Handle);
+    if (VDMForWOW)
+    {
+        //
+        // Only close the handles if VDMForWOW.  The event thread my still using
+        // these events.  We can safely close the handles when event thread
+        // exits its event loop.
+        //
+
+        CloseHandle(hSuspend);
+        CloseHandle(hResume);
+        CloseHandle(hConsoleSuspended);
+        CloseHandle(hMainThreadSuspended);
+        if (sc.FocusEvent != INVALID_HANDLE) {
+            CloseHandle(sc.FocusEvent);
         }
+    }
+    else if (ThreadInfo.EventMgr.Handle)
+    {
+        NtAlertThread(ThreadInfo.EventMgr.Handle);
+    }
 }
-
-
-
-
 
 /*:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 /*::::::::::::::::::::::::::: Process events ::::::::::::::::::::::::::::::*/
 /*:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 
+VOID EventThreadSleep(DWORD dwMilliseconds)
+{
+    NTSTATUS status;
+
+    //
+    // Note, the Suspend takes long time to come back.  So if suspend event is
+    // detected, we don't check if the 'wait' is actually longer than dwMilliseconds.)
+    //
+
+    status = WaitForSingleObject(hSuspend, dwMilliseconds);
+    if (status == 0)
+    {
+        nt_process_suspend_event();
+    }
+}
 DWORD ConsoleEventThread(PVOID pv)
 {
 
-   DWORD dwRet = (DWORD)-1;
+    DWORD dwRet = (DWORD)-1;
 
-   try {
+    try
+    {
+        SetThreadPriority(ThreadInfo.EventMgr.Handle, THREAD_PRIORITY_HIGHEST);
+        DisableScreenSwitch(hConsoleSuspended);
+        DelayMouseEvents(2);
 
-      SetThreadPriority(ThreadInfo.EventMgr.Handle, THREAD_PRIORITY_HIGHEST);
-      DelayMouseEvents(2);
+        dwRet = nt_event_loop();
 
-      dwRet = nt_event_loop();
+        CloseHandle(ThreadInfo.EventMgr.Handle);
+        CloseHandle(hSuspend);
+        CloseHandle(hResume);
+        CloseHandle(hConsoleSuspended);
+        CloseHandle(hMainThreadSuspended);
+        CloseHandle(hConsoleStop);
+        CloseHandle(hConsoleStopped);
+        CloseHandle(hConsoleResume);
+        if (sc.FocusEvent != INVALID_HANDLE) {
+            CloseHandle(sc.FocusEvent);
+        }
+        ThreadInfo.EventMgr.Handle = NULL;
+        ThreadInfo.EventMgr.ID = 0;
+    }
+    except(VdmUnhandledExceptionFilter(GetExceptionInformation()))
+    {
+        ;  // we shouldn't arrive here
+    }
 
-      CloseHandle(ThreadInfo.EventMgr.Handle);
-      CloseHandle(hConsoleWait);
-      CloseHandle(hConsoleSuspend);
-      ThreadInfo.EventMgr.Handle = NULL;
-      ThreadInfo.EventMgr.ID = 0;
-      }
-   except(VdmUnhandledExceptionFilter(GetExceptionInformation())) {
-      ;  // we shouldn't arrive here
-      }
-
-   return dwRet;
+    return (dwRet);
 }
-
-
 
 DWORD nt_event_loop(void)
 {
     DWORD RecordsRead;
     DWORD loop;
     NTSTATUS status;
-    HANDLE Events[2];
+    HANDLE Events[3];
+    BOOL  success;
 
     /*
      * The con server is optimized to avoid extra CaptureBuffer allocations
@@ -351,169 +417,200 @@ DWORD nt_event_loop(void)
     /* the console input handle shouldn't get changed during the lifetime
        of the ntvdm
     */
-    Events[0] = GetConsoleInputWaitHandle(); ////sc.InputHandle
-    Events[1] = hConsoleSuspend;
-    /*:::::::::::::::::::::::::::::::::::::::::::::: Get and process events */
+    Events[0] = hSuspend;                    // from fullscreen/windowed switch
+    Events[1] = GetConsoleInputWaitHandle(); // sc.InputHandle
+    Events[2] = hConsoleStop;                // from nt_block_event_thread
+    /* Get and process events */
 
-    while (TRUE) {
-
+    while (TRUE)
+    {
         //
         // Wait for the InputHandle to be signalled, or a suspend event.
         //
-        status = NtWaitForMultipleObjects(2,
+        status = NtWaitForMultipleObjects(3,
                                           Events,
                                           WaitAny,
                                           TRUE,
                                           NULL
-                                          );
+                                         );
 
-            //
-            // Input handle was signaled, Read the input, without
-            // waiting (otherwise we may get blocked and be unable to
-            // handle the suspend event).
-            //
-        if (!status) {
-            if (ReadConsoleInputExW(sc.InputHandle,
+        //
+        // Input handle was signaled, Read the input, without
+        // waiting (otherwise we may get blocked and be unable to
+        // handle the suspend event).
+        //
+        if (status == 1)
+        {
+            EnableScreenSwitch(FALSE, hConsoleSuspended);
+            success = ReadConsoleInputExW(sc.InputHandle,
                                     &InputRecord[0],
                                     sizeof(InputRecord)/sizeof(INPUT_RECORD),
                                     &RecordsRead,
                                     CONSOLE_READ_NOWAIT
-                                    ))
-              {
-                if (!RecordsRead) {
+                                    );
+
+
+            if (success)
+            {
+                if (!RecordsRead)
+                {
                     continue;
-                    }
+                }
 
                 update_key_history(&InputRecord[0], RecordsRead);
-                }
-            else {
+            }
+            else
+            {
                 DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
                 break; //Read from console failed
-                }
             }
-
-           //
-           // Console Suspend event was signaled
-           //
-        else if (status == 1) {
+        }
+        else if (status == 0)
+        {
+            //
+            // Console Suspend event was signaled
+            //
             nt_process_suspend_event();
             continue;
+        }
+        else if (status == 2)
+        {
+            SetEvent(hConsoleStopped);
+            SetEvent(hConsoleSuspended);
+            status = NtWaitForSingleObject(hConsoleResume, TRUE, NULL);
+            ResetEvent(hConsoleSuspended);
+
+            //
+            // If error, probably cause handle was closed, so exit
+            // if alerted signal to exit
+            //
+            if (status)
+            {
+                ExitThread(0);
             }
+            continue;
+        }
+        else
+        {
 
-           //
-           // alerted or User apc, This means to terminate
-           // Got an error, inform the user.
-           //
-        else {
-           if (!NT_SUCCESS(status)) {
+            //
+            // alerted or User apc, This means to terminate
+            // Got an error, inform the user.
+            //
+            if (!NT_SUCCESS(status))
+            {
                 DisplayErrorTerm(EHS_FUNC_FAILED,status,__FILE__,__LINE__);
-                }
-           return 0;
-           }
+            }
+            return (0);
+        }
 
-
+        //
+        // At this point, we need to block screen switch operation
+        //
+        DisableScreenSwitch(hConsoleSuspended);
         //
         // Process the Input Events
         //
-        for (loop = 0; loop < RecordsRead; loop++) {
-           switch(InputRecord[loop].EventType) {
+        for (loop = 0; loop < RecordsRead; loop++)
+        {
+            switch (InputRecord[loop].EventType)
+            {
 
-              case MOUSE_EVENT:
-                  nt_process_mouse(&InputRecord[loop].Event.MouseEvent);
-                  break;
+            case MOUSE_EVENT:
+                nt_process_mouse(&InputRecord[loop].Event.MouseEvent);
+                break;
+
+            case KEY_EVENT:
+                if (WaitKbdHdw(0xffffffff))
+                {
+                    return (0);
+                }
+
+                do
+                {
+
+                    if (KbdHdwFull > 8)
+                    {
+                        ULONG Delay = KbdHdwFull;
+
+                        HostReleaseKbd();
+                        HostIdleNoActivity();
+                        EventThreadSleep(Delay);
+                        if (WaitKbdHdw(0xffffffff))
+                            return (0);
+                    }
+
+                    nt_process_keys(&InputRecord[loop].Event.KeyEvent);
+
+                } while (++loop < RecordsRead &&
+                         InputRecord[loop].EventType == KEY_EVENT);
+                loop--;
+                HostReleaseKbd();
+                HostIdleNoActivity();
+                break;
+
+            case MENU_EVENT:
+                nt_process_menu(&InputRecord[loop].Event.MenuEvent);
+                break;
 
 
-              case KEY_EVENT:
+            case FOCUS_EVENT:
+                nt_process_focus(&InputRecord[loop].Event.FocusEvent);
+                break;
 
-                  if (WaitKbdHdw(0x50000))  {
-                      return(0);
-                      }
+            case WINDOW_BUFFER_SIZE_EVENT:
+                nt_mark_screen_refresh();
+                break;
 
-                  do {
-
-                       if (KbdHdwFull > 8) {
-                           ULONG Delay = KbdHdwFull;
-
-                           HostReleaseKbd();
-                           HostIdleNoActivity();
-                           Sleep(Delay);
-                           if (WaitKbdHdw(0x50000))
-                               return (0);
-                           }
-
-                       nt_process_keys(&InputRecord[loop].Event.KeyEvent);
-
-                  } while (++loop < RecordsRead &&
-                           InputRecord[loop].EventType == KEY_EVENT);
-                  loop--;
-                  HostReleaseKbd();
-                  HostIdleNoActivity();
-                  break;
-
-              case MENU_EVENT:
-                  nt_process_menu(&InputRecord[loop].Event.MenuEvent);
-                  break;
-
-
-              case FOCUS_EVENT:
-                  nt_process_focus(&InputRecord[loop].Event.FocusEvent);
-                  break;
-
-              case WINDOW_BUFFER_SIZE_EVENT:
-                  nt_mark_screen_refresh();
-                  break;
-
-              default:
-                  fprintf(trace_file,"Undocumented event from console\n");
-                  break;
-              }
-           }
-
-        //
-        // encourage the console to pack events together
-        //
-
-        Sleep(10);
-
+            default:
+                fprintf(trace_file,"Undocumented event from console\n");
+                break;
+            }
         }
 
-    return 0;
+        //
+        // 10 ms delay to encourage the console to pack events together
+        //
+        EventThreadSleep(10);
+    }
+
+    return (0);
 }
 
 
 /*:::::::::::::::::::::: Update key history buffer ::::::::::::::::::::::::*/
 
 void update_key_history(register INPUT_RECORD *InputRecords,
-            register DWORD RecordsRead)
+                        register DWORD RecordsRead)
 {
-    for(;RecordsRead--;InputRecords++)
+    for (;RecordsRead--;InputRecords++)
     {
-        if(InputRecords->EventType == KEY_EVENT)
+        if (InputRecords->EventType == KEY_EVENT)
         {
 
             //Transfer key event to history buffer
-        *key_history_tail = InputRecords->Event.KeyEvent;
+            *key_history_tail = InputRecords->Event.KeyEvent;
 
-        //Update ptrs to history buffer
+            //Update ptrs to history buffer
 
-        if(++key_history_tail >= &key_history[MAX_KEY_EVENTS])
-        key_history_tail = key_history;
+            if (++key_history_tail >= &key_history[MAX_KEY_EVENTS])
+                key_history_tail = key_history;
 
-        //Check for buffer overflow
+            //Check for buffer overflow
 
-        if(key_history_tail == key_history_head)
-        {
-        //Buffer overflow, bump head ptr and loss oldest key
+            if (key_history_tail == key_history_head)
+            {
+                //Buffer overflow, bump head ptr and loss oldest key
 
-        if(++key_history_head >= &key_history[MAX_KEY_EVENTS])
-            key_history_head = key_history;
+                if (++key_history_head >= &key_history[MAX_KEY_EVENTS])
+                    key_history_head = key_history;
+            }
+
+            //Update history counter
+
+            if (key_history_count != MAX_KEY_EVENTS)
+                key_history_count++;
         }
-
-        //Update history counter
-
-        if(key_history_count != MAX_KEY_EVENTS)
-        key_history_count++;
-    }
     }
     return;
 }
@@ -525,25 +622,25 @@ int GetHistoryKeyEvent(PKEY_EVENT_RECORD LastKeyEvent, int KeyNumber)
     int KeyReturned = FALSE;
     int KeysBeforeWrap = key_history_tail-key_history;
 
-    if(key_history_count >= KeyNumber)
+    if (key_history_count >= KeyNumber)
     {
-    if(KeysBeforeWrap < KeyNumber)
-    {
-        //Wrap
+        if (KeysBeforeWrap < KeyNumber)
+        {
+            //Wrap
 
-        *LastKeyEvent = key_history[MAX_KEY_EVENTS -
-                    (KeyNumber - KeysBeforeWrap)];
-    }
-    else
-    {
-        //No warp
-        *LastKeyEvent = key_history_tail[0-KeyNumber];
+            *LastKeyEvent = key_history[MAX_KEY_EVENTS -
+                                        (KeyNumber - KeysBeforeWrap)];
+        }
+        else
+        {
+            //No warp
+            *LastKeyEvent = key_history_tail[0-KeyNumber];
+        }
+
+        KeyReturned = TRUE;
     }
 
-    KeyReturned = TRUE;
-    }
-
-    return(KeyReturned);
+    return (KeyReturned);
 }
 
 /*:::::::::::::::::::: Init key history buffer ::::::::::::::::::::::::::::::*/
@@ -565,20 +662,26 @@ void nt_process_focus(PFOCUS_EVENT_RECORD FocusEvent)
 
     sc.Focus = FocusEvent->bSetFocus;
 
-    if(sc.Focus )
+    if (sc.Focus)
     {
         /* input focus acquired */
         AltUpDownUp();
+        EnableScreenSwitch(FALSE, hConsoleSuspended);
 
         MouseInFocus();
-    if (PointerAttachedWindowed && sc.ScreenState == WINDOWED)
-    {
-        MouseHide();
-        PointerAttachedWindowed = FALSE; /* only used in switch */
-        DelayedReattachMouse = TRUE;
-    }
-    /* set the event in case waiting for focus to go fullscreen */
-    if(sc.FocusEvent != NULL) PulseEvent(sc.FocusEvent);
+        if (PointerAttachedWindowed && sc.ScreenState == WINDOWED)
+        {
+            MouseHide();
+            PointerAttachedWindowed = FALSE; /* only used in switch */
+            DelayedReattachMouse = TRUE;
+        }
+
+        /* set the event in case waiting for focus to go fullscreen */
+        if (sc.FocusEvent != INVALID_HANDLE)
+        {
+            PulseEvent(sc.FocusEvent);
+        }
+
 #ifndef MONITOR
         if (sc.ModeType == GRAPHICS)
             host_mark_screen_refresh();
@@ -587,19 +690,17 @@ void nt_process_focus(PFOCUS_EVENT_RECORD FocusEvent)
     else    /* input focus lost */
     {
 
+        EnableScreenSwitch(FALSE, hConsoleSuspended);
         slow = savedScreenState != sc.ScreenState;
 
         MouseOutOfFocus();      /* turn off mouse 'attachment' */
 
 #ifndef PROD
-    fprintf(trace_file,"Focus lost\n");
+        fprintf(trace_file,"Focus lost\n");
 #endif
     }
-
-
-
+    DisableScreenSwitch(hConsoleSuspended);
 }
-
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 /*:::::::::::::::::::::: Process menu events :::::::::::::::::::::::::::::*/
@@ -620,45 +721,46 @@ Ammended to do Alt key processing.
 
 ================================================================*/
 
-    switch(MenuEvent->dwCommandId)
-       {
-          // consrv sends when it gets an initmenu, and indicates
-          // that a sys menu is coming up, and we are losing kbd focus
-       case WM_INITMENU:
-          AltUpDownUp();
-      /* stop cursor cliping */
-      MouseSystemMenuON();
-          break;
+    switch (MenuEvent->dwCommandId)
+    {
+    // consrv sends when it gets an initmenu, and indicates
+    // that a sys menu is coming up, and we are losing kbd focus
+    case WM_INITMENU:
 
-            // consrv sends when it gets a MENUSELECT with
-            // HIWORD(wParam) == MF_MAINMENU (0xffff). I think
-            // it means we are regaining kbd focus
-       case WM_MENUSELECT:
+        /* stop cursor cliping */
+        MouseSystemMenuON();
+        break;
+
+        //
+        // consrv sends when sys menu is done and we regain focus
+        //
+    case WM_MENUSELECT:
+        AltUpDownUp(); // resync key states
         MouseSystemMenuOFF();
-          break;
+        break;
 
-       case IDM_POINTER:
-          {
-          BOOL bIcon;
+    case IDM_POINTER:
+        {
+            BOOL bIcon;
 
-          VDMConsoleOperation(VDM_IS_ICONIC,&bIcon);
 
-          /* is the SoftPC window NOT an icon? */
-          if(!bIcon)
+            /* is the SoftPC window NOT an icon? */
+            if (VDMConsoleOperation(VDM_IS_ICONIC,&bIcon) &&
+                !bIcon)
             {
-            if(bPointerOff) /* if the pointer is not visible */
-               {
-               MouseDisplay();
-               }
-            else/* hide the pointer */
-               {
-               MouseHide();
-               }
+                if (bPointerOff) /* if the pointer is not visible */
+                {
+                    MouseDisplay();
+                }
+                else/* hide the pointer */
+                {
+                    MouseHide();
+                }
             }
-          break;
-          }
+            break;
+        }
 
-       } /* End of switch */
+    } /* End of switch */
 }
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
@@ -669,19 +771,24 @@ void nt_process_suspend_event()
 {
     NTSTATUS Status;
 
-    //Tell the CPU thread that we have blocked
-    SetEvent(hConsoleWaitStall);
+    //
+    //Tell the requesting thread that we have blocked
+    //
+    SetEvent(hConsoleSuspended);
 
     //
-    // Wait for the resume routine to wake us up
+    // Wait for the resume event to wake us up
     //
-    Status = NtWaitForSingleObject(hConsoleWait, TRUE, NULL);
+    Status = NtWaitForSingleObject(hResume, TRUE, NULL);
 
     // If error, probably cause handle was closed, so exit
     // if alerted signal to exit
-    if (Status) {
+    //
+    if (Status)
+    {
         ExitThread(0);
-        }
+    }
+    DisableScreenSwitch(hConsoleSuspended);
 }
 
 
@@ -697,99 +804,101 @@ void SyncToggleKeys(WORD wVirtualKeyCode, DWORD dwControlKeyState)
 {
     DWORD CurrKeyState;
 
-         CurrKeyState = dwControlKeyState;
+    CurrKeyState = dwControlKeyState;
 
-         //
-         // If the key is one of the toggles, and changed state
-         // invert the current state, since want we really want
-         // is the toggle state before this key was pressed.
-         //
-         if (wVirtualKeyCode == VK_SHIFT &&
-             (CurrKeyState & SHIFT_PRESSED) != (ToggleKeyState & SHIFT_PRESSED))
-           {
-            CurrKeyState ^= SHIFT_PRESSED;
+    //
+    // If the key is one of the toggles, and changed state
+    // invert the current state, since want we really want
+    // is the toggle state before this key was pressed.
+    //
+    if (wVirtualKeyCode == VK_SHIFT &&
+        (CurrKeyState & SHIFT_PRESSED) != (ToggleKeyState & SHIFT_PRESSED))
+    {
+        CurrKeyState ^= SHIFT_PRESSED;
+    }
+
+    if (wVirtualKeyCode == VK_NUMLOCK &&
+        (CurrKeyState & NUMLOCK_ON) != (ToggleKeyState & NUMLOCK_ON))
+    {
+        CurrKeyState ^= NUMLOCK_ON;
+    }
+
+    if (wVirtualKeyCode == VK_SCROLL &&
+        (CurrKeyState & SCROLLLOCK_ON) != (ToggleKeyState & SCROLLLOCK_ON))
+    {
+        CurrKeyState ^= SCROLLLOCK_ON;
+    }
+
+    if (wVirtualKeyCode == VK_CAPITAL &&
+        (CurrKeyState & CAPSLOCK_ON) != (ToggleKeyState & CAPSLOCK_ON))
+    {
+        /*
+         * KbdBios does not toggle capslock if Ctl is down.
+         * Nt does the opposite always toggling capslock state.
+         * Force NT conform behaviour by sending:
+         *    Ctl up, Caps Dn, Caps Up, Ctl dn
+         * so that KbdBios will toggle its caps state
+         * before processing the current Ctl-Caps keyevent.
+         */
+        if (dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+        {
+            nt_key_up_action(&fake_ctl);
+            if (IsKeyDown(30))
+            {    // capslock
+                nt_key_up_action(&fake_caps);
             }
+            nt_key_down_action(&fake_caps);
+            nt_key_up_action(&fake_caps);
+            nt_key_down_action(&fake_ctl);
+        }
 
-         if (wVirtualKeyCode == VK_NUMLOCK &&
-             (CurrKeyState & NUMLOCK_ON) != (ToggleKeyState & NUMLOCK_ON))
-           {
-            CurrKeyState ^= NUMLOCK_ON;
-            }
-
-         if (wVirtualKeyCode == VK_SCROLL &&
-             (CurrKeyState & SCROLLLOCK_ON) != (ToggleKeyState & SCROLLLOCK_ON))
-           {
-            CurrKeyState ^= SCROLLLOCK_ON;
-            }
-
-         if (wVirtualKeyCode == VK_CAPITAL &&
-             (CurrKeyState & CAPSLOCK_ON) != (ToggleKeyState & CAPSLOCK_ON))
-           {
-                /*
-                 * KbdBios does not toggle capslock if Ctl is down.
-                 * Nt does the opposite always toggling capslock state.
-                 * Force NT conform behaviour by sending:
-                 *    Ctl up, Caps Dn, Caps Up, Ctl dn
-                 * so that KbdBios will toggle its caps state
-                 * before processing the current Ctl-Caps keyevent.
-                 */
-             if (dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-                {
-                 nt_key_up_action(&fake_ctl);
-                 if (IsKeyDown(30)) {    // capslock
-                     nt_key_up_action(&fake_caps);
-                     }
-                 nt_key_down_action(&fake_caps);
-                 nt_key_up_action(&fake_caps);
-                 nt_key_down_action(&fake_ctl);
-                 }
-
-            CurrKeyState ^= CAPSLOCK_ON;
-            }
+        CurrKeyState ^= CAPSLOCK_ON;
+    }
 
 
-         if ((CurrKeyState & SHIFT_PRESSED) &&
-              !(ToggleKeyState & SHIFT_PRESSED))
-            {
-             nt_key_down_action(&fake_shift);
-             }
-         else if ((CurrKeyState & SHIFT_PRESSED) &&
-                   !(ToggleKeyState & SHIFT_PRESSED) )
-            {
-             nt_key_up_action(&fake_shift);
-             }
+    if ((CurrKeyState & SHIFT_PRESSED) &&
+        !(ToggleKeyState & SHIFT_PRESSED))
+    {
+        nt_key_down_action(&fake_shift);
+    }
+    else if (!(CurrKeyState & SHIFT_PRESSED) &&
+             (ToggleKeyState & SHIFT_PRESSED))
+    {
+        nt_key_up_action(&fake_shift);
+    }
 
 
-         if ((CurrKeyState & NUMLOCK_ON) != (ToggleKeyState & NUMLOCK_ON))
-            {
-             if (IsKeyDown(90)) {
-                 nt_key_up_action(&fake_numlck);
-                 }
-             nt_key_down_action(&fake_numlck);
-             nt_key_up_action(&fake_numlck);
-             }
+    if ((CurrKeyState & NUMLOCK_ON) != (ToggleKeyState & NUMLOCK_ON))
+    {
+        if (IsKeyDown(90))
+        {
+            nt_key_up_action(&fake_numlck);
+        }
+        nt_key_down_action(&fake_numlck);
+        nt_key_up_action(&fake_numlck);
+    }
 
-         if ((CurrKeyState & CAPSLOCK_ON) != (ToggleKeyState & CAPSLOCK_ON))
-            {
-             if (IsKeyDown(30)) {  //  capslock
-                 nt_key_up_action(&fake_caps);
-                 }
-             nt_key_down_action(&fake_caps);
-             nt_key_up_action(&fake_caps);
-             }
+    if ((CurrKeyState & CAPSLOCK_ON) != (ToggleKeyState & CAPSLOCK_ON))
+    {
+        if (IsKeyDown(30))
+        {  //  capslock
+            nt_key_up_action(&fake_caps);
+        }
+        nt_key_down_action(&fake_caps);
+        nt_key_up_action(&fake_caps);
+    }
 
-         if ((CurrKeyState & SCROLLLOCK_ON) != (ToggleKeyState & SCROLLLOCK_ON))
-            {
-             if (IsKeyDown(125)) {  // scrolllock
-                 nt_key_up_action(&fake_scroll);
-                 }
-             nt_key_down_action(&fake_scroll);
-             nt_key_up_action(&fake_scroll);
-             }
+    if ((CurrKeyState & SCROLLLOCK_ON) != (ToggleKeyState & SCROLLLOCK_ON))
+    {
+        if (IsKeyDown(125))
+        {  // scrolllock
+            nt_key_up_action(&fake_scroll);
+        }
+        nt_key_down_action(&fake_scroll);
+        nt_key_up_action(&fake_scroll);
+    }
+
 }
-
-
-
 
 /*
  *  AltUpDownUp - Ensures all kbdhdw keys are in the up state
@@ -804,46 +913,82 @@ void SyncToggleKeys(WORD wVirtualKeyCode, DWORD dwControlKeyState)
  *
  *  Alt-TAB does not work, because user32 got ?smart? and sends an
  *  alt-up before switching focus, breaking our detection algorithm.
- *  Also other hot keys which are meaning ful to various dos apps
+ *  Also other hot keys which are meaningful to various dos apps
  *  are not handled. Note that this is the same detection algorithm
  *  used by win 3.1.
  *
  */
 void AltUpDownUp(void)
 {
+    ULONG ControlKeyState = 0;
 
-   Sleep(100);
-   if (WaitKbdHdw(0xffffffff))
-       return;
+    EventThreadSleep(100);
+    if (WaitKbdHdw(0xffffffff))
+        return;
 
-   if (IsKeyDown(60) || IsKeyDown(62)) {    // left alt, right alt
+    if (IsKeyDown(60) || IsKeyDown(62))
+    {    // left alt, right alt
 
-       nt_key_up_action(&fake_alt);    // Alt Up
+        nt_key_up_action(&fake_alt);    // Alt Up
 
-       HostReleaseKbd();
-       Sleep(100);
-       if (WaitKbdHdw(0xffffffff))
-           ExitThread(1);
+        HostReleaseKbd();
+        EventThreadSleep(100);
+        if (WaitKbdHdw(0xffffffff))
+            ExitThread(1);
 
-       nt_key_down_action(&fake_alt);  // Alt Down
+        nt_key_down_action(&fake_alt);  // Alt Down
 
-       HostReleaseKbd();
-       Sleep(100);
-       if (WaitKbdHdw(0xffffffff))
-           ExitThread(1);
+        HostReleaseKbd();
+        EventThreadSleep(100);
+        if (WaitKbdHdw(0xffffffff))
+            ExitThread(1);
 
-       nt_key_up_action(&fake_alt);    // Alt Up
+        nt_key_up_action(&fake_alt);    // Alt Up
 
-       HostReleaseKbd();
-       Sleep(20);
-       if (WaitKbdHdw(0xffffffff))
-           ExitThread(1);
+        HostReleaseKbd();
+        EventThreadSleep(20);
+        if (WaitKbdHdw(0xffffffff))
+            ExitThread(1);
 
-       }
+    }
 
-   RaiseAllDownKeys();
+    RaiseAllDownKeys();
 
-   HostReleaseKbd();
+    //
+    // resync the control key states in case they changed since we last had the kbd focus.
+    //
+
+    if (GetKeyState(VK_CAPITAL) & 1) {
+        ControlKeyState |= CAPSLOCK_ON;
+    }
+
+    if (GetKeyState(VK_NUMLOCK) & 1) {
+        ControlKeyState |= NUMLOCK_ON;
+    }
+
+    if (GetKeyState(VK_SCROLL) & 1) {
+        ControlKeyState |= SCROLLLOCK_ON;
+    }
+
+    if ((ControlKeyState & CAPSLOCK_ON) != (ToggleKeyState & CAPSLOCK_ON)) {
+        nt_key_down_action(&fake_caps);
+        nt_key_up_action(&fake_caps);
+    }
+
+    if ((ControlKeyState & NUMLOCK_ON) != (ToggleKeyState & NUMLOCK_ON)) {
+        nt_key_down_action(&fake_numlck);
+        nt_key_up_action(&fake_numlck);
+    }
+
+    if ((ControlKeyState & SCROLLLOCK_ON) != (ToggleKeyState & SCROLLLOCK_ON)) {
+        nt_key_down_action(&fake_scroll);
+        nt_key_up_action(&fake_scroll);
+    }
+
+    ToggleKeyState = ControlKeyState;
+
+
+    HostReleaseKbd();
 
 }
 
@@ -856,18 +1001,40 @@ void AltUpDownUp(void)
 
 VOID nt_process_keys(PKEY_EVENT_RECORD KeyEvent)
 {
-
+#ifdef KOREA
+    // For Korean 103 keyboard layout support.
+    if (!is_us_mode() && GetConsoleOutputCP() != 437)
+    {
+        switch (KeyEvent->wVirtualKeyCode)
+        {
+        case VK_MENU:
+        case VK_CONTROL:
+            if (KeyEvent->dwControlKeyState & ENHANCED_KEY)
+                KeyEvent->dwControlKeyState &= ~ENHANCED_KEY;
+            break;
+        case VK_HANGEUL:
+            if (KeyEvent->wVirtualScanCode == 0xF2)
+                KeyEvent->wVirtualScanCode = 0x38;
+            break;
+        case VK_HANJA:
+            if (KeyEvent->wVirtualScanCode == 0xF1)
+                KeyEvent->wVirtualScanCode = 0x1D;
+            break;
+        }
+    }
+#endif
     // Check the last toggle key states, for change
     if ((ToggleKeyState & TOGGLEKEYBITS)
-         != (KeyEvent->dwControlKeyState & TOGGLEKEYBITS))
-       {
-         SyncToggleKeys(KeyEvent->wVirtualKeyCode, KeyEvent->dwControlKeyState);
-         ToggleKeyState = KeyEvent->dwControlKeyState & TOGGLEKEYBITS;
-         }
+        != (KeyEvent->dwControlKeyState & TOGGLEKEYBITS))
+    {
+        SyncToggleKeys(KeyEvent->wVirtualKeyCode, KeyEvent->dwControlKeyState);
+        ToggleKeyState = KeyEvent->dwControlKeyState & TOGGLEKEYBITS;
+    }
 
     /*............................... Maintain shift states in case of pastes */
 
-    if(KeyEvent->bKeyDown) {
+    if (KeyEvent->bKeyDown)
+    {
 
 
 #ifndef MONITOR
@@ -881,10 +1048,12 @@ VOID nt_process_keys(PKEY_EVENT_RECORD KeyEvent)
 #endif
 
 
-        switch(KeyEvent->wVirtualKeyCode) {
+        switch (KeyEvent->wVirtualKeyCode)
+        {
 #ifdef YODA
         case VK_F11:
-            if (getenv("YODA")) {
+            if (getenv("YODA"))
+            {
                 EventStatus |= ~ES_YODA;
             }
             break;
@@ -900,29 +1069,30 @@ VOID nt_process_keys(PKEY_EVENT_RECORD KeyEvent)
 
         case VK_CONTROL:
             fake_ctl = *KeyEvent;
-        break;
+            break;
         }
 
         nt_key_down_action(KeyEvent);
 
-    } else {    /* ! KeyEvent->bKeyDown */
+    }
+    else
+    {    /* ! KeyEvent->bKeyDown */
 
-             /*
-              * We don't get a CTRL-Break key make code cause console
-              * eats it when it invokes the CntrlHandler. We must fake
-              * it here, rather than in the CntrlHandler, cause
-              * CntrlHandler is asynchronous and we may lose the state
-              * of the Cntrl-Key.
-              * 25-Aug-1992 Jonle
-              * Also SysRq/Printscreen key. Simon May 93
-              */
-         if (KeyEvent->wVirtualKeyCode == VK_CANCEL ||
-             KeyEvent->wVirtualKeyCode == VK_SNAPSHOT )
-            {
-             nt_key_down_action(KeyEvent);
-         }
+        /*
+         * We don't get a CTRL-Break key make code cause console
+         * eats it when it invokes the CntrlHandler. We must fake
+         * it here, rather than in the CntrlHandler, cause
+         * CntrlHandler is asynchronous and we may lose the state
+         * of the Cntrl-Key.
+         * 25-Aug-1992 Jonle
+         * Also SysRq/Printscreen key. Simon May 93
+         */
+        if (KeyEvent->wVirtualKeyCode == VK_CANCEL)
+        {
+            nt_key_down_action(KeyEvent);
+        }
 
-         nt_key_up_action(KeyEvent);   /* Key up */
+        nt_key_up_action(KeyEvent);   /* Key up */
 
     }   /* ! KeyEvent->bKeyDown */
 
@@ -940,8 +1110,8 @@ void nt_key_down_action(PKEY_EVENT_RECORD KeyEvent)
 
     ATcode = KeyMsgToKeyCode(KeyEvent);
 
-    if(ATcode)
-       (*host_key_down_fn_ptr)(ATcode);
+    if (ATcode)
+        (*host_key_down_fn_ptr)(ATcode);
 
 }
 
@@ -955,8 +1125,8 @@ void nt_key_up_action(PKEY_EVENT_RECORD KeyEvent)
 
     ATcode = KeyMsgToKeyCode(KeyEvent);
 
-    if(ATcode)
-       (*host_key_up_fn_ptr)(ATcode);
+    if (ATcode)
+        (*host_key_up_fn_ptr)(ATcode);
 
 }
 
@@ -976,29 +1146,31 @@ void nt_process_mouse(PMOUSE_EVENT_RECORD MouseEvent)
 
     host_ica_lock();
 
-    if (NoMouseTics) {
+    if (NoMouseTics)
+    {
         ULONG CurrTic;
         CurrTic = NtGetTickCount();
         if (CurrTic > NoMouseTics ||
-            (NoMouseTics == 0xffffffff && CurrTic < (0xffffffff >> 1)) )
-          {
+            (NoMouseTics == 0xffffffff && CurrTic < (0xffffffff >> 1)))
+        {
             NoMouseTics = 0;
             MouseEBufNxtEvtInx = MouseEBufNxtFreeInx = 0;
-            }
-        else {
+        }
+        else
+        {
             host_ica_unlock();
             return;
-            }
         }
+    }
 
 
     /*:::::::::::::::::::::::::::::::::::::::::::::::::: Setup button state */
 
     mouse_button_left = MouseEvent->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED
-            ? 1 : 0;
+                        ? 1 : 0;
 
     mouse_button_right = MouseEvent->dwButtonState & RIGHTMOST_BUTTON_PRESSED
-             ? 1 : 0;
+                         ? 1 : 0;
 
     /*::::::::::::::::::::::::::::::::::::::::::::::: Get new mouse postion */
 
@@ -1015,75 +1187,76 @@ void nt_process_mouse(PMOUSE_EVENT_RECORD MouseEvent)
     if (sc.ScreenState == WINDOWED)
 #endif /* X86GFX */
     {
-    ULONG maxWidth = sc.PC_W_Width,
-          maxHeight = sc.PC_W_Height;
+        ULONG maxWidth = sc.PC_W_Width,
+        maxHeight = sc.PC_W_Height;
 
-    if ((sc.ModeType == TEXT) && get_pix_char_width() &&
-        get_host_char_height())
-    {
-        maxWidth /= get_pix_char_width();
-        maxHeight /= get_host_char_height();
-    }
-    if (mouse_pos.x < 0)
-        mouse_pos.x = 0;
-    else if ((ULONG)mouse_pos.x >= maxWidth)
-        mouse_pos.x = maxWidth - 1;
-    if (mouse_pos.y < 0)
-        mouse_pos.y = 0;
-    else if ((ULONG)mouse_pos.y >= maxHeight)
-        mouse_pos.y = maxHeight - 1;
+        if ((sc.ModeType == TEXT) && get_pix_char_width() &&
+            get_host_char_height())
+        {
+            maxWidth /= get_pix_char_width();
+            maxHeight /= get_host_char_height();
+        }
+        if (mouse_pos.x < 0)
+            mouse_pos.x = 0;
+        else if ((ULONG)mouse_pos.x >= maxWidth)
+            mouse_pos.x = maxWidth - 1;
+        if (mouse_pos.y < 0)
+            mouse_pos.y = 0;
+        else if ((ULONG)mouse_pos.y >= maxHeight)
+            mouse_pos.y = maxHeight - 1;
     }
 
 
     LastMouseInx = MouseEBufNxtFreeInx ? MouseEBufNxtFreeInx - 1
-                                      : MOUSEEVENTBUFFERSIZE - 1;
+                   : MOUSEEVENTBUFFERSIZE - 1;
 
-        //
-        // If the previous mouse event is the same as the last
-        // then drop the event.
-        //
+    //
+    // If the previous mouse event is the same as the last
+    // then drop the event.
+    //
     if (MouseEBufNxtEvtInx != MouseEBufNxtFreeInx &&
         MouseEventBuffer[LastMouseInx].mouse_pos.x == mouse_pos.x &&
         MouseEventBuffer[LastMouseInx].mouse_pos.y == mouse_pos.y &&
         MouseEventBuffer[LastMouseInx].mouse_button_left ==  mouse_button_left &&
-        MouseEventBuffer[LastMouseInx].mouse_button_right == mouse_button_right )
-      {
+        MouseEventBuffer[LastMouseInx].mouse_button_right == mouse_button_right)
+    {
         host_ica_unlock();
         return;
+    }
+
+
+    //
+    // If not too many events in the mouse buffer
+    //    or no outstanding mouse events
+    //    or the mouse button state has changed.
+    // Add the current mouse data to the next free position in
+    // the MouseEventBuffer
+    //
+
+
+    if (MouseEventCount <= MOUSEEVENTBUFFERSIZE/2 ||
+        MouseEBufNxtEvtInx == MouseEBufNxtFreeInx ||
+        MouseEventBuffer[LastMouseInx].mouse_button_left != mouse_button_left ||
+        MouseEventBuffer[LastMouseInx].mouse_button_right != mouse_button_right)
+    {
+        LastMouseInx = MouseEBufNxtFreeInx;
+        if (++MouseEBufNxtFreeInx == MOUSEEVENTBUFFERSIZE)
+        {
+            MouseEBufNxtFreeInx = 0;
         }
 
+        MouseEventCount++;
 
-      //
-      // If not too many events in the mouse buffer
-      //    or no outstanding mouse events
-      //    or the mouse button state has changed.
-      // Add the current mouse data to the next free position in
-      // the MouseEventBuffer
-      //
-
-
-    if(MouseEventCount <= MOUSEEVENTBUFFERSIZE/2 ||
-       MouseEBufNxtEvtInx == MouseEBufNxtFreeInx ||
-       MouseEventBuffer[LastMouseInx].mouse_button_left != mouse_button_left ||
-       MouseEventBuffer[LastMouseInx].mouse_button_right != mouse_button_right)
-
-      {
-       LastMouseInx = MouseEBufNxtFreeInx;
-       if(++MouseEBufNxtFreeInx == MOUSEEVENTBUFFERSIZE) {
-           MouseEBufNxtFreeInx = 0;
-           }
-
-       MouseEventCount++;
-
-       //
-       // if the buffer is full drop the oldest event
-       //
-       if (MouseEBufNxtFreeInx == MouseEBufNxtEvtInx) {
-           always_trace0("Mouse event input buffer overflow");
-           if(++MouseEBufNxtEvtInx == MOUSEEVENTBUFFERSIZE)
-               MouseEBufNxtEvtInx = 0;
-           }
-       }
+        //
+        // if the buffer is full drop the oldest event
+        //
+        if (MouseEBufNxtFreeInx == MouseEBufNxtEvtInx)
+        {
+            always_trace0("Mouse event input buffer overflow");
+            if (++MouseEBufNxtEvtInx == MOUSEEVENTBUFFERSIZE)
+                MouseEBufNxtEvtInx = 0;
+        }
+    }
 
 
     MouseEventBuffer[LastMouseInx].mouse_pos = mouse_pos;
@@ -1103,7 +1276,7 @@ void nt_process_mouse(PMOUSE_EVENT_RECORD MouseEvent)
  */
 BOOL MoreMouseEvents(void)
 {
- return MouseEBufNxtEvtInx != MouseEBufNxtFreeInx;
+    return (MouseEBufNxtEvtInx != MouseEBufNxtFreeInx);
 }
 
 
@@ -1117,20 +1290,20 @@ BOOL MoreMouseEvents(void)
 void GetNextMouseEvent(void)
 {
 
- if (MouseEBufNxtEvtInx != MouseEBufNxtFreeInx) {
-    os_pointer_data.x = (SHORT)MouseEventBuffer[MouseEBufNxtEvtInx].mouse_pos.x;
-    os_pointer_data.y = (SHORT)MouseEventBuffer[MouseEBufNxtEvtInx].mouse_pos.y;
-    os_pointer_data.button_l = MouseEventBuffer[MouseEBufNxtEvtInx].mouse_button_left;
-    os_pointer_data.button_r = MouseEventBuffer[MouseEBufNxtEvtInx].mouse_button_right;
+    if (MouseEBufNxtEvtInx != MouseEBufNxtFreeInx)
+    {
+        os_pointer_data.x = (SHORT)MouseEventBuffer[MouseEBufNxtEvtInx].mouse_pos.x;
+        os_pointer_data.y = (SHORT)MouseEventBuffer[MouseEBufNxtEvtInx].mouse_pos.y;
+        os_pointer_data.button_l = MouseEventBuffer[MouseEBufNxtEvtInx].mouse_button_left;
+        os_pointer_data.button_r = MouseEventBuffer[MouseEBufNxtEvtInx].mouse_button_right;
 
-    if (++MouseEBufNxtEvtInx == MOUSEEVENTBUFFERSIZE)
-         MouseEBufNxtEvtInx = 0;
+        if (++MouseEBufNxtEvtInx == MOUSEEVENTBUFFERSIZE)
+            MouseEBufNxtEvtInx = 0;
 
-    MouseEventCount--;
+        MouseEventCount--;
     }
 
 }
-
 
 /*:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 /*:::::::::::::::::Flush all outstanding mouse events :::::::::::::::::::::*/
@@ -1138,9 +1311,9 @@ void GetNextMouseEvent(void)
 
 void FlushMouseEvents(void)
 {
-     host_ica_lock();
-     MouseEBufNxtEvtInx = MouseEBufNxtFreeInx = 0;
-     host_ica_unlock();
+    host_ica_lock();
+    MouseEBufNxtEvtInx = MouseEBufNxtFreeInx = 0;
+    host_ica_unlock();
 }
 
 //
@@ -1176,13 +1349,13 @@ void nt_process_screen_scale(void)
     host_ica_lock();
     if (!init)
     {
-    init = TRUE;
-    savedScale = get_screen_scale();
+        init = TRUE;
+        savedScale = get_screen_scale();
     }
     if (savedScale == 4)
-    savedScale = 2;
+        savedScale = 2;
     else
-    savedScale++;
+        savedScale++;
     EventStatus |= ES_SCALEVENT;
     host_ica_unlock();
 }
@@ -1213,29 +1386,30 @@ void CheckForYodaEvents(void)
 
     /*:::::::::::::::::::::::::::::::::: check for Yoda event object signal */
 
-    if(YodaEvent == NULL)
+    if (YodaEvent == NULL)
     {
-    if((YodaEvent = OpenEvent(EVENT_ALL_ACCESS,FALSE,"YodaEvent")) == NULL)
-    {
-        always_trace0("Failed to open Yoda event object\n");
-        YodaEvent =  (HANDLE) -1;
-    }
-    }
-
-    if(YodaEvent && YodaEvent != (HANDLE) -1)
-    {
-    if(!WaitForSingleObject(YodaEvent,0))
-    {
-        ResetEvent(YodaEvent);
-        Enter_yoda();
-    }
+        if ((YodaEvent = OpenEvent(EVENT_ALL_ACCESS,FALSE,"YodaEvent")) == NULL)
+        {
+            always_trace0("Failed to open Yoda event object\n");
+            YodaEvent =  (HANDLE) -1;
+        }
     }
 
-     // check for yoda kbd event
-    if (EventStatus & ES_YODA) {
+    if (YodaEvent && YodaEvent != (HANDLE) -1)
+    {
+        if (!WaitForSingleObject(YodaEvent,0))
+        {
+            ResetEvent(YodaEvent);
+            Enter_yoda();
+        }
+    }
+
+    // check for yoda kbd event
+    if (EventStatus & ES_YODA)
+    {
         EventStatus &= ~ES_YODA;
         Enter_yoda();
-        }
+    }
 
 }
 #endif
@@ -1255,23 +1429,44 @@ void CheckForYodaEvents(void)
  */
 DWORD WaitKbdHdw(DWORD dwTime)
 {
-  DWORD dwRc, dwErr;
+    DWORD dwRc, dwErr;
+    HANDLE Thread, hSuspended;
 
-  dwErr = dwRc = WaitForSingleObject(hKbdHdwMutex, dwTime);
-  if (dwRc == WAIT_TIMEOUT) {
-      if (dwTime < 0x10000) {
-          dwErr = 0;
-          }
-      }
-  else if (dwRc == 0xFFFFFFFF) {
-      dwErr = GetLastError();
-      }
 
-  if (dwErr)  {
-      DisplayErrorTerm(EHS_FUNC_FAILED,dwErr,__FILE__,__LINE__);
-      }
+    Thread = NtCurrentTeb()->ClientId.UniqueThread;
+    if (Thread == IcaLock.OwningThread) {  // No synchronization needed
+        dwErr = dwRc = WaitForSingleObject(hKbdHdwMutex, dwTime);
+    } else {
+        HANDLE events[2] = {hKbdHdwMutex, hSuspend};
 
-  return dwRc;
+        rewait:
+        dwErr = dwRc = WaitForMultipleObjects(2, events, FALSE, dwTime);
+        if (dwRc == 1) {
+            hSuspended = CurrentMonitorTeb == NtCurrentTeb() ? hMainThreadSuspended : hConsoleSuspended;
+            SetEvent(hSuspended);
+            WaitForSingleObject(hResume, INFINITE);
+            DisableScreenSwitch(hSuspended);
+            goto rewait;
+        }
+    }
+    if (dwRc == WAIT_TIMEOUT)
+    {
+        if (dwTime < 0x10000)
+        {
+            dwErr = 0;
+        }
+    }
+    else if (dwRc == 0xFFFFFFFF)
+    {
+        dwErr = GetLastError();
+    }
+
+    if (dwErr)
+    {
+        DisplayErrorTerm(EHS_FUNC_FAILED,dwErr,__FILE__,__LINE__);
+    }
+
+    return (dwRc);
 }
 
 GLOBAL VOID HostReleaseKbd(VOID)
@@ -1306,51 +1501,54 @@ void InitQueue(void)
 
 BOOL CntrlHandler(ULONG CtrlType)
 {
-    switch (CtrlType)  {
-       case CTRL_C_EVENT:
-       case CTRL_BREAK_EVENT:
-            break;
+    switch (CtrlType)
+    {
+    case CTRL_C_EVENT:
+    case CTRL_BREAK_EVENT:
+        break;
 
-       case SYSTEM_ROOT_CONSOLE_EVENT:
-            //
-            // top most console process is going away
-            // remember this so we will terminate the vdm in
-            // nt_block_event, when the dos app voluntarily exits
-            //
-            CntrlHandlerState |= CNTRL_SYSTEMROOTCONSOLE;
+    case SYSTEM_ROOT_CONSOLE_EVENT:
+        //
+        // top most console process is going away
+        // remember this so we will terminate the vdm in
+        // nt_block_event, when the dos app voluntarily exits
+        //
+        CntrlHandlerState |= CNTRL_SYSTEMROOTCONSOLE;
 
-            // fall thru to see if we should terminate now
+        // fall thru to see if we should terminate now
 
-       case CTRL_CLOSE_EVENT:
-       case CTRL_LOGOFF_EVENT:
-       case CTRL_SHUTDOWN_EVENT:
+    case CTRL_CLOSE_EVENT:
+    case CTRL_LOGOFF_EVENT:
+    case CTRL_SHUTDOWN_EVENT:
 #ifndef PROD
-            if (VDMForWOW) {  // shouldn't happen
-                printf("WOW: Received EndTask Notice, but we shouldn't\n");
-                break;
-                }
-#endif
-            if (CntrlHandlerState & CNTRL_PUSHEXIT) {
-                ExitProcess(0);
-                return FALSE;
-                }
-
-            if ( (CntrlHandlerState & CNTRL_PIFALLOWCLOSE) ||
-                 (!(CntrlHandlerState & CNTRL_SHELLCOUNT) &&
-                   (CntrlHandlerState & CNTRL_VDMBLOCKED))   )
-               {
-                TerminateVDM();
-                return FALSE;
-                }
-
+        if (VDMForWOW)
+        {  // shouldn't happen
+            printf("WOW: Received EndTask Notice, but we shouldn't\n");
             break;
+        }
+#endif
+        if (CntrlHandlerState & CNTRL_PUSHEXIT)
+        {
+            ExitProcess(0);
+            return (FALSE);
+        }
+
+        if ((CntrlHandlerState & CNTRL_PIFALLOWCLOSE) ||
+            (!(CntrlHandlerState & CNTRL_SHELLCOUNT) &&
+             (CntrlHandlerState & CNTRL_VDMBLOCKED)))
+        {
+            TerminateVDM();
+            return (FALSE);
+        }
+
+        break;
 
 #ifndef PROD
-       default:   // shouldn't happen
-            printf("NTVDM: Received unknown CtrlType=%lu\n",CtrlType);
+    default:   // shouldn't happen
+        printf("NTVDM: Received unknown CtrlType=%lu\n",CtrlType);
 #endif
-       }
-    return TRUE;
+    }
+    return (TRUE);
 }
 
 
@@ -1361,8 +1559,8 @@ BOOL CntrlHandler(ULONG CtrlType)
  * the PIF setting shows window should not close.
  */
 
- void nt_block_event_thread(ULONG BlockFlags)
- {
+void nt_block_event_thread(ULONG BlockFlags)
+{
     DWORD        dw;
     int          UnusedKeyEvents;
     COORD        scrSize;
@@ -1370,66 +1568,173 @@ BOOL CntrlHandler(ULONG CtrlType)
     nt_init_event_thread();  // does nothing if init already
 
     /* remember the reason why we are blocked.
-     *	0 == the application is not being terminated, instead, it is
-     *	executing either a 32 bits application or command.com(TSR installed
-     *	or shell out).
-     *	1 == application is terminating.
-     *	if the application is terminating, we are safe to re-enable
-     *	stream io on nt_resume_event_thread.
+     *  0 == the application is not being terminated, instead, it is
+     *  executing either a 32 bits application or command.com(TSR installed
+     *  or shell out).
+     *  1 == application is terminating.
+     *  if the application is terminating, we are safe to re-enable
+     *  stream io on nt_resume_event_thread.
     */
+
     event_thread_blocked_reason = BlockFlags;
+    EventThreadKeepMode         = 0;
+
+#if !defined(JAPAN) && !defined(KOREA)
+
+    /////////////////////////////////////////////////////////////////////////
+    //
+    // If we need to preserve the mode,
+    //     save current mode in EventThreadKeepMode.  (This is for simplicity
+    //         such that in fullscreen case, it is easier for us to know which
+    //         mode to set to.)
+    //
+    // In general EventThreadKeepode == 0 if it is the top level
+    //     ntvdm (i.e. exiting top level ntvdm.).
+    //     Otherwise, it is exiting at lease second level (nested case).
+    //
+    // In ResetConsoleState (on block event thread) we will check:
+    //
+    //     windowed mode:
+    //         if (EventThreadKeepMode != 0)
+    //             there is an old mode needs to be restore.
+    //             don't change original console state.
+    //         else
+    //             set console back to original mode (stored in sc)
+    //
+    //     fullscreen text mode:
+    //
+    //         if (!EventThreadKeepMode)
+    //             we just exited an appp and is going back to
+    //             top level ntvdm.  We need to restore original console state
+    //         if (EventThreadKeepMode)
+    //             don't destroy current setting.  For simplicity, use
+    //                EventThreadKeepMode value to set current fullscreen
+    //                mode.
+    //
+    //     fullscreen graphic mode:
+    //
+    //         Pretend we are going to fullscrren text mode.
+    //         if (!EventThreadKeepMode)
+    //             we are exiting from top level ntvdm app.  Use old code.
+    //         if (EventThreadKeepMode)
+    //             Set to the saved mode.
+    //
+    //
+    // In SetupConsoleMode (on resume) we will check:
+    //     if (EventThreadKeepMode != 0)
+    //         Don't reset original console state.
+    //     else  // don't need to restore mode
+    //         original console state = current state;
+    //
+
+    /////////////////////////////////////////////////////////////
+    //
+    // What jonle's suggestion is:
+    //
+    //     ntvdm switches to the closest DOS video mode
+    //     ntvdm remembers the mode it sets to
+    //     run dos apps
+    //     before exiting the top level dos app
+    //     check if current mode == the mode ntvdm set to
+    //     if yes then ntvdm switches console state back to the original state
+    //     else leave it alone.
+    //
+    //     I will leave this suggestion to next time I change the code or next
+    //     release.  Basically we need to:
+    //         Remember the DOS mode we set to in calcScreenParams()
+    //         In nt_block_event_thread, if we are exiting top level dos app,
+    //         compare current mode with the mode we saved in CalcScreenParams().
+    //         if they are the same, do what we do today.
+    //         else we leave current mode alone.  That means we need to set
+    //         console state/window info to the corresponding mode.  Need to
+    //         check for windowed mode, fullscreen mode and graphic mode.  Some
+    //         mode, we can leave it alone but some mode we may need to actually
+    //         set it.  (I am pretty sure we need to complete change the way
+    //         we handle fullscreen graphic mode.  See comments there too.)
+    //
+    ///////////////////////////////////////////////////////////////////
+
+    if (CntrlHandlerState & CNTRL_SHELLCOUNT) {
+        EventThreadKeepMode = ((DWORD) sas_hw_at_no_check(vd_rows_on_screen)) + 1;
+    }
+#endif
 
     // Send notification message for VDDs */
+    nt_devices_block_or_terminate();
     VDDBlockUserHook();
 
 
     /*::::::::::::::::::::::::::::::::::::::::::::::::::::: Turn off sound */
     InitSound(FALSE);
+    SbCloseDevices();
 
     /*::::::::::::::::::::::::::::::::::::::::::::: Block the event thread */
 
-    if (!VDMForWOW) {
+    if (!VDMForWOW)
+    {
+        HANDLE events[2];
 
-        ResetMouseOnBlock();               // remove mouse pointer menu item
+        ResetMouseOnBlock();            // remove mouse pointer menu item
 
-        SetEvent(hConsoleSuspend);
+        //
+        // suspend the event thread and wait for it to block
+        //
+        events[0] = hConsoleStopped;
+        events[1] = hSuspend;
+        ResetEvent(hConsoleResume);
+        SetEvent(hConsoleStop);
 
-        //Wait for the event thread to block
-        dw = WaitForSingleObject(hConsoleWaitStall, 360000);
-        if (dw)  {
-            if (dw == WAIT_TIMEOUT)
-                SetLastError(ERROR_SERVICE_REQUEST_TIMEOUT);
+        rewaitEventThread:
+        dw = WaitForMultipleObjects(2, events, FALSE, INFINITE);
+        if (dw == 0) {
+            CheckScreenSwitchRequest(hMainThreadSuspended);
+        }
+        else if (dw ==  1)
+        {
+            SetEvent(hMainThreadSuspended);
+            WaitForSingleObject(hResume, INFINITE);
+            DisableScreenSwitch(hMainThreadSuspended);
+            goto rewaitEventThread;
+        } else {
             DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(), __FILE__,__LINE__);
             TerminateVDM();
-            }
-
-
+        }
         /*::::::::::::::::::::::::::::::::: Flush screen output, reset console */
 
 
-	if (sc.ScreenState == STREAM_IO)
-	    stream_io_update();
-	else {
-	    if (sc.ScreenState != FULLSCREEN)
-		(*update_alg.calc_update)();
-	    // Put Console back the way it was when we started up
-	    ResetConsoleState();
+        if (sc.ScreenState == STREAM_IO)
+            stream_io_update();
+        else
+        {
+            if (sc.ScreenState != FULLSCREEN)
+#if defined(JAPAN) || defined(KOREA)
+                if (ConsoleInitialised == TRUE && ConsoleNoUpdates == FALSE)
+#endif // JAPAN || KOREA
+                {
+                    if (get_mode_change_required()) {
+                        (void)(*choose_display_mode)();
+                        set_mode_change_required(FALSE);
+                    }
+                    (*update_alg.calc_update)();
+                }
 
-	    // Ensure system pointer visible.
-	    while(ShowConsoleCursor(sc.OutputHandle,TRUE) < 0)
-	       ;
+            ResetConsoleState();
+
+            // Ensure system pointer visible.
+            while (ShowConsoleCursor(sc.OutputHandle,TRUE) < 0)
+                ;
 
 #ifdef MONITOR
-	    if(sc.ScreenState == FULLSCREEN) RegainRegenMemory();
+            if (sc.ScreenState == FULLSCREEN) RegainRegenMemory();
 #endif
 
-	    /* If keeping window open when exiting and fullscreen, return to desktop */
-	    /* Transition made simple as VDM de-registered from console */
-	    if (BlockFlags == 1 && sc.ScreenState == FULLSCREEN)
-	    {
-		SetConsoleDisplayMode(sc.OutputHandle, CONSOLE_WINDOWED_MODE, &scrSize);
-	    }
-	}
+            /* If keeping window open when exiting and fullscreen, return to desktop */
+            /* Transition made simple as VDM de-registered from console */
+            if (BlockFlags == 1 && sc.ScreenState == FULLSCREEN)
+            {
+                SetConsoleDisplayMode(sc.OutputHandle, CONSOLE_WINDOWED_MODE, &scrSize);
+            }
+        }
 
         // Turn off PIF Reserved & ShortCut Keys
         DisablePIFKeySetup();
@@ -1450,22 +1755,58 @@ BOOL CntrlHandler(ULONG CtrlType)
 
         /*::: Restore Console modes */
 
-        if(!SetConsoleMode(sc.InputHandle,sc.OrgInConsoleMode))
+        if (!SetConsoleMode(sc.InputHandle,sc.OrgInConsoleMode))
             DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(), __FILE__,__LINE__);
 
-        if(!SetConsoleMode(sc.OutputHandle,sc.OrgOutConsoleMode))
+        if (!SetConsoleMode(sc.OutputHandle,sc.OrgOutConsoleMode))
             DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(), __FILE__,__LINE__);
 
+#if defined(JAPAN) || defined(KOREA)
+        // 32bit IME status restore
+        if (SetConsoleNlsMode( sc.InputHandle, ConsoleNlsMode & (~NLS_IME_DISABLE)))
+        {
+    #ifdef JAPAN_DBG
+            DbgPrint( "NTVDM: 32bit IME status restore %08x success\n", ConsoleNlsMode );
+    #endif
+        }
+        else
+        {
+            DbgPrint( "NTVDM: SetConsoleNlsMode Error %08x\n", GetLastError() );
+        }
+
+        // Set cursor mode
+        if (!SetConsoleCursorMode( sc.OutputHandle,
+                                   TRUE,            // Bringing
+                                   TRUE             //  Double byte cursor
+                                 ))
+        {
+    #ifdef JAPAN_DBG
+            DbgPrint( "NTVDM: SetConsoleCursorMode Error\n" );
+    #endif
+        }
+
+        // NtConsoleFlag, for full screen graphics app running second time.
+        // NtConsoleFlag is in $NtDisp
+        {
+            sys_addr FlagAddr;
+            extern word NtConsoleFlagSeg;
+            extern word NtConsoleFlagOff;
+
+            FlagAddr = effective_addr( NtConsoleFlagSeg, NtConsoleFlagOff );
+            sas_store( FlagAddr, 0x01 );
+        }
+#endif // JAPAN || KOREA
         if (!(CntrlHandlerState & CNTRL_SHELLCOUNT) &&
-            CntrlHandlerState & CNTRL_SYSTEMROOTCONSOLE) {
+            CntrlHandlerState & CNTRL_SYSTEMROOTCONSOLE)
+        {
             TerminateVDM();
-            }
+        }
         //
         // Reset the Active buffer field in sc.
         //
         sc.ActiveOutputBufferHandle = sc.OutputHandle;
         MouseDetachMenuItem(FALSE);
-        }
+    }
 
     // clear kbd state flags in biosdata area
     sas_store (kb_flag,0);
@@ -1487,9 +1828,8 @@ BOOL CntrlHandler(ULONG CtrlType)
     if (!(CntrlHandlerState & CNTRL_SHELLCOUNT))
         host_com_close_all();   /* Close all open comms ports */
 
-    fEventThreadBlock = TRUE;
-
     CntrlHandlerState |= CNTRL_VDMBLOCKED;
+
 #ifndef PROD
     fprintf(trace_file,"Blocked event thread\n");
 #endif
@@ -1506,25 +1846,30 @@ void nt_resume_event_thread(void)
     // If wow enters here we are in a really bad way
     // since it means they are trying to reload
     //
-    if (VDMForWOW) {
+    if (VDMForWOW)
+    {
         TerminateVDM();
         return;
-        }
+    }
 
-    /* re-enable stream io if the application is terminating */
-
+#if defined(JAPAN) || defined(KOREA)
     if (event_thread_blocked_reason == 1 &&
-	StreamIoSwitchOn && !host_stream_io_enabled) {
-	/* renew the screen buffer and window size */
-	if (!GetConsoleScreenBufferInfo(sc.OutputHandle,
-					&sc.ConsoleBuffInfo))
+#else
+    /* re-enable stream io if we don't need to save original mode */
+    if (EventThreadKeepMode == 0 &&
+#endif
+        StreamIoSwitchOn && !host_stream_io_enabled)
+    {
+        /* renew the screen buffer and window size */
+        if (!GetConsoleScreenBufferInfo(sc.OutputHandle,
+                                        &sc.ConsoleBuffInfo))
 
             DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(), __FILE__,__LINE__);
 
-	enable_stream_io();
+        enable_stream_io();
 #ifdef X86GFX
-	/* tell video bios we are back to stream io */
-	sas_store_no_check( (int10_seg<<4)+useHostInt10, STREAM_IO);
+        /* tell video bios we are back to stream io */
+        sas_store_no_check( (int10_seg<<4)+useHostInt10, STREAM_IO);
 #endif
 
     }
@@ -1534,6 +1879,11 @@ void nt_resume_event_thread(void)
 #ifndef PROD
     fprintf(trace_file,"Resume event thread\n");
 #endif
+
+    //
+    // Reset hMainThreadSuspended before register console VDM
+    //
+    ResetEvent(hMainThreadSuspended);
 
     // Setup Console modes
     SetupConsoleMode();
@@ -1550,128 +1900,59 @@ void nt_resume_event_thread(void)
     // Send notification message for VDDs */
     VDDResumeUserHook();
 
-    if (sc.ScreenState != STREAM_IO) {
-	DoFullScreenResume();
-	MouseAttachMenuItem(sc.ActiveOutputBufferHandle);
+    if (sc.ScreenState != STREAM_IO)
+    {
+        DoFullScreenResume();
+        MouseAttachMenuItem(sc.ActiveOutputBufferHandle);
     }
     ResumeTimerThread(); /* Restart timer thread */
 
     // set kbd state flags in biosdata area
-    if (!VDMForWOW) {
+    if (!VDMForWOW)
+    {
         SyncBiosKbdLedToKbdDevice();
-        }
+    }
 
     KbdResume();
+#ifdef JAPAN
+    SetModeForIME();
+#endif // JAPAN
 
-    SetEvent(hConsoleWait);               /* Restart event thread */
+    //
+    // Let go the event thread
+    //
+    SetEvent(hConsoleResume);
 }
-
 
 
 void
 SyncBiosKbdLedToKbdDevice(
-    void
-    )
+                         void
+                         )
 {
-   NTSTATUS Status;
-   UNICODE_STRING UnicodeString;
-   OBJECT_ATTRIBUTES ObjAttr;
-   IO_STATUS_BLOCK IoStatus;
-   KEYBOARD_INDICATOR_PARAMETERS kip;
-   KEYBOARD_UNIT_ID_PARAMETER kuid;
-   HANDLE hKeyboard = 0;
-   HANDLE KeyboardEvent = 0;
-   ULONG ControlKeyState;
+    unsigned char KbdLed = 0;
 
-   unsigned char KbdLed;
+    ToggleKeyState = 0;
+    if (GetKeyState(VK_CAPITAL) & 1) {
+        ToggleKeyState |= CAPSLOCK_ON;
+        KbdLed |= CAPS_STATE;
+    }
 
+    if (GetKeyState(VK_NUMLOCK) & 1) {
+        ToggleKeyState |= NUMLOCK_ON;
+        KbdLed |= NUM_STATE;
+    }
 
-   ControlKeyState = ToggleKeyState & (CAPSLOCK_ON | NUMLOCK_ON | SCROLLLOCK_ON);
+    if (GetKeyState(VK_SCROLL) & 1) {
+        ToggleKeyState |= SCROLLLOCK_ON;
+        KbdLed |= SCROLL_STATE;
+    }
 
-   RtlInitUnicodeString(&UnicodeString, DD_KEYBOARD_DEVICE_NAME_U L"0");
-   InitializeObjectAttributes(&ObjAttr, &UnicodeString, 0, NULL, NULL);
+    sas_store (kb_flag,KbdLed);
+    sas_store (kb_flag_2,(unsigned char)(KbdLed >> 4));
 
-   Status = NtCreateFile(&hKeyboard,
-                         FILE_READ_DATA | SYNCHRONIZE,
-                         &ObjAttr,
-                         &IoStatus,
-                         NULL, 0, 0, FILE_OPEN_IF, 0, NULL, 0
-                         );
-
-    if (!NT_SUCCESS(Status)) {
-        hKeyboard = 0;
-        goto GiveUp;
-        }
-    else {
-        KeyboardEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-        if (!KeyboardEvent) {
-            goto GiveUp;
-            }
-        }
-
-    kuid.UnitId = 0;
-    Status = NtDeviceIoControlFile(hKeyboard,
-                                   KeyboardEvent,
-                                   NULL, NULL,     // apcrtn, apccontext
-                                   &IoStatus,
-                                   IOCTL_KEYBOARD_QUERY_INDICATORS,
-                                   &kuid, sizeof(kuid),
-                                   &kip, sizeof(kip)
-                                   );
-
-   if (!NT_SUCCESS(Status)) {
-       goto GiveUp;
-       }
-
-
-   Status = NtWaitForSingleObject(KeyboardEvent, FALSE, NULL);
-   if (Status != STATUS_SUCCESS) {
-       goto GiveUp;
-       }
-
-
-   ControlKeyState = 0;
-   if (kip.LedFlags & KEYBOARD_CAPS_LOCK_ON) {
-       ControlKeyState |= CAPSLOCK_ON;
-       }
-
-   if (kip.LedFlags & KEYBOARD_NUM_LOCK_ON) {
-       ControlKeyState |= NUMLOCK_ON;
-       }
-
-   if (kip.LedFlags & KEYBOARD_SCROLL_LOCK_ON) {
-       ControlKeyState |= SCROLLLOCK_ON;
-       }
-
-GiveUp:
-
-   if (hKeyboard) {
-       NtClose(hKeyboard);
-       }
-
-   if (KeyboardEvent) {
-       NtClose(KeyboardEvent);
-       }
-
-
-   ToggleKeyState = ControlKeyState;
-   KbdLed = 0;
-   if (ToggleKeyState & NUMLOCK_ON) {
-       KbdLed |= NUM_STATE;
-       }
-   if (ToggleKeyState & CAPSLOCK_ON) {
-       KbdLed |= CAPS_STATE;
-       }
-   if (ToggleKeyState & SCROLLLOCK_ON) {
-       KbdLed |= SCROLL_STATE;
-       }
-
-   sas_store (kb_flag,KbdLed);
-   sas_store (kb_flag_2,(unsigned char)(KbdLed >> 4));
-
-   return;
+    return;
 }
-
 
 
 #define NUMBBIRECS 32
@@ -1699,138 +1980,146 @@ VOID ReturnBiosBufferKeys(VOID)
     sas_loadw(BIOS_KB_BUFFER_START,&BufferStart);
 
     i = NUMBBIRECS - 1;
-    while (BufferHead != BufferTail)  {
+    while (BufferHead != BufferTail)
+    {
 
-             /*
-              * Get Scode\char from bios buffer, starting from
-              * the last key entered.
-              */
-         BufferTail -= 2;
-         if (BufferTail < BufferStart) {
-             BufferTail = BufferEnd-2;
-             }
-         sas_loadw(BIOS_VAR_START + BufferTail, &w);
-
-         InputRecord[i].EventType = KEY_EVENT;
-         InputRecord[i].Event.KeyEvent.wVirtualScanCode = w >> 8;
-         AsciiChar = (UCHAR)w & 0xFF;
-         (UCHAR)InputRecord[i].Event.KeyEvent.uChar.AsciiChar = AsciiChar;
-
-          /*
-           *  Translate the character stuff in InputRecord.
-           *  we start filling InputRecord from the bottom
-           *  we are working from the last key entered, towards
-           *  the oldest key.
-           */
-         if (!BiosKeyToInputRecord(&InputRecord[i].Event.KeyEvent))  {
-             ;    // error in translation skip it
-             }
-
-                  // normal case
-         else if (InputRecord[i].Event.KeyEvent.wVirtualScanCode)  {
-             InputRecord[i].Event.KeyEvent.bKeyDown = FALSE;
-             InputRecord[i-1] = InputRecord[i];
-             i--;
-             InputRecord[i--].Event.KeyEvent.bKeyDown = TRUE;
-             }
-
-                 //  Special character codes with no scan code are
-                 //  generated by simulating the alt-num pad entry
-         else if (InputRecord[i].Event.KeyEvent.uChar.AsciiChar)
-            {
-             UnicodeChar = InputRecord[i].Event.KeyEvent.uChar.UnicodeChar;
-
-                  // write out what we have, ensuring we have space
-             if (i != NUMBBIRECS - 1) {
-                  WriteConsoleInputVDMW(sc.InputHandle,
-                                        &InputRecord[i+1],
-                                        NUMBBIRECS - i - 1,
-                                        &dwRecs);
-                  i = NUMBBIRECS - 1;
-                  }
-
-
-
-              // restore NUMLOCK state if needed
-             usKeyState = (USHORT)GetKeyState(VK_NUMLOCK);
-             if (!(usKeyState & 1)) {
-                 InputRecord[i].EventType = KEY_EVENT;
-                 InputRecord[i].Event.KeyEvent.wVirtualScanCode  = 0x45;
-                 InputRecord[i].Event.KeyEvent.uChar.UnicodeChar = 0;
-                 InputRecord[i].Event.KeyEvent.wVirtualKeyCode   = VK_NUMLOCK;
-                 InputRecord[i].Event.KeyEvent.dwControlKeyState = NUMLOCK_ON;
-                 InputRecord[i].Event.KeyEvent.wRepeatCount      = 1;
-                 InputRecord[i--].Event.KeyEvent.bKeyDown = FALSE;
-                 InputRecord[i] = InputRecord[0];
-                 InputRecord[i--].Event.KeyEvent.bKeyDown = TRUE;
-                 }
-
-               // alt up
-             InputRecord[i].EventType = KEY_EVENT;
-             InputRecord[i].Event.KeyEvent.wVirtualScanCode  = 0x38;
-             InputRecord[i].Event.KeyEvent.uChar.UnicodeChar = UnicodeChar;
-             InputRecord[i].Event.KeyEvent.wVirtualKeyCode   = VK_MENU;
-             InputRecord[i].Event.KeyEvent.dwControlKeyState = NUMLOCK_ON;
-             InputRecord[i].Event.KeyEvent.wRepeatCount      = 1;
-             InputRecord[i--].Event.KeyEvent.bKeyDown = FALSE;
-
-               // up/down for each digits, starting with lsdigit
-             while (AsciiChar) {
-                 Digit = AsciiChar % 10;
-                 AsciiChar /= 10;
-
-                 InputRecord[i].EventType = KEY_EVENT;
-                 InputRecord[i].Event.KeyEvent.uChar.UnicodeChar = 0;
-                 InputRecord[i].Event.KeyEvent.wVirtualScanCode= aNumPadSCode[Digit];
-                 InputRecord[i].Event.KeyEvent.wVirtualKeyCode = VK_NUMPAD0+Digit;
-                 InputRecord[i].Event.KeyEvent.dwControlKeyState = NUMLOCK_ON | LEFT_ALT_PRESSED;
-                 InputRecord[i].Event.KeyEvent.bKeyDown = FALSE;
-                 InputRecord[i-1] = InputRecord[i];
-                 i--;
-                 InputRecord[i--].Event.KeyEvent.bKeyDown = TRUE;
-                 }
-
-               // send alt down
-             InputRecord[i].EventType = KEY_EVENT;
-             InputRecord[i].Event.KeyEvent.wVirtualScanCode  = 0x38;
-             InputRecord[i].Event.KeyEvent.uChar.UnicodeChar = 0;
-             InputRecord[i].Event.KeyEvent.wVirtualKeyCode   = VK_MENU;
-             InputRecord[i].Event.KeyEvent.dwControlKeyState = NUMLOCK_ON | LEFT_ALT_PRESSED;
-             InputRecord[i].Event.KeyEvent.wRepeatCount      = 1;
-             InputRecord[i--].Event.KeyEvent.bKeyDown = TRUE;
-
-
-               // toggel numpad state if needed
-             if (!(usKeyState & 1)) {
-                 InputRecord[i].EventType = KEY_EVENT;
-                 InputRecord[i].Event.KeyEvent.wVirtualScanCode  = 0x45;
-                 InputRecord[i].Event.KeyEvent.uChar.UnicodeChar = 0;
-                 InputRecord[i].Event.KeyEvent.wVirtualKeyCode   = VK_NUMLOCK;
-                 InputRecord[i].Event.KeyEvent.dwControlKeyState = NUMLOCK_ON;
-                 InputRecord[i].Event.KeyEvent.wRepeatCount      = 1;
-                 InputRecord[i].Event.KeyEvent.bKeyDown = FALSE;
-                 InputRecord[i-1] = InputRecord[i];
-                 i--;
-                 InputRecord[i--].Event.KeyEvent.bKeyDown = TRUE;
-                 }
-             }
-
-
-
-
-             /*  If buffer is full or
-              *     bios buffer is empty and got stuff in buffer
-              *     Write it out
-              */
-        if ((BufferHead == BufferTail && i != NUMBBIRECS - 1) || i < 0)
-            {
-             WriteConsoleInputVDMW(sc.InputHandle,
-                                   &InputRecord[i+1],
-                                   NUMBBIRECS - i - 1,
-                                   &dwRecs);
-             i = NUMBBIRECS - 1;
-             }
+        /*
+         * Get Scode\char from bios buffer, starting from
+         * the last key entered.
+         */
+        BufferTail -= 2;
+        if (BufferTail < BufferStart)
+        {
+            BufferTail = BufferEnd-2;
         }
+        sas_loadw(BIOS_VAR_START + BufferTail, &w);
+
+        InputRecord[i].EventType = KEY_EVENT;
+        InputRecord[i].Event.KeyEvent.wVirtualScanCode = w >> 8;
+        AsciiChar = (UCHAR)w & 0xFF;
+        (UCHAR)InputRecord[i].Event.KeyEvent.uChar.AsciiChar = AsciiChar;
+
+        /*
+         *  Translate the character stuff in InputRecord.
+         *  we start filling InputRecord from the bottom
+         *  we are working from the last key entered, towards
+         *  the oldest key.
+         */
+        if (!BiosKeyToInputRecord(&InputRecord[i].Event.KeyEvent))
+        {
+            ;    // error in translation skip it
+        }
+
+        // normal case
+        else if (InputRecord[i].Event.KeyEvent.wVirtualScanCode)
+        {
+            InputRecord[i].Event.KeyEvent.bKeyDown = FALSE;
+            InputRecord[i-1] = InputRecord[i];
+            i--;
+            InputRecord[i--].Event.KeyEvent.bKeyDown = TRUE;
+        }
+
+        //  Special character codes with no scan code are
+        //  generated by simulating the alt-num pad entry
+        else if (InputRecord[i].Event.KeyEvent.uChar.AsciiChar)
+        {
+            UnicodeChar = InputRecord[i].Event.KeyEvent.uChar.UnicodeChar;
+
+            // write out what we have, ensuring we have space
+            if (i != NUMBBIRECS - 1)
+            {
+                WriteConsoleInputVDMW(sc.InputHandle,
+                                      &InputRecord[i+1],
+                                      NUMBBIRECS - i - 1,
+                                      &dwRecs);
+                i = NUMBBIRECS - 1;
+            }
+
+
+
+            // restore NUMLOCK state if needed
+            usKeyState = (USHORT)GetKeyState(VK_NUMLOCK);
+            if (!(usKeyState & 1))
+            {
+                InputRecord[i].EventType = KEY_EVENT;
+                InputRecord[i].Event.KeyEvent.wVirtualScanCode  = 0x45;
+                InputRecord[i].Event.KeyEvent.uChar.UnicodeChar = 0;
+                InputRecord[i].Event.KeyEvent.wVirtualKeyCode   = VK_NUMLOCK;
+                InputRecord[i].Event.KeyEvent.dwControlKeyState = NUMLOCK_ON;
+                InputRecord[i].Event.KeyEvent.wRepeatCount      = 1;
+                InputRecord[i--].Event.KeyEvent.bKeyDown = FALSE;
+                InputRecord[i] = InputRecord[0];
+                InputRecord[i--].Event.KeyEvent.bKeyDown = TRUE;
+            }
+
+            // alt up
+            InputRecord[i].EventType = KEY_EVENT;
+            InputRecord[i].Event.KeyEvent.wVirtualScanCode  = 0x38;
+            InputRecord[i].Event.KeyEvent.uChar.UnicodeChar = UnicodeChar;
+            InputRecord[i].Event.KeyEvent.wVirtualKeyCode   = VK_MENU;
+            InputRecord[i].Event.KeyEvent.dwControlKeyState = NUMLOCK_ON;
+            InputRecord[i].Event.KeyEvent.wRepeatCount      = 1;
+            InputRecord[i--].Event.KeyEvent.bKeyDown = FALSE;
+
+            // up/down for each digits, starting with lsdigit
+            while (AsciiChar)
+            {
+                Digit = AsciiChar % 10;
+                AsciiChar /= 10;
+
+                InputRecord[i].EventType = KEY_EVENT;
+                InputRecord[i].Event.KeyEvent.uChar.UnicodeChar = 0;
+                InputRecord[i].Event.KeyEvent.wVirtualScanCode= aNumPadSCode[Digit];
+                InputRecord[i].Event.KeyEvent.wVirtualKeyCode = VK_NUMPAD0+Digit;
+                InputRecord[i].Event.KeyEvent.dwControlKeyState = NUMLOCK_ON | LEFT_ALT_PRESSED;
+                InputRecord[i].Event.KeyEvent.bKeyDown = FALSE;
+                InputRecord[i-1] = InputRecord[i];
+                i--;
+                InputRecord[i--].Event.KeyEvent.bKeyDown = TRUE;
+            }
+
+            // send alt down
+            InputRecord[i].EventType = KEY_EVENT;
+            InputRecord[i].Event.KeyEvent.wVirtualScanCode  = 0x38;
+            InputRecord[i].Event.KeyEvent.uChar.UnicodeChar = 0;
+            InputRecord[i].Event.KeyEvent.wVirtualKeyCode   = VK_MENU;
+            InputRecord[i].Event.KeyEvent.dwControlKeyState = NUMLOCK_ON | LEFT_ALT_PRESSED;
+            InputRecord[i].Event.KeyEvent.wRepeatCount      = 1;
+            InputRecord[i--].Event.KeyEvent.bKeyDown = TRUE;
+
+
+            // toggel numpad state if needed
+            if (!(usKeyState & 1))
+            {
+                InputRecord[i].EventType = KEY_EVENT;
+                InputRecord[i].Event.KeyEvent.wVirtualScanCode  = 0x45;
+                InputRecord[i].Event.KeyEvent.uChar.UnicodeChar = 0;
+                InputRecord[i].Event.KeyEvent.wVirtualKeyCode   = VK_NUMLOCK;
+                InputRecord[i].Event.KeyEvent.dwControlKeyState = NUMLOCK_ON;
+                InputRecord[i].Event.KeyEvent.wRepeatCount      = 1;
+                InputRecord[i].Event.KeyEvent.bKeyDown = FALSE;
+                InputRecord[i-1] = InputRecord[i];
+                i--;
+                InputRecord[i--].Event.KeyEvent.bKeyDown = TRUE;
+            }
+        }
+
+
+
+
+        /*  If buffer is full or
+         *     bios buffer is empty and got stuff in buffer
+         *     Write it out
+         */
+        if ((BufferHead == BufferTail && i != NUMBBIRECS - 1) || i < 0)
+        {
+            WriteConsoleInputVDMW(sc.InputHandle,
+                                  &InputRecord[i+1],
+                                  NUMBBIRECS - i - 1,
+                                  &dwRecs);
+            i = NUMBBIRECS - 1;
+        }
+    }
 
 
     sas_storew(BIOS_KB_BUFFER_TAIL, BufferTail);
@@ -1853,18 +2142,25 @@ void ReturnUnusedKeyEvents(int UnusedKeyEvents)
 
     /* Return keys to console input buffer */
 
-    if(UnusedKeyEvents)
+    if (UnusedKeyEvents)
     {
-    for(KeyToRtn = 1, KeyInx = UnusedKeyEvents-1;
-        KeyToRtn <= UnusedKeyEvents &&
-        GetHistoryKeyEvent(&InputRecords[KeyInx].Event.KeyEvent,KeyToRtn);
-        KeyToRtn++,KeyInx--)
-    {
-        InputRecords[KeyToRtn - 1].EventType = KEY_EVENT;
-    }
+        //
+        // Make sure we only retrieve the max number of events that we recorded.
+        //
 
-    if(!WriteConsoleInputVDMW(sc.InputHandle,InputRecords,KeyToRtn,&RecsWrt))
-        always_trace0("Console write failed\n");
+        if (UnusedKeyEvents > MAX_KEY_EVENTS) {
+            UnusedKeyEvents = MAX_KEY_EVENTS;
+        }
+        for (KeyToRtn = 1, KeyInx = UnusedKeyEvents-1;
+            KeyToRtn <= UnusedKeyEvents &&
+            GetHistoryKeyEvent(&InputRecords[KeyInx].Event.KeyEvent,KeyToRtn);
+            KeyToRtn++,KeyInx--)
+        {
+            InputRecords[KeyToRtn - 1].EventType = KEY_EVENT;
+        }
+
+        if (!WriteConsoleInputVDMW(sc.InputHandle,InputRecords,KeyToRtn,&RecsWrt))
+            always_trace0("Console write failed\n");
     }
 
     /* Clear down key history buffer and event queue */
@@ -1878,9 +2174,10 @@ void ReturnUnusedKeyEvents(int UnusedKeyEvents)
  */
 void cmdPushExitInConsoleBuffer (void)
 {
-    if (VDMForWOW) {
+    if (VDMForWOW)
+    {
         return;
-        }
+    }
     CntrlHandlerState |= CNTRL_PUSHEXIT;
 
     /*

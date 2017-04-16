@@ -15,7 +15,7 @@ DESIGNER	: J.P.Box
 DATE		: April '88
 
 PURPOSE		: Contains all the routines that communicate with
-		the arrays and data structures that hold the 
+		the arrays and data structures that hold the
 		necessary Expanded Memory Manager Data.
 
 
@@ -76,10 +76,7 @@ AMMENDMENTS	:
 
 #include <stdio.h>
 #include <string.h>
-
-#if defined(NTVDM) && defined(MONITOR)
 #include <malloc.h>
-#endif
 
 #include TypesH
 
@@ -169,7 +166,7 @@ boolean lim_page_frame_init(PLIM_CONFIG_DATA lim_config_data)
 
 
     /* each mapping register set has no_phys_pages pages */
-    EM_page_mapped_array = host_malloc(no_phys_pages * no_altreg_sets *
+    EM_page_mapped_array = (unsigned short *)host_malloc(no_phys_pages * no_altreg_sets *
 				   sizeof(short));
     if (EM_page_mapped_array == NULL) {
 	host_error(EG_MALLOC_FAILURE, ERR_CONT, "");
@@ -177,7 +174,7 @@ boolean lim_page_frame_init(PLIM_CONFIG_DATA lim_config_data)
     }
     /* one bit for each altreg set */
     altreg_alloc_mask_size = (no_altreg_sets + 7) / 8;
-    altreg_alloc_mask = host_malloc(altreg_alloc_mask_size);
+    altreg_alloc_mask = (unsigned char *)host_malloc(altreg_alloc_mask_size);
     if (altreg_alloc_mask == NULL) {
 	host_free(EM_page_mapped_array);
 	host_error(EG_MALLOC_FAILURE, ERR_CONT, "");
@@ -270,7 +267,7 @@ GLOBAL int init_expanded_memory IFN2(int, size, 	/* size of area in megabytes */
 
 	/* get space for expanded memory pages	*/
 
-	if(host_initialise_EM(size) != SUCCESS)
+	if(host_initialise_EM((short)size) != SUCCESS)
 	{
 #ifdef NTVDM
 	    host_error(EG_EXPANDED_MEM_FAILURE, ERR_QU_CO, NULL);
@@ -305,7 +302,7 @@ GLOBAL int init_expanded_memory IFN2(int, size, 	/* size of area in megabytes */
 #ifdef NTVDM
 	map_size = no_phys_pages * NSIZE;
 	page_offset = MAP_OFFSET + map_size;	
-	pages_below_640 = backfill / EMM_PAGE_SIZE;
+	pages_below_640 = (SHORT)(backfill / EMM_PAGE_SIZE);
 	pages_above_640 = no_phys_pages - pages_below_640;
 
 	/* initialize active mapping register to set 0 */
@@ -400,7 +397,7 @@ PURPOSE		: This routine calls frees all memory allocated for the
 		expanded memory manager and resets the variables that
 		are used by the Expanded Memory Manager(EMM).
 
-RETURNED STATUS	: SUCCESS - 
+RETURNED STATUS	: SUCCESS -
 
 DESCRIPTION	: If total_pages = 0, this indicates that expanded
 		memory hasn't been initialised, so the routine simply
@@ -458,7 +455,7 @@ DESCRIPTION	: see emm.h for a description of space required for
 GLOBAL short get_new_handle IFN1(short, no_pages)	/* No.of pages to store in handle */
 
 {
-	short	i;			/* loop count */
+	unsigned short	i;			/* loop count */
 	short	handle_no;
 	int	data_size;		/* no. of bytes of data storage */
 	long	storage_ID;		/* host dependant storage	*/
@@ -484,7 +481,7 @@ GLOBAL short get_new_handle IFN1(short, no_pages)	/* No.of pages to store in han
 	handle[handle_no] = storage_ID;
 
 	for (i=0 ; i < no_phys_pages ; i++) {
-		set_map_no(handle_no, i, FREE);
+		set_map_no(handle_no, (unsigned char)i, FREE);
 	}
 
 	total_open_handles++;
@@ -505,7 +502,7 @@ PURPOSE		: frees the storage space allocated to the handle number.
 RETURNED STATUS	: SUCCESS - space freed
 		  FAILURE - unable to free space
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -539,7 +536,7 @@ PURPOSE		: changes the number of pages allocated to a given handle
 RETURNED STATUS	: SUCCESS - handle reallocated
 		  FAILURE - unable to get space for new handle data
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -582,7 +579,7 @@ PURPOSE		: checks to see if the handle no. is valid - this should
 RETURNED STATUS	: TRUE	- Handle no. is valid
 		FALSE	- Handle no. is invalid
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -617,9 +614,9 @@ FUNCTION	: set_no_pages
 
 PURPOSE		: sets the no of pages variable in the specified handle
 
-RETURNED STATUS	: 
+RETURNED STATUS	:
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -648,14 +645,14 @@ FUNCTION	: set_EMpage_no
 PURPOSE		: sets Expanded Memory page that is used for the specified
 		logical page into the handle data storage area
 
-RETURNED STATUS	: 
+RETURNED STATUS	:
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
-GLOBAL void set_EMpage_no IFN3(short, handle_no, 
-			       short, logical_page_no, 
+GLOBAL void set_EMpage_no IFN3(short, handle_no,
+			       short, logical_page_no,
 			       short, EM_page_no)
 
 {
@@ -686,14 +683,14 @@ FUNCTION	: set_map_no
 PURPOSE		: sets Expanded Memory page number in the map section of
 		the handle data storage area
 
-RETURNED STATUS	: 
+RETURNED STATUS	:
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
-GLOBAL void set_map_no IFN3(short, handle_no, 
-			    unsigned char, physical_page_no, 
+GLOBAL void set_map_no IFN3(short, handle_no,
+			    unsigned char, physical_page_no,
 			    short, EM_page_no)
 
 {
@@ -724,13 +721,13 @@ FUNCTION	: set_name
 PURPOSE		: writes a name into the name section of the handle data
 		 storage area
 
-RETURNED STATUS	: 
+RETURNED STATUS	:
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
-GLOBAL void set_name IFN2(short, handle_no, 
+GLOBAL void set_name IFN2(short, handle_no,
 		          char *, new_name)
 
 {
@@ -748,7 +745,7 @@ GLOBAL void set_name IFN2(short, handle_no,
 
 	ptr += NAME_OFFSET;
 	strncpy((char *)ptr, new_name, NAME_LENGTH);
-
+        ptr[NAME_LENGTH-1] = '\0';
 	FORGETBLOCK(storage_ID)
 
 	return;
@@ -763,7 +760,7 @@ PURPOSE		: gets the number of pages assigned to the specified handle
 
 RETURNED STATUS	: no of pages returned
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -796,11 +793,11 @@ PURPOSE		: returns the Expanded Memory page no. used for the
 
 RETURNED STATUS	: Expanded Memory page no. returned
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
-GLOBAL short get_EMpage_no IFN2(short, handle_no, 
+GLOBAL short get_EMpage_no IFN2(short, handle_no,
 				short, logical_page_no)
 
 {
@@ -834,11 +831,11 @@ PURPOSE		: returns the Expanded Memory page no. saved in the map
 
 RETURNED STATUS	: page no. in map returned
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
-GLOBAL short get_map_no IFN2(short, handle_no, 
+GLOBAL short get_map_no IFN2(short, handle_no,
 			     unsigned char, physical_page_no)
 
 {
@@ -869,9 +866,9 @@ FUNCTION	: get_name
 
 PURPOSE		: returns a pointer to the name assigned to the given handle
 
-RETURNED STATUS	: 
+RETURNED STATUS	:
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -891,7 +888,8 @@ GLOBAL char *get_name IFN1(short, handle_no)
 
 	ptr += NAME_OFFSET;
 	strncpy(name, (char *)ptr, NAME_LENGTH);
-
+        name[NAME_LENGTH - 1] = 0;       
+ 
 	FORGETBLOCK(storage_ID)
 
 	return(name);
@@ -907,7 +905,7 @@ PURPOSE		: allocates a page from expanded memory
 RETURNED 	: >=0 = SUCCESS -  EM page no. returned
 		  <0  = FAILURE - error occured in trying to allocate page
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -935,7 +933,7 @@ PURPOSE		: frees a page of expanded memory for further use
 RETURNED 	: SUCCESS - page freed successfully
 		  FAILURE - unable to free page
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */
@@ -975,20 +973,20 @@ FUNCTION	: page_already_mapped
 
 PURPOSE		: function to determine whether a EMM page is already
 		  mapped to a different physical page within intel
-		  memory 
+		  memory
 				
 RETURNED 	: count of number of pages in addition to the page
 		  passed which are mapped to the same logical page.
 		  The page number of one of these mirror pages is
 		  also returned via the pointer passed as an argument.
 
-DESCRIPTION	: 
+DESCRIPTION	:
 			
 ========================================================================
 */
 
 GLOBAL ULONG
-page_already_mapped IFN2(short, EM_page_no, 
+page_already_mapped IFN2(short, EM_page_no,
 			unsigned char *, physical_page_no)
 
 {
@@ -1055,7 +1053,7 @@ disconnect_MM_LIM_page IFN4( USHORT, segment, SHORT, EM_page_no,
 		/*
 		 * We have to disconnect the last page of this group,
 		 * by connecting it as SAS_RAM.
-		 */ 
+		 */
 
 		segment = physical_page[physical_page_no];
 		eff_addr = effective_addr( segment, 0 );
@@ -1082,11 +1080,11 @@ PURPOSE		: maps a page from expanded memory into Intel physical
 RETURNED 	: SUCCESS - page mapped successfully
 		  FAILURE - unable to map page
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 ========================================================================
 */
-GLOBAL int map_page IFN2(short, EM_page_no, 
+GLOBAL int map_page IFN2(short, EM_page_no,
 			 unsigned char, physical_page_no)
 
 {
@@ -1111,7 +1109,7 @@ GLOBAL int map_page IFN2(short, EM_page_no,
 				"phys page already mapped to page %#x",
 						EM_page_mapped[physical_page_no]);
 
-		if(EM_page_mapped[physical_page_no] == EM_page_no) 
+		if(EM_page_mapped[physical_page_no] == EM_page_no)
 		{
 			sure_note_trace0(LIM_VERBOSE,
 					"remap of same page, so do nothing");
@@ -1152,14 +1150,14 @@ GLOBAL int map_page IFN2(short, EM_page_no,
 	}
 #ifndef NTVDM
 
-	/* 
+	/*
 	 * If this logical page is already mapped, make sure the
-	 * new mapping has an up to date copy 
+	 * new mapping has an up to date copy
 	 */
-	   
+	
 	phys_page = physical_page_no;
 
-	if (page_already_mapped(EM_page_no, &phys_page)) 
+	if (page_already_mapped(EM_page_no, &phys_page))
 	{
 		/*
 		 * We now want to get the LIM logical page up to date with
@@ -1208,7 +1206,7 @@ PURPOSE		: unmaps a page from Intel physical address space back to
 RETURNED 	: SUCCESS - page unmapped successfully
 		  FAILURE - error in unmapping page
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 ========================================================================
 */
@@ -1311,13 +1309,13 @@ DESCRIPTION	: if handle_no is >= 0 the map is stored in the data area
 		  if handle_no == -1 the map is stored in the array pointed
 		  	to by dst_segment:dst_offset
 		  if handle_no == -2 only the pages specified by the segment
-		  	addresses in the src array (pointed to by 
+		  	addresses in the src array (pointed to by
 		  	src_segment:src_offset) are saved in the dst array
 		  	(pointed to by dst_segment:dst_offset).
 
 =========================================================================
 */
-GLOBAL int save_map IFN5(short, handle_no, 
+GLOBAL int save_map IFN5(short, handle_no,
 			 unsigned short, dst_segment,
 			 unsigned short, dst_offset,
 			 unsigned short, src_segment,
@@ -1325,14 +1323,14 @@ GLOBAL int save_map IFN5(short, handle_no,
 
 {
 	unsigned short	offset,		/* temp offset variable		*/
-			segment;	/* segment address to be saved	*/
-	short		i,		/* loop counter			*/
+			segment,	/* segment address to be saved	*/
+            i,		/* loop counter			*/
 			page_no,	/* physical page no.		*/
 			no_to_save;	/* no of pages in src array	*/
 
 	if(handle_no >= 0)
 		for (i = 0; i < no_phys_pages; i++)
-			set_map_no(handle_no, i, EM_page_mapped[i]);
+			set_map_no(handle_no, (unsigned char) i, EM_page_mapped[i]);
 
 	else if(handle_no == -1)
 		for(i = 0; i < no_phys_pages; i++)
@@ -1393,7 +1391,7 @@ RETURNED STATUS	: SUCCESS - Map read successfully
 
 DESCRIPTION	: A +ve handle number indicates that the map is stored
 		within the handle data area.
-		If the handle number is -ve the map will be read from the 
+		If the handle number is -ve the map will be read from the
 		data pointed to by segment:offset
 
 		Only page out - if there is a page currently mapped in and
@@ -1405,17 +1403,17 @@ DESCRIPTION	: A +ve handle number indicates that the map is stored
 =========================================================================
 */
 #ifdef ANSI
-GLOBAL int restore_map (short handle_no, 
-			unsigned short segment, 
-			unsigned short offset, 
-			short pages_out[], 
+GLOBAL int restore_map (short handle_no,
+			unsigned short segment,
+			unsigned short offset,
+			short pages_out[],
 			short pages_in[])
 #else
 GLOBAL int restore_map (handle_no, segment, offset, pages_out, pages_in)
 short handle_no;
-unsigned short segment; 
-unsigned short offset; 
-short pages_out[]; 
+unsigned short segment;
+unsigned short offset;
+short pages_out[];
 short pages_in[];
 #endif	/* ANSI */
 {
@@ -1426,7 +1424,7 @@ short pages_in[];
 	for(i = 0; i < no_phys_pages; i++)
 	{
 		if(handle_no >= 0)
-			new_page = get_map_no(handle_no, i);
+			new_page = get_map_no(handle_no, (unsigned char)i);
 		else
 		{
 			read_intel_word(segment, offset, (word *)&new_page);
@@ -1443,7 +1441,7 @@ short pages_in[];
 /*
 		if(old_page != EMPTY && new_page != EMPTY && old_page != new_page )
 */
-/* need to do unmap to empty state case to update the page copy in the LIM 
+/* need to do unmap to empty state case to update the page copy in the LIM
    space in case of new maps of that page to other LIM slots. */
 #ifdef NTVDM
 		if(old_page != EMPTY && old_page != new_page && new_page != LEAVE)
@@ -1492,13 +1490,13 @@ DESCRIPTION	: type - uses a bit pattern, bit 0 represents destination,
 
 =========================================================================
 */
-GLOBAL int copy_exchange_data IFN8(unsigned char, type, 
-				   short, src_handle, 
-				   unsigned short, src_seg_page, 
+GLOBAL int copy_exchange_data IFN8(unsigned char, type,
+				   short, src_handle,
+				   unsigned short, src_seg_page,
 				   unsigned short, src_offset,
-				   short, dst_handle, 
-				   unsigned short, dst_seg_page, 
-				   unsigned short, dst_offset, 
+				   short, dst_handle,
+				   unsigned short, dst_seg_page,
+				   unsigned short, dst_offset,
 				   unsigned long, length)
 
 {
@@ -1506,9 +1504,9 @@ GLOBAL int copy_exchange_data IFN8(unsigned char, type,
 			src_EMpage;	/* EM page no. of source	*/
 	int		page_no;	/* phys. page no. of mapped page*/
 
-	/* 
+	/*
 	 * First check to see if the expanded memory page is mapped
-	 * if it is - change the type to deal directly with the 
+	 * if it is - change the type to deal directly with the
 	 * physical page that it is mapped to
 	 */
 	if( type & 1)
@@ -1611,8 +1609,8 @@ GLOBAL int page_status IFN1(short, EMpage_no)
 /*
 ========================================================================
 
-FUNCTION	: phys_page_from_addr 
-		  
+FUNCTION	: phys_page_from_addr
+		
 PURPOSE		: determines the physical page number of a LIM page
 		  from its Intel address.
 		  		
@@ -1631,7 +1629,7 @@ phys_page_from_addr IFN1( sys_addr, address )
 
 	start = effective_addr( EM_start, 0x0 );
 
-	return( (ULONG)(( address - start ) / EMM_PAGE_SIZE ));
+	return( (SHORT)((ULONG)(( address - start ) / EMM_PAGE_SIZE )));
 }
 
 /*
@@ -1646,11 +1644,11 @@ FUNCTION	: get_total_pages
 		  get_page_seg
 		  get_map_size
 
-PURPOSE		: simply returns the reqested variables, to avoid 
+PURPOSE		: simply returns the reqested variables, to avoid
 		having to use globals
 
 
-RETURNED STATUS	: the following variables are returned , depending upon 
+RETURNED STATUS	: the following variables are returned , depending upon
 		the routine called:-
 			total_pages
 			unallocated_pages
@@ -1661,7 +1659,7 @@ RETURNED STATUS	: the following variables are returned , depending upon
 			physical_page[i]
 			map_size
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 ========================================================================
 */
@@ -1817,7 +1815,7 @@ GLOBAL boolean allocate_altreg_set(unsigned short *altreg_set)
     return TRUE;
 }
 /* free the given alt mapping register set */
-GLOBAL boolean deallocate_altreg_set(short set)
+GLOBAL boolean deallocate_altreg_set(unsigned short set)
 {
 
     /* can not deallocate set 0 or active set */
@@ -1889,7 +1887,7 @@ FUNCTION	: LIM_b_write,
 		  LIM_w_write,
 		  LIM_str_write
 		  patch_pages
-		  
+		
 PURPOSE		: LIM byte, word & string - called from write check
 		  failure code in the CPU when a write to a multi-mapped
 		  LIM page is detected.
@@ -1898,7 +1896,7 @@ PURPOSE		: LIM byte, word & string - called from write check
 		  		
 RETURNED STATUS	: None.
 
-DESCRIPTION	: 
+DESCRIPTION	:
 			
 ========================================================================
 */
@@ -1957,7 +1955,7 @@ patch_one_page_full IFN4( sys_addr, intel_addr, sys_addr, eff_addr,
 			check_len = data;
 			do
 			{
-				sas_store_no_check( eff_addr, 
+				sas_store_no_check( eff_addr,
 					sas_hw_at_no_check(
 							intel_addr ));
 				intel_addr++;
@@ -1972,7 +1970,7 @@ patch_one_page_full IFN4( sys_addr, intel_addr, sys_addr, eff_addr,
 
 LOCAL VOID
 patch_pages IFN6( MM_LIM_op_type, type, ULONG, offset,
-			SHORT, EM_page_no, SHORT, phys_page_no, 
+			SHORT, EM_page_no, SHORT, phys_page_no,
 			ULONG, data, sys_addr, intel_addr )
 
 {
@@ -1981,7 +1979,7 @@ patch_pages IFN6( MM_LIM_op_type, type, ULONG, offset,
 
 	for( cnt01 = 0; cnt01 < get_no_phys_pages(); cnt01++ )
 	{
-		if(( EM_page_mapped[cnt01] == EM_page_no ) && 
+		if(( EM_page_mapped[cnt01] == EM_page_no ) &&
 							( cnt01 != phys_page_no ))
 		{
 			eff_addr = effective_addr( get_page_seg(cnt01),
@@ -1991,7 +1989,7 @@ patch_pages IFN6( MM_LIM_op_type, type, ULONG, offset,
 
 			sure_note_trace1(LIM_VERBOSE,
 					"MM LIM write type %d", type );
-			sure_note_trace2(LIM_VERBOSE, 
+			sure_note_trace2(LIM_VERBOSE,
 					"log page 0x%x, phs page 0x%x",
 								EM_page_no, cnt01 );
 		}
@@ -2033,7 +2031,7 @@ GLOBAL VOID
 LIM_w_write IFN1( sys_addr, intel_addr )
 
 {
-	ULONG		limdata; 
+	ULONG		limdata;
 	SHORT		EM_page_no, phys_page_no;
 	word		offset;
 
@@ -2078,12 +2076,12 @@ LIM_str_write IFN2( sys_addr, intel_addr, ULONG, length )
 
 FUNCTION	: print_handle_data
 
-PURPOSE		: used for debugging only - prints all the data stored 
+PURPOSE		: used for debugging only - prints all the data stored
 		for a given handle
 
 RETURNED STATUS	: none
 
-DESCRIPTION	: 
+DESCRIPTION	:
 
 =========================================================================
 */

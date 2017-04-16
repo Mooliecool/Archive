@@ -6,6 +6,9 @@
 //     Released. Well the problem is WIN30 allows it, so we need to be
 //     compatible.
 //
+// IMPORTANT NOTE: If you add any calls to ReleaseDC to this file you need to
+//                 also add the associated code to update the GDI 16-32 handle
+//                 mapping table. 
 //
 // 03-Feb-92  NanduriR   Created.
 //
@@ -84,7 +87,13 @@ BOOL ReleaseCachedDCs(HAND16 htask16, HAND16 hwnd16, HAND16 hdc16,
              }
 
              if (hdcTemp) {
-                 if (ReleaseDC(lpT->hwnd32, HDC32(hdcTemp))) {
+                 HANDLE hdc32 = HDC32(hdcTemp);
+
+                 if (ReleaseDC(lpT->hwnd32, hdc32)) {
+
+                     // update the GDI 16-32 handle mapping table
+                     DeleteWOWGdiHandle(hdc32, (HAND16)hdcTemp);
+
                      LOGDEBUG(6,
                          ("ReleaseCachedDCs: success hdc16 %04x - count %04x\n",
                                                    hdcTemp, (iReleasedDCs-1)));
@@ -97,7 +106,6 @@ BOOL ReleaseCachedDCs(HAND16 htask16, HAND16 hwnd16, HAND16 hdc16,
                  // reset the state evenif ReleaseDC failed
 
                  lpT->flState = 0;
-                 FREEHDC16(hdcTemp);
                  if (!(--iReleasedDCs))
                      break;
              }
@@ -134,7 +142,13 @@ BOOL FreeCachedDCs(HAND16 htask16)
              hdcTemp = lpT->hdc16;
              if (lpT->flState & DCCACHE_STATE_RELPENDING) {
 
-                 if (ReleaseDC(lpT->hwnd32, HDC32(hdcTemp))) {
+                 HANDLE hdc32 = HDC32(hdcTemp);
+
+                 if (ReleaseDC(lpT->hwnd32, hdc32)) {
+
+                     // update the GDI 16-32 handle mapping table
+                     DeleteWOWGdiHandle(hdc32, (HAND16)hdcTemp);
+
                      LOGDEBUG(6,
                          ("FreeCachedDCs: success hdc16 %04x - task %04x\n",
                                                                hdcTemp, htask16));
@@ -149,7 +163,6 @@ BOOL FreeCachedDCs(HAND16 htask16)
              }
 
              lpT->flState = 0;
-             FREEHDC16(hdcTemp);
          }
     }
 

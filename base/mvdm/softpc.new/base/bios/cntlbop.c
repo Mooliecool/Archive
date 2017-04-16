@@ -58,7 +58,7 @@ void end_secure_boot IPT0();
 IMPORT void runux IPT0();
 #endif
 
-static control_bop_array base_bop_table[] = 
+static control_bop_array base_bop_table[] =
 {
 #ifdef SECURE
      9, end_secure_boot,
@@ -124,7 +124,7 @@ PROCEDURE	  : 	control_bop()
 
 PURPOSE		  : 	Execute a BOP FF control function.
 		
-PARAMETERS	  : 	AH - Host type.  
+PARAMETERS	  : 	AH - Host type.
 			AL - Function code
 			(others are function specific)
 			
@@ -145,10 +145,10 @@ ERROR RECOVERY	  :	No call made
 =========================================================================
 */
 
-void control_bop IFN0()
+void control_bop IPT0()
 {
-    unsigned short host_type;
-    
+    unsigned long host_type;
+
 /*
  * If the host type is generic then look up the function in the
  * base bop table, otherwise see if the function is specific to the

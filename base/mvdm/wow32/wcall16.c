@@ -283,13 +283,9 @@ VPVOID  WOWGlobalAllocLock16(WORD wFlags, DWORD cb, HMEM16 *phMem)
 
     if (vp) {
 
-    // Get handle of 16-bit object
+        // Get handle of 16-bit object
         if (phMem) {
-            PCBVDMFRAME pCBFrame;
-
-            pCBFrame = CBFRAMEPTR(CURRENTPTD()->vpCBStack);
-            *phMem = pCBFrame->wGenUse1;
-            FREEVDMPTR(pCBFrame);
+            *phMem = Parm16.WndProc.wParam;
         }
     }
     return vp;
@@ -315,16 +311,13 @@ VPVOID  WOWGlobalLockSize16(HMEM16 hMem, PDWORD pcb)
 {
     PARM16 Parm16;
     VPVOID vp = 0;
-    PCBVDMFRAME pCBFrame;
 
     Parm16.WndProc.wParam = hMem;
     CallBack16(RET_GLOBALLOCK, &Parm16, 0, &vp);
 
     // Get size of 16-bit object    (will be 0 if lock failed)
     if (pcb) {
-        pCBFrame = CBFRAMEPTR(CURRENTPTD()->vpCBStack);
-        *pcb = pCBFrame->wGenUse2 | (LONG)pCBFrame->wGenUse1 << 16;
-        FREEVDMPTR(pCBFrame);
+        *pcb = Parm16.WndProc.lParam;
     }
 
     return vp;
@@ -392,7 +385,7 @@ HAND16 GetExePtr16( HAND16 hInst )
     ptd = CURRENTPTD();
 
     if (hInst == ptd->hInst16) {
-	return ptd->hMod16;
+        return ptd->hMod16;
     }
 
     //
@@ -412,13 +405,20 @@ HAND16 GetExePtr16( HAND16 hInst )
 
 
     //
-    // update the cache
-    // slide everybody down 1 entry, put this new guy at the top
+    // GetExePtr(hmod) returns hmod, don't cache these.
     //
 
-    RtlMoveMemory(ghModCache+1, ghModCache, sizeof(HMODCACHE)*(CHMODCACHE-1));
-    ghModCache[0].hInst16 = hInst;
-    ghModCache[0].hMod16 = (HAND16)LOWORD(ul);
+    if (hInst != (HAND16)LOWORD(ul)) {
+
+        //
+        // update the cache
+        // slide everybody down 1 entry, put this new guy at the top
+        //
+
+        RtlMoveMemory(ghModCache+1, ghModCache, sizeof(HMODCACHE)*(CHMODCACHE-1));
+        ghModCache[0].hInst16 = hInst;
+        ghModCache[0].hMod16 = (HAND16)LOWORD(ul);
+    }
 
     return (HAND16)LOWORD(ul);
 }
@@ -479,19 +479,67 @@ VPVOID RealLockResource16(HMEM16 hMem, PINT pcb)
 {
     PARM16 Parm16;
     VPVOID vp = 0;
-    PCBVDMFRAME pCBFrame;
 
     Parm16.WndProc.wParam = hMem;
     CallBack16(RET_LOCKRESOURCE, &Parm16, 0, &vp);
 
     // Get size of 16-bit object    (will be 0 if lock failed)
     if (pcb) {
-        pCBFrame = CBFRAMEPTR(CURRENTPTD()->vpCBStack);
-        *pcb = pCBFrame->wGenUse2 | (LONG)pCBFrame->wGenUse1 << 16;
-        FREEVDMPTR(pCBFrame);
+        *pcb = Parm16.WndProc.lParam;
     }
 
     return vp;
+}
+
+int WINAPI WOWlstrcmp16(LPCWSTR lpString1, LPCWSTR lpString2)
+{
+    PARM16 Parm16;
+    DWORD dwReturn = 0;
+    DWORD cb1, cb2;
+    VPSTR vp1, vp2;
+    LPSTR p1, p2;
+
+    //
+    // to handle DBCS correctly allocate enough room
+    // for two DBCS bytes for every unicode char.
+    //
+
+    cb1 = sizeof(WCHAR) * (wcslen(lpString1) + 1);
+    cb2 = sizeof(WCHAR) * (wcslen(lpString2) + 1);
+
+    // be sure allocation size matches stackfree16() size below
+    vp1 = stackalloc16(cb1 + cb2);
+    vp2 = vp1 + cb1;
+
+    p1 = VDMPTR(vp1, cb1);
+    p2 = p1 + cb1;
+
+    RtlUnicodeToMultiByteN(
+        p1,
+        cb1,
+        NULL,
+        (LPWSTR) lpString1,   // cast because arg isn't declared const
+        cb1
+        );
+
+    RtlUnicodeToMultiByteN(
+        p2,
+        cb2,
+        NULL,
+        (LPWSTR) lpString2,   // cast because arg isn't declared const
+        cb2
+        );
+
+    FREEVDMPTR(p1);
+
+    Parm16.lstrcmpParms.lpstr1 = vp1;
+    Parm16.lstrcmpParms.lpstr2 = vp2;
+
+    CallBack16(RET_LSTRCMP, &Parm16, 0, &dwReturn);
+
+    stackfree16(vp1, (cb1 + cb2));
+
+    return (int)(short int)LOWORD(dwReturn);
 }
 
 
@@ -619,13 +667,13 @@ BOOL CallBack16(INT iRetID, PPARM16 pParm16, VPPROC vpfnProc, PVPVOID pvpReturn)
     "SETABORTPROC",         // RET_SETABORTPROC
     "ENUMPROPSPROC",        // RET_ENUMPROPSPROC
     "FORCESEGMENTFAULT",    // RET_FORCESEGMENTFAULT
-    "UNUSEDFUNC",           // 
+    "LSTRCMP",              // RET_LSTRCMP
     "UNUSEDFUNC",           // 
     "UNUSEDFUNC",           // 
     "UNUSEDFUNC",           // 
     "UNUSEDFUNC",           // 
     "GETEXEPTR",            // RET_GETEXEPTR
-    "UNUSEDFUNC",           //
+    "UNUSEDFUNC",           // 
     "FORCETASKFAULT",       // RET_FORCETASKFAULT
     "GETEXPWINVER",         // RET_GETEXPWINVER
     "GETCURDIR",            // RET_GETCURDIR
@@ -642,25 +690,52 @@ BOOL CallBack16(INT iRetID, PPARM16 pParm16, VPPROC vpfnProc, PVPVOID pvpReturn)
     "GETDIBSIZE",           // RET_GETDIBSIZE
     "GETDIBFLAGS",          // RET_GETDIBFLAGS
     "SETDIBSEL",            // RET_SETDIBSEL
-    "FREEDIBSEL"            // RET_FREEDIBSEL
+    "FREEDIBSEL",           // RET_FREEDIBSEL
     };
 #endif
     register PTD ptd;
     register PVDMFRAME pFrame;
     register PCBVDMFRAME pCBFrame;
     WORD wAX;
-#if FASTBOPPING
-#else
-    USHORT SaveIp;
-#endif
-#ifdef DEBUG
-    VPVOID   vpStackT, vpCBStackT;
-#endif
+    BOOL fComDlgSync = FALSE;
+    INT  cStackAlloc16;
+    VPVOID   vpCBStack;  // See NOTES in walloc16.c\stackalloc16()
 
+    USHORT SaveIp;
+
+#ifdef DEBUG
+    VPVOID   vpStackT;
+#endif
 
     WOW32ASSERT(iRetID != RET_RETURN && iRetID != RET_DEBUGRETURN);
 
     ptd = CURRENTPTD();
+
+    // ssync 16-bit & 32-bit common dialog structs (see wcommdlg.c)
+    if(ptd->CommDlgTd) {
+
+        // only ssync for stuff that might actually callback into the app
+        // ie. we don't need to ssync every time wow32 calls GlobalLock16
+        switch(iRetID) {
+            case RET_WNDPROC:           // try to get these in a most frequently
+            case RET_HOOKPROC:          // used order
+            case RET_WINSOCKBLOCKHOOK:
+            case RET_ENUMFONTPROC:
+            case RET_ENUMWINDOWPROC:
+            case RET_ENUMOBJPROC:
+            case RET_ENUMPROPSPROC:
+            case RET_LINEDDAPROC:
+            case RET_GRAYSTRINGPROC:
+            case RET_SETWORDBREAKPROC:
+            case RET_SETABORTPROC:
+                // Note: This call can invalidate flat ptrs to 16-bit mem
+                Ssync_WOW_CommDlg_Structs(ptd->CommDlgTd, w32to16, 0);
+                fComDlgSync = TRUE;   // set this for return ssync
+                break;
+            default:
+                break;
+        }
+    }
 
     GETFRAMEPTR(ptd->vpStack, pFrame);
 
@@ -670,27 +745,36 @@ BOOL CallBack16(INT iRetID, PPARM16 pParm16, VPPROC vpfnProc, PVPVOID pvpReturn)
                 (ptd->dwFlags & TDF_IGNOREINPUT) ||
                 (ptd->htask16 == 0));
 
-    // Prep the frame for the callback
-    // make it word aligned.
 
-    if (ptd->dwFlags & TDF_INITCALLBACKSTACK) {
+    // set up the callback stack frame from the correct location
+    // & make it word aligned.
+    // if stackalloc16() hasn't been called since the app called into wow32
+    if (ptd->cStackAlloc16 == 0) {
+        vpCBStack = ptd->vpStack;
         ptd->vpCBStack = (ptd->vpStack - sizeof(CBVDMFRAME)) & (~0x1);
     }
     else {
-        ptd->dwFlags |= TDF_INITCALLBACKSTACK;
+        vpCBStack = ptd->vpCBStack;
         ptd->vpCBStack = (ptd->vpCBStack - sizeof(CBVDMFRAME)) & (~0x1);
     }
+
     GETFRAMEPTR(ptd->vpCBStack, (PVDMFRAME)pCBFrame);
-    pCBFrame->vpStack = ptd->vpStack;
-    pCBFrame->wRetID = (WORD)iRetID;
+    pCBFrame->vpStack    = ptd->vpStack;
+    pCBFrame->wRetID     = (WORD)iRetID;
     pCBFrame->wTDB       = pFrame->wTDB;
     pCBFrame->wLocalBP   = pFrame->wLocalBP;
+
+    // save the current context stackalloc16() count and set the count to
+    // 0 for the next context.  This will force ptd->vpCBStack to be calc'd
+    // correctly in any future calls to stackalloc16() if the app callsback
+    // into WOW
+    cStackAlloc16      = ptd->cStackAlloc16;
+    ptd->cStackAlloc16 = 0;
 
 #ifdef DEBUG
     // Save
 
     vpStackT = ptd->vpStack;
-    vpCBStackT = ptd->vpCBStack;
 #endif
 
     if (pParm16)
@@ -760,34 +844,26 @@ BOOL CallBack16(INT iRetID, PPARM16 pParm16, VPPROC vpfnProc, PVPVOID pvpReturn)
 
     // Set up to use the right 16-bit stack for this thread
 
-#if FASTBOPPING
-    SETFASTVDMSTACK(ptd->vpCBStack);
-#else
     SETVDMSTACK(ptd->vpCBStack);
-#endif
+
 
     //
     // do the callback!
     //
 
-#if FASTBOPPING
-    CurrentMonitorTeb = NtCurrentTeb();
-    FastWOWCallbackCall();
-    // fastbop code refreshes ptd->vpStack
-#else
     // Time to get the IEU running task-time code again
     SaveIp = getIP();
     host_simulate();
     setIP(SaveIp);
     ptd->vpStack = VDMSTACK();
-#endif
+
 
     // after return from callback ptd->vpStack will point to PCBVDMFRAME
-
-    // consistency check
-    WOW32ASSERT(ptd->vpStack == vpCBStackT);
-
     ptd->vpCBStack = ptd->vpStack;
+
+    // reset the stackalloc16() count back to this context
+    ptd->cStackAlloc16 = cStackAlloc16;
+
     GETFRAMEPTR(ptd->vpCBStack, (PVDMFRAME)pCBFrame);
 
     // Just making sure that this thread matches the current 16-bit task
@@ -798,7 +874,31 @@ BOOL CallBack16(INT iRetID, PPARM16 pParm16, VPPROC vpfnProc, PVPVOID pvpReturn)
     if (pvpReturn) {
         LOW(*pvpReturn) = pCBFrame->wAX;
         HIW(*pvpReturn) = pCBFrame->wDX;
-    }
+    } 
+
+    switch(iRetID) {
+
+        case RET_GLOBALLOCK: 
+        case RET_LOCKRESOURCE:
+            if(pParm16) {
+                pParm16->WndProc.lParam = 
+                            pCBFrame->wGenUse2 | (LONG)pCBFrame->wGenUse1 << 16;
+            }
+            break;
+
+        case RET_GLOBALALLOCLOCK:
+            if(pParm16) {
+                    pParm16->WndProc.wParam = pCBFrame->wGenUse1;
+                }
+            break;
+
+        case RET_FINDRESOURCE:
+            if(pParm16) {
+                pParm16->WndProc.lParam = (ULONG)pCBFrame->wGenUse1;
+            }
+            break;
+
+    } // end switch
 
     LOGDEBUG(9,("%04X          WIN16 %s returning: %lx\n",
         pCBFrame->wTDB, apszCallBacks[iRetID], (pvpReturn) ? *pvpReturn : 0));
@@ -811,7 +911,15 @@ BOOL CallBack16(INT iRetID, PPARM16 pParm16, VPPROC vpfnProc, PVPVOID pvpReturn)
     // consistency check
     WOW32ASSERT(pCBFrame->vpStack == vpStackT);
 
+    // restore the stack & callback frame ptrs to original values
     ptd->vpStack = pCBFrame->vpStack;
+    ptd->vpCBStack = vpCBStack;
+
+    // ssync 16-bit & 32-bit common dialog structs (see wcommdlg.c)
+    if(fComDlgSync) {
+        // Note: This call can invalidate flat ptrs to 16-bit mem
+        Ssync_WOW_CommDlg_Structs(ptd->CommDlgTd, w16to32, 0);
+    }
 
     FREEVDMPTR(pCBFrame);
 

@@ -1,5 +1,6 @@
 /* SccsID @(#)video.h	1.24 08/19/94 Copyright Insignia Solutions Inc. */
 
+#ifndef NEC_98
 /*
  * M6845 video chip registers
  */
@@ -8,12 +9,12 @@
 #define R11_CURS_END	        11
 #define CGA_R12_START_ADDRH	12
 #define CGA_R13_START_ADDRL	13
-#define R14_CURS_ADDRH	        14 
-#define R15_CURS_ADDRL	        15 
+#define R14_CURS_ADDRH	        14
+#define R15_CURS_ADDRL	        15
 
-#define M6845_INDEX_REG         (vd_addr_6845)
-#define M6845_DATA_REG          (vd_addr_6845 + 1) 
-#define M6845_MODE_REG          (vd_addr_6845 + 4)
+#define M6845_INDEX_REG         (word)(vd_addr_6845)
+#define M6845_DATA_REG          (word)(vd_addr_6845 + 1)
+#define M6845_MODE_REG          (word)(vd_addr_6845 + 4)
 
 /*
  * The individual colour adaptor registers
@@ -37,6 +38,7 @@
 
 /* 4 full scanlines is the (offset/size) of one text line PER bank */
 #define ONELINEOFF      320
+#endif // !NEC_98
 
 
 /*
@@ -57,6 +59,78 @@
 /*
  * intel memory position defines for data stored in bios variables
  */
+
+#if defined(NEC_98)
+IMPORT void keyboard_io IPT0();             /* routed to KB BIOS        */
+IMPORT void vd_NEC98_set_mode IPT0();           /* 0ah Set mode             */
+IMPORT void vd_NEC98_get_mode IPT0();           /* 0bh Get mode             */
+IMPORT void vd_NEC98_start_display IPT0();      /* 0ch Start display        */
+IMPORT void vd_NEC98_stop_display IPT0();       /* 0dh Stop display         */
+IMPORT void vd_NEC98_single_window IPT0();      /* 0eh Set single window    */
+IMPORT void vd_NEC98_multi_window IPT0();       /* 0fh Set multi window     */
+IMPORT void vd_NEC98_set_cursor IPT0();         /* 10h Set cursor type      */
+IMPORT void vd_NEC98_show_cursor IPT0();        /* 11h Show cursor          */
+IMPORT void vd_NEC98_hide_cursor IPT0();        /* 12h Hide cursor          */
+IMPORT void vd_NEC98_set_cursorpos IPT0();      /* 13h Set cursor position  */
+IMPORT void vd_NEC98_get_font IPT0();           /* 14h Get font             */
+IMPORT void vd_NEC98_get_pen IPT0();            /* 15h Get lightpen status  */
+IMPORT void vd_NEC98_init_textvram IPT0();      /* 16h Initialize text vram */
+IMPORT void vd_NEC98_start_beep IPT0();         /* 17h Start beep sound     */
+IMPORT void vd_NEC98_stop_beep IPT0();          /* 18h Stop beep sound      */
+IMPORT void vd_NEC98_init_pen IPT0();           /* 19h Initialize lightpen  */
+IMPORT void vd_NEC98_set_font IPT0();           /* 1ah Set user font        */
+IMPORT void vd_NEC98_set_kcgmode IPT0();        /* 1bh Set KCG access mode  */
+IMPORT void vd_NEC98_init_crt IPT0();           /* 1ch Initialize CRT    /H */
+IMPORT void vd_NEC98_set_disp_width IPT0();     /* 1dh Set display size  /H */
+IMPORT void vd_NEC98_set_cursor_type IPT0();    /* 1eh Set cursor type   /H */
+IMPORT void vd_NEC98_get_mswitch IPT0();        /* 21h Get memory switch /H */
+IMPORT void vd_NEC98_set_mswitch IPT0();        /* 22h Set memory switch /H */
+IMPORT void vd_NEC98_set_beep_rate IPT0();      /* 23h Set beep rate     /H */
+IMPORT void vd_NEC98_set_beep_time IPT0();      /* 24h Set beep time&ring/H */
+IMPORT void video_init IPT0();
+
+extern BOOL     HIRESO_MODE;
+
+IMPORT void (*video_func_h[]) ();
+IMPORT void (*video_func_n[]) ();
+
+/*
+ * The following table specifies data for the supported video
+ * modes - ie 80x25 A/N and 640x200 APA.  It is indexed via the video
+ * mode variable and a value of VD_BAD_MODE indicates that the given
+ * video mode is not supported.
+ */
+
+typedef struct {
+                sys_addr    start_addr;
+                sys_addr    end_addr;
+                word        clear_char;
+                half_word   mode_control_val;
+                half_word   mode_screen_cols;
+                word        ncols;
+                half_word   npages;
+               } MODE_ENTRY;
+
+#if 0 ///STREAM_IO codes are disabled now, till Beta-1
+#ifdef NTVDM
+/* this is the stream io buffer size used on RISC machines.
+ * On X86, the size is determined by spckbd.asm
+ */
+#define STREAM_IO_BUFFER_SIZE_32	82
+IMPORT void disable_stream_io(void);
+IMPORT void host_enable_stream_io(void);
+IMPORT void host_disable_stream_io(void);
+IMPORT half_word * stream_io_buffer;
+IMPORT word * stream_io_dirty_count_ptr;
+IMPORT word stream_io_buffer_size;
+IMPORT boolean	stream_io_enabled;
+#ifdef MONITOR
+IMPORT sys_addr stream_io_bios_busy_sysaddr;
+#endif
+
+#endif
+#endif // zero
+#else  // !NEC_98
 
 #define	vd_video_mode	0x449
 #define VID_COLS	0x44A	/* vd_cols_on_screen */
@@ -186,7 +260,15 @@ IMPORT MODE_ENTRY vd_ext_graph_table[];
  * Mode macros to distinguish between alphanumeric & graphics video modes
  */
 
+#ifdef JAPAN
+// mode73h support
+#define	alpha_num_mode() \
+    ( (sas_hw_at_no_check(vd_video_mode) < 4) || \
+      (sas_hw_at_no_check(vd_video_mode) == 7) || \
+      (!is_us_mode() && sas_hw_at_no_check(DosvModePtr) == 0x73 ) )
+#else // !JAPAN
 #define	alpha_num_mode()	(sas_hw_at_no_check(vd_video_mode) < 4 || sas_hw_at_no_check(vd_video_mode) == 7)
+#endif // !JAPAN
 #define	global_alpha_num_mode()	((Video_mode < 4) || (Video_mode == 7))
 #ifdef EGG
 #ifdef V7VGA
@@ -276,3 +358,27 @@ IMPORT sys_addr stream_io_bios_busy_sysaddr;
 #endif /* MONITOR */
 
 #endif /* NTVDM */
+#if defined(JAPAN) || defined(KOREA)
+extern int dbcs_first[];
+#define is_dbcs_first( c ) dbcs_first[ 0xff & c ]
+
+extern int BOPFromDispFlag;
+extern sys_addr DBCSVectorAddr; // word
+extern sys_addr DosvModePtr;    // byte
+extern sys_addr DosvVramPtr;
+extern int DosvVramSize;
+
+void SetDBCSVector( int CP );
+void SetVram( void );
+int is_us_mode( void );
+void SetModeForIME( void );
+#define INT10_NOTCHANGED    0   // RAID #875
+#define INT10_SBCS          1
+#define INT10_DBCS_LEADING  2
+#define INT10_DBCS_TRAILING 4
+#define INT10_CHANGED       0x10
+extern int  Int10FlagCnt;
+extern byte Int10Flag[];
+extern byte NtInt10Flag[];
+#endif // JAPAN
+#endif // NEC98

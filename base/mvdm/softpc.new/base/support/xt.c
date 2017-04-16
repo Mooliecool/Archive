@@ -34,7 +34,7 @@
 
 /*
  * ============================================================================
- * Global data 
+ * Global data
  * ============================================================================
  */
 
@@ -60,14 +60,14 @@ half_word cpu_int_translate[16];        /* this will go very soon!      */
 word cpu_int_delay;                     /* Delay before pending interrupt */
 
 int trap_delay_count;
- 
+
 /*
  * The lock flag prevents the Interrupt Controller Adapter from being
  * called from a signal handler while it is already active in the mainline.
  */
- 
+
 half_word ica_lock;
- 
+
 /*
  * The actual CCPU registers
  */
@@ -273,10 +273,10 @@ GLOBAL void read_descriptor IFN2(LIN_ADDR, addr, DESCR *, descr)
 #endif
 
 	/* load attributes and access rights */
-	descr->AR = (second_dword >> 8) & 0xff;
+	descr->AR = (USHORT)((second_dword >> 8) & 0xff);
 
 	/* unpack the base */
-	descr->base = (first_dword >> 16) | 
+	descr->base = (first_dword >> 16) |
 #ifdef SPC386
 	    (second_dword & 0xff000000) |
 #endif

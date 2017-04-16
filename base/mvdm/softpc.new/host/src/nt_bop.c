@@ -6,6 +6,11 @@
 #include "insignia.h"
 #include "host_def.h"
 #include <nt_thred.h>
+#include <nt_pif.h>
+#include "idetect.h"
+#include "conapi.h"
+#include "nt_graph.h"
+#include <bop.h>
 
 #ifndef MONITOR
 #include <gdpvar.h>
@@ -78,6 +83,7 @@ DATA OBJECTS      : None
 #include "nt_eoi.h"
 #include <nt_com.h>
 #include "yoda.h"
+#include "nt_vdd.h"
 
 
 /* [3.1.2 DECLARATIONS]                                                 */
@@ -99,6 +105,7 @@ DATA OBJECTS      : None
 //
 
 typedef ULONG (*MYFARPROC)();
+typedef ULONG (*W32INITPROC)(VOID);
 
 /* [5.1.3 PROCEDURE() DECLARATIONS]                 */
 
@@ -146,25 +153,25 @@ control_bop_array host_bop_table[] =
 void MS_bop_0(void) {
     ULONG DemCmd;
 
-    DemCmd = (ULONG)(*Sim32GetVDMPointer(SEGOFF(getCS(),getIP()),
-                                         1,
-                                         FALSE
-                                         ));
-    DemDispatch( DemCmd );
+    EnableScreenSwitch(FALSE, hMainThreadSuspended);
+    DemCmd = (ULONG)(*(PUCHAR)VdmMapFlat(getCS(), getIP(), VDM_V86));
     setIP((USHORT)(getIP() + 1));
+
+    DemDispatch( DemCmd );
 
     // we need to prevent the idle system from going off on intensive file
     // reads. However, we don't want to disable it for continuous 'Get Time'
     // calls (command 0x15). Nor for Get Date (0x15).
     if (DemCmd != 0x15 && DemCmd != 0x14)
         IDLE_disk();
+    DisableScreenSwitch(hMainThreadSuspended);
 }
 
 // WOW BOP
 HANDLE hWOWDll;
 
 MYFARPROC WOWDispatchEntry;
-MYFARPROC WOWInitEntry;
+W32INITPROC WOWInitEntry;
 VOID (*pW32HungAppNotifyThread)(UINT) = NULL;
 
 static BOOL WowModeInitialized = FALSE;
@@ -172,8 +179,9 @@ static BOOL WowModeInitialized = FALSE;
 void MS_bop_1(void) {
 
     if (!WowModeInitialized) {
-    //Load the WOW DLL
-    if ((hWOWDll = SafeLoadLibrary("WOW32")) == NULL)
+
+    hWOWDll = LoadSystem32Library(L"WOW32.DLL");
+    if (hWOWDll == NULL)
     {
 #ifndef PROD
         HostDebugBreak();
@@ -183,14 +191,12 @@ void MS_bop_1(void) {
     }
 
     // Get the init entry point and dispatch entry point
-    if ((WOWInitEntry = (MYFARPROC)GetProcAddress(hWOWDll, "W32Init")) == NULL)
+    if ((WOWInitEntry = (W32INITPROC)GetProcAddress(hWOWDll, "W32Init")) == NULL)
     {
 #ifndef PROD
         HostDebugBreak();
 #endif
-        FreeLibrary(hWOWDll);
         TerminateVDM();
-        return;
     }
 
     if ((WOWDispatchEntry = GetProcAddress(hWOWDll, "W32Dispatch")) == NULL)
@@ -198,9 +204,7 @@ void MS_bop_1(void) {
 #ifndef PROD
         HostDebugBreak();
 #endif
-        FreeLibrary(hWOWDll);
         TerminateVDM();
-        return;
     }
 
     //Get Comms functions
@@ -209,9 +213,7 @@ void MS_bop_1(void) {
 #ifndef PROD
         HostDebugBreak();
 #endif
-        FreeLibrary(hWOWDll);
         TerminateVDM();
-        return;
     }
 
     if ((GetCommShadowMSR = (GCSfn) GetProcAddress(hWOWDll, "GetCommShadowMSR")) == NULL)
@@ -219,9 +221,7 @@ void MS_bop_1(void) {
 #ifndef PROD
         HostDebugBreak();
 #endif
-        FreeLibrary(hWOWDll);
         TerminateVDM();
-        return;
     }
 
     //Get hung app Notification routine
@@ -232,9 +232,7 @@ void MS_bop_1(void) {
 #ifndef PROD
         HostDebugBreak();
 #endif
-        FreeLibrary(hWOWDll);
         TerminateVDM();
-        return;
     }
 
 
@@ -245,7 +243,6 @@ void MS_bop_1(void) {
         HostDebugBreak();
 #endif
         TerminateVDM();
-        return;
     }
 
     WowModeInitialized = TRUE;
@@ -256,36 +253,36 @@ void MS_bop_1(void) {
 #else
     // Dispatch to WOW dispatcher
     {
-	static BYTE **AddressOfLocal;
-	BYTE *localSimulateContext = GLOBAL_SimulateContext;
+        static BYTE **AddressOfLocal;
+        BYTE *localSimulateContext = GLOBAL_SimulateContext;
 
-	AddressOfLocal = &localSimulateContext;
+        AddressOfLocal = &localSimulateContext;
 
-	(*WOWDispatchEntry)();
+        (*WOWDispatchEntry)();
 
-	SET_GLOBAL_SimulateContext(localSimulateContext);
+        SET_GLOBAL_SimulateContext(localSimulateContext);
 
-	if(AddressOfLocal != &localSimulateContext)
-	{
-	    //Thread switch detected via stack change, force CPU to
-	    //abort the current fragment, reseting GDP var's refering
-	    //to the host stack
+        if(AddressOfLocal != &localSimulateContext)
+        {
+            //Thread switch detected via stack change, force CPU to
+            //abort the current fragment, reseting GDP var's refering
+            //to the host stack
 
-	    setEIP(getEIP());
-	}
+            setEIP(getEIP());
+        }
     }
-#endif	/* CPU_40_STYLE */
+#endif  /* CPU_40_STYLE */
 }
 
 
 // XMS BOP
 void MS_bop_2(void) {
-    XMSDispatch((ULONG)(*Sim32GetVDMPointer(SEGOFF(getCS(),getIP()),
-                                            1,
-                                            FALSE
-                                            )));
+    ULONG XmsCmd;
 
+    XmsCmd = (ULONG)(*(PUCHAR)VdmMapFlat(getCS(), getIP(), VDM_V86));
     setIP((USHORT)(getIP() + 1));
+
+    XMSDispatch(XmsCmd);
 }
 
 
@@ -313,12 +310,12 @@ void MS_bop_3(void)
 
 void MS_bop_4(void)
 {
-    half_word Command;
+    ULONG Command;
     IMPORT BOOL CmdDispatch(ULONG);
 
-    sas_load( ((ULONG)getCS()<<4) + getIP(), &Command);
-    CmdDispatch((ULONG) Command);
+    Command = (ULONG)(*(PUCHAR)VdmMapFlat(getCS(), getIP(), VDM_V86));
     setIP((USHORT)(getIP() + 1));
+    CmdDispatch((ULONG) Command);
 }
 
 
@@ -411,6 +408,7 @@ Return Value:
                                         //  1 = loaded
                                         //  2 = tried loading already, failed
 
+
     //
     // new: VdmRedir support is now a DLL. Try to load it. If it can't be loaded
     // for whatever reason, return an error to the DOS program. Since it is
@@ -477,7 +475,6 @@ returnError:
     setIP((USHORT)(getIP() + 1));
 }
 
-HANDLE hVdmRedir;
 BOOL VdmRedirLoaded = FALSE;
 
 BOOL IsVdmRedirLoaded() {
@@ -486,14 +483,16 @@ BOOL IsVdmRedirLoaded() {
 
 BOOL LoadVdmRedir() {
 
+    HANDLE hVdmRedir;
 #if DBG
-    LPSTR funcName = "";
+    LPSTR  funcName = "";
 #endif
 
     if (VdmRedirLoaded) {
         return TRUE;
     }
-    if (hVdmRedir = SafeLoadLibrary("VDMREDIR")) {
+
+    if (hVdmRedir = LoadSystem32Library(L"VDMREDIR.DLL")) {
 
         //
         // get addresses of procedures called by functions in dos\dem\demfile.c
@@ -564,7 +563,7 @@ closeAndReturnError:
         printf("MS_bop_7: Error: cannot locate entry point %s in VDMREDIR.DLL\n", funcName);
 #endif
 
-    CloseHandle(hVdmRedir);
+    UnloadSystem32Library(hVdmRedir);
     return FALSE;
 }
 
@@ -665,11 +664,34 @@ void MS_bop_B(void)
 }
 
 
-//timing bop
+//devices bop
+
+extern  VOID nt_mscdexinit(VOID);
+extern  VOID nt_mscdex(VOID);
+typedef VOID (*PFNSVC)(VOID);
+
+PFNSVC  apfnDevicesSVC [] = {
+     nt_mscdexinit,     //SVC_DEVICES_MSCDEXINIT
+     nt_mscdex,         //SVC_DEVICES_MSCDEX
+};
 
 void MS_bop_C(void)
 {
-    illegal_bop();
+    ULONG   DevicesCmd;
+    USHORT  ip;
+
+    ip = getIP();
+    DevicesCmd = (ULONG)(*(PUCHAR)VdmMapFlat(getCS(), ip, VDM_V86));
+    setIP((USHORT)(ip + 1));
+
+    if (DevicesCmd >= SVC_DEVICES_LASTSVC){
+#if DBG
+        printf("MS_bop_C: Error: Unimplemented devices SVC index %x\n", DevicesCmd);
+#endif
+        setCF(1);
+    }
+
+    (apfnDevicesSVC [DevicesCmd])();
 }
 
 
@@ -728,8 +750,40 @@ void MS_bop_F(void)
 {
     extern void kb_setup_vectors(void);
 
-
     kb_setup_vectors();
+
+    //
+    // Now that int10_seg and UseHostInt10 are initialized we can reflect the
+    // current display state to BIOS if needed.
+    //
+
+    if (sc.ScreenState != STREAM_IO) {
+        sas_store_no_check((int10_seg << 4) + useHostInt10, (half_word)sc.ScreenState);
+    }
+
+    //
+    // Set idle counter settings, we set this each time we read pif file since
+    // Defaults (from static code init):
+    //     WNTPifFgPr = 100, with range of 0 to 200.
+    //     minConsecutiveTicks = 50
+    //     minFailedPolls = 8
+    //
+
+    {
+    int minTicks, minPolls;
+
+    // higher pri, requires more minimum consecutive ticks, and more minimum polls
+    // scale minTicks where 50 == 100%
+    // scale minPolls where 8 == 100%
+    minTicks = (WNTPifFgPr >> 2) + 25;
+
+    minPolls = (WNTPifFgPr << 3) / 100;
+    if (minPolls < 4) {
+        minPolls +=4;
+        }
+
+    idle_set(minPolls, minTicks);
+    }
 
 
 #ifdef MONITOR

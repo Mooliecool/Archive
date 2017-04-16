@@ -63,6 +63,13 @@ typedef struct _KEY_EVENT_RECORD {
 #define SCROLLLOCK_ON         0x0040 // the scrolllock light is on.
 #define CAPSLOCK_ON           0x0080 // the capslock light is on.
 #define ENHANCED_KEY          0x0100 // the key is enhanced.
+#define NLS_DBCSCHAR          0x00010000 // DBCS for JPN: SBCS/DBCS mode.
+#define NLS_ALPHANUMERIC      0x00000000 // DBCS for JPN: Alphanumeric mode.
+#define NLS_KATAKANA          0x00020000 // DBCS for JPN: Katakana mode.
+#define NLS_HIRAGANA          0x00040000 // DBCS for JPN: Hiragana mode.
+#define NLS_ROMAN             0x00400000 // DBCS for JPN: Roman/Noroman mode.
+#define NLS_IME_CONVERSION    0x00800000 // DBCS for JPN: IME conversion.
+#define NLS_IME_DISABLE       0x20000000 // DBCS for JPN: IME enable/disable.
 
 typedef struct _MOUSE_EVENT_RECORD {
     COORD dwMousePosition;
@@ -141,6 +148,15 @@ typedef struct _CHAR_INFO {
 #define BACKGROUND_GREEN     0x0020 // background color contains green.
 #define BACKGROUND_RED       0x0040 // background color contains red.
 #define BACKGROUND_INTENSITY 0x0080 // background color is intensified.
+#define COMMON_LVB_LEADING_BYTE    0x0100 // Leading Byte of DBCS
+#define COMMON_LVB_TRAILING_BYTE   0x0200 // Trailing Byte of DBCS
+#define COMMON_LVB_GRID_HORIZONTAL 0x0400 // DBCS: Grid attribute: top horizontal.
+#define COMMON_LVB_GRID_LVERTICAL  0x0800 // DBCS: Grid attribute: left vertical.
+#define COMMON_LVB_GRID_RVERTICAL  0x1000 // DBCS: Grid attribute: right vertical.
+#define COMMON_LVB_REVERSE_VIDEO   0x4000 // DBCS: Reverse fore/back ground attribute.
+#define COMMON_LVB_UNDERSCORE      0x8000 // DBCS: Underscore.
+
+#define COMMON_LVB_SBCSDBCS        0x0300 // SBCS or DBCS flag.
 
 
 typedef struct _CONSOLE_SCREEN_BUFFER_INFO {

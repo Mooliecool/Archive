@@ -29,7 +29,7 @@ BOOL W32CheckDibColorIndices(LPBITMAPINFOHEADER lpbmi);
 
 // VGA colors
 RGBQUAD rgbVGA[] = {
-//    Blue  Green   Red   
+//    Blue  Green   Red
       0x00, 0x00, 0x00, 0,    // 0  ; black
       0x00, 0x00, 0x80, 0,    // 1  ; dark red
       0x00, 0x80, 0x00, 0,    // 2  ; dark green
@@ -46,7 +46,7 @@ RGBQUAD rgbVGA[] = {
       0xff, 0x00, 0xff, 0,    // d  ; magenta
       0xff, 0xff, 0x00, 0,    // e  ; cyan
       0xff, 0xff, 0xff, 0     // f  ; white
-};                        
+};
 
 RGBQUAD rgb4[] = {
       0xc0, 0xdc, 0xc0, 0,    // 8
@@ -54,8 +54,6 @@ RGBQUAD rgb4[] = {
       0xf0, 0xfb, 0xff, 0,    // 246
       0xa4, 0xa0, 0xa0, 0     // 247
 };
-
-
 
 PDIBINFO pDibInfoHead = NULL;
 PDIBSECTIONINFO pDibSectionInfoHead = NULL;
@@ -71,7 +69,7 @@ HDC W32HandleDibDrv (PVPVOID vpbmi16)
     PBITMAPINFOHEADER16 pbmi16;
     INT             nbmiSize,nBytesWritten;
     HANDLE          hfile=NULL,hsec=NULL;
-    ULONG           RetVal,OriginalSelLimit,SelectorLimit,OriginalFlags;
+    ULONG           RetVal,OriginalSelLimit,ulSelectorLimit,OriginalFlags;
     PARM16          Parm16;
     CHAR            pchTempFile[MAX_PATH];
     BOOL            bRet = FALSE;
@@ -104,18 +102,18 @@ HDC W32HandleDibDrv (PVPVOID vpbmi16)
 
     try {
 
-        // Copy the wholething into a temp file. First get a temp file name
-        if ((nSize = GetTempPath (MAX_PATH, pchTempFile)) == 0 ||
+        // Copy the whole thing into a temp file. First get a temp file name
+        if ((nSize = DPM_GetTempPath (MAX_PATH, pchTempFile)) == 0 ||
              nSize >= MAX_PATH)
             goto hdd_err;
 
-        if (GetTempFileName (pchTempFile,
+        if (DPM_GetTempFileName (pchTempFile,
                              "DIB",
                              0,
                              pchTempFile) == 0)
             goto hdd_err;
 
-        if ((hfile = CreateFile (pchTempFile,
+        if ((hfile = DPM_CreateFile (pchTempFile,
                                 GENERIC_READ | GENERIC_WRITE,
                                 FILE_SHARE_WRITE,
                                 NULL,
@@ -135,18 +133,18 @@ HDC W32HandleDibDrv (PVPVOID vpbmi16)
         CallBack16(RET_GETDIBSIZE,
                    &Parm16,
                    0,
-                   (PVPVOID)&SelectorLimit);
+                   (PVPVOID)&ulSelectorLimit);
 
         Parm16.WndProc.wParam = HIWORD(vpbmi16);
 
-        if (SelectorLimit == 0xffffffff || SelectorLimit == 0) {
+        if (ulSelectorLimit == 0xffffffff || ulSelectorLimit == 0) {
             LOGDEBUG(LOG_ALWAYS,("\nWOW::W32HandleDibDrv Invalid Selector %x\n",HIWORD(vpbmi16)));
             goto hdd_err;
         }
 
-        SelectorLimit++;
+        ulSelectorLimit++;
 
-        OriginalSelLimit = SelectorLimit;
+        OriginalSelLimit = ulSelectorLimit;
 
         CallBack16(RET_GETDIBFLAGS,
                    &Parm16,
@@ -158,7 +156,7 @@ HDC W32HandleDibDrv (PVPVOID vpbmi16)
             goto hdd_err;
         }
 
-        GETVDMPTR(vpBase16, SelectorLimit, pbmi16);
+        GETVDMPTR(vpBase16, ulSelectorLimit, pbmi16);
 
         nbmiSize = GetBMI16Size(vpbmi16, (WORD) DIB_RGB_COLORS, &dwClrUsed);
 
@@ -169,7 +167,7 @@ HDC W32HandleDibDrv (PVPVOID vpbmi16)
         nAlignmentSpace = (nbmiSize+LOWORD(vpbmi16)) % 4;
 
         if (nAlignmentSpace) {
-            if (WriteFile (hfile,
+            if (DPM_WriteFile (hfile,
                            pbmi16,
                            nAlignmentSpace,
                            &nBytesWritten,
@@ -179,29 +177,30 @@ HDC W32HandleDibDrv (PVPVOID vpbmi16)
         }
 
         //
-        // detect a clinical case of bitedit screwing around dib.drv 
-        // 
+        // detect a clinical case of bitedit screwing around dib.drv
+        //
         // code below is using dib macros declared in wdib.h
         // namely:
         //      DibNumColors - yields max number of colors in dib
         //      DibColors    - yields pointer to a dib color table
-        //  
+        //
         // Function W32CheckDibColorIndices checks to see if DIB color
         // table looks like a number (defined usually by biClrImportant)
         // of WORD indices in a sequential order (0, 1, 2, ...)
-        // if this is the case, app is trying to use undocumented feature 
-        // of DIB.DRV that turns color matching off in this case. 
+        // if this is the case, app is trying to use undocumented feature
+        // of DIB.DRV that turns color matching off in this case.
         // Since we cannot enforce that rule, we approximate it by filling
         // color table by a number of known (and always same) entries
-        // When blitting occurs, no color matching will be performed (when 
+        // When blitting occurs, no color matching will be performed (when
         // both target and destination are of this very nature).
-        // For no reason at all we fill color table with vga colors. 
-        // Sequential indices could have worked just as well. 
-        //    
+        // For no reason at all we fill color table with vga colors.
+        // Sequential indices could have worked just as well.
+        //
         // Modifications are made to memory pointed to by lpbmi32
 
         if (W32CheckDibColorIndices((LPBITMAPINFOHEADER)lpbmi32)) {
-            INT i, nColors;
+            BYTE i;
+            INT nColors;
             LPBITMAPINFOHEADER lpbmi = (LPBITMAPINFOHEADER)lpbmi32;
             LPRGBQUAD lprgbq = (LPRGBQUAD)DibColors(lpbmi);
 
@@ -217,14 +216,14 @@ HDC W32HandleDibDrv (PVPVOID vpbmi16)
                 case 4:
                     RtlCopyMemory(lprgbq, rgbVGA, sizeof(rgbVGA));
                     break;
-                    
+
                 case 8:
                     RtlCopyMemory(lprgbq,     rgbVGA,   8*sizeof(RGBQUAD));
                     RtlCopyMemory(lprgbq+248, rgbVGA+8, 8*sizeof(RGBQUAD));
                     RtlCopyMemory(lprgbq+8,   rgb4,   2*sizeof(RGBQUAD));
                     RtlCopyMemory(lprgbq+246, rgb4+2, 2*sizeof(RGBQUAD));
                     for (i = 10; i < 246; ++i) {
-                        lprgbq[i].rgbBlue = i; 
+                        lprgbq[i].rgbBlue = i;
                         lprgbq[i].rgbGreen= 0;
                         lprgbq[i].rgbRed  = 0;
                         lprgbq[i].rgbReserved = 0;
@@ -233,34 +232,34 @@ HDC W32HandleDibDrv (PVPVOID vpbmi16)
 
                 default: // this should never happen
                     break;
-            }            
+            }
         }
 
-        if (WriteFile (hfile,
+        if (DPM_WriteFile (hfile,
                        pbmi16,
-                       SelectorLimit,
+                       ulSelectorLimit,
                        &nBytesWritten,
-                       NULL) == FALSE || nBytesWritten != (INT) SelectorLimit)
+                       NULL) == FALSE || nBytesWritten != (INT) ulSelectorLimit)
             goto hdd_err;
 
-        if (SelectorLimit < 64*1024) {
-            if (SetFilePointer (hfile,
+        if (ulSelectorLimit < 64*1024) {
+            if (DPM_SetFilePointer (hfile,
                                 64*1024+nAlignmentSpace,
                                 NULL,
                                 FILE_BEGIN) == -1)
                 goto hdd_err;
 
-            if (SetEndOfFile (hfile) == FALSE)
+            if (DPM_SetEndOfFile (hfile) == FALSE)
                 goto hdd_err;
 
-            SelectorLimit = 64*1024;
+            ulSelectorLimit = 64*1024;
         }
 
         if ((hsec = CreateFileMapping (hfile,
                                        NULL,
                                        PAGE_READWRITE | SEC_COMMIT,
                                        0,
-                                       SelectorLimit+nAlignmentSpace,
+                                       ulSelectorLimit+nAlignmentSpace,
                                        NULL)) == NULL) {
             LOGDEBUG(LOG_ALWAYS,("\nWOW::W32HandleDibDrv CreateFileMapping Failed\n"));
             goto hdd_err;
@@ -284,7 +283,7 @@ HDC W32HandleDibDrv (PVPVOID vpbmi16)
                          FILE_MAP_WRITE,
                          0,
                          0,
-                         SelectorLimit+nAlignmentSpace)) == NULL) {
+                         ulSelectorLimit+nAlignmentSpace)) == NULL) {
             LOGDEBUG(LOG_ALWAYS,("\nWOW::W32HandleDibDrv MapViewOfFile Failed\n"));
             goto hdd_err;
         }
@@ -297,7 +296,7 @@ HDC W32HandleDibDrv (PVPVOID vpbmi16)
 
 #ifndef i386
         if (!NT_SUCCESS(VdmAddVirtualMemory((ULONG)pvBits,
-                                            (ULONG)SelectorLimit,
+                                            (ULONG)ulSelectorLimit,
                                             (PULONG)&pvIntelBits))) {
             LOGDEBUG(LOG_ALWAYS,("\nWOW::W32HandleDibDrv VdmAddVirtualMemory failed\n"));
             goto hdd_err;
@@ -309,7 +308,7 @@ HDC W32HandleDibDrv (PVPVOID vpbmi16)
         // above. So here we zap the correct address into the flataddress
         // array.
         if (!VdmAddDescriptorMapping(HIWORD(vpbmi16),
-                                    (USHORT) ((SelectorLimit+65535)/65536),
+                                    (USHORT) ((ulSelectorLimit+65535)/65536),
                                     (ULONG) pvIntelBits,
                                     (ULONG) pvBits)) {
             LOGDEBUG(LOG_ALWAYS,("\nWOW::W32HandleDibDrv VdmAddDescriptorMapping failed\n"));
@@ -339,16 +338,16 @@ HDC W32HandleDibDrv (PVPVOID vpbmi16)
 
         // Store all the relevant information so that DeleteDC could
         // free all the resources later.
-        if (W32AddDibInfo(hdcMem, 
-                          hfile, 
-                          hsec, 
+        if (W32AddDibInfo(hdcMem,
+                          hfile,
+                          hsec,
                           nAlignmentSpace,
-                          pvBits, 
-                          pvIntelBits, 
-                          hbm, 
+                          pvBits,
+                          pvIntelBits,
+                          hbm,
                           OriginalSelLimit,
                           (USHORT)OriginalFlags,
-                          (USHORT)((HIWORD(vpbmi16)))) == FALSE) 
+                          (USHORT)((HIWORD(vpbmi16)))) == FALSE)
             goto hdd_err;
 
 
@@ -361,12 +360,12 @@ hdd_err:;
     finally {
         if (!bRet) {
 
-            if (hdcMem) {    
+            if (hdcMem) {
                 DeleteDC (hdcMem);
                 hdcMem = NULL;
             }
             if (hfile)
-                CloseHandle (hfile);
+                DPM_CloseHandle (hfile);
 
             if (hsec)
                 CloseHandle (hsec);
@@ -393,7 +392,7 @@ BOOL W32AddDibInfo (
     )
 {
     PDIBINFO pdi;
-    
+
     if ((pdi = malloc_w (sizeof (DIBINFO))) == NULL)
         return FALSE;
 
@@ -427,7 +426,7 @@ BOOL W32FreeDibInfoHandle(PDIBINFO pdi, PDIBINFO pdiLast)
 
     DeleteObject (pdi->di_hbm);
     CloseHandle (pdi->di_hsec);
-    CloseHandle (pdi->di_hfile);
+    DPM_CloseHandle (pdi->di_hfile);
 
     DeleteDC(pdi->di_hdc);
     W32FreeDibInfo (pdi, pdiLast);
@@ -510,7 +509,7 @@ HDC W32FindAndLockDibInfo (USHORT sel)
 
 //
 //  This function is called from krnl386 if GlobalReAlloc or GlobalFree is
-//  trying to operate on memory which we suspect is dib-mapped. It finds 
+//  trying to operate on memory which we suspect is dib-mapped. It finds
 //  dib by original selector and restores it, thus allowing respective function
 //  to succeede. Bitedit is the app that does globalrealloc before DeleteDC
 //
@@ -543,7 +542,7 @@ ULONG FASTCALL WK32FindAndReleaseDib(PVDMFRAME pvf)
                 LOGDEBUG(LOG_ALWAYS, ("\nWOW: FindAndReleaseDib failed (lock count!)\n"));
                 return FALSE;
             }
-            
+
             return W32FreeDibInfoHandle(pdi, pdiLast);
         }
 
@@ -564,7 +563,7 @@ BOOL W32CheckDibColorIndices(LPBITMAPINFOHEADER lpbmi)
     if (lpbmi->biClrImportant) {
         nColors = min(nColors, (WORD)lpbmi->biClrImportant);
     }
-    
+
     for (i = 0; i < nColors; ++i) {
         if (*lpw++ != i) {
             return FALSE;
@@ -650,12 +649,12 @@ ULONG FASTCALL WG32CreateDIBSection(PVDMFRAME pFrame)
     {
         PARM16          Parm16;
         PDIBSECTIONINFO pdi;
-        ULONG           SelectorLimit;
+        ULONG           ulSelectorLimit;
 
-        SelectorLimit = (ULONG)cjBitmapBitsSize(lpbmi32);
+        ulSelectorLimit = (ULONG)cjBitmapBitsSize(lpbmi32);
 #ifndef i386
         if (!NT_SUCCESS(VdmAddVirtualMemory((ULONG)pvBits,
-                                            SelectorLimit,
+                                            ulSelectorLimit,
                                             (PULONG)&pvIntelBits))) {
             LOGDEBUG(LOG_ALWAYS,("\nWOW::WG32CreateDibSection VdmAddVirtualMemory failed\n"));
             goto cds_err;
@@ -670,7 +669,7 @@ ULONG FASTCALL WG32CreateDIBSection(PVDMFRAME pFrame)
         Parm16.WndProc.wParam = (WORD)-1;           // -1 => allocate selectors
         Parm16.WndProc.lParam = (LONG) pvIntelBits; // backing pointer
         Parm16.WndProc.wMsg = 0x10;                 // GA_NOCOMPACT
-        Parm16.WndProc.hwnd = (WORD)((SelectorLimit+65535)/65536);// selector count
+        Parm16.WndProc.hwnd = (WORD)((ulSelectorLimit+65535)/65536);// selector count
 
         CallBack16(RET_SETDIBSEL,
                    &Parm16,
@@ -687,19 +686,19 @@ ULONG FASTCALL WG32CreateDIBSection(PVDMFRAME pFrame)
             goto cds_err;
         }
 
-#ifndef i386 
+#ifndef i386
         // okay, that was successful - map the descriptors properly
 
         if (!VdmAddDescriptorMapping(HIWORD(pvBits32),
-                                    (USHORT) ((SelectorLimit+65535)/65536),
+                                    (USHORT) ((ulSelectorLimit+65535)/65536),
                                     (ULONG) pvIntelBits,
                                     (ULONG) pvBits)) {
             LOGDEBUG(LOG_ALWAYS,("\nWOW::WG32CreateDibSection VdmAddDescriptorMapping failed\n"));
             goto cds_err;
         }
 #endif
-        
-        LOGDEBUG(LOG_ALWAYS, ("\nWOW:CreateDIBSection: [16:16 %x] [Intel %x] [Flat %x]\n", 
+
+        LOGDEBUG(LOG_ALWAYS, ("\nWOW:CreateDIBSection: [16:16 %x] [Intel %x] [Flat %x]\n",
                              pvBits32, pvIntelBits, pvBits));
 
         ul = GETHBITMAP16(hbm32);
@@ -707,7 +706,7 @@ ULONG FASTCALL WG32CreateDIBSection(PVDMFRAME pFrame)
         // Add it to the list used for cleanup at DeleteObject time.
 
         if ((pdi = malloc_w (sizeof (DIBSECTIONINFO))) != NULL) {
-            pdi->di_hbm         = (HBITMAP)(HAND16)hbm32;
+            pdi->di_hbm         = hbm32;
             pdi->di_pv16        = pvBits32;
 #ifndef i386
             pdi->di_newIntelDib = pvIntelBits;
@@ -748,6 +747,7 @@ cds_err:
 
     if (hbm32 != 0) {
         DeleteObject(hbm32);
+        DeleteWOWGdiHandle(hbm32, (HAND16)LOWORD(ul));
     }
     LOGDEBUG(LOG_ALWAYS,("\nWOW::WG32CreateDibSection returning failure\n"));
     ul = 0;

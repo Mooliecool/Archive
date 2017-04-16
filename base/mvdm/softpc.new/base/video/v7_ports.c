@@ -44,7 +44,7 @@
  * The following #include specifies the code segment into which this
  * module will by placed by the MPW C compiler on the Mac II running
  * MultiFinder.
- */ 
+ */
 #include "SOFTPC_VGA.seg"
 #endif
 
@@ -89,6 +89,7 @@ io_addr         port;
 half_word       value;
 
 {
+#ifndef NEC_98
 	NON_PROD(if(io_verbose & EGA_PORTS_VERBOSE)fprintf(trace_file,"seq(6,%#x)\n",value);)
 	note_entrance2("vga_seq_extn_control(%x,%x)", port, value);
 
@@ -96,6 +97,7 @@ half_word       value;
 		sequencer.extensions_control.as_bfld.extension_enable = 1;
 	else if (value == 0xae)
 		sequencer.extensions_control.as_bfld.extension_enable = 0;
+#endif  //NEC_98
 }
 
 GLOBAL VOID
@@ -105,12 +107,13 @@ UTINY *rd_bank;
 UTINY *wrt_bank;
 
 {
+#ifndef NEC_98
 	if( get_seq_chain4_mode() && get_chain4_mode() ) {
 		set_v7_bank_for_seq_chain4( rd_bank, wrt_bank );
 	}
 	else {
 
-	/* 
+	/*
 	   1.4.92 MG
 	   Note that we and off the top bit of the bank selects. This means
 	   that accesses to the top 512k (which we don't have) get mapped into
@@ -124,6 +127,7 @@ UTINY *wrt_bank;
 		*rd_bank=(extensions_controller.ram_bank_select.as_bfld.cpu_read_bank_select&1);
 		*wrt_bank=(extensions_controller.ram_bank_select.as_bfld.cpu_write_bank_select&1);
 	}
+#endif  //NEC_98
 }
 
 /*(
@@ -140,7 +144,7 @@ Input:
 		value	- the value to be written to the register
 
 Output:
-		The Extension Registers are set to the correct value, and 
+		The Extension Registers are set to the correct value, and
 		any other required actions are emulated.
 
 ----------------------------------------------------------------------
@@ -152,6 +156,7 @@ io_addr         port;
 half_word       value;
 
 {
+#ifndef NEC_98
 	half_word	old_value;
 
 	note_entrance2("vga_extn_outb(%x,%x)", port, value);
@@ -219,36 +224,36 @@ half_word       value;
 			break;
 		case 0xa5:
 			note_entrance0("cursor attributes");
-			old_value=extensions_controller.cursor_attrs.as.abyte;
+			old_value=(half_word)extensions_controller.cursor_attrs.as.abyte;
 			extensions_controller.cursor_attrs.as.abyte = value;
 
 			/*
 			   8.6.92 MG
-			   We need to check that the pointer was disabled 
+			   We need to check that the pointer was disabled
 			   before we redraw it when it is enabled. Otherwise
-			   we can get old pointers left on the screen in 
+			   we can get old pointers left on the screen in
 			   Windows.
 			*/
 
 			/* Not doing cursor mode stuff (whatever that means) */
 
-			if (value&0x80!=old_value&0x80) {
+                        if ((value&0x80) != (old_value&0x80)) {
 				host_start_update ();
 				if (value & 0x80) {
-					/* Enable hardware graphics pointer */ 
+					/* Enable hardware graphics pointer */
 					draw_v7ptr();
 				}
 				else {
-					/* Disable hardware graphics pointer */ 
+					/* Disable hardware graphics pointer */
 					(*clear_v7ptr)(curr_v7ptr_x, curr_v7ptr_y);
 				}
 				host_end_update ();
 			}
 			break;
 
-		/* 
+		/*
 		   31.3.92 MG Register c1 is an undocumented DAC control
-		   register, bit 0 switches between 6 and 8 bit data in 
+		   register, bit 0 switches between 6 and 8 bit data in
 		   the DAC.
 		*/
 
@@ -321,7 +326,7 @@ half_word       value;
 					break;
 				case 2:
 					extensions_controller.foreground_latch_2 = value;
-					extensions_controller.fast_latch_load_state.as_bfld.fg_latch_load_state = 3; 
+					extensions_controller.fast_latch_load_state.as_bfld.fg_latch_load_state = 3;
 					SET_FG_LATCH( 2, value );
 					break;
 				case 3:
@@ -349,7 +354,7 @@ half_word       value;
 					break;
 				case 2:
 					put_latch2(value);
-					extensions_controller.fast_latch_load_state.as_bfld.bg_latch_load_state = 3; 
+					extensions_controller.fast_latch_load_state.as_bfld.bg_latch_load_state = 3;
 					break;
 				case 3:
 					put_latch3(value);
@@ -407,7 +412,7 @@ half_word       value;
 				extensions_controller.compatibility_control.as.abyte = value;
 				set_seq_chain4_mode(extensions_controller.compatibility_control.as_bfld.sequential_chain4);
 				set_seq_chain_mode(extensions_controller.compatibility_control.as_bfld.sequential_chain);
-				if (get_chain4_mode() && (now_seqchain4 != get_seq_chain4_mode()))
+				if (get_chain4_mode() && (now_seqchain4 != (BOOL)get_seq_chain4_mode()))
 				{
 					/* do we need to change the read/write routines here?? */
 					ega_read_routines_update();
@@ -447,6 +452,7 @@ half_word       value;
 			        sequencer.address.as.abyte);)
 			break;
 	}
+#endif  //NEC_98
 }
 
 /*(
@@ -473,12 +479,13 @@ vga_extn_inb(port, value)
 io_addr         port;
 half_word       *value;
 {
+#ifndef NEC_98
 	note_entrance1("vga_extn_inb(%x)", port);
 
 	switch (sequencer.address.as.abyte) {
 
 		case 0x83:
-			*value = attribute_controller.address.as.abyte;
+			*value = (half_word)attribute_controller.address.as.abyte;
 			break;
 		case 0x8e:
 		case 0x8f:
@@ -489,13 +496,13 @@ half_word       *value;
 			*value = extensions_controller.pointer_pattern;
 			break;
 		case 0x9c:
-			*value = extensions_controller.ptr_horiz_posn_hi.as.abyte;
+			*value = (half_word)extensions_controller.ptr_horiz_posn_hi.as.abyte;
 			break;
 		case 0x9d:
 			*value = extensions_controller.ptr_horiz_posn_lo;
 			break;
 		case 0x9e:
-			*value = extensions_controller.ptr_vert_posn_hi.as.abyte;
+			*value = (half_word)extensions_controller.ptr_vert_posn_hi.as.abyte;
 			break;
 		case 0x9f:
 			*value = extensions_controller.ptr_vert_posn_lo;
@@ -517,21 +524,21 @@ half_word       *value;
 			*value = get_latch3;
 			break;
 		case 0xa4:
-			*value = extensions_controller.clock_select.as.abyte;
+			*value = (half_word)extensions_controller.clock_select.as.abyte;
 			break;
 		case 0xa5:
 			*value = extensions_controller.cursor_attrs.as.abyte & 0x89;
 			break;
 
-		/* 
+		/*
 		   31.3.92 MG Register C1 controls 6/8 bit data in the DAC.
 		*/
 
 		case 0xc1:
-			*value=extensions_controller.dac_control.as.abyte;	
+			*value = (half_word)extensions_controller.dac_control.as.abyte;	
 			break;
 		case 0xeb:
-			*value = extensions_controller.emulation_control.as.abyte;
+			*value = (half_word)extensions_controller.emulation_control.as.abyte;
 			break;
 		case 0xec:
 			*value = extensions_controller.foreground_latch_0;
@@ -564,7 +571,7 @@ half_word       *value;
 			extensions_controller.fast_latch_load_state.as_bfld.fg_latch_load_state = 0;
 			break;
 		case 0xf1:
-			*value = extensions_controller.fast_latch_load_state.as.abyte;
+			*value = (half_word)extensions_controller.fast_latch_load_state.as.abyte;
 			break;
 		case 0xf2:
 			switch (extensions_controller.fast_latch_load_state.as_bfld.bg_latch_load_state)
@@ -594,34 +601,34 @@ half_word       *value;
 			*value = extensions_controller.fg_bg_pattern;
 			break;
 		case 0xf6:
-			*value = extensions_controller.ram_bank_select.as.abyte;
+			*value = (half_word)extensions_controller.ram_bank_select.as.abyte;
 			break;
 		case 0xf7:
 			*value = extensions_controller.switch_readback;
 			break;
 		case 0xf8:
-			*value = extensions_controller.clock_control.as.abyte;
+			*value = (half_word)extensions_controller.clock_control.as.abyte;
 			break;
 		case 0xf9:
-			*value = extensions_controller.page_select.as_bfld.extended_page_select;
+			*value = (half_word)extensions_controller.page_select.as_bfld.extended_page_select;
 			break;
 		case 0xfa:
-			*value = extensions_controller.foreground_color.as.abyte;
+			*value = (half_word)extensions_controller.foreground_color.as.abyte;
 			break;
 		case 0xfb:
-			*value = extensions_controller.background_color.as.abyte;
+			*value = (half_word)extensions_controller.background_color.as.abyte;
 			break;
 		case 0xfc:
-			*value = extensions_controller.compatibility_control.as.abyte;
+			*value = (half_word)extensions_controller.compatibility_control.as.abyte;
 			break;
 		case 0xfd:
-			*value = extensions_controller.timing_select.as.abyte;
+			*value = (half_word)extensions_controller.timing_select.as.abyte;
 			break;
 		case 0xfe:
 			*value = extensions_controller.fg_bg_control.as.abyte & 0xe;
 			break;
 		case 0xff:
-			*value = extensions_controller.interface_control.as.abyte;
+			*value = (half_word)extensions_controller.interface_control.as.abyte;
 			break;
 		default:
 			NON_PROD(if(io_verbose & EGA_PORTS_VERBOSE)
@@ -636,6 +643,7 @@ half_word       *value;
 
 	}
 	note_entrance1("returning %x",*value);
+#endif //NEC_98
 }
 
 /*(
@@ -659,11 +667,12 @@ Output:
 GLOBAL VOID
 draw_v7ptr()
 {
+#ifndef NEC_98
 	sys_addr pattern;
 
 	if (extensions_controller.cursor_attrs.as_bfld.pointer_enable)
 	{
-		curr_v7ptr_x = extensions_controller.ptr_horiz_posn_lo + 
+		curr_v7ptr_x = extensions_controller.ptr_horiz_posn_lo +
 			(extensions_controller.ptr_horiz_posn_hi.as_bfld.ptr_horiz_position << 8);
 
 
@@ -676,15 +685,15 @@ draw_v7ptr()
 			curr_v7ptr_x >>= 1;
 		}
 
-		curr_v7ptr_y = extensions_controller.ptr_vert_posn_lo + 
+		curr_v7ptr_y = extensions_controller.ptr_vert_posn_lo +
 			(extensions_controller.ptr_vert_posn_hi.as_bfld.ptr_vert_position << 8);
 
 		/*
-		 * I have never seen the pointer bank select bits used, so 
+		 * I have never seen the pointer bank select bits used, so
 		 * this is a guess as to their meaning.
 		 */
 
-	/* 
+	/*
 	   1.4.92 MG
 	   Sadly, this guess isn't correct - the pointer_bank_select bits are
 	   used to select which 256k bank the pointer data is read from. Now
@@ -695,7 +704,7 @@ draw_v7ptr()
 	   As a result, we also need to lose the top bit here. The correct
 	   way to do this would be to either support nonexistent VGA memory
 	   correctly, or to add another 512k to the memory we already use.
-	   
+	
 	   This fix is mainly to make Windows 3.1 work with its video-7
 	   driver. It stuffs bytes into the last few k of the 1Mb space on
 	   the video-7 to see if the memory exists. As we just map this
@@ -711,6 +720,7 @@ draw_v7ptr()
 
 		(*paint_v7ptr)(pattern, curr_v7ptr_x, curr_v7ptr_y);
 	}
+#endif  //NEC_98
 }
 
 GLOBAL	VOID	remove_v7ptr IFN0()
@@ -735,6 +745,7 @@ GLOBAL	BOOL	v7ptr_between_lines IFN2(int, start_line, int, end_line)
  */
 GLOBAL void set_v7_fg_latch_byte IFN2(IU8, index, IU8, value)
 {
+#ifndef NEC_98
 	IU32 v7latch;
 
 	/* get current value */
@@ -765,6 +776,7 @@ GLOBAL void set_v7_fg_latch_byte IFN2(IU8, index, IU8, value)
 
 	/* update v7 latches */
 	setVideov7_fg_latches(v7latch);
+#endif  //NEC_98
 }
 #endif	/* CPU_40_STYLE */
 

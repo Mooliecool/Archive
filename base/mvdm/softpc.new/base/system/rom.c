@@ -16,9 +16,7 @@
 */
 
 #include <stdio.h>
-#if defined(NTVDM) && defined(MONITOR)
 #include <malloc.h>
-#endif
 
 #include TypesH
 #include MemoryH
@@ -45,12 +43,27 @@
 #endif	/* ! CCPU */
 #endif	/* CPU_40_STYLE */
 
+#if defined(NEC_98)
+
+#ifndef BIOSNROM_FILENAME
+#define BIOSNROM_FILENAME       "biosn.rom"
+#endif /* BIOSNROM_FILENAME */
+
+#ifndef BIOSNWROM_FILENAME
+#define BIOSNWROM_FILENAME      "biosnw.rom"
+#endif /* BIOSNWROM_FILENAME */
+
+#ifndef RS232CEXROM_FILENAME
+#define RS232CEXROM_FILENAME    "rs232cex.rom"
+#endif
+#else    //NEC_98
+
 #ifndef BIOS1ROM_FILENAME
 #define	BIOS1ROM_FILENAME	"bios1.rom"
 #endif /* BIOS1ROM_FILENAME */
 
 #ifndef BIOS2ROM_FILENAME
-#ifdef	CPU_40_STYLE
+#if defined(CPU_40_STYLE) || defined(ARCX86)
 #define	BIOS2ROM_FILENAME	"bios4.rom"
 #else	/* CPU_40_STYLE */
 #define	BIOS2ROM_FILENAME	"bios2.rom"
@@ -68,6 +81,8 @@
 #ifndef V7VGAROM_FILENAME
 #define	V7VGAROM_FILENAME	"v7vga.rom"
 #endif /* V7VGAROM_FILENAME */
+
+#endif   //NEC_98
 
 #ifdef 	GISP_SVGA
 #define	GISP_VGAROM_FILENAME         "hwvga.rom"
@@ -97,6 +112,11 @@
 
 #define	ROM_SIGNATURE		0xaa55
 
+#if defined(NEC_98)
+#define SIXTY_FOUR_K 1024*64
+#define NINETY_SIX_K 1024*96
+#endif   //NEC_98
+
 /* Current SoftPC verion number */
 #define MAJOR_VER	0x03
 #define MINOR_VER	0x00
@@ -117,6 +137,15 @@ extern long host_read_resource (int, char *, host_addr, int ,int);
 #else
 extern long host_read_resource ();
 #endif
+
+extern void host_simulate();
+
+#if defined(NEC_98)
+VOID setup_memory_switch(VOID);
+extern GLOBAL BOOL HIRESO_MODE;
+extern sys_addr host_check_rs232cex();
+extern BOOL video_emu_mode;
+#endif   //NEC_98
 
 /*(
  *=========================== patchCheckSum ================================
@@ -185,7 +214,7 @@ patchCheckSum IFN3(PHY_ADDR, start, PHY_ADDR, length, PHY_ADDR, offset)
 	indicatedLength = sas_PR8(start + 2) * 512;
 	if (indicatedLength != roundedLength) {
 		always_trace3("ROM at 0x%.5lx has incorrect length 0x%.8lx (actually 0x%.8lx)", start, indicatedLength, roundedLength);
-		sas_PW8(start + 2, roundedLength / 512);
+		sas_PW8(start + 2, (IU8)(roundedLength / 512));
 	}
 
 
@@ -200,9 +229,9 @@ patchCheckSum IFN3(PHY_ADDR, start, PHY_ADDR, length, PHY_ADDR, offset)
 	host_free(buffer);
 
 	if (checksum != 0) {
-		always_trace2("ROM at 0x%.8lx has incorrect checksum 0x%.2x", 
+		always_trace2("ROM at 0x%.8lx has incorrect checksum 0x%.2x",
 			start, checksum);
-		sas_PW8(start + offset, 
+		sas_PW8(start + offset,
 			(IU8)((IS8)sas_PR8(start + offset) - checksum));
 	}
 	sas_connect_memory(start, start + roundedLength - 1, SAS_ROM);
@@ -219,6 +248,7 @@ OUTPUT:		None.
 )*/
 GLOBAL void read_video_rom IFN0()
 {
+#ifndef NEC_98
 #ifdef REAL_VGA
 	read_rom (VGAROM_FILENAME, EGA_ROM_START);
 #else /* REAL_VGA */
@@ -232,7 +262,14 @@ GLOBAL void read_video_rom IFN0()
 #ifdef V7VGA
 		romLength = read_rom (V7VGAROM_FILENAME, EGA_ROM_START);
 #else	/* V7VGA */
+#ifdef ARCX86
+        if (UseEmulationROM)
+            romLength = read_rom (V7VGAROM_FILENAME, EGA_ROM_START);
+        else
+            romLength = read_rom (VGAROM_FILENAME, EGA_ROM_START);
+#else  /* ARCX86 */
 		romLength = read_rom (VGAROM_FILENAME, EGA_ROM_START);
+#endif /* ARCX86 */
 #endif  /* V7VGA */
 		break;
 #endif	/* VGG */
@@ -267,7 +304,7 @@ GLOBAL void read_video_rom IFN0()
 		 * Is seems that the V86 manager (or emm386) incorrectly
 		 * maps C6000..C7FFF during initialisation.
 		 * We round up the video ROM to 32Kb to avoid this problem,
-		 * which reduces the amount of "upper memory" RAM available to 
+		 * which reduces the amount of "upper memory" RAM available to
 		 * dos extenders by 12K.
 		 */
 		if (romLength < (32*1024))
@@ -275,10 +312,33 @@ GLOBAL void read_video_rom IFN0()
 		patchCheckSum(EGA_ROM_START, romLength, 5);
 	}
 #endif	/* not REAL_VGA */
+#endif   //NEC_98
 }
 
 GLOBAL void rom_init IFN0()
 {
+#if defined(NEC_98)
+    sys_addr    rs232cex_rom_addr;
+
+    sas_fills( ROM_START, BAD_OP, PC_MEM_SIZE - ROM_START);
+//  if(HIRESO_MODE){
+//      read_rom (BIOSHROM_FILENAME, BIOSH_START);
+//      sas_connect_memory (BIOSH_START, 0xFFFFFL,SAS_ROM);
+//  }else{
+        rs232cex_rom_addr = host_check_rs232cex();
+        if(rs232cex_rom_addr){
+            read_rom (RS232CEXROM_FILENAME, rs232cex_rom_addr);
+            sas_connect_memory (rs232cex_rom_addr, rs232cex_rom_addr + 0x4000, SAS_ROM);
+        }
+        if(!video_emu_mode)
+            read_rom (BIOSNROM_FILENAME, BIOSN_START);
+        else
+            read_rom (BIOSNWROM_FILENAME, BIOSN_START);
+        sas_connect_memory (BIOSN_START, 0xFFFFFL,SAS_ROM);
+//  }
+    setup_memory_switch();
+#else    //NEC_98
+
 #if !defined(NTVDM) || ( defined(NTVDM) && !defined(X86GFX) )
 	 /*
      * Fill up all of ROM (Intel C0000 upwards) with bad op-codes.
@@ -306,7 +366,7 @@ GLOBAL void rom_init IFN0()
 
 	/* Load the video rom. */
 	read_video_rom();
-    
+
 	/* load the rom bios */
 #ifdef GISP_SVGA
 	if ((ULONG) config_inquire(C_GFX_ADAPTER, NULL) == CGA )
@@ -329,6 +389,17 @@ GLOBAL void rom_init IFN0()
 
 #else	/* !NTVDM | (NTVDM & !X86GFX) */
 
+#ifdef ARCX86
+    if (UseEmulationROM) {
+        sas_fills( EGA_ROM_START, BAD_OP, 0x8000);
+        sas_fills( BIOS_START, BAD_OP, PC_MEM_SIZE - BIOS_START);
+        read_video_rom();
+        read_rom (BIOS1ROM_FILENAME, BIOS_START);
+        read_rom (BIOS2ROM_FILENAME, BIOS2_START);
+    } else {
+        sas_connect_memory (BIOS_START, 0xFFFFFL, SAS_ROM);
+    }
+#else  /* ARCX86 */
 	/*
 	 * Now tell the CPU what it's not allowed to write over...
 	 *
@@ -336,16 +407,50 @@ GLOBAL void rom_init IFN0()
 	 * as everyone else should have done it inside read_rom.
 	 */
 	sas_connect_memory (BIOS_START, 0xFFFFFL, SAS_ROM);
+#endif /* ARCX86 */
+
 #ifdef EGG
 	sas_connect_memory (EGA_ROM_START, EGA_ROM_END-1, SAS_ROM);
 #endif
 #endif /* !NTVDM | (NTVDM & !X86GFX) */
 
 	host_rom_init();
+#endif   //NEC_98
 }
 
 LOCAL LONG read_rom IFN2(char *, name, sys_addr, address)
 {
+#if defined(NEC_98)
+    host_addr tmp;
+    long size = 0;
+    if(HIRESO_MODE) {
+       if (!(tmp = (host_addr)sas_scratch_address(SIXTY_FOUR_K)))
+       {
+           host_error(EG_MALLOC_FAILURE, ERR_CONT | ERR_QUIT, NULL);
+           return(0);
+       }
+       if (size = host_read_resource(ROMS_REZ_ID, name, tmp, SIXTY_FOUR_K, TRUE))
+       {
+           sas_connect_memory( address, address+size, SAS_RAM);
+           sas_stores (address, tmp, size);
+           sas_connect_memory( address, address+size, SAS_ROM);
+       }
+    } else {
+       if (!(tmp = (host_addr)sas_scratch_address(NINETY_SIX_K)))
+       {
+           host_error(EG_MALLOC_FAILURE, ERR_CONT | ERR_QUIT, NULL);
+           return(0);
+       }
+       if (size = host_read_resource(ROMS_REZ_ID, name, tmp, NINETY_SIX_K, TRUE))
+       {
+           sas_connect_memory( address, address+size, SAS_RAM);
+           sas_stores (address, tmp, size);
+           sas_connect_memory( address, address+size, SAS_ROM);
+       }
+    }
+   return( size );
+#else    //NEC_98
+
 #if !(defined(NTVDM) && defined(MONITOR))
 	host_addr tmp;
 	long size = 0;
@@ -377,9 +482,64 @@ LOCAL LONG read_rom IFN2(char *, name, sys_addr, address)
 
     return( size );
 #else
+
+#ifdef ARCX86
+    if (UseEmulationROM) {
+        host_addr tmp;
+        long size = 0;
+
+        tmp = (host_addr)sas_scratch_address(ROM_BUFFER_SIZE);
+        if (!tmp)
+        {
+            host_error(EG_MALLOC_FAILURE, ERR_CONT | ERR_QUIT, NULL);
+            return(0);
+        }
+        if (size = host_read_resource(ROMS_REZ_ID, name, tmp, ROM_BUFFER_SIZE, TRUE))
+        {
+            sas_connect_memory( address, address+size, SAS_RAM);
+            sas_stores (address, tmp, size);
+            sas_connect_memory( address, address+size, SAS_ROM);
+        }
+        return( size );
+    } else {
+        return ( 0L );
+    }
+#else  /* ARCX86 */
     return ( 0L );
+#endif /* ARCX86 */
+
 #endif	/* !(NTVDM && MONITOR) */
+#endif   //NEC_98
 }
+
+#if defined(NEC_98)
+
+static byte memory_sw_n[32] = {0xE1,0x00,0x48,0x00,0xE1,0x00,0x05,0x00,
+                               0xE1,0x00,0x04,0x00,0xE1,0x00,0x00,0x00,
+                               0xE1,0x00,0x01,0x00,0xE1,0x00,0x00,0x00,
+                               0xE1,0x00,0x00,0x00,0xE1,0x00,0x93,0x00};
+static byte memory_sw_h[32] = {0xE1,0x00,0x48,0x00,0xE1,0x00,0x05,0x00,
+                               0xE1,0x00,0x05,0x00,0xE1,0x00,0x00,0x00,
+                               0xE1,0x00,0x41,0x00,0xE1,0x00,0x00,0x00,
+                               0xE1,0x00,0x00,0x00,0xE1,0x00,0x92,0x00};
+
+VOID setup_memory_switch(VOID)
+{
+        int i;
+
+        if(HIRESO_MODE){
+           for (i=0;i<32;i++)
+           {
+           sas_PW8((MEMORY_SWITCH_START_H+i),memory_sw_h[i]);
+           }
+        } else {
+           for (i=0;i<32;i++)
+           {
+           sas_PW8((MEMORY_SWITCH_START_N+i),memory_sw_n[i]);
+           }
+        }
+}
+#endif   //NEC_98
 
 LOCAL	half_word	do_rom_checksum IFN1(sys_addr, addr)
 {
@@ -391,7 +551,7 @@ LOCAL	half_word	do_rom_checksum IFN1(sys_addr, addr)
 	for (; addr<last_byte_addr; addr++)
 		sum += sas_hw_at(addr);
 
-	return( sum % 0x100 );
+	return( (half_word)(sum % 0x100) );
 }
 
 LOCAL	VOID	do_search_for_roms IFN3(sys_addr, start_addr,
@@ -422,8 +582,8 @@ LOCAL	VOID	do_search_for_roms IFN3(sys_addr, start_addr,
 				push_word( 0x95a );
 				savedCS = getCS();
 				savedIP = getIP();
-				setCS((addr & 0xf0000) >> 4);
-				setIP((addr & 0xffff));
+				setCS((UCHAR)((addr & 0xf0000) >> 4));
+				setIP((USHORT)((addr & 0xffff)));
 				host_simulate();
 				setCS(savedCS);
 				setIP(savedIP);
@@ -501,7 +661,7 @@ GLOBAL VOID patch_rom IFN2(sys_addr, addr, half_word, val)
 	}
 
 #endif /* macintosh */
- 
+
 	/* The page might not be present (Arrggghhhh!!!!!)
 	** so we can't do anything sensible and must give
 	** up. We print an error though.
@@ -551,9 +711,9 @@ GLOBAL VOID patch_rom IFN2(sys_addr, addr, half_word, val)
 	 * inited, then the sas_connect will drop out to yoda.
 	 */
 
-	if (Length_of_M_area == 0) 
+	if (Length_of_M_area == 0)
 		return;
- 
+
 	old_val = sas_hw_at( addr );
 
 	/* Optimisation - don't upset the world if the value is unchanged.
@@ -594,7 +754,7 @@ GLOBAL VOID patch_rom IFN2(sys_addr, addr, half_word, val)
  * post-write checks. Since all 3.0 and later CPUs do
  * pre-write checks they're no longer needed.
  */
- 
+
 #if !(defined(NTVDM) & defined(MONITOR))
 void update_romcopy IFN1(long, addr)
 {
@@ -621,7 +781,11 @@ sys_addr  cur_loc;
 
 GLOBAL void display_string IFN1(char *, string_ptr)
 {
-#if !defined(NTVDM) || (defined(NTVDM) && !defined(X86GFX) )
+#if !defined(NTVDM) || (defined(NTVDM) && !defined(X86GFX) ) || defined(ARCX86)
+#ifdef ARCX86
+  if (UseEmulationROM)
+#endif
+  {
 	/*
 	 * Put the message "*string_ptr" in the ROM
 	 * scratch area where the drivers know where
@@ -636,7 +800,7 @@ GLOBAL void display_string IFN1(char *, string_ptr)
 
 	/* In a paging environment, we must be careful as a
 	** the ROM area could have been copied and/or mapped
-	** as read only. We must alter the memory which is 
+	** as read only. We must alter the memory which is
 	** currently at the linear address of the ROM (whether
 	** that is actually our rom or a RAM copy of it). We
 	** must force this alteration despite any protection
@@ -644,7 +808,7 @@ GLOBAL void display_string IFN1(char *, string_ptr)
 	*/
 
 	/* get a host pointer to the memory behind the required
-	** linear address. 
+	** linear address.
 	*/
 	hostPtr = getPtrToLinAddrByte(cur_loc);
 
@@ -702,7 +866,8 @@ GLOBAL void display_string IFN1(char *, string_ptr)
 	sas_disconnect_memory(DOS_SCRATCH_PAD, DOS_SCRATCH_PAD_END);
 	cur_loc -= strlen(string_ptr);
 #endif /* CPU_40_STYLE */
-#endif	/* !NTVDM | !MONITOR */
+  }
+#endif	/* !NTVDM | !MONITOR | ARCX86 */
 	cur_loc+=strlen(string_ptr);
 }
 

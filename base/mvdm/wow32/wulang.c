@@ -175,12 +175,61 @@ ULONG FASTCALL WU32AnsiPrev(PVDMFRAME pFrame)
     PSZ psz2;
     register PANSIPREV16 parg16;
     DWORD ret;
+#ifdef FE_SB
+    PSZ lpCurrent;
+#endif // FE_SB
 
     GETARGPTR(pFrame, sizeof(ANSIPREV16), parg16);
     GETPSZPTR(parg16->f1, psz1);
     GETPSZPTR(parg16->f2, psz2);
 
+#ifdef FE_SB
+    if (GetSystemDefaultLangID() == 0x411) {
+        lpCurrent = psz2;
+
+        // New Win32 CharPrev code for SUR-FE
+        // The following code is correct.
+        // But some Japanese Windows application does not work
+        // with it.
+        // Jpanese WOW uses old code with bug.
+        //
+        // if (psz1 > psz2)
+        //     return psz1
+
+        if (psz1 == psz2) {
+            ul = (ULONG)psz1;
+            goto PrevExit;
+        }
+
+        if (--lpCurrent == psz1) {
+            ul = (ULONG)psz1;
+            goto PrevExit;
+        }
+
+        // we assume lpCurrentChar never points the second byte
+        // of double byte character
+        // this check makes things a little bit faster [takaok]
+        if (IsDBCSLeadByte(*lpCurrent)) {
+            ul = (ULONG)lpCurrent-1;
+            goto PrevExit;
+        }
+
+        do {
+            lpCurrent--;
+            if (!IsDBCSLeadByte(*lpCurrent)) {
+                lpCurrent++;
+                break;
+            }
+        } while(lpCurrent != psz1);
+
+        ul = (ULONG)(psz2 - (((psz2 - lpCurrent) & 1) ? 1 : 2));
+    }
+    else
+        ul = (ULONG) AnsiPrev(psz1, psz2);
+PrevExit:
+#else // !FE_SB
     ul = (ULONG) AnsiPrev(psz1, psz2);
+#endif // !FE_SB
 
     ul = (ULONG) psz2 - ul;
 

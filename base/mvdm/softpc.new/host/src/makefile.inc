@@ -1,6 +1,6 @@
 #dummy file to be included
 
-{obj\$(TARGET_DIRECTORY)\}fprt.obj : fprt.c
+{$(O)\}fprt.obj : ..\fprt.c
 
-$(SOFTPC_DEST)\obj\$(TARGET_DIRECTORY)\fprt.obj : obj\$(TARGET_DIRECTORY)\fprt.OBJ
+$(SOFTPC_DEST)\$(ALT_PROJECT_TARGET)\$(O)\fprt.obj : $(O)\fprt.OBJ
         copy $** $@

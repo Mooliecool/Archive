@@ -114,16 +114,52 @@ typedef struct
 	UTINY	*route_reg2;
 	UTINY	*screen_ptr;
 	ULONG	rotate;
+#if defined(NEC_98)         
+        unsigned char   *gvram_p00_copy;
+        unsigned char   *gvram_p10_copy;
+        unsigned char   *gvram_p20_copy;
+        unsigned char   *gvram_p30_copy;
+        unsigned char   *gvram_p01_copy;
+        unsigned char   *gvram_p11_copy;
+        unsigned char   *gvram_p21_copy;
+        unsigned char   *gvram_p31_copy;
+        long            gvram_dirty_flag0;
+        long            gvram_dirty_flag1;
+        unsigned char   read_bank;
+        unsigned char   select_bank;
+        unsigned char   *gvram_p00_ptr;
+        unsigned char   *gvram_p10_ptr;
+        unsigned char   *gvram_p20_ptr;
+        unsigned char   *gvram_p30_ptr;
+        unsigned char   *gvram_p01_ptr;
+        unsigned char   *gvram_p11_ptr;
+        unsigned char   *gvram_p21_ptr;
+        unsigned char   *gvram_p31_ptr;
+} NEC98_GLOBALS, VGA_GLOBALS;
+#else  // !NEC_98
 } VGA_GLOBALS;
+#endif // !NEC_98
 
+#if defined(NEC_98)         
+extern struct NEC98_CPU_GLOBALS
+#else  // !NEC_98
 extern struct EGA_CPU_GLOBALS
+#endif // !NEC_98
 {
+#if defined(NEC_98)         
+        NEC98_GLOBALS    *globals;
+#else  // !NEC_98
 #ifndef	HOST_VGA_GLOBALS
 	VGA_GLOBALS	*globals;
 #endif
+#endif // !NEC_98
 	ULONG		saved_state;		/* Last value of EGA_CPU.ega_state.state */
 	ULONG		saved_mode_chain;		/* Last value of mode/chain combined */
+#if defined(NEC_98)         
+        MAGIC           NEC98_state;
+#else  // !NEC_98
 	MAGIC		ega_state;
+#endif // !NEC_98
 	ULONG		fun_or_protection;   /* true means write function is 1-3 and/or there
 						is bit protection, so latches must be used */
 	ULONG		calc_data_xor;	/* Used to recalculate data_xor_mask when the
@@ -144,8 +180,96 @@ extern struct EGA_CPU_GLOBALS
 	UTINY		seq_chain4;
 	UTINY		seq_chain;
 #endif
+#if defined(NEC_98)
+} NEC98_CPU;
+#else  // !NEC_98
 } EGA_CPU;
+#endif // !NEC_98
 
+#if defined(NEC_98)
+#define NEC98GLOBS       NEC98_CPU.globals
+
+#define	getVideolatches()		NEC98GLOBS->latches
+#define	setVideolatches(value)		NEC98GLOBS->latches = value
+#define	getVideorplane()		NEC98GLOBS->VGA_rplane
+#define	setVideorplane(value)		NEC98GLOBS->VGA_rplane = value
+#define	getVideowplane()		NEC98GLOBS->VGA_wplane
+#define	setVideowplane(value)		NEC98GLOBS->VGA_wplane = value
+#define	getVideoscratch()		NEC98GLOBS->scratch
+#define	setVideoscratch(value)		NEC98GLOBS->scratch = value
+#define	getVideosr_masked_val()		NEC98GLOBS->sr_masked_val
+#define	setVideosr_masked_val(value)	NEC98GLOBS->sr_masked_val = value
+#define	getVideosr_nmask()		NEC98GLOBS->sr_nmask
+#define	setVideosr_nmask(value)		NEC98GLOBS->sr_nmask = value
+#define	getVideodata_and_mask()		NEC98GLOBS->data_and_mask
+#define	setVideodata_and_mask(value)	NEC98GLOBS->data_and_mask = value
+#define	getVideodata_xor_mask()		NEC98GLOBS->data_xor_mask
+#define	setVideodata_xor_mask(value)	NEC98GLOBS->data_xor_mask = value
+#define	getVideolatch_xor_mask()	NEC98GLOBS->latch_xor_mask
+#define	setVideolatch_xor_mask(value)	NEC98GLOBS->latch_xor_mask = value
+#define	getVideobit_prot_mask()		NEC98GLOBS->bit_prot_mask
+#define	setVideobit_prot_mask(value)	NEC98GLOBS->bit_prot_mask = value
+#define	getVideoplane_enable()		NEC98GLOBS->plane_enable
+#define	setVideoplane_enable(value)	NEC98GLOBS->plane_enable = value
+#define	getVideoplane_enableMask()	NEC98GLOBS->plane_enable_mask
+#define	setVideoplane_enable_mask(value)	NEC98GLOBS->plane_enable_mask = value
+#define	getVideosr_lookup()		NEC98GLOBS->sr_lookup
+#define	setVideosr_lookup(value)	NEC98GLOBS->sr_lookup = value
+#define	getVideofwd_str_read_addr()	NEC98GLOBS->fwd_str_read_addr
+#define	setVideofwd_str_read_addr(value)	NEC98GLOBS->fwd_str_read_addr = value
+#define	getVideobwd_str_read_addr()	NEC98GLOBS->bwd_str_read_addr
+#define	setVideobwd_str_read_addr(value)	NEC98GLOBS->bwd_str_read_addr = value
+#define	getVideodirty_total()		NEC98GLOBS->dirty_flag
+#define	setVideodirty_total(value)	NEC98GLOBS->dirty_flag = value
+#define	getVideodirty_low()		NEC98GLOBS->dirty_low
+#define	setVideodirty_low(value)	NEC98GLOBS->dirty_low = value
+#define	getVideodirty_high()		NEC98GLOBS->dirty_high
+#define	setVideodirty_high(value)	NEC98GLOBS->dirty_high = value
+#define	getVideovideo_copy()		NEC98GLOBS->video_copy
+#define	setVideovideo_copy(value)	NEC98GLOBS->video_copy = value
+#define	getVideomark_byte()		NEC98GLOBS->mark_byte
+#define	setVideomark_byte(value)	NEC98GLOBS->mark_byte = value
+#define	getVideomark_word()		NEC98GLOBS->mark_word
+#define	setVideomark_word(value)	NEC98GLOBS->mark_word = value
+#define	getVideomark_string()		NEC98GLOBS->mark_string
+#define	setVideomark_string(value)	NEC98GLOBS->mark_string = value
+#define	getVideoread_shift_count()	NEC98GLOBS->read_shift_count
+#define	setVideoread_shift_count(value)	NEC98GLOBS->read_shift_count = value
+#define	getVideoread_mapped_plane()	NEC98GLOBS->read_mapped_plane
+#define	setVideoread_mapped_plane(value)	NEC98GLOBS->read_mapped_plane = value
+#define	getVideocolour_comp()		NEC98GLOBS->colour_comp
+#define	setVideocolour_comp(value)	NEC98GLOBS->colour_comp = value
+#define	getVideodont_care()		NEC98GLOBS->dont_care
+#define	setVideodont_care(value)	NEC98GLOBS->dont_care = value
+#define	getVideov7_bank_vid_copy_off()	NEC98GLOBS->v7_vid_copy_off
+#define	setVideov7_bank_vid_copy_off(value)	NEC98GLOBS->v7_vid_copy_off = value
+#define	getVideoscreen_ptr()		NEC98GLOBS->screen_ptr
+#define	setVideoscreen_ptr(value)	NEC98GLOBS->screen_ptr = value
+#define	getVideorotate()		NEC98GLOBS->rotate
+#define	setVideorotate(value)		NEC98GLOBS->rotate = value
+#define	getVideocalc_data_xor()		calc_data_xor
+#define	setVideocalc_data_xor(value)	calc_data_xor = value
+#define	getVideocalc_latch_xor()	calc_latch_xor
+#define	setVideocalc_latch_xor(value)	calc_latch_xor = value
+#define	getVideoread_byte_addr()		
+#define	setVideoread_byte_addr(value)	
+#define	getVideov7_fg_latches()		fg_latches
+#define	setVideov7_fg_latches(value)	fg_latches = value
+#define	getVideoGC_regs()		
+#define	setVideoGC_regs(value)		
+#define	getVideolast_GC_index()		
+#define	setVideolast_GC_index(value)	
+#define	getVideodither()		
+#define	setVideodither(value)	
+#define	getVideowrmode()	
+#define	setVideowrmode(value)	
+#define	getVideochain()	
+#define	setVideochain(value)	
+#define	getVideowrstate()	
+#define	setVideowrstate(value)	
+
+#define write_state NEC98_CPU.NEC98_state.state
+#else  // !NEC_98
 #ifndef CPU_40_STYLE	/* Vglobs done via access fns */
 #ifdef	HOST_VGA_GLOBALS
 /* Some hosts, such as the Mac, declare their own VGA_GLOBALS structure */
@@ -332,6 +456,7 @@ extern struct VideoVector C_Video;	/* in (generated) vglfunc.c */
 #endif	/* CPU_40_STYLE */
 
 #define write_state EGA_CPU.ega_state.state
+#endif // !NEC_98
 
 #define UNCHAINED	0
 #define CHAIN2		1
@@ -341,6 +466,23 @@ IMPORT ULONG sr_lookup[16];
 
 #define N_WRITE_TYPES 24
 
+#if defined(NEC_98)         
+#define get_latch(n) (* ((UTINY *) (&NEC98GLOBS->latches) + n))
+
+#define get_latch0 get_latch(0)
+#define get_latch1 get_latch(1)
+#define get_latch2 get_latch(2)
+#define get_latch3 get_latch(3)
+#define get_latch01 (* (USHORT *) (&NEC98GLOBS->latches))
+#define get_latch23 (* (USHORT *) (&NEC98GLOBS->latches + 2))
+
+#define put_latch(n, value) * ((UTINY *) (&NEC98GLOBS->latches) + n) = (value)
+
+#define put_latch0(value) put_latch(0, value)
+#define put_latch1(value) put_latch(1, value)
+#define put_latch2(value) put_latch(2, value)
+#define put_latch3(value) put_latch(3, value)
+#else  // !NEC_98
 #ifdef CPU_40_STYLE
 extern IU32 latchval;	/* used for following latch macros */
 #define get_latch(n) \
@@ -387,6 +529,7 @@ extern IU32 latchval;	/* used for following latch macros */
 #define put_latch3(value) put_latch(3, value)
 
 #endif	/* CPU_40_STYLE */
+#endif // !NEC_98
 
 /*
  * macro to do the logical operations on cpu data and the latch values

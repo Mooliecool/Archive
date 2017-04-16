@@ -26,7 +26,7 @@ HANDLE APIENTRY W32FindResource(HANDLE hModule, LPCSTR lpType, LPCSTR lpName, WO
     // result to USER.
     //
 
-    if (LOWORD (hModule) == 0) {
+    if (!ISINST16(hModule)) {
         return (FindResourceEx(hModule, lpType, lpName, wLang));
     }
     else {
@@ -65,7 +65,7 @@ BOOL APIENTRY W32FreeResource(HANDLE hResData, HANDLE hModule)
     // result to USER.
     //
 
-    if ((LOWORD (hModule) != 0) && ISRES16(hResData)) {
+    if (ISINST16(hModule) && ISRES16(hResData)) {
         return FreeResource16(GETHRES16(hResData));
     }
     else {
@@ -82,7 +82,7 @@ LPSTR APIENTRY W32LockResource(HANDLE hResData, HANDLE hModule)
     // result to USER.
     //
 
-    if ((LOWORD (hModule) != 0) && ISRES16(hResData)) {
+    if (ISINST16(hModule) && ISRES16(hResData)) {
         return LockResource16(GETHRES16(hResData));
     }
     else {
@@ -99,7 +99,7 @@ BOOL APIENTRY W32UnlockResource(HANDLE hResData, HANDLE hModule)
     // result to USER.
     //
 
-    if ((LOWORD (hModule) != 0) && ISRES16(hResData)) {
+    if (ISINST16(hModule) && ISRES16(hResData)) {
         return UnlockResource16(GETHRES16(hResData));
     }
     else {
@@ -116,7 +116,7 @@ DWORD APIENTRY W32SizeofResource(HANDLE hModule, HANDLE hResInfo)
     // result to USER.
     //
 
-    if ((LOWORD (hModule) != 0) && ISINST16(hModule) && ISRES16(hResInfo)) {
+    if (ISINST16(hModule) && ISRES16(hResInfo)) {
         WOW32ASSERT(GETHMOD16(hModule));
         return SizeofResource16(GETHMOD16(hModule), GETHRES16(hResInfo));
     }

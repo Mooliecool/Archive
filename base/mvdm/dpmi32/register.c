@@ -30,7 +30,6 @@ Revision History:
 #undef LINKED_INTO_MONITOR
 #include <softpc.h>
 
-extern LDT_ENTRY *Ldt;
 
 //
 // Internal functions

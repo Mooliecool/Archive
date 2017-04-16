@@ -43,7 +43,7 @@ TARGETLIBS=
 
 SOURCES=rename.c
 
-LINKLIBS= $(BASEDIR)\public\sdk\lib\*\setargv.obj
+LINKLIBS= $(SDK_LIB_PATH)\setargv.obj
 
 
 NTTEST=

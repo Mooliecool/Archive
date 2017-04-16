@@ -83,16 +83,21 @@ Return Value:
     //
 
     {
+        int  len;
         char Lowercase[MAX_PATH];
 
-        WOW32ASSERT(strlen(FileName) < MAX_PATH-1);
+        len = strlen(FileName);
+        if(len >= MAX_PATH) {
+            WOW32ASSERT((FALSE));
+            return FALSE;
+        }
         strcpy(Lowercase, FileName);
-        _strlwr(Lowercase);
-        WOW32ASSERT(!strcmp(FileName, Lowercase));
+        WOW32_strlwr(Lowercase);
+        WOW32ASSERT(!WOW32_strcmp(FileName, Lowercase));
     }
 #endif
 
-    if (!strcmp(FileName, szWinDotIni)) {
+    if (!WOW32_strcmp(FileName, szWinDotIni)) {
         Result = TRUE;
         goto Done;
     }
@@ -102,17 +107,17 @@ Return Value:
                                       BufferForFullPath,
                                       &PointerToName );
 
-    if (SizeOfFullPath == 0) {
+
+    if((SizeOfFullPath == 0) || (SizeOfFullPath > sizeof(BufferForFullPath))) {
+        WOW32ASSERT((FALSE));
         Result = FALSE;
         goto Done;
     }
 
-    WOW32ASSERT( (SizeOfFullPath + 1) <= sizeof BufferForFullPath );
-
     WOW32ASSERTMSG(pszWinIniFullPath && pszWinIniFullPath[0],
                    "WOW32 ERROR pszWinIniFullPath not initialized.\n");
 
-    Result = !_stricmp( pszWinIniFullPath, BufferForFullPath );
+    Result = !WOW32_stricmp( pszWinIniFullPath, BufferForFullPath );
 
 Done:
     return Result;
@@ -172,6 +177,14 @@ Routine Description:
 
     Update one key of the "embedding" section of win.ini based on the
     information stored on the correspondent subkey of HKEY_CLASSES_ROOT.
+
+    The embedding section in NT is found at: 
+        HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Embedding
+
+    A typical value is SoundRec which is defined with:
+      REG_SZ: "Sound,Sound,sndrec32.exe,picture"
+    where              ^      ^--- sndrec32.exe is the "server"
+                       '--- Sound is the "ClassName"
 
     The code below is an improved version of the function
     "UpdateWinIni" extracted from Win 3.1 (shell\library\dbf.c).
@@ -395,16 +408,16 @@ Return Value:
     lpClass = KeyName;
     szLine = Value;
 
-    if (!(lpClassName=strchr(szLine, ',')))
+    if (!(lpClassName=WOW32_strchr(szLine, ',')))
         return;
     // get the server name and null terminate the class name
-    if (!(lpServer=strchr(++lpClassName, ','))) {
+    if (!(lpServer=WOW32_strchr(++lpClassName, ','))) {
         return;
     }
     *lpServer++ = '\0';
 
     // null terminate the server
-    if (!(lpT=strchr(lpServer, ','))) {
+    if (!(lpT=WOW32_strchr(lpServer, ','))) {
         return;
     }
     *lpT++ = '\0';

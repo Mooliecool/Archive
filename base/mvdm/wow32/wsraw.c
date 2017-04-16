@@ -565,7 +565,7 @@ ULONG FASTCALL WWS32getsockopt(PVDMFRAME pFrame)
     WORD        actualOptionLength16;
     PBYTE       optionValue16;
     DWORD       optionLength32;
-    PBYTE       optionValue32;
+    PBYTE       optionValue32 = NULL;
     VPWORD      vpwOptLen16;
     VPBYTE      vpwOptVal16;
 
@@ -640,6 +640,10 @@ ULONG FASTCALL WWS32getsockopt(PVDMFRAME pFrame)
         FLUSHVDMPTR( vpwOptVal16, actualOptionLength16, optionValue16 );
     }
 
+    if(optionValue32) {
+        free_w(optionValue32);
+    }
+
     FREEVDMPTR( optionLength16 );
     FREEVDMPTR( optionValue16 );
 
@@ -700,7 +704,7 @@ ULONG FASTCALL WWS32htons(PVDMFRAME pFrame)
 
 
 
-
+#define ADDR_STR_SIZE 32
 
 
 
@@ -709,7 +713,7 @@ ULONG FASTCALL WWS32inet_addr(PVDMFRAME pFrame)
     ULONG ul;
     register PINET_ADDR16 parg16;
     PSZ addressString;
-    CHAR     szAddrStr[32];
+    CHAR     szAddrStr[ADDR_STR_SIZE];
     register PINET_ADDR16 realParg16;
 
     WSEXIT_IF_NOT_INTIALIZED();
@@ -719,7 +723,8 @@ ULONG FASTCALL WWS32inet_addr(PVDMFRAME pFrame)
     realParg16 = parg16;
 
     GETVDMPTR( parg16->cp, 1, addressString );
-    strcpy(szAddrStr, addressString);
+    strncpy(szAddrStr, addressString, ADDR_STR_SIZE);
+    szAddrStr[ADDR_STR_SIZE-1] = '\0';
     FREEVDMPTR( addressString );
 
     //
@@ -781,7 +786,7 @@ ULONG FASTCALL WWS32inet_ntoa(PVDMFRAME pFrame)
 
     if ( ipAddress != NULL ) {
         GETVDMPTR( WWS32vIpAddress, strlen( ipAddress )+1, ipAddress16 );
-        strcpy( ipAddress16, ipAddress );
+        strcpy( ipAddress16, ipAddress);
         FLUSHVDMPTR( WWS32vIpAddress, strlen( ipAddress )+1, ipAddress16 );
         FREEVDMPTR( ipAddress16 );
         ul = WWS32vIpAddress;
@@ -1085,7 +1090,7 @@ ULONG FASTCALL WWS32recvfrom(PVDMFRAME pFrame)
 
     // Thunk the 16-bit recv buffer
     if(!WSThunkRecvBuffer(BufferLength, vpBuf16, &buffer)) {
-        goto exit;
+        goto exit2;
     }
 
     ul = GETWORD16( (*wsockapis[WOW_RECVFROM].lpfn)(s32,
@@ -1100,6 +1105,10 @@ ULONG FASTCALL WWS32recvfrom(PVDMFRAME pFrame)
     FREEARGPTR(pFrame);
     FREEARGPTR(parg16);
 
+    // Un-Thunk the 16-bit recv buffer
+    WSUnthunkRecvBuffer((INT)ul, BufferLength, vpBuf16, buffer);
+
+exit2:
     // Un-Thunk the 16-bit Address name and length buffers
     WSUnThunkAddrBufAndLen(ul,
                            vpwAddrLen16,
@@ -1107,11 +1116,6 @@ ULONG FASTCALL WWS32recvfrom(PVDMFRAME pFrame)
                            addressLength,
                            &fastSockaddr,
                            realSockaddr);
-
-    // Un-Thunk the 16-bit recv buffer
-    WSUnthunkRecvBuffer((INT)ul, BufferLength, vpBuf16, buffer);
-
-
 exit:
 
     FREEARGPTR( parg16 );
@@ -1412,7 +1416,7 @@ ULONG FASTCALL WWS32sendto(PVDMFRAME pFrame)
 
     // Thunk the 16-bit send buffer
     if(!WSThunkSendBuffer(BufferLength, vpBuf16, &buffer)) {
-        goto exit;
+        goto exit2;
     }
 
     ul = GETWORD16( (*wsockapis[WOW_SENDTO].lpfn)(s32,
@@ -1427,11 +1431,12 @@ ULONG FASTCALL WWS32sendto(PVDMFRAME pFrame)
     FREEARGPTR(pFrame);
     FREEARGPTR(parg16);
 
-    // Un-Thunk the 16-bit address buffer
-    WSUnThunkAddrBuf(&fastSockaddr, realSockaddr);
-
     // Un-Thunk the 16-bit send buffer
     WSUnthunkSendBuffer(buffer);
+
+exit2:
+    // Un-Thunk the 16-bit address buffer
+    WSUnThunkAddrBuf(&fastSockaddr, realSockaddr);
 
 exit:
 

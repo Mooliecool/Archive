@@ -77,7 +77,7 @@ The Intel instructions fall into the following 'types':-
 	 | TB  | INST addr            |  --  |  --  |  --  |
 	 ---------------------------------------------------
 
-	 TA is actually mapped to T4, - so addr acts like a src. 
+	 TA is actually mapped to T4, - so addr acts like a src.
 	 TB is actually mapped to T2, - so addr acts like a src.
 
 The instruction identifier can be of two types, either a pseudo-
@@ -187,7 +187,7 @@ LOCAL UTINY aa_rules[10][3] =
 
       H The low 3 bits (2-0) of the last opcode byte select a general
 	register.
-      
+
       I The instruction contains immediate data.
 
       J The instruction contains a relative offset.
@@ -206,7 +206,7 @@ LOCAL UTINY aa_rules[10][3] =
 
       Q The 3 bits (5-3) of the last opcode byte select a segment
 	register.
-      
+
       R The 'mode' and 'r/m' fields of the modR/M byte must select a
 	general register.
 
@@ -236,7 +236,7 @@ LOCAL UTINY aa_rules[10][3] =
 
       n co-processor register relative to stack top('ndex?).
 
-   
+
  */
 #define A_Hb	(UTINY)  50
 #define A_Hw	(UTINY)  51
@@ -354,7 +354,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* 0d 0d     */{T5, {{I_OR16     , A_Fax , A_Iw  },{I_OR32     , A_Feax, A_Id  }}},
    /* 0e 0e     */{T2,OI(I_PUSH16   , A_Pw  , A_    )},
    /* 0f 0f     */{T0,OI(P_RULE3    , 0x1   , 0x00  )},
-   
+
    /* 10 10     */{T5,OI(I_ADC8     , A_Eb  , A_Gb  )},
    /* 11 11     */{T5, {{I_ADC16    , A_Ew  , A_Gw  },{I_ADC32    , A_Ed  , A_Gd  }}},
    /* 12 12     */{T5,OI(I_ADC8     , A_Gb  , A_Eb  )},
@@ -371,7 +371,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* 1d 1d     */{T5, {{I_SBB16    , A_Fax , A_Iw  },{I_SBB32    , A_Feax, A_Id  }}},
    /* 1e 1e     */{T2,OI(I_PUSH16   , A_Pw  , A_    )},
    /* 1f 1f     */{T3,OI(I_POP_SR   , A_Pw  , A_    )},
-   
+
    /* 20 20     */{T5,OI(I_AND8     , A_Eb  , A_Gb  )},
    /* 21 21     */{T5, {{I_AND16    , A_Ew  , A_Gw  },{I_AND32    , A_Ed  , A_Gd  }}},
    /* 22 22     */{T5,OI(I_AND8     , A_Gb  , A_Eb  )},
@@ -388,7 +388,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* 2d 2d     */{T5, {{I_SUB16    , A_Fax , A_Iw  },{I_SUB32    , A_Feax, A_Id  }}},
    /* 2e 2e     */{T0,OI(P_CS       , A_    , A_    )},
    /* 2f 2f     */{T0,OI(I_DAS      , A_    , A_    )},
-   
+
    /* 30 30     */{T5,OI(I_XOR8     , A_Eb  , A_Gb  )},
    /* 31 31     */{T5, {{I_XOR16    , A_Ew  , A_Gw  },{I_XOR32    , A_Ed  , A_Gd  }}},
    /* 32 32     */{T5,OI(I_XOR8     , A_Gb  , A_Eb  )},
@@ -405,7 +405,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* 3d 3d     */{T6, {{I_CMP16    , A_Fax , A_Iw  },{I_CMP32    , A_Feax, A_Id  }}},
    /* 3e 3e     */{T0,OI(P_DS       , A_    , A_    )},
    /* 3f 3f     */{T0,OI(I_AAS      , A_    , A_    )},
-   
+
    /* 40 40     */{T1, {{I_INC16    , A_Hw  , A_    },{I_INC32    , A_Hd  , A_    }}},
    /* 41 41     */{T1, {{I_INC16    , A_Hw  , A_    },{I_INC32    , A_Hd  , A_    }}},
    /* 42 42     */{T1, {{I_INC16    , A_Hw  , A_    },{I_INC32    , A_Hd  , A_    }}},
@@ -422,7 +422,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* 4d 4d     */{T1, {{I_DEC16    , A_Hw  , A_    },{I_DEC32    , A_Hd  , A_    }}},
    /* 4e 4e     */{T1, {{I_DEC16    , A_Hw  , A_    },{I_DEC32    , A_Hd  , A_    }}},
    /* 4f 4f     */{T1, {{I_DEC16    , A_Hw  , A_    },{I_DEC32    , A_Hd  , A_    }}},
-   
+
    /* 50 50     */{T2, {{I_PUSH16   , A_Hw  , A_    },{I_PUSH32   , A_Hd  , A_    }}},
    /* 51 51     */{T2, {{I_PUSH16   , A_Hw  , A_    },{I_PUSH32   , A_Hd  , A_    }}},
    /* 52 52     */{T2, {{I_PUSH16   , A_Hw  , A_    },{I_PUSH32   , A_Hd  , A_    }}},
@@ -439,7 +439,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* 5d 5d     */{T3, {{I_POP16    , A_Hw  , A_    },{I_POP32    , A_Hd  , A_    }}},
    /* 5e 5e     */{T3, {{I_POP16    , A_Hw  , A_    },{I_POP32    , A_Hd  , A_    }}},
    /* 5f 5f     */{T3, {{I_POP16    , A_Hw  , A_    },{I_POP32    , A_Hd  , A_    }}},
-   
+
    /* 60 60     */{T0, {{I_PUSHA    , A_    , A_    },{I_PUSHAD   , A_    , A_    }}},
    /* 61 61     */{T0, {{I_POPA     , A_    , A_    },{I_POPAD    , A_    , A_    }}},
    /* 62 62     */{T6, {{I_BOUND16  , A_Gw  , A_Ma16},{I_BOUND32  , A_Gd  , A_Ma32}}},
@@ -463,7 +463,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* 6d 6d     */{T0,OI(P_RULE6    , 0x3   , 0x6b  )},
    /* 6e 6e     */{T0,OI(P_RULE6    , 0x3   , 0x6e  )},
    /* 6f 6f     */{T0,OI(P_RULE6    , 0x3   , 0x71  )},
-   
+
    /* 70 70     */{T2, {{I_JO16     , A_Jb2  , A_    },{I_JO32     , A_Jb  , A_    }}},
    /* 71 71     */{T2, {{I_JNO16    , A_Jb2  , A_    },{I_JNO32    , A_Jb  , A_    }}},
    /* 72 72     */{T2, {{I_JB16     , A_Jb2  , A_    },{I_JB32     , A_Jb  , A_    }}},
@@ -480,7 +480,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* 7d 7d     */{T2, {{I_JNL16    , A_Jb2  , A_    },{I_JNL32    , A_Jb  , A_    }}},
    /* 7e 7e     */{T2, {{I_JLE16    , A_Jb2  , A_    },{I_JLE32    , A_Jb  , A_    }}},
    /* 7f 7f     */{T2, {{I_JNLE16   , A_Jb2  , A_    },{I_JNLE32   , A_Jb  , A_    }}},
-    
+
    /* 80 80     */{T0,OI(P_RULE2    , 0x2   , 0x00  )},
    /* 81 81     */{T0,OI(P_RULE2    , 0x2   , 0x08  )},
    /* 82 82     */{T0,OI(P_RULE2    , 0x2   , 0x00  )},
@@ -503,7 +503,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* 8d 8d     */{TA, {{I_LEA      , A_Gw  , A_M   },{I_LEA      , A_Gd  , A_M   }}},
    /* 8e 8e     */{T4,OI(I_MOV_SR   , A_Lw  , A_Ew  )},
    /* 8f 8f     */{T0,OI(P_RULE2    , 0x2   , 0x18  )},
-   
+
    /* 90 90     */{T0,OI(I_NOP      , A_    , A_    )},
    /* 91 91     */{T8, {{I_XCHG16   , A_Fax , A_Hw  },{I_XCHG32   , A_Feax, A_Hd  }}},
    /* 92 92     */{T8, {{I_XCHG16   , A_Fax , A_Hw  },{I_XCHG32   , A_Feax, A_Hd  }}},
@@ -520,7 +520,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* 9d 9d     */{T0, {{I_POPF     , A_    , A_    },{I_POPFD    , A_    , A_    }}},
    /* 9e 9e     */{T0,OI(I_SAHF     , A_    , A_    )},
    /* 9f 9f     */{T0,OI(I_LAHF     , A_    , A_    )},
-    
+
    /* a0 a0     */{T4,OI(I_MOV8     , A_Fal , A_Ob  )},
    /* a1 a1     */{T4, {{I_MOV16    , A_Fax , A_Ow  },{I_MOV32    , A_Feax, A_Od  }}},
    /* a2 a2     */{T4,OI(I_MOV8     , A_Ob  , A_Fal )},
@@ -537,7 +537,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* ad ad     */{T0,OI(P_RULE6    , 0x3   , 0x89  )},
    /* ae ae     */{T0,OI(P_RULE6    , 0x3   , 0x8c  )},
    /* af af     */{T0,OI(P_RULE6    , 0x3   , 0x8f  )},
-   
+
    /* b0 b0     */{T4,OI(I_MOV8     , A_Hb  , A_Ib  )},
    /* b1 b1     */{T4,OI(I_MOV8     , A_Hb  , A_Ib  )},
    /* b2 b2     */{T4,OI(I_MOV8     , A_Hb  , A_Ib  )},
@@ -554,7 +554,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* bd bd     */{T4, {{I_MOV16    , A_Hw  , A_Iw  },{I_MOV32    , A_Hd  , A_Id  }}},
    /* be be     */{T4, {{I_MOV16    , A_Hw  , A_Iw  },{I_MOV32    , A_Hd  , A_Id  }}},
    /* bf bf     */{T4, {{I_MOV16    , A_Hw  , A_Iw  },{I_MOV32    , A_Hd  , A_Id  }}},
-   
+
    /* c0 c0     */{T0,OI(P_RULE2    , 0x2   , 0x20  )},
    /* c1 c1     */{T0,OI(P_RULE2    , 0x2   , 0x28  )},
    /* c2 c2     */{T2, {{I_RETN16   , A_Iw  , A_    },{I_RETN32   , A_Iw  , A_    }}},
@@ -571,7 +571,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* cd cd     */{T2,OI(I_INT      , A_Ib  , A_    )},
    /* ce ce     */{T0,OI(I_INTO     , A_    , A_    )},
    /* cf cf     */{T0, {{I_IRET     , A_    , A_    },{I_IRETD    , A_    , A_    }}},
-   
+
    /* d0 d0     */{T0,OI(P_RULE2    , 0x2   , 0x40  )},
    /* d1 d1     */{T0,OI(P_RULE2    , 0x2   , 0x48  )},
    /* d2 d2     */{T0,OI(P_RULE2    , 0x2   , 0x50  )},
@@ -588,7 +588,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* dd dd     */{T0,OI(P_RULE4    , 0x2   , 0xf0  )},
    /* de de     */{T0,OI(P_RULE4    , 0x3   , 0x00  )},
    /* df df     */{T0,OI(P_RULE4    , 0x3   , 0x10  )},
-   
+
    /* e0 e0     */{T2,OI(P_RULE8    , 0x3   , 0x9a  )},
    /* e1 e1     */{T2,OI(P_RULE8    , 0x3   , 0x9c  )},
    /* e2 e2     */{T2,OI(P_RULE8    , 0x3   , 0x9e  )},
@@ -605,7 +605,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /* ed ed     */{T4, {{I_IN16     , A_Fax , A_Fdx },{I_IN32     , A_Feax, A_Fdx }}},
    /* ee ee     */{T6,OI(I_OUT8     , A_Fdx , A_Fal )},
    /* ef ef     */{T6, {{I_OUT16    , A_Fdx , A_Fax },{I_OUT32    , A_Fdx , A_Feax}}},
-   
+
 #ifdef CPU_286
    /* f0 f0     */{T0,OI(I_LOCK     , A_    , A_    )},
 #else
@@ -657,7 +657,7 @@ LOCAL OPCODE_INFO opcode_info[] =
 #else
    /*10f 0f/0f  */{BAD_OPCODE},
 #endif /* PIG */
-   
+
 #ifdef CPU_286
    /*110 0f/10  */{BAD_OPCODE},
    /*111 0f/11  */{BAD_OPCODE},
@@ -681,7 +681,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*11d 0f/1d  */{BAD_OPCODE},
    /*11e 0f/1e  */{BAD_OPCODE},
    /*11f 0f/1f  */{BAD_OPCODE},
-   
+
 #ifdef CPU_286
    /*120 0f/20  */{BAD_OPCODE},
    /*121 0f/21  */{BAD_OPCODE},
@@ -708,7 +708,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*12d 0f/2d  */{BAD_OPCODE},
    /*12e 0f/2e  */{BAD_OPCODE},
    /*12f 0f/2f  */{BAD_OPCODE},
-   
+
    /*130 0f/30  */{BAD_OPCODE},
    /*131 0f/31  */{BAD_OPCODE},
    /*132 0f/32  */{BAD_OPCODE},
@@ -725,7 +725,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*13d 0f/3d  */{BAD_OPCODE},
    /*13e 0f/3e  */{BAD_OPCODE},
    /*13f 0f/3f  */{BAD_OPCODE},
-   
+
    /*140 0f/40  */{BAD_OPCODE},
    /*141 0f/41  */{BAD_OPCODE},
    /*142 0f/42  */{BAD_OPCODE},
@@ -742,7 +742,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*14d 0f/4d  */{BAD_OPCODE},
    /*14e 0f/4e  */{BAD_OPCODE},
    /*14f 0f/4f  */{BAD_OPCODE},
-   
+
    /*150 0f/50  */{BAD_OPCODE},
    /*151 0f/51  */{BAD_OPCODE},
    /*152 0f/52  */{BAD_OPCODE},
@@ -759,7 +759,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*15d 0f/5d  */{BAD_OPCODE},
    /*15e 0f/5e  */{BAD_OPCODE},
    /*15f 0f/5f  */{BAD_OPCODE},
-   
+
    /*160 0f/60  */{BAD_OPCODE},
    /*161 0f/61  */{BAD_OPCODE},
    /*162 0f/62  */{BAD_OPCODE},
@@ -776,7 +776,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*16d 0f/6d  */{BAD_OPCODE},
    /*16e 0f/6e  */{BAD_OPCODE},
    /*16f 0f/6f  */{BAD_OPCODE},
-   
+
    /*170 0f/70  */{BAD_OPCODE},
    /*171 0f/71  */{BAD_OPCODE},
    /*172 0f/72  */{BAD_OPCODE},
@@ -793,7 +793,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*17d 0f/7d  */{BAD_OPCODE},
    /*17e 0f/7e  */{BAD_OPCODE},
    /*17f 0f/7f  */{BAD_OPCODE},
-    
+
 #ifdef CPU_286
    /*180 0f/80  */{BAD_OPCODE},
    /*181 0f/81  */{BAD_OPCODE},
@@ -811,7 +811,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*18d 0f/8d  */{BAD_OPCODE},
    /*18e 0f/8e  */{BAD_OPCODE},
    /*18f 0f/8f  */{BAD_OPCODE},
-   
+
    /*190 0f/90  */{BAD_OPCODE},
    /*191 0f/91  */{BAD_OPCODE},
    /*192 0f/92  */{BAD_OPCODE},
@@ -828,7 +828,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*19d 0f/9d  */{BAD_OPCODE},
    /*19e 0f/9e  */{BAD_OPCODE},
    /*19f 0f/9f  */{BAD_OPCODE},
-    
+
    /*1a0 0f/a0  */{BAD_OPCODE},
    /*1a1 0f/a1  */{BAD_OPCODE},
    /*1a2 0f/a2  */{BAD_OPCODE},
@@ -845,7 +845,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*1ad 0f/ad  */{BAD_OPCODE},
    /*1aa 0f/ae  */{BAD_OPCODE},
    /*1af 0f/af  */{BAD_OPCODE},
-   
+
    /*1b0 0f/b0  */{BAD_OPCODE},
    /*1b1 0f/b1  */{BAD_OPCODE},
    /*1b2 0f/b2  */{BAD_OPCODE},
@@ -862,7 +862,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*1bd 0f/bd  */{BAD_OPCODE},
    /*1be 0f/be  */{BAD_OPCODE},
    /*1bf 0f/bf  */{BAD_OPCODE},
-   
+
    /*1c0 0f/c0  */{BAD_OPCODE},
    /*1c1 0f/c1  */{BAD_OPCODE},
    /*1c2 0f/c2  */{BAD_OPCODE},
@@ -896,7 +896,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*18d 0f/8d  */{T2, {{I_JNL16    , A_Jw  , A_    },{I_JNL32    , A_Jd  , A_    }}},
    /*18e 0f/8e  */{T2, {{I_JLE16    , A_Jw  , A_    },{I_JLE32    , A_Jd  , A_    }}},
    /*18f 0f/8f  */{T2, {{I_JNLE16   , A_Jw  , A_    },{I_JNLE32   , A_Jd  , A_    }}},
-   
+
    /*190 0f/90  */{T3,OI(I_SETO     , A_Eb  , A_    )},
    /*191 0f/91  */{T3,OI(I_SETNO    , A_Eb  , A_    )},
    /*192 0f/92  */{T3,OI(I_SETB     , A_Eb  , A_    )},
@@ -913,7 +913,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*19d 0f/9d  */{T3,OI(I_SETNL    , A_Eb  , A_    )},
    /*19e 0f/9e  */{T3,OI(I_SETLE    , A_Eb  , A_    )},
    /*19f 0f/9f  */{T3,OI(I_SETNLE   , A_Eb  , A_    )},
-    
+
    /*1a0 0f/a0  */{T2,OI(I_PUSH16   , A_Qw  , A_    )},
    /*1a1 0f/a1  */{T3,OI(I_POP_SR   , A_Qw  , A_    )},
    /*1a2 0f/a2  */{BAD_OPCODE},
@@ -930,7 +930,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*1ad 0f/ad  */{T9, {{I_SHRD16   , A_Ew  , A_GwCL},{I_SHRD32   , A_Ed  , A_GdCL}}},
    /*1aa 0f/ae  */{BAD_OPCODE},
    /*1af 0f/af  */{T5, {{I_IMUL16T2 , A_Gw  , A_Ew  },{I_IMUL32T2 , A_Gd  , A_Ed  }}},
-   
+
    /*1b0 0f/b0  */{T5,OI(I_CMPXCHG8 , A_Eb  , A_Gb  )},
    /*1b1 0f/b1  */{T5, {{I_CMPXCHG16, A_Ew  , A_Gw  },{I_CMPXCHG32, A_Ed  , A_Gd  }}},
    /*1b2 0f/b2  */{T4, {{I_LSS      , A_Gw  , A_Mp16},{I_LSS      , A_Gd  , A_Mp32}}},
@@ -947,7 +947,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*1bd 0f/bd  */{T4, {{I_BSR16    , A_Gw  , A_Ew  },{I_BSR32    , A_Gd  , A_Ed  }}},
    /*1be 0f/be  */{T4, {{I_MOVSX8   , A_Gw  , A_Eb  },{I_MOVSX8   , A_Gd  , A_Eb  }}},
    /*1bf 0f/bf  */{T4,OI(I_MOVSX16  , A_Gd  , A_Ew  )},
-   
+
    /*1c0 0f/c0  */{T8,OI(I_XADD8    , A_Eb  , A_Gb  )},
    /*1c1 0f/c1  */{T8, {{I_XADD16   , A_Ew  , A_Gw  },{I_XADD32   , A_Ed  , A_Gd  }}},
    /*1c2 0f/c2  */{BAD_OPCODE},
@@ -965,7 +965,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*1ce 0f/ce  */{T1,OI(I_BSWAP    , A_Hd  , A_    )},
    /*1cf 0f/cf  */{T1,OI(I_BSWAP    , A_Hd  , A_    )},
 #endif /* CPU_286 */
-   
+
    /*1d0 0f/d0  */{BAD_OPCODE},
    /*1d1 0f/d1  */{BAD_OPCODE},
    /*1d2 0f/d2  */{BAD_OPCODE},
@@ -982,7 +982,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*1dd 0f/dd  */{BAD_OPCODE},
    /*1de 0f/de  */{BAD_OPCODE},
    /*1df 0f/df  */{BAD_OPCODE},
-  
+
    /*1e0 0f/e0  */{BAD_OPCODE},
    /*1e1 0f/e1  */{BAD_OPCODE},
    /*1e2 0f/e2  */{BAD_OPCODE},
@@ -999,7 +999,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*1ed 0f/ed  */{BAD_OPCODE},
    /*1ee 0f/ee  */{BAD_OPCODE},
    /*1ef 0f/ef  */{BAD_OPCODE},
-   
+
    /*1f0 0f/f0  */{BAD_OPCODE},
    /*1f1 0f/f1  */{BAD_OPCODE},
    /*1f2 0f/f2  */{BAD_OPCODE},
@@ -1521,7 +1521,7 @@ LOCAL OPCODE_INFO opcode_info[] =
    /*39f e2 e2     */{T2, {{I_LOOP16   , A_Fecx , A_Jb  },{I_LOOP32   , A_Fecx , A_Jb  }}},
    /*3a0 e3 e3     */{T2, {{I_JCXZ     , A_Fcx , A_Jb  },{I_JECXZ    , A_Fcx , A_Jb  }}},
    /*3a1 e3 e3     */{T2, {{I_JCXZ     , A_Fecx , A_Jb  },{I_JECXZ    , A_Fecx , A_Jb  }}}
-   
+
    };
 
 #undef BAD_OPCODE
@@ -1601,9 +1601,9 @@ LOCAL USHORT addr_maintype[3][3][8] =
 /*    - addressing sub type info. */
 LOCAL UTINY addr_subtype[4][8] =
    {
-   {A_SI00, A_SI01, A_SI02, A_SI03, A_SI04, A_SI05, A_SI06, A_SI07}, 
-   {A_SI10, A_SI11, A_SI12, A_SI13, A_SI14, A_SI15, A_SI16, A_SI17}, 
-   {A_SI20, A_SI21, A_SI22, A_SI23, A_SI24, A_SI25, A_SI26, A_SI27}, 
+   {A_SI00, A_SI01, A_SI02, A_SI03, A_SI04, A_SI05, A_SI06, A_SI07},
+   {A_SI10, A_SI11, A_SI12, A_SI13, A_SI14, A_SI15, A_SI16, A_SI17},
+   {A_SI20, A_SI21, A_SI22, A_SI23, A_SI24, A_SI25, A_SI26, A_SI27},
    {A_SI30, A_SI31, A_SI32, A_SI33, A_SI34, A_SI35, A_SI36, A_SI37}
    };
 
@@ -1765,8 +1765,8 @@ decode IFN4 (
           */
       default:	
 	 d_inst->inst_id = I_ZBADOP;
-	 d_inst->prefix_sz = p - start_of_inst;
-         d_inst->inst_sz = p - start_of_inst + 1;
+	 d_inst->prefix_sz = (UTINY)(p - start_of_inst);
+         d_inst->inst_sz = (UTINY)(p - start_of_inst + 1);
          return;
 	 }
       p++;
@@ -1777,8 +1777,8 @@ decode IFN4 (
     */
    d_inst->operand_size = operand_size;
    d_inst->address_size = address_size;
-   d_inst->prefix_sz = p-start_of_inst;
-   opcode = INST_BYTE(f,p);
+   d_inst->prefix_sz = (UTINY)(p-start_of_inst);
+   opcode = (USHORT)INST_BYTE(f,p);
 
    while ( 1 )
       {
@@ -1800,16 +1800,16 @@ decode IFN4 (
 	     */
 	    opcode = XREF() + GET_XXX(INST_OFFSET_BYTE(f,p,1));
 	    break;
-	 
+	
 	 case P_RULE3:
 	    /*
 	       The instruction is further decoded by a second Opcode
 	       Byte.
 	     */
 	    p++;   /* move onto second Opcode byte */
-	    opcode = XREF() + INST_BYTE(f,p);   /* form pseudo opcode */
+	    opcode = (USHORT)(XREF() + INST_BYTE(f,p));   /* form pseudo opcode */
 	    break;
-	 
+	
 	 case P_RULE4:
 	    /*
 	       The instruction is further decoded by the 'xxx' field and
@@ -1830,7 +1830,7 @@ decode IFN4 (
 	     */
 	    opcode = XREF() + GET_R_M(INST_BYTE(f,p));
 	    break;
-	 
+	
 	 case P_RULE6:
 	    /*
 	       The instruction is further decoded by the absence or
@@ -1916,7 +1916,7 @@ decode IFN4 (
 	 case A_EwIv: arg[i] = A_Ew; arg[i+1] = A_Iv;  break;
 	    }
 	 }
-      
+
       /* now action processing rule for operand */
       d_arg = &d_inst->args[i];
 
@@ -2067,7 +2067,7 @@ decode IFN4 (
       case A_Rd:   /* ('mode') and 'r/m' fields must refer to
 		      a double word register */
 	 d_arg->arg_type = A_Rd;
-	 decoding = INST_BYTE(f,p);
+	 decoding = (UTINY)INST_BYTE(f,p);
 #ifdef INTEL_BOOK_NOT_OS2
 	 if ( GET_MODE(decoding) != 3 )
 	    {
@@ -2089,7 +2089,7 @@ decode IFN4 (
       case A_Ma32:
       case A_Mp16:
       case A_Mp32:
-	 decoding = INST_BYTE(f,p);   /* peek at modR/M byte */
+	 decoding = (UTINY)INST_BYTE(f,p);   /* peek at modR/M byte */
 	 if ( GET_MODE(decoding) == 3 )
 	    {
 	    /* register access not allowed -- force a bad op. */
@@ -2102,9 +2102,9 @@ decode IFN4 (
 #endif /* OLDPIG */
 	    break;
 	    }
-	 
+	
 	 /* otherwise handle just like 'E' case */
-	 
+	
       case A_Eb:   /* 'mode' and 'r/m' fields of modR/M byte
 		      denote general register or memory address */
       case A_Ew:
@@ -2121,7 +2121,7 @@ decode IFN4 (
       case A_M28:
       case A_M94:
       case A_M108:
-	 decoding = GET_INST_BYTE(f,p);   /* get modR/M byte */
+	 decoding = (UTINY)GET_INST_BYTE(f,p);   /* get modR/M byte */
 	 mode = GET_MODE(decoding);
 	 r_m  = GET_R_M(decoding);
 
@@ -2173,7 +2173,7 @@ decode IFN4 (
 	    if ( address_size == ADDR_32 && r_m == 4 )
 	       {
 	       /* process SIB byte */
-	       decoding = GET_INST_BYTE(f,p);   /* get SIB byte */
+	       decoding = (UTINY)GET_INST_BYTE(f,p);   /* get SIB byte */
 
 	       /* subvert the original r_m value with the base value,
 		  then addressing mode, displacements and default
@@ -2198,7 +2198,7 @@ decode IFN4 (
 	    /* encode segment register */
 	    if ( segment_override == SEG_CLR )
 	       segment_override = addr_default_segment[address_size][mode][r_m];
-	    
+	
 	    d_arg->arg_values[0] = segment_override;
 
 	    /* encode displacement */
@@ -2244,7 +2244,7 @@ decode IFN4 (
 	 /* encode segment register */
 	 if ( segment_override == SEG_CLR )
 	    segment_override = A_DS;
-	    
+	
 	 d_arg->arg_values[0] = segment_override;
 
 	 /* encode type and displacement */
@@ -2290,7 +2290,7 @@ decode IFN4 (
 	 /* encode segment register */
 	 if ( segment_override == SEG_CLR )
 	    segment_override = A_DS;
-	    
+	
 	 d_arg->arg_values[0] = segment_override;
 
 	 /* encode displacement */
@@ -2313,7 +2313,7 @@ decode IFN4 (
 	 /* encode segment register */
 	 if ( segment_override == SEG_CLR )
 	    segment_override = A_DS;
-	    
+	
 	 d_arg->arg_values[0] = segment_override;
 
 	 /* encode displacement */
@@ -2514,7 +2514,7 @@ decode IFN4 (
 	 break;
 
       /* DIRECT ADDRESS ENCODINGS ====================================*/
-      
+
       case A_Aw:   /* direct address <off16><seg> in instruction stream */
 	 d_arg->arg_type = A_K;
 
@@ -2526,7 +2526,7 @@ decode IFN4 (
 	 immed |= (ULONG)GET_INST_BYTE(f,p) << 8;
 	 d_arg->arg_values[1] = immed;
 	 break;
-      
+
       case A_Ad:   /* direct address <off32><seg> in instruction stream */
 	 d_arg->arg_type = A_K;
 
@@ -2569,5 +2569,5 @@ decode IFN4 (
 	 } /* end switch */
       } /* end for */
 
-   d_inst->inst_sz = p - start_of_inst;
+   d_inst->inst_sz = (UTINY)(p - start_of_inst);
    } /* end 'decode' */

@@ -53,7 +53,7 @@ void rom_checksum();
 void copyROM();
 
 USHORT get_lim_backfill_segment(void);
-BOOL   HoldEMMBackfillMemory(ULONG Address, ULONG Size);
+BOOL   HoldEMMBackFillMemory(ULONG Address, ULONG Size);
 
 #if DBG
 extern unsigned short get_emm_page_size(void);
@@ -61,8 +61,8 @@ extern unsigned short get_intel_page_size(void);
 #endif
 
 /* SYNC THESE DEFINITIONS WITH BASE\EMM.H, or sas_init will assert */
-#define EMM_PAGE_SIZE		0x4000
-#define INTEL_PAGE_SIZE 	0x1000
+#define EMM_PAGE_SIZE           0x4000
+#define INTEL_PAGE_SIZE         0x1000
 
 typedef struct
 {
@@ -84,7 +84,7 @@ sys_addr Length_of_M_area;       /* sys addr (long) offset of end of M */
 
 static  HANDLE A20SectionHandle = NULL;
 static BOOL A20IsON = FALSE;
-static	USHORT	BackFillSegment;
+static  USHORT  BackFillSegment;
 
 
 
@@ -117,40 +117,14 @@ Return Value:
     PVOID BaseAddress;
     OBJECT_ATTRIBUTES   A20ObjAttr;
     LARGE_INTEGER       SectionSize;
-    UCHAR SectionAnsiName[80];
-    WCHAR SectionUnicodeName[80];
-    UNICODE_STRING UnicodeString;
     USHORT Pages;
     ULONG BackFillBase;
 
-#define CONVENTIONAL_MEM_SECTION "\\BaseNamedObjects\\VdmConventionalMemory"
-
-    //
-    // Create a name for the Convetional memory section
-    //
-    sprintf(
-        SectionAnsiName,
-        "%s%d",
-        CONVENTIONAL_MEM_SECTION,
-        GetCurrentProcessId()
-        );
-
-    if (MultiByteToWideChar(0, 0, SectionAnsiName, -1, SectionUnicodeName,80)
-        == 0
-    ) {
-#if DBG
-        DbgBreakPoint();
-#endif
-    //    host_error(EG_MALLOC_FAILURE,ERR_QUIT,"");
-        TerminateVDM();
-    }
-
-    RtlInitUnicodeString(&UnicodeString, SectionUnicodeName);
 
     InitializeObjectAttributes(
         &A20ObjAttr,
-        &UnicodeString,
-        OBJ_CASE_INSENSITIVE,
+        NULL,
+        0,
         NULL,
         NULL
         );
@@ -169,12 +143,12 @@ Return Value:
         );
 
     if (!NT_SUCCESS(Status)) {
-	// bugbug -williamh
-	// we should pop up an approiate message before we
-	// terminate the vdm.
+        // bugbug -williamh
+        // we should pop up an approiate message before we
+        // terminate the vdm.
 #if DBG
-	    DbgPrint("sas_init: can not create himem section, status = %lx\n",
-		     Status);
+            DbgPrint("sas_init: can not create himem section, status = %lx\n",
+                     Status);
 #endif
         TerminateVDM();
     }
@@ -198,8 +172,8 @@ Return Value:
 
     if (!NT_SUCCESS(Status)) {
 #if DBG
-	DbgPrint("sas_init: cannot free 1st 640k virtual address, status = %lx\n",
-		 Status);
+        DbgPrint("sas_init: cannot free 1st 640k virtual address, status = %lx\n",
+                 Status);
 #endif
         TerminateVDM();
     }
@@ -216,8 +190,8 @@ Return Value:
 
     if (!NT_SUCCESS(Status)) {
 #if DBG
-	DbgPrint("sas_init: can not free himem virtual address, status = %lx\n",
-		 Status);
+        DbgPrint("sas_init: can not free himem virtual address, status = %lx\n",
+                 Status);
 #endif
         TerminateVDM();
     }
@@ -241,8 +215,8 @@ Return Value:
 
     if (!NT_SUCCESS(Status)){
 #if DBG
-	DbgPrint("sas_init: can not map view of 1st 64K, status = %ls\n",
-		 Status);
+        DbgPrint("sas_init: can not map view of 1st 64K, status = %ls\n",
+                 Status);
 #endif
         TerminateVDM();
     }
@@ -262,8 +236,8 @@ Return Value:
 
     if (!NT_SUCCESS(Status)){
 #if DBG
-	DbgPrint("sas_init: can not map view of himem space, status = %lx\n",
-		 Status);
+        DbgPrint("sas_init: can not map view of himem space, status = %lx\n",
+                 Status);
 #endif
         TerminateVDM();
     }
@@ -299,8 +273,8 @@ Return Value:
         );
     if (!NT_SUCCESS(Status)){
 #if DBG
-	DbgPrint("sas_init: can not map view of himem space, status = %lx\n",
-		 Status);
+        DbgPrint("sas_init: can not map view of himem space, status = %lx\n",
+                 Status);
 #endif
         TerminateVDM();
     }
@@ -310,19 +284,19 @@ Return Value:
 
     /* make sure our constants are in sync with emm.h */
 #if DBG
-	ASSERT(EMM_PAGE_SIZE == get_emm_page_size());
-	ASSERT(INTEL_PAGE_SIZE == get_intel_page_size());
+        ASSERT(EMM_PAGE_SIZE == get_emm_page_size());
+        ASSERT(INTEL_PAGE_SIZE == get_intel_page_size());
 #endif
-	if (!HoldEMMBackFillMemory(BackFillSegment * 16,
-				   (640 * 1024) - BackFillSegment * 16)
-				  ) {
+        if (!HoldEMMBackFillMemory(BackFillSegment * 16,
+                                   (640 * 1024) - BackFillSegment * 16)
+                                  ) {
 
 #if DBG
-	    DbgPrint("sas_init: can not map backfill space, status = %lx\n",
-		     Status);
+            DbgPrint("sas_init: can not map backfill space, status = %lx\n",
+                     Status);
 #endif
-	    TerminateVDM();
-	}
+            TerminateVDM();
+        }
     }
 
     //
@@ -340,8 +314,8 @@ Return Value:
         );
     if (!NT_SUCCESS(Status)){
 #if DBG
-	DbgPrint("sas_init: can not map view of himem space, status = %lx\n",
-		 Status);
+        DbgPrint("sas_init: can not map view of himem space, status = %lx\n",
+                 Status);
 #endif
         TerminateVDM();
     }
@@ -453,6 +427,10 @@ Return Value:
 
     if (!MemType) {
         MemType = (PMEMTYPE) ch_malloc(sizeof(MEMTYPE));
+        if ( NULL == MemType ) {
+             goto ErrorSASC;
+        }
+
         MemType->Previous = NULL;
         MemType->Next = NULL;
         MemType->Start = Low;
@@ -472,9 +450,14 @@ Return Value:
         return;
     }
 
+    New = (PMEMTYPE) ch_malloc(sizeof(MEMTYPE));
+    if ( NULL == New ) {
+        goto ErrorSASC; 
+    }
+
     if (!Current) {
         // Block goes at end of list
-        New = (PMEMTYPE) ch_malloc(sizeof(MEMTYPE));
+
         Previous->Next = New;
         New->Previous = Previous;
         New->Start = Low;
@@ -483,7 +466,7 @@ Return Value:
         New->Next = NULL;
     } else {
         // Block goes in front of Current
-        New = (PMEMTYPE) ch_malloc(sizeof(MEMTYPE));
+
         New->Start = Low;
         New->Type = (half_word)Type;
         New->End = High;
@@ -504,6 +487,9 @@ Return Value:
         if (New->Previous->End > New->End) {
             // block contained in exising block
             Temp = (PMEMTYPE) ch_malloc(sizeof(MEMTYPE));
+            if(NULL == Temp) {
+               goto ErrorSASC;
+            }
             Temp->Previous = New;
             Temp->Next = New->Next;
             New->Next = Temp;
@@ -535,10 +521,14 @@ Return Value:
     if ((New->Next) && (New->Next->Start <= New->End)) {
         New->Next->Start = New->End + 1;
     }
-
+    return;
+ErrorSASC:
+    
+    RcMessageBox(EG_MALLOC_FAILURE, NULL, NULL,
+        RMB_ICON_BANG | RMB_ABORT);
+    TerminateVDM();
 }
 
-
 EXPORT
 half_word
 sas_memory_type(
@@ -616,7 +606,7 @@ Return Value:
 
     if (!NT_SUCCESS(Status)) {
 #if DBG
-	DbgPrint("A20OFF: Unable to unmap view of section, status = %lx\n",
+        DbgPrint("A20OFF: Unable to unmap view of section, status = %lx\n",
                  Status);
 #endif
         TerminateVDM();
@@ -636,7 +626,7 @@ Return Value:
 
     if (!NT_SUCCESS(Status)) {
 #if DBG
-	DbgPrint("A20OFF: Unable to map view of section, status = %lx\n",
+        DbgPrint("A20OFF: Unable to map view of section, status = %lx\n",
                  Status);
 #endif
         TerminateVDM();
@@ -684,10 +674,10 @@ Return Value:
 
     if (!NT_SUCCESS(Status)) {
 #if DBG
-	DbgPrint("A20ON: Unable to unmap view of section, status = %lx\n",
+        DbgPrint("A20ON: Unable to unmap view of section, status = %lx\n",
                  Status);
 #endif
-	TerminateVDM();
+        TerminateVDM();
     }
     SectionOffset.HighPart = 0;
     SectionOffset.LowPart = 640 * 1024;
@@ -705,10 +695,10 @@ Return Value:
 
     if (!NT_SUCCESS(Status)) {
 #if DBG
-	DbgPrint("A20ON: Unable to map view of section, status = %lx\n",
+        DbgPrint("A20ON: Unable to map view of section, status = %lx\n",
                  Status);
 #endif
-	TerminateVDM();
+        TerminateVDM();
     }
     A20IsON = TRUE;
 }
@@ -1325,15 +1315,18 @@ NOTE: Sudeepb 31-Oct-1993 Converted scratch to be allocated dynamically rather
 {
     //DbgPrint("NtVdm : sas_scratch_address\n");
     if (Length > 64 * 1024) {
-        //DbgPrint("SoftPc: sas_scratch_address requet for buffer larger than 64K\n");
         return NULL;
     }
 
     if (scratch)
         return scratch;
 
-    if ((scratch = (host_addr) malloc (64 * 1024)) == NULL)
+    if ((scratch = (host_addr) malloc (64 * 1024)) == NULL){
+        RcMessageBox(EG_MALLOC_FAILURE, NULL, NULL,
+             RMB_ICON_BANG | RMB_ABORT);
+        TerminateVDM();
         return NULL;
+    }
 
     return scratch;
 }
@@ -1502,9 +1495,9 @@ VOID sas_part_disable_20_bit_wrapping(){
  * NOTE: The very first caller will be sas_init.
  *
  * Input: ULONG BaseAddress -- the starting address, must be in INTEL page
- *			       boundary
- *	  ULONG Size	    -- size of the range, must be a multiple of
- *			       EMM_PAGE_SIZE.
+ *                             boundary
+ *        ULONG Size        -- size of the range, must be a multiple of
+ *                             EMM_PAGE_SIZE.
  *
  * According to LouP, a view costs about 400 bytes of memory. This is why
  * I make these function strictly to work on EMM_PAGE_SIZE instead of 4KB.
@@ -1517,7 +1510,7 @@ HoldEMMBackFillMemory(ULONG BaseAddress, ULONG Size)
     ULONG NewBase, Pages, i;
     LARGE_INTEGER   SectionOffset;
     ULONG ViewSize;
-    NTSTATUS Status;
+    NTSTATUS Status = STATUS_SUCCESS;;
 
     /* this function can only be called if there is backfill at all */
     ASSERT(BackFillSegment < 640 * 1024 / 16);
@@ -1529,23 +1522,23 @@ HoldEMMBackFillMemory(ULONG BaseAddress, ULONG Size)
     ASSERT((BaseAddress & (INTEL_PAGE_SIZE - 1)) == 0);
 
     for (Pages = Size / EMM_PAGE_SIZE; Pages; Pages--) {
-	SectionOffset.LowPart = BaseAddress;
-	SectionOffset.HighPart = 0;
-	ViewSize = EMM_PAGE_SIZE;
-	Status = NtMapViewOfSection(A20SectionHandle,
-				    NtCurrentProcess(),
-				    (PVOID *)&BaseAddress,
-				    0,
-				    ViewSize,
-				    &SectionOffset,
-				    &ViewSize,
-				    ViewUnmap,
-				    MEM_DOS_LIM,
-				    PAGE_EXECUTE_READWRITE
-				    );
-	if (!NT_SUCCESS(Status))
-	    break;
-	BaseAddress += EMM_PAGE_SIZE;
+        SectionOffset.LowPart = BaseAddress;
+        SectionOffset.HighPart = 0;
+        ViewSize = EMM_PAGE_SIZE;
+        Status = NtMapViewOfSection(A20SectionHandle,
+                                    NtCurrentProcess(),
+                                    (PVOID *)&BaseAddress,
+                                    0,
+                                    ViewSize,
+                                    &SectionOffset,
+                                    &ViewSize,
+                                    ViewUnmap,
+                                    MEM_DOS_LIM,
+                                    PAGE_EXECUTE_READWRITE
+                                    );
+        if (!NT_SUCCESS(Status))
+            break;
+        BaseAddress += EMM_PAGE_SIZE;
     }
     return (NT_SUCCESS(Status));
 }

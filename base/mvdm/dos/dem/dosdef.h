@@ -25,6 +25,7 @@
 #define ATTR_DEVICE          0x40
 
 #define ATTR_ALL             (ATTR_HIDDEN | ATTR_SYSTEM | ATTR_DIRECTORY)
+#define ATTR_IGNORE          (ATTR_READ_ONLY | ATTR_ARCHIVE | ATTR_DEVICE)
 #define DOS_ATTR_MASK        0x0037  // ATTR_DEVICE isn't used on 32 bit side.
                                      // ATTR_VOL maps to FILE_ATTRIBUTES_NORMAL.
 

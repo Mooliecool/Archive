@@ -335,21 +335,35 @@ extern void sas_stores_from_transbuf IPT3(sys_addr, dest, host_addr, src, sys_ad
 /* General Intel memory parameters */
 
 
+#if defined(NEC_98)
+#define BIOSN_START             0xE8000L
+#define BIOSH_START             0xF0000L
+#else  // !NEC_98
 #define BIOS_START_OFFSET	0x0000L
 #define BIOS1_END_SEGMENT	0xF000L
 #define BIOS1_END_OFFSET 	0x7000L 	/* End of 1st half of ROM */
 #define BIOS2_START_SEGMENT	0xF000L
 #define BIOS2_START_OFFSET 	0xE000L		/* 2nd half of BIOS ROM	*/
+#endif // !NEC_98
 #define	BAD_OP			0xC5		/* filling RAM for the use of */
 
+#if defined(NEC_98)
+#define ROM_START               0xE8000L
+#else  // !NEC_98
 #define	BASIC_ROM		0xFE000L	/* Start of Basic Rom */
 #define ROM_START		0xC0000L	/* Start of Expansion ROM @ 768k */
+#endif // !NEC_98
 
 #define FIXED_DISK_START	0xC8000L	/* Start fixed disk BIOS*/
 #define FIXED_DISK_END		0xCA000L	/* End fixed disk BIOS +1 */
 
 #define	START_SEGMENT		0xF000		/* 8088 start address */
 #define	START_OFFSET		0xFFF0
+
+#if defined(NEC_98)
+#define MEMORY_SWITCH_START_N   0xA3FE0L
+#define MEMORY_SWITCH_START_H   0xE3FE0L
+#endif // NEC_98
 
 /*
  * The follwoing are the offsets for the entry points to the
@@ -1080,3 +1094,152 @@ typedef union   {
 		} IVT_ENTRY;
 #endif
 #endif /* BACK_M */
+
+#if defined(NEC_98)
+
+#ifndef RL_ROM
+
+#define N_INT00_OFFSET  0x0936
+#define N_INT01_OFFSET  0x0936
+#define N_INT02_OFFSET  0x08f0
+#define N_INT03_OFFSET  0x0936
+#define N_INT04_OFFSET  0x0936
+#define N_INT05_OFFSET  0x0936
+#define N_INT06_OFFSET  0x0936
+#define N_INT07_OFFSET  0x0936
+#define N_INT08_OFFSET  0x0603
+#define N_INT09_OFFSET  0x0E59
+#define N_INT0A_OFFSET  0x0937
+#define N_INT0B_OFFSET  0x0937
+#define N_INT0C_OFFSET  0x1833
+#define N_INT0D_OFFSET  0x0937
+#define N_INT0E_OFFSET  0x0937
+#define N_INT0F_OFFSET  0x0937
+#define N_INT10_OFFSET  0x0937
+#define N_INT11_OFFSET  0x0937
+#define N_INT12_OFFSET  0x0937
+#define N_INT13_OFFSET  0x0937
+#define N_INT14_OFFSET  0x0937
+#define N_INT15_OFFSET  0x0937
+#define N_INT16_OFFSET  0x0937
+#define N_INT17_OFFSET  0x0937
+#define N_INT18_OFFSET  0x0ABD
+#define N_INT19_OFFSET  0x1596
+#define N_INT1A_OFFSET  0x0680
+#define N_INT1B_OFFSET  0x1A82
+#define N_INT1C_OFFSET  0x0500
+#define N_INT1D_OFFSET  0x0936
+#define N_INT1E_OFFSET  0x0000
+#define N_INT1F_OFFSET  0x0200
+
+#define H_INT00_OFFSET  0x01F3
+#define H_INT01_OFFSET  0x01F3
+#define H_INT02_OFFSET  0x0119
+#define H_INT03_OFFSET  0x01F3
+#define H_INT04_OFFSET  0x01F3
+#define H_INT05_OFFSET  0x01F3
+#define H_INT06_OFFSET  0x01F3
+#define H_INT07_OFFSET  0x01F3
+#define H_INT08_OFFSET  0x195b
+#define H_INT09_OFFSET  0x08A8
+#define H_INT0A_OFFSET  0x01F4
+#define H_INT0B_OFFSET  0x01F4
+#define H_INT0C_OFFSET  0x13F7
+#define H_INT0D_OFFSET  0x01F4
+#define H_INT0E_OFFSET  0x01F4
+#define H_INT0F_OFFSET  0x01F4
+#define H_INT10_OFFSET  0x2B05
+#define H_INT11_OFFSET  0x01F4
+#define H_INT12_OFFSET  0x01F4
+#define H_INT13_OFFSET  0x01F4
+#define H_INT14_OFFSET  0x01F4
+#define H_INT15_OFFSET  0x01F4
+#define H_INT16_OFFSET  0x01F4
+#define H_INT17_OFFSET  0x01F4
+#define H_INT18_OFFSET  0x0430
+#define H_INT19_OFFSET  0x0D7A
+#define H_INT1A_OFFSET  0x2AC0
+#define H_INT1B_OFFSET  0x1B78
+#define H_INT1C_OFFSET  0x1780
+#define H_INT1D_OFFSET  0x0000
+#define H_INT1E_OFFSET  0x01F3
+#define H_INT1F_OFFSET  0x5DD0
+
+#else
+
+#define N_INT00_OFFSET  0x0936
+#define N_INT01_OFFSET  0x0936
+#define N_INT02_OFFSET  0x08F0
+#define N_INT03_OFFSET  0x0936
+#define N_INT04_OFFSET  0x0936
+#define N_INT05_OFFSET  0x0936
+#define N_INT06_OFFSET  0x0936
+#define N_INT07_OFFSET  0x0936
+#define N_INT08_OFFSET  0x064E
+#define N_INT09_OFFSET  0x0E44
+#define N_INT0A_OFFSET  0x0937
+#define N_INT0B_OFFSET  0x0937
+#define N_INT0C_OFFSET  0x183D
+#define N_INT0D_OFFSET  0x0937
+#define N_INT0E_OFFSET  0x0937
+#define N_INT0F_OFFSET  0x0937
+#define N_INT10_OFFSET  0x0936
+#define N_INT11_OFFSET  0x0936
+#define N_INT12_OFFSET  0x2369
+#define N_INT13_OFFSET  0x22F7
+#define N_INT14_OFFSET  0x0937
+#define N_INT15_OFFSET  0x0937
+#define N_INT16_OFFSET  0x0937
+#define N_INT17_OFFSET  0x0937
+#define N_INT18_OFFSET  0x0ABD
+#define N_INT19_OFFSET  0x1596
+#define N_INT1A_OFFSET  0x0680
+#define N_INT1B_OFFSET  0x1A82
+#define N_INT1C_OFFSET  0x0500
+#define N_INT1D_OFFSET  0x0936
+#define N_INT1E_OFFSET  0x0000
+#define N_INT1F_OFFSET  0x0200
+
+#define H_INT00_OFFSET  0x01BF
+#define H_INT01_OFFSET  0x01BF
+#define H_INT02_OFFSET  0x00E5
+#define H_INT03_OFFSET  0x01BF
+#define H_INT04_OFFSET  0x01BF
+#define H_INT05_OFFSET  0x01BF
+#define H_INT06_OFFSET  0x01BF
+#define H_INT07_OFFSET  0x01BF
+#define H_INT08_OFFSET  0x1876
+#define H_INT09_OFFSET  0x07D8
+#define H_INT0A_OFFSET  0x01C0
+#define H_INT0B_OFFSET  0x01C0
+#define H_INT0C_OFFSET  0x131E
+#define H_INT0D_OFFSET  0x01C0
+#define H_INT0E_OFFSET  0x01C0
+#define H_INT0F_OFFSET  0x01C0
+#define H_INT10_OFFSET  0x2755
+#define H_INT11_OFFSET  0x0021
+#define H_INT12_OFFSET  0x24FC
+#define H_INT13_OFFSET  0x23E7
+#define H_INT14_OFFSET  0x01C0
+#define H_INT15_OFFSET  0x01C0
+#define H_INT16_OFFSET  0x01C0
+#define H_INT17_OFFSET  0x01C0
+#define H_INT18_OFFSET  0x0360
+#define H_INT19_OFFSET  0x0C80
+#define H_INT1A_OFFSET  0x2710
+#define H_INT1B_OFFSET  0x1A20
+#define H_INT1C_OFFSET  0x1690
+#define H_INT1D_OFFSET  0x0000
+#define H_INT1E_OFFSET  0x01BF
+#define H_INT1F_OFFSET  0x6400
+
+#endif
+
+#define N_BIOS_SEGMENT  0xFD80
+#define BASIC_SEGMENT   0xE800
+#define H_BIOS_SEGMENT  0xF800
+#define H_GBIO_SEGMENT  0xF000
+
+#define BIOS_MODE       0x0AC0
+#define MACHINE_FLAG    0x0AB7
+#endif // NEC_98

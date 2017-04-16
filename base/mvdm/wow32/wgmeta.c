@@ -20,8 +20,6 @@ MODNAME(wgmeta.c);
 typedef METAHEADER UNALIGNED *PMETAHEADER16;
 
 
-
-
 // WARNING: This function may cause 16-bit memory to move
 VOID CopyMetaFile16FromHMF32(HAND16 hMF16, HMETAFILE hMF32)
 {
@@ -131,14 +129,21 @@ ULONG FASTCALL WG32CloseMetaFile(PVDMFRAME pFrame)
 {
     HMETAFILE hmf;
     ULONG ulRet = 0;
+    HAND16   hdc16;
+    HANDLE   hdc32;
     register PCLOSEMETAFILE16 parg16;
 
     GETARGPTR(pFrame, sizeof(CLOSEMETAFILE16), parg16);
 
-    hmf = CloseMetaFile(HDC32(parg16->f1));
+    hdc16 = (HAND16)parg16->f1;
+    hdc32 = HDC32(hdc16);
+    hmf = CloseMetaFile(hdc32);
+
+    // update our GDI handle mapping table
+    DeleteWOWGdiHandle(hdc32, hdc16);
 
     if (hmf)
-	ulRet = (ULONG)WinMetaFileFromHMF(hmf, TRUE);
+   ulRet = (ULONG)WinMetaFileFromHMF(hmf, TRUE);
     // WARNING: 16-bit memory may have moved - invalidate flat pointers now
     FREEVDMPTR(pFrame);
     FREEARGPTR(parg16);
@@ -161,11 +166,11 @@ ULONG FASTCALL WG32CopyMetaFile(PVDMFRAME pFrame)
         hmf = HMFFromWinMetaFile(parg16->f1, FALSE);
         hmfNew = CopyMetaFile(hmf, psz2);
         DeleteMetaFile(hmf);
-	ul = (ULONG)WinMetaFileFromHMF(hmfNew, TRUE);
-	// WARNING: 16-bit memory may have moved - invalidate flat pointers now
-	FREEVDMPTR(pFrame);
-	FREEARGPTR(parg16);
-	FREEPSZPTR(psz2);
+   ul = (ULONG)WinMetaFileFromHMF(hmfNew, TRUE);
+   // WARNING: 16-bit memory may have moved - invalidate flat pointers now
+   FREEVDMPTR(pFrame);
+   FREEARGPTR(parg16);
+   FREEPSZPTR(psz2);
     } else {
         UINT cb;
         VPVOID vp, vpNew;
@@ -187,15 +192,15 @@ ULONG FASTCALL WG32CopyMetaFile(PVDMFRAME pFrame)
          * WinWord doesn't crash.
          */
 
-	    vpNew = GlobalAllocLock16(GMEM_MOVEABLE | GMEM_DDESHARE, cb, &h16New);
+       vpNew = GlobalAllocLock16(GMEM_MOVEABLE | GMEM_DDESHARE, cb, &h16New);
 
-	    // 16-bit memory may have moved - invalidate flat pointers now
-	    FREEVDMPTR(pFrame);
-	    FREEARGPTR(parg16);
-	    FREEPSZPTR(psz2);
+       // 16-bit memory may have moved - invalidate flat pointers now
+       FREEVDMPTR(pFrame);
+       FREEARGPTR(parg16);
+       FREEPSZPTR(psz2);
 
             if (vpNew) {
-		GETMISCPTR(vp, pMF);
+      GETMISCPTR(vp, pMF);
                 GETOPTPTR(vpNew, 0, pMFNew);
 
                 RtlCopyMemory(pMFNew, pMF, cb);
@@ -308,7 +313,7 @@ INT WG32EnumMetaFileCallBack(HDC hdc, LPHANDLETABLE lpht, LPMETARECORD lpMR, LON
 
     // update object table if we have one
     if (pMetaData->parmemp.vpHandleTable)
-        PUTHANDLETABLE16(pMetaData->parmemp.vpHandleTable,nObj,lpht);
+        PUTHANDLETABLE16(pMetaData->parmemp.vpHandleTable, nObj, lpht);
 
     // update MetaRecord
 
@@ -344,7 +349,8 @@ ULONG FASTCALL WG32EnumMetaFile(PVDMFRAME pFrame)
     PBYTE       pMetaFile;
     HMETAFILE   hmf = (HMETAFILE) 0;
     HAND16      hMetaFile16;
-    HDC 	hDC = 0;
+    HDC         hDC = 0;
+    HDC         hDC2 = 0;
 
     GETARGPTR(pFrame, sizeof(ENUMMETAFILE16), parg16);
 
@@ -367,7 +373,7 @@ ULONG FASTCALL WG32EnumMetaFile(PVDMFRAME pFrame)
     // Get the metafile bits so we can get max record size and number of objects
 
     vpMetaFile = GlobalLock16(hMetaFile16, NULL);
-    FREEARGPTR(parg16); 	// memory may have moved
+    FREEARGPTR(parg16);    // memory may have moved
     FREEVDMPTR(pFrame);
     if (!vpMetaFile)
         goto EMF_Exit;
@@ -381,41 +387,57 @@ ULONG FASTCALL WG32EnumMetaFile(PVDMFRAME pFrame)
 
     if (metadata.parmemp.nObjects)
     {
-	PBYTE pHT;
-	DWORD cb = ((PMETAHEADER16)pMetaFile)->mtNoObjects*sizeof(HAND16);
+        PBYTE pHT;
 
-	metadata.parmemp.vpHandleTable = GlobalAllocLock16(GMEM_MOVEABLE, cb, NULL);
-	FREEOPTPTR(pMetaFile);	 // memory may have moved
-	FREEARGPTR(parg16);
-	FREEVDMPTR(pFrame);
+        DWORD cb = ((PMETAHEADER16)pMetaFile)->mtNoObjects*sizeof(HAND16);
+
+        metadata.parmemp.vpHandleTable = 
+                                     GlobalAllocLock16(GMEM_MOVEABLE, cb, NULL);
+
+        FREEOPTPTR(pMetaFile);   // memory may have moved
+        FREEARGPTR(parg16);
+        FREEVDMPTR(pFrame);
+
         if (!metadata.parmemp.vpHandleTable)
             goto EMF_Exit;
 
         GETOPTPTR(metadata.parmemp.vpHandleTable, 0, pHT);
-	RtlZeroMemory(pHT, cb);
+        RtlZeroMemory(pHT, cb);
     }
 
     metadata.parmemp.vpMetaRecord = GlobalAllocLock16(GMEM_MOVEABLE, metadata.mtMaxRecordSize*sizeof(WORD), NULL);
-    FREEOPTPTR(pMetaFile);	 // memory may have moved
+    FREEOPTPTR(pMetaFile);  // memory may have moved
     FREEARGPTR(parg16);
     FREEVDMPTR(pFrame);
     if (!metadata.parmemp.vpMetaRecord)
         goto EMF_Exit;
 
+    hDC = HDC32(metadata.parmemp.hdc);
+
     // Corel Draw passes a NULL hDC, we'll create a dummy to keep GDI32 happy.
     if (CURRENTPTD()->dwWOWCompatFlags & WOWCF_GETDUMMYDC) {
-	if ((hDC = HDC32(metadata.parmemp.hdc)) == 0) {
+        if (hDC == 0) {
             hDC = CreateMetaFile(NULL);
+            hDC2 = hDC;
         }
     }
-    else {
-	hDC = HDC32(metadata.parmemp.hdc);
-    }
 
+    // When processing metafile, access2.0 faults while receiving
+    // WM_DEVMODECHANGE so we block that particular message when
+    // in EnumMetaFile
+
+    if ( CURRENTPTD()->dwWOWCompatFlagsEx & WOWCFEX_EATDEVMODEMSG) {
+         CURRENTPTD()->dwFlags |= TDF_EATDEVMODEMSG;
+    }
     ul = GETBOOL16(EnumMetaFile(hDC,
                                 hmf,
                                 (MFENUMPROC)WG32EnumMetaFileCallBack,
-				((LPARAM)(LPVOID)&metadata)));
+            ((LPARAM)(LPVOID)&metadata)));
+
+
+    CURRENTPTD()->dwFlags &= ~TDF_EATDEVMODEMSG;
+    
+    
     // 16-bit memory may have moved - nothing to do as no flat ptrs exist now
 
     // copy the 32-bit metafile back to 16-bit land (the app may have altered
@@ -424,8 +446,8 @@ ULONG FASTCALL WG32EnumMetaFile(PVDMFRAME pFrame)
 
     // Cleanup the dummy hDC created for Corel Draw 5.0.
     if (CURRENTPTD()->dwWOWCompatFlags & WOWCF_GETDUMMYDC) {
-	if (HDC32(metadata.parmemp.hdc) == 0) {
-            DeleteMetaFile(CloseMetaFile(hDC));
+        if (hDC2 != 0) {
+            DeleteMetaFile(CloseMetaFile(hDC2));
         }
     }
 
@@ -445,6 +467,8 @@ EMF_Exit:
     FREEARGPTR(parg16);
     RETURN(ul);
 }
+
+
 
 
 ULONG FASTCALL WG32GetMetaFile(PVDMFRAME pFrame)
@@ -495,6 +519,9 @@ ULONG FASTCALL WG32PlayMetaFileRecord(PVDMFRAME pFrame)
     ULONG ul = FALSE;
     LPHANDLETABLE pHT = NULL;
     PBYTE pMetaData;
+    PMETARECORD pMetaRec;
+    HANDLE hDeleteObject32 = NULL;
+    HAND16 hDeleteObject16 = 0;
     WORD wHandles;
     VPHANDLETABLE16 vpHT;
     register PPLAYMETAFILERECORD16 parg16;
@@ -512,16 +539,37 @@ ULONG FASTCALL WG32PlayMetaFileRecord(PVDMFRAME pFrame)
     }
     GETOPTPTR(parg16->f3, 0, pMetaData);
 
+    // If the record is a DeleteObject record, save the index into the metafile
+    // handle table.
+    pMetaRec = (PMETARECORD)pMetaData;
+    if(pMetaRec) {
+        if(pMetaRec->rdFunction == META_DELETEOBJECT) {
+            hDeleteObject32 = pHT->objectHandle[pMetaRec->rdParm[0]];
+            hDeleteObject16 = GDI16(hDeleteObject32);
+        }
+    }
+        
     ul = (ULONG) PlayMetaFileRecord(HDC32(parg16->f1),
                                     pHT,
                                     (LPMETARECORD)pMetaData,
                                     (UINT)wHandles);
 
-
     if (wHandles && vpHT) {
+
+        // This will cause any handles that were created implicitly by the call
+        // PlayMetaFileRecord() & added to the metafile handle table (pHT) to be
+        // added to our GDI handle mapping table.
         PUTHANDLETABLE16(vpHT, wHandles, pHT);
+
         FREEHANDLETABLE16(pHT);
     }
+
+    // Remove the handle associated with this DeleteObject record from the GDI
+    // handle mapping table.
+    if(hDeleteObject16) {
+        DeleteWOWGdiHandle((HANDLE)hDeleteObject32, hDeleteObject16);
+    }
+
 PMFR_Exit:
     FREEARGPTR(parg16);
     RETURN(ul);

@@ -1,4 +1,5 @@
 /*
+ *  Copyright (C) Microsoft Corporation, 1990-1999
  *  nt_vdd.h
  *
  *  VDD services exports and defines
@@ -6,9 +7,15 @@
  */
 
 #ifndef _NT_VDD
-
 #define _NT_VDD
 
+#if _MSC_VER > 1000
+#pragma once
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * IO port service prototypes and data structure definitions
@@ -28,12 +35,12 @@ typedef VOID (*PFNVDD_OUTSW) (WORD iport,WORD * data,WORD count);
 /**  Array of handlers for VDD IO hooks. **/
 
 typedef struct _VDD_IO_HANDLERS {
-    PFNVDD_INB	 inb_handler;
-    PFNVDD_INW	 inw_handler;
-    PFNVDD_INSB	 insb_handler;
-    PFNVDD_INSW	 insw_handler;
-    PFNVDD_OUTB	 outb_handler;
-    PFNVDD_OUTW	 outw_handler;
+    PFNVDD_INB   inb_handler;
+    PFNVDD_INW   inw_handler;
+    PFNVDD_INSB  insb_handler;
+    PFNVDD_INSW  insw_handler;
+    PFNVDD_OUTB  outb_handler;
+    PFNVDD_OUTW  outw_handler;
     PFNVDD_OUTSB outsb_handler;
     PFNVDD_OUTSW outsw_handler;
 } VDD_IO_HANDLERS, *PVDD_IO_HANDLERS;
@@ -140,15 +147,15 @@ BOOL VDDDeInstallMemoryHook (
 
 BOOL VDDAllocMem(
   HANDLE hVDD,
-  PVOID	Address,
-  DWORD	Size
+  PVOID Address,
+  DWORD Size
 );
 
 
 BOOL VDDFreeMem(
   HANDLE hVDD,
-  PVOID	Address,
-  DWORD	Size
+  PVOID Address,
+  DWORD Size
 );
 
 /**
@@ -158,8 +165,8 @@ BOOL VDDFreeMem(
 
 BOOL VDDIncludeMem(
   HANDLE hVDD,
-  PVOID	Address,
-  DWORD	Size
+  PVOID Address,
+  DWORD Size
 );
 
 
@@ -167,35 +174,35 @@ VOID VDDTerminateVDM();
 
 /** Basic typedefs of VDD User hooks **/
 
-typedef VOID (*PFNVDD_UCREATE)	    (USHORT DosPDB);
+typedef VOID (*PFNVDD_UCREATE)      (USHORT DosPDB);
 typedef VOID (*PFNVDD_UTERMINATE)   (USHORT DosPDB);
-typedef VOID (*PFNVDD_UBLOCK)	    (VOID);
-typedef VOID (*PFNVDD_URESUME)	    (VOID);
+typedef VOID (*PFNVDD_UBLOCK)       (VOID);
+typedef VOID (*PFNVDD_URESUME)      (VOID);
 
 /**  Array of handlers for VDD User hooks. **/
 
 typedef struct _VDD_USER_HANDLERS {
-    HANDLE		hvdd;
-    PFNVDD_UCREATE	ucr_handler;
-    PFNVDD_UTERMINATE	uterm_handler;
-    PFNVDD_UBLOCK	ublock_handler;
-    PFNVDD_URESUME	uresume_handler;
+    HANDLE              hvdd;
+    PFNVDD_UCREATE      ucr_handler;
+    PFNVDD_UTERMINATE   uterm_handler;
+    PFNVDD_UBLOCK       ublock_handler;
+    PFNVDD_URESUME      uresume_handler;
     struct _VDD_USER_HANDLERS *next;
 } VDD_USER_HANDLERS, *PVDD_USER_HANDLERS;
 
 /** Function prototypes **/
 
 BOOL VDDInstallUserHook (
-     HANDLE		hVDD,
-     PFNVDD_UCREATE	Ucr_Handler,
-     PFNVDD_UTERMINATE	Uterm_Handler,
-     PFNVDD_UBLOCK	Ublock_handler,
-     PFNVDD_URESUME	Uresume_handler
+     HANDLE             hVDD,
+     PFNVDD_UCREATE     Ucr_Handler,
+     PFNVDD_UTERMINATE  Uterm_Handler,
+     PFNVDD_UBLOCK      Ublock_handler,
+     PFNVDD_URESUME     Uresume_handler
 );
 
 
 BOOL VDDDeInstallUserHook (
-     HANDLE	       hVdd
+     HANDLE            hVdd
 );
 
 VOID VDDTerminateUserHook(USHORT DosPDB);
@@ -212,4 +219,91 @@ BOOL   VDDReleaseDosHandle (ULONG pPDB, SHORT hFile);
 HANDLE VDDRetrieveNtHandle (ULONG pPDB, SHORT hFile, PVOID* ppSFT, PVOID* ppJFT);
 
 
-#endif	// ifndef _NT_VDD
+VOID
+VdmTraceEvent(
+    USHORT Type,
+    USHORT wData,
+    ULONG  lData
+    );
+
+#if DBG
+#define VDM_TRACE(Type, wData, lData) VdmTraceEvent(Type, wData, lData)
+#else
+#define VDM_TRACE(Type, wData, lData) TRUE
+#endif
+
+typedef enum {
+    VDM_V86,
+    VDM_PM
+} VDM_MODE;
+
+typedef enum {
+    VDM_NO_ERROR,
+    VDM_ERROR_INVALID_BUFFER_SIZE,
+    VDM_ERROR_INVALID_FUNCTION,
+} VDM_ERROR_TYPE;
+
+typedef enum {
+    VDM_GET_TICK_COUNT,
+    VDM_GET_TIMER0_INITIAL_COUNT,
+    VDM_GET_LAST_UPDATED_TIMER0_COUNT,
+    VDM_LATCH_TIMER0_COUNT,
+    VDM_SET_NEXT_TIMER0_COUNT,
+} VDM_INFO_TYPE;
+
+#ifndef MSW_PE
+#define MSW_PE 0x1
+#endif
+
+#define getMODE() ((getMSW() & MSW_PE) ? VDM_PM : VDM_V86)
+
+PVOID
+VdmMapFlat(
+    USHORT selector,
+    ULONG offset,
+    VDM_MODE mode
+    );
+
+#ifdef _X86_
+
+#define VdmUnmapFlat(sel, off, buffer, mode) TRUE
+#define VdmFlushCache(sel, off, len, mode) TRUE
+
+#else
+
+BOOL
+VdmUnmapFlat(
+    USHORT selector,
+    ULONG offset,
+    PVOID buffer,
+    VDM_MODE mode
+    );
+
+
+BOOL
+VdmFlushCache(
+    USHORT selector,
+    ULONG offset,
+    ULONG length,
+    VDM_MODE mode
+    );
+
+#endif
+
+BOOL
+VdmParametersInfo(
+    VDM_INFO_TYPE infotype,
+    PVOID pBuffer,
+    ULONG cbBufferSize
+    );
+
+VDM_INFO_TYPE
+VdmGetParametersInfoError(
+    VOID
+    );
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif  // ifndef _NT_VDD

@@ -53,10 +53,6 @@ GLOBAL void host_com_lock(int adapter);
 GLOBAL void host_com_unlock(int adapter);
 GLOBAL int host_com_open(int);
 
-#if 0
-GLOBAL boolean host_com_suspend(int adapter);
-GLOBAL boolean host_com_resume(int adapter);
-#endif
 
 /* autoflush stub */
 GLOBAL void host_setup_aflush (int);
@@ -121,6 +117,14 @@ typedef struct _COM_STATES {
 
 
 #define ESCAPECHAR ((UCHAR)(-1))
+
+#if defined(NEC_98)
+BYTE pifrsflag;                        // Get pif data from nt_pif.c
+#define PIFRS_RTS_CTS  0x01            // rts/cts flow control
+#define PIFRS_Xon_Xoff 0x02            // Xon/xoff flow control
+#define PIFRS_DTR_DSR  0x04            // dtr/dsr flow control
+#endif // NEC_98
+
 typedef struct _host_com
 {
     HANDLE handle;              /* Device handle */
@@ -199,12 +203,12 @@ typedef struct _host_com
 
     DWORD RXThreadID;           /* RX thread ID */
     HANDLE RXThreadHandle;      /* RX thread handle */
-    COM_STATES	ComStates;	/* Com device states as we know it */
+    COM_STATES ComStates;  /* Com device states as we know it */
     int     SuspendTimeoutTicks; /* auto close ticks setting */
     int     SuspendTickCounter; /* auto close tick counter */
-    BOOL    SyncWrite;		/* TRUE if we should write data synchrounously */
-    BOOL    Suspended;		/* TRUE if the port has been suspended */
-    BOOL    Suspending; 	/* TRUE when the port is being suspended */
+    BOOL    SyncWrite;     /* TRUE if we should write data synchrounously */
+    BOOL    Suspended;     /* TRUE if the port has been suspended */
+    BOOL    Suspending;    /* TRUE when the port is being suspended */
     DWORD   TickCount;
 
 } HOST_COM, *PHOST_COM;
@@ -235,14 +239,14 @@ GLOBAL void CPU host_com_poll(int adapter);
 RXBUFCHARTYPE GetCharacterTypeInBuffer(register HOST_COM *current);
 void CPU EmptyRXBuffer(int adapter);
 void GetCharFromRXBuffer(HOST_COM *current, RXBUFCHARTYPE type,
-			UCHAR *data, UCHAR *error);
+         UCHAR *data, UCHAR *error);
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: LOCAL DATA */
 
 LOCAL HOST_COM host_com[4];    /* 4 comm ports - the insignia MAX */
 
 LOCAL PHOST_COM host_com_ptr[4] = { &host_com[0], &host_com[1],&host_com[2],
-				    &host_com[3]};
+                &host_com[3]};
 
 LOCAL int disable_open[4] = { FALSE, FALSE, FALSE, FALSE };
 
@@ -260,9 +264,9 @@ LOCAL int disable_open[4] = { FALSE, FALSE, FALSE, FALSE };
 
 #define  REOPEN_DELAY    (36)           /* Reopen delay in 55ms (2 secs) */
 #define  RXFLUSHTRIGGER  (36)           /* RX flush trigger (2 secs), if a
-					   character is not read from the
-					   UART within this time the RX buffer
-					   is flushed */
+                  character is not read from the
+                  UART within this time the RX buffer
+                  is flushed */
 
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 /*::::::::::::::::::::::::: Init comms system ::::::::::::::::::::::::::::::*/
@@ -301,6 +305,11 @@ boolean host_com_check_adapter(int adapter)
 }
 #endif
 
+GLOBAL void tx_holding_register_empty(int adapter);
+GLOBAL void tx_shift_register_empty(int adapter);
+GLOBAL void SyncBaseLineSettings(int, DIVISOR_LATCH *, LINE_CONTROL_REG *);
+
+
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 /*::::::::::::::::::::::::: Open comms port ::::::::::::::::::::::::::::::::*/
 /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
@@ -320,12 +329,12 @@ GLOBAL CPU int host_com_open(int adapter)
     /*:::::::::::::::::::::::::::::::::::::::::: Is the port already open ? */
 
     if(current->type == ADAPTER_REAL)
-	return(TRUE);       /* Exit port already open */
+   return(TRUE);       /* Exit port already open */
 
     /*::::::::::: Attempting to open the port to soon after a failed open ? */
 
     if(current->ReOpenCounter || disable_open[adapter])
-	return(FALSE);              /* Yes */
+   return(FALSE);              /* Yes */
 
     /*::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 
@@ -335,36 +344,36 @@ GLOBAL CPU int host_com_open(int adapter)
 
     if(adapter > 3 || adapter < 0)
     {
-	current->type = ADAPTER_NULL;
-	current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
-	return(FALSE);                           /* Open attempt failed */
+   current->type = ADAPTER_NULL;
+   current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
+   return(FALSE);                           /* Open attempt failed */
     }
 
     /*::::::::::::::::::::::::::: We have a vaild adapter so try to open it */
     config_inquire((UTINY)(C_COM1_NAME + adapter),
-		   &ComConfigValues);
+         &ComConfigValues);
     current->handle = CreateFile(ComConfigValues.string,
-				 GENERIC_READ | GENERIC_WRITE, 0, NULL,
-				 OPEN_EXISTING,
-				 FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
-				 NULL);
+             GENERIC_READ | GENERIC_WRITE, 0, NULL,
+             OPEN_EXISTING,
+             FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
+             NULL);
 
     /*............................................... Validate open attempt */
 
     if(current->handle == (HANDLE) -1)
     {
-	always_trace1("Cannot open comms port '%s'\n",
-		  (CHAR*) config_inquire((UTINY)(C_COM1_NAME+adapter),NULL));
+   always_trace1("Cannot open comms port '%s'\n",
+        (CHAR*) config_inquire((UTINY)(C_COM1_NAME+adapter),NULL));
 
-	if(current->DisplayError) {
-	    RcErrorBoxPrintf(EHS_ERR_OPENING_COM_PORT,
-		 (CHAR*) config_inquire((UTINY)(C_COM1_NAME+adapter),NULL));
-	    current->DisplayError = FALSE; //Error only display once per session
-	}
+   if(current->DisplayError) {
+       RcErrorBoxPrintf(EHS_ERR_OPENING_COM_PORT,
+       (CHAR*) config_inquire((UTINY)(C_COM1_NAME+adapter),NULL));
+       current->DisplayError = FALSE; //Error only display once per session
+   }
 
-	current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
-	current->type = ADAPTER_NULL;       /* Unable to open adapter */
-	return(FALSE);
+   current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
+   current->type = ADAPTER_NULL;       /* Unable to open adapter */
+   return(FALSE);
     }
 
 
@@ -372,9 +381,9 @@ GLOBAL CPU int host_com_open(int adapter)
 
     current->buffer = (UCHAR *) malloc(BUFFER_SIZE);
     if (current->buffer == NULL) {
-	CloseHandle(current->handle);
-	current->type = ADAPTER_NULL;
-	return FALSE;
+   CloseHandle(current->handle);
+   current->type = ADAPTER_NULL;
+   return FALSE;
     }
     current->rxwindow_size = DEFAULT_RXWINDOW_SIZE;
     current->bytes_in_rxwindow = 0;
@@ -400,11 +409,11 @@ GLOBAL CPU int host_com_open(int adapter)
     //Create objects used to control multipe overlapping writes
     for(i=0; i < MAX_PENDING_WRITES; i++)
     {
-	//Objects must be created in the signalled state for the closedown
-	//routine to function correctly
+   //Objects must be created in the signalled state for the closedown
+   //routine to function correctly
 
-	current->TXEvent[i] = CreateEvent(NULL,TRUE,TRUE,NULL);
-	current->DWOV[i].hEvent = NULL;
+   current->TXEvent[i] = CreateEvent(NULL,TRUE,TRUE,NULL);
+   current->DWOV[i].hEvent = NULL;
     }
 
     /*::::::::::::::::::::::::::::::::::::::::::::::::: Empty RX/TX buffers */
@@ -420,11 +429,11 @@ GLOBAL CPU int host_com_open(int adapter)
 
     current->max_tx_threshold = (short)config_inquire(C_COM_TXBUFFER_SIZE, NULL);
     if (!current->max_tx_threshold || current->max_tx_threshold > TX_MAX_BUFFER)
-	current->max_tx_threshold = TX_MAX_BUFFER;
+   current->max_tx_threshold = TX_MAX_BUFFER;
 
     //Setup other delayed write control variables
     if (current->max_tx_threshold == 1)
-	current->tx_threshold = 0;
+   current->tx_threshold = 0;
     current->tx_flush_count = 0;        // No. of flushs of below size
     /*::::::::::::::::::::::::::: Extended control variables used by adaper */
 
@@ -455,10 +464,10 @@ GLOBAL CPU int host_com_open(int adapter)
 
     if(!GetCommState(current->handle, &(current->dcbBeforeOpen)))
     {
-	always_trace0("ntvdm : GetCommState failed on open\n");
-	host_com_close(adapter);    /* turn it into a NULL adapter */
-	current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
-	return(FALSE);
+   always_trace0("ntvdm : GetCommState failed on open\n");
+   host_com_close(adapter);    /* turn it into a NULL adapter */
+   current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
+   return(FALSE);
     }
 
     current->dcbValid = TRUE;
@@ -475,10 +484,21 @@ GLOBAL CPU int host_com_open(int adapter)
     LocalDCB.fBinary = 1;                        /* Run in RAW mode */
     LocalDCB.fOutxCtsFlow = FALSE;               /* Disable CTS */
     LocalDCB.fOutxDsrFlow = FALSE;               /* Disable DSR */
+#if defined(NEC_98)
+    LocalDCB.fDtrControl = ((pifrsflag & PIFRS_DTR_DSR) == PIFRS_DTR_DSR ) ?
+                           DTR_CONTROL_HANDSHAKE : DTR_CONTROL_DISABLE;
+    LocalDCB.fOutX = FALSE;          /* Disable XON/XOFF */
+    LocalDCB.fInX = ((pifrsflag & PIFRS_Xon_Xoff) == PIFRS_Xon_Xoff) ?
+                    TRUE : FALSE;
+    LocalDCB.fTXContinueOnXoff = LocalDCB.fInX;
+    LocalDCB.fRtsControl = ((pifrsflag & PIFRS_RTS_CTS) == PIFRS_RTS_CTS) ?
+                           RTS_CONTROL_HANDSHAKE : RTS_CONTROL_DISABLE;
+#else // !NEC_98
     LocalDCB.fDtrControl = DTR_CONTROL_DISABLE;
-    LocalDCB.fOutX = FALSE;                      /* Disable XON/XOFF */
+    LocalDCB.fOutX = FALSE;          /* Disable XON/XOFF */
     LocalDCB.fInX = FALSE;
     LocalDCB.fRtsControl = RTS_CONTROL_DISABLE;
+#endif // !NEC_98
 
     LocalDCB.XonChar = XON_CHARACTER;    /* Define XON/XOFF chars */
     LocalDCB.XoffChar = XOFF_CHARACTER;
@@ -487,19 +507,19 @@ GLOBAL CPU int host_com_open(int adapter)
      * what they were before suspended
      */
     if (current->Suspended) {
-	LocalDCB.BaudRate = current->ComStates.BaudRate;
-	LocalDCB.Parity = current->ComStates.Parity;
-	LocalDCB.StopBits = current->ComStates.StopBits;
-	LocalDCB.ByteSize = current->ComStates.DataBits;
-	LocalDCB.fParity = (LocalDCB.Parity == NOPARITY);
+   LocalDCB.BaudRate = current->ComStates.BaudRate;
+   LocalDCB.Parity = current->ComStates.Parity;
+   LocalDCB.StopBits = current->ComStates.StopBits;
+   LocalDCB.ByteSize = current->ComStates.DataBits;
+   LocalDCB.fParity = (LocalDCB.Parity == NOPARITY);
     }
     /* initialize the ComStates by copying data from DCB */
     else {
-	current->ComStates.BaudRate = current->dcbBeforeOpen.BaudRate;
-	current->ComStates.Parity = current->dcbBeforeOpen.Parity;
-	current->ComStates.StopBits = current->dcbBeforeOpen.StopBits;
-	current->ComStates.DataBits = current->dcbBeforeOpen.ByteSize;
-	current->ComStates.Break = 0;
+   current->ComStates.BaudRate = current->dcbBeforeOpen.BaudRate;
+   current->ComStates.Parity = current->dcbBeforeOpen.Parity;
+   current->ComStates.StopBits = current->dcbBeforeOpen.StopBits;
+   current->ComStates.DataBits = current->dcbBeforeOpen.ByteSize;
+   current->ComStates.Break = 0;
     }
     ASSERT(LocalDCB.BaudRate != 0);
 
@@ -507,11 +527,11 @@ GLOBAL CPU int host_com_open(int adapter)
 
     if(!SyncLineSettings(NULL, &(LocalDCB), &divisor_latch, &LCR_reg))
     {
-	always_trace0("ntvdm : Unable to sync line states\n");
+   always_trace0("ntvdm : Unable to sync line states\n");
 
-	host_com_close(adapter);
-	current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
-	return(FALSE);
+   host_com_close(adapter);
+   current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
+   return(FALSE);
     }
 
     SyncBaseLineSettings(adapter,&divisor_latch, &LCR_reg);
@@ -520,33 +540,33 @@ GLOBAL CPU int host_com_open(int adapter)
 
     if(!SetCommState(current->handle, &(LocalDCB)))
     {
-	always_trace0("ntvdm : SetCommState failed on open\n");
+   always_trace0("ntvdm : SetCommState failed on open\n");
 
-	host_com_close(adapter);
-	current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
-	return(FALSE);
+   host_com_close(adapter);
+   current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
+   return(FALSE);
     }
 
     /*::::::::::::::::::::: Put the driver into streaming MSR,LSR, RX mode */
 
     if(!EnableMSRLSRRXmode(current->handle, current->ModemEvent,
-			   (unsigned char) ESCAPECHAR))
+            (unsigned char) ESCAPECHAR))
     {
-	always_trace0("ntvdm : GetCommState failed on open\n");
-	host_com_close(adapter);    /* turn it into a NULL adapter */
-	current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
-	return(FALSE);
+   always_trace0("ntvdm : GetCommState failed on open\n");
+   host_com_close(adapter);    /* turn it into a NULL adapter */
+   current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
+   return(FALSE);
     }
 
     /*::::::::::::::::::::::::::::::::::::::::: Setup comm port queue sizes */
 
     if(!SetupComm(current->handle,INPUT_QUEUE_SIZE,OUTPUT_QUEUE_SIZE))
     {
-	always_trace1("ntvdm : SetupComm failed, %d\n",GetLastError());
+   always_trace1("ntvdm : SetupComm failed, %d\n",GetLastError());
 
-	host_com_close(adapter);
-	current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
-	return(FALSE);
+   host_com_close(adapter);
+   current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
+   return(FALSE);
     }
 
     /*::::::::::::::::::::: Set communication port up for non-blocking read */
@@ -561,53 +581,53 @@ GLOBAL CPU int host_com_open(int adapter)
 
     /* restore device states in case of resume */
     if (current->Suspended) {
-	/* break line */
-	if (current->ComStates.Break)
-	    SetCommBreak(current->handle);
-	else
-	    ClearCommBreak(current->handle);
-	/* Data Terminal Ready line */
-	if (current->ComStates.DTR)
-	    EscapeCommFunction(current->handle, SETDTR);
-	else
-	    EscapeCommFunction(current->handle, CLRDTR);
-	/* Request To Send line */
-	if (current->ComStates.RTS)
-	    EscapeCommFunction(current->handle, SETRTS);
-	else
-	    EscapeCommFunction(current->handle, CLRRTS);
+   /* break line */
+   if (current->ComStates.Break)
+       SetCommBreak(current->handle);
+   else
+       ClearCommBreak(current->handle);
+   /* Data Terminal Ready line */
+   if (current->ComStates.DTR)
+       EscapeCommFunction(current->handle, SETDTR);
+   else
+       EscapeCommFunction(current->handle, CLRDTR);
+   /* Request To Send line */
+   if (current->ComStates.RTS)
+       EscapeCommFunction(current->handle, SETRTS);
+   else
+       EscapeCommFunction(current->handle, CLRRTS);
 
-	/* parity, stop bits and data bits */
-	FastCommSetLineControl(current->handle,
-		   current->ComStates.StopBits,
-		   current->ComStates.Parity,
-		   current->ComStates.DataBits
-		  );
-	/* baud rate */
-	FastCommSetBaudRate(current->handle, current->ComStates.BaudRate);
+   /* parity, stop bits and data bits */
+   FastCommSetLineControl(current->handle,
+         current->ComStates.StopBits,
+         current->ComStates.Parity,
+         current->ComStates.DataBits
+        );
+   /* baud rate */
+   FastCommSetBaudRate(current->handle, current->ComStates.BaudRate);
 
-	/* we are no longer in suspended state */
-	current->Suspended = FALSE;
+   /* we are no longer in suspended state */
+   current->Suspended = FALSE;
 
     }
     else {
-	/*::::::::::::::::::::::::::::::::::::::::::::: Setup RTS and DTR states */
-	setup_RTSDTR(adapter);
+   /*::::::::::::::::::::::::::::::::::::::::::::: Setup RTS and DTR states */
+   setup_RTSDTR(adapter);
     }
 
     /*::::::::::::::::::::::::::::::::::::::::::::::: Create Comms RX thread */
 
     if(!(current->RXThreadHandle = CreateThread(NULL,
-						8192,
-						PollCommsThread,
-						(LPVOID)adapter,
-						0,
-						&current->RXThreadID)))
+                  8192,
+                  PollCommsThread,
+                  (LPVOID)adapter,
+                  0,
+                  &current->RXThreadID)))
     {
-	always_trace1("ntvdm : Failed comms thread for %d\n", adapter);
-	host_com_close(adapter);        /* Unable to create RX thread */
-	current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
-	return(FALSE);
+   always_trace1("ntvdm : Failed comms thread for %d\n", adapter);
+   host_com_close(adapter);        /* Unable to create RX thread */
+   current->ReOpenCounter = REOPEN_DELAY;   /* Delay next open attempt */
+   return(FALSE);
     }
     /* reset the counter */
     current->SuspendTimeoutTicks = ComConfigValues.index * 1000;
@@ -626,8 +646,8 @@ GLOBAL CPU void host_com_close_all(void)
 
     for(adapter = 0; adapter < 4; adapter++)
     {
-	host_com[adapter].DisplayError = TRUE; //Enable error displaying
-	host_com_close(adapter);
+   host_com[adapter].DisplayError = TRUE; //Enable error displaying
+   host_com_close(adapter);
     }
 }
 
@@ -644,95 +664,95 @@ GLOBAL CPU void host_com_close IFN1(int, adapter)
 
     if(current->type != ADAPTER_NULL)
     {
-	always_trace1("Closing comms port %d\n",adapter);
+   always_trace1("Closing comms port %d\n",adapter);
 
-	/* only touch the device if we own the device */
-	if (current->type == ADAPTER_REAL) {
-	    /*....... Flush any delayed writes and wait for writes to complete */
-	    if (current->no_tx_chars)
-		FlushTXBuffer(adapter,CLOSE_TRIGGER);
-	    WaitForMultipleObjects(MAX_PENDING_WRITES,current->TXEvent,TRUE,INFINITE);
-	    /* reset DCB to whatever it was before open */
-	    if (current->dcbValid) {
-		SetCommState(current->handle, &current->dcbBeforeOpen);
-		current->dcbValid = FALSE;
-	    }
+   /* only touch the device if we own the device */
+   if (current->type == ADAPTER_REAL) {
+       /*....... Flush any delayed writes and wait for writes to complete */
+       if (current->no_tx_chars)
+      FlushTXBuffer(adapter,CLOSE_TRIGGER);
+       WaitForMultipleObjects(MAX_PENDING_WRITES,current->TXEvent,TRUE,INFINITE);
+       /* reset DCB to whatever it was before open */
+       if (current->dcbValid) {
+      SetCommState(current->handle, &current->dcbBeforeOpen);
+      current->dcbValid = FALSE;
+       }
 
-	}
+   }
 
 
-	/* keep the base adapter states intact if we are suspending the device */
-	if (!current->Suspending)
-	    /*........................................ Reset base comms adatper */
-	    com_init(adapter);		 /* Initialise base comms adapter */
+   /* keep the base adapter states intact if we are suspending the device */
+   if (!current->Suspending)
+       /*........................................ Reset base comms adatper */
+       com_init(adapter);      /* Initialise base comms adapter */
 
-	/*................................................. Close RX thread */
+   /*................................................. Close RX thread */
 
-	if(current->RXThreadHandle)
-	{
-	    /*................................. Tell RX thread to terminate */
+   if(current->RXThreadHandle)
+   {
+       /*................................. Tell RX thread to terminate */
 
-	    current->TerminateRXThread = TRUE;  // Tell RX thread to terminate
-	    current->RX_in_Control = TRUE;
-	    SetEvent(current->RXControlObject);
+       current->TerminateRXThread = TRUE;  // Tell RX thread to terminate
+       current->RX_in_Control = TRUE;
+       SetEvent(current->RXControlObject);
 
-	    /* Wait for RX thread to close itself, max wait 30 seconds */
+       /* Wait for RX thread to close itself, max wait 30 seconds */
 
-	    WaitForSingleObject(current->RXThreadHandle,30000);
-	    CloseHandle(current->RXThreadHandle);
+       WaitForSingleObject(current->RXThreadHandle,30000);
+       CloseHandle(current->RXThreadHandle);
 
-	    current->RXThreadHandle = NULL;  // Mark thread as closed
-	}
-	/* now it is safe to close the device */
-	CloseHandle(current->handle); current->handle = NULL;
+       current->RXThreadHandle = NULL;  // Mark thread as closed
+   }
+   /* now it is safe to close the device */
+   CloseHandle(current->handle); current->handle = NULL;
 
-	/*............... Delete RX critical section and RX control objects */
+   /*............... Delete RX critical section and RX control objects */
 
-	DeleteCriticalSection(&current->CSEvent);
-	DeleteCriticalSection(&current->AdapterLock);
+   DeleteCriticalSection(&current->CSEvent);
+   DeleteCriticalSection(&current->AdapterLock);
 
-	/*............................................. Close event objects */
+   /*............................................. Close event objects */
 
-	CloseHandle(current->ModemEvent);
-	CloseHandle(current->RXControlObject);
-	CloseHandle(current->RXEvent);      // Overlapped read wait object
-	for(i=0; i < MAX_PENDING_WRITES; i++)
-	{
-	    CloseHandle(current->TXEvent[i]); // Overlapped write wait object
-	    current->TXEvent[i] = NULL;
-	}
+   CloseHandle(current->ModemEvent);
+   CloseHandle(current->RXControlObject);
+   CloseHandle(current->RXEvent);      // Overlapped read wait object
+   for(i=0; i < MAX_PENDING_WRITES; i++)
+   {
+       CloseHandle(current->TXEvent[i]); // Overlapped write wait object
+       current->TXEvent[i] = NULL;
+   }
 
-	CloseHandle(current->EvtHandle);    // WaitCommEvent wait object
-	CloseHandle(current->XOFFEvent);
+   CloseHandle(current->EvtHandle);    // WaitCommEvent wait object
+   CloseHandle(current->XOFFEvent);
 
-	current->XOFFEvent = current->RXEvent = current->EvtHandle = NULL;
+   current->XOFFEvent = current->RXEvent = current->EvtHandle = NULL;
 
-	/*.......................... Disable IRET hooks for comms interrupt */
+   /*.......................... Disable IRET hooks for comms interrupt */
 
 #ifdef MONITOR
-	ica_iret_hook_control(current->controller, current->line, FALSE);
+   ica_iret_hook_control(current->controller, current->line, FALSE);
 #endif
 
-	/*. This makes sure that the next access to the port will reopen it */
-	current->ReOpenCounter = 0;
+   /*. This makes sure that the next access to the port will reopen it */
+   current->ReOpenCounter = 0;
 
-	free(current->buffer);
-	current->buffer = NULL;
-	current->type = ADAPTER_NULL;   /* Mark adapter as closed */
+   free(current->buffer);
+   current->buffer = NULL;
+   current->type = ADAPTER_NULL;   /* Mark adapter as closed */
      }
      else if (current->Suspended) {
-	/* the application is terminating while the port is suspended.
-	 * first we turn the disable-open on so that we will not try
-	 * to physical touch the port. Then we call base to reset the
-	 * adapter
-	 */
+   /* the application is terminating while the port is suspended.
+    * first we turn the disable-open on so that we will not try
+    * to physical touch the port. Then we call base to reset the
+    * adapter
+    */
 
-	BOOL	DisableOpen;
-	DisableOpen = disable_open[adapter];
-	disable_open[adapter] = TRUE;
-	com_init(adapter);
-	disable_open[adapter] = DisableOpen;
-	current->Suspended = FALSE;
+   BOOL  DisableOpen;
+   DisableOpen = disable_open[adapter];
+   disable_open[adapter] = TRUE;
+   com_init(adapter);
+   disable_open[adapter] = DisableOpen;
+   current->Suspended = FALSE;
     }
 }
 
@@ -749,19 +769,19 @@ GLOBAL CPU UTINY host_com_read_char( int adapter, FIFORXDATA * buffer, UTINY cou
     UTINY RetCount = count;
    /* if xoff is in progress, don't read nothing */
    if (!current->XOFFInProgress) {
-	while (count) {
-	    CharType = GetCharacterTypeInBuffer(current);
-	    if (CharType == RXCHAR || CharType == CHARINERROR) {
-		buffer->error = 0;
-		GetCharFromRXBuffer(current, CharType, &buffer->data, &host_error);
-		if (!host_error)
-		    buffer->error = MapHostToBaseError(host_error);
-		buffer++;
-		count--;
-	    }
-	    else
-		break;
-	}
+   while (count) {
+       CharType = GetCharacterTypeInBuffer(current);
+       if (CharType == RXCHAR || CharType == CHARINERROR) {
+      buffer->error = 0;
+      GetCharFromRXBuffer(current, CharType, &buffer->data, &host_error);
+      if (!host_error)
+          buffer->error = MapHostToBaseError(host_error);
+      buffer++;
+      count--;
+       }
+       else
+      break;
+   }
     }
       /* Tell comms idle system that there has been comms activity */
     IDLE_comlpt();
@@ -785,7 +805,7 @@ GLOBAL RXCPU VOID host_com_read IFN3(int, adapter, UTINY *, data, int *, error)
     /*::::::::::::::::::::::::::::::::::::::::: Dealing with NULL adapter ? */
 
     if(current->type != ADAPTER_REAL && !host_com_open(adapter))
-	return;                             /* Exit, unable to open adapter */
+   return;                             /* Exit, unable to open adapter */
 
     /*::::::::::::::::::::::: Get next character from input character queue */
 
@@ -793,51 +813,51 @@ GLOBAL RXCPU VOID host_com_read IFN3(int, adapter, UTINY *, data, int *, error)
     while(MoreToProcess)
     {
 
-	CharType = GetCharacterTypeInBuffer(current);
+   CharType = GetCharacterTypeInBuffer(current);
 
-	//Process next character in buffer
-	switch(CharType)
-	{
-	    //................................................Process character
+   //Process next character in buffer
+   switch(CharType)
+   {
+       //................................................Process character
 
-	    case RXCHAR:
-	    case CHARINERROR:
-		host_error = 0;
-		GetCharFromRXBuffer(current,CharType,(UCHAR *)data,&host_error);
+       case RXCHAR:
+       case CHARINERROR:
+      host_error = 0;
+      GetCharFromRXBuffer(current,CharType,(UCHAR *)data,&host_error);
 
-		//error reading character
-		if(host_error)
-		    *error = MapHostToBaseError(host_error); /* Get error */
-		MoreToProcess = FALSE;
-		break;
+      //error reading character
+      if(host_error)
+          *error = MapHostToBaseError(host_error); /* Get error */
+      MoreToProcess = FALSE;
+      break;
 
-	    //.....................Process receive error, no character available
+       //.....................Process receive error, no character available
 
-	    case RXERROR:
-		com_lsr_change(adapter);
-		break;
+       case RXERROR:
+      com_lsr_change(adapter);
+      break;
 
-	    //...................................... Process modem state changes
+       //...................................... Process modem state changes
 
-	    case MODEMSTATE:
-		com_modem_change(adapter);
-		break;
+       case MODEMSTATE:
+      com_modem_change(adapter);
+      break;
 
-	    //..................................................RX buffer empty
+       //..................................................RX buffer empty
 
-	    case RXBUFEMPTY:
-		always_trace0("Read requested on empty RX buffer");
-		*error = 0; *data = (UTINY)-1; //Buffer empty
-		MoreToProcess = FALSE;
-		break;
+       case RXBUFEMPTY:
+      always_trace0("Read requested on empty RX buffer");
+      *error = 0; *data = (UTINY)-1; //Buffer empty
+      MoreToProcess = FALSE;
+      break;
 
-	    case UNKNOWN:
-		GetCharFromRXBuffer(current,CharType,(UCHAR *)data,&host_error);
-		*error = MapHostToBaseError(host_error); /* Get error */
-		MoreToProcess = FALSE;
-		break;
+       case UNKNOWN:
+      GetCharFromRXBuffer(current,CharType,(UCHAR *)data,&host_error);
+      *error = MapHostToBaseError(host_error); /* Get error */
+      MoreToProcess = FALSE;
+      break;
 
-	}
+   }
     }
 
     /* Tell comms idle system that there has been comms activity */
@@ -854,9 +874,9 @@ int CPU host_com_char_read(int adapter, int data_available_ints)
 
     current->CharReadFromUART = TRUE;           //Char read from UART
     if(data_available_ints)
-	host_com_EOI_hook((long) adapter);
+   host_com_EOI_hook((long) adapter);
     else
-	host_com_poll(adapter);
+   host_com_poll(adapter);
 
     return(0);
 }
@@ -890,21 +910,21 @@ GLOBAL RXCPU void host_com_write IFN2(int, adapter, char, data)
     /*:::::::::::::::::::::::::::::::::: Are we dealing with a NULL adapter */
 
     if(current->type != ADAPTER_REAL && !host_com_open(adapter))
-	return;                             /* Exit, unable to open adapter */
+   return;                             /* Exit, unable to open adapter */
 
     if(data == XOFF_CHARACTER || data == XON_CHARACTER)
-	sub_note_trace1(HOST_COM_VERBOSE,"XO%s sent",data == XOFF_CHARACTER ? "FF" : "N");
+   sub_note_trace1(HOST_COM_VERBOSE,"XO%s sent",data == XOFF_CHARACTER ? "FF" : "N");
 
     /*::::::::::::::::::::::::::::::::::::::::: Is the user sending an XOFF */
 
 
     if(data == XOFF_CHARACTER)
     {
-	if(current->no_tx_chars) FlushTXBuffer(adapter,XOFF_TRIGGER);
-	SendXOFFIoctlToDriver(adapter);
+   if(current->no_tx_chars) FlushTXBuffer(adapter,XOFF_TRIGGER);
+   SendXOFFIoctlToDriver(adapter);
     }
     else
-	SendDataToDriver(adapter,data);
+   SendDataToDriver(adapter,data);
 
     /*::::::::::: Tell comms idle system that there has been comms activity */
 
@@ -916,7 +936,7 @@ GLOBAL RXCPU void host_com_write IFN2(int, adapter, char, data)
      * sync mode -> FlushTxBuffer will do the signaling.
      */
     if (!current->SyncWrite)
-	tx_shift_register_empty(adapter);
+   tx_shift_register_empty(adapter);
 }
 
 /*:::::::::::::::::::::::::::::::::::::::::::::::::::: Write data to driver */
@@ -931,16 +951,16 @@ void SendDataToDriver(int adapter, char data)
 
     if(current->tx_threshold)
     {
-	//Add char to tx buffer queue
-	current->TXBuffer[current->no_tx_chars++] = (unsigned char) data;
+   //Add char to tx buffer queue
+   current->TXBuffer[current->no_tx_chars++] = (unsigned char) data;
 
 
-	//Write threshold reached ?
-	if(current->tx_threshold <= current->no_tx_chars ||
-	   current->XOFFInProgress)
-	    FlushTXBuffer(adapter,(current->XOFFInProgress) ?
-			  XOFF_TRIGGER : TXFULL_TRIGGER);
-	return;
+   //Write threshold reached ?
+   if(current->tx_threshold <= current->no_tx_chars ||
+      current->XOFFInProgress)
+       FlushTXBuffer(adapter,(current->XOFFInProgress) ?
+           XOFF_TRIGGER : TXFULL_TRIGGER);
+   return;
     }
 
 
@@ -952,24 +972,24 @@ void SendDataToDriver(int adapter, char data)
 
     if(!WriteFile(current->handle, &data, 1, &BytesWritten, &OV))
     {
-	if((error = GetLastError()) == ERROR_IO_PENDING)
-	{
-	    /* Write request pending wait for it to complete */
-	    if(GetOverlappedResult(current->handle,&OV,&BytesWritten,TRUE))
-		error = 0;             /* Write successful */
-	    else
-		error = GetLastError();
-	}
+   if((error = GetLastError()) == ERROR_IO_PENDING)
+   {
+       /* Write request pending wait for it to complete */
+       if(GetOverlappedResult(current->handle,&OV,&BytesWritten,TRUE))
+      error = 0;             /* Write successful */
+       else
+      error = GetLastError();
+   }
 
-	/* Reset comms port, clear error */
-	if(error) ClearCommError(current->handle,&error,NULL);
+   /* Reset comms port, clear error */
+   if(error) ClearCommError(current->handle,&error,NULL);
     }
 
     /*::::::::::::::::::::::::::::::::::::::::::::::::::::::: Display error */
 
 #ifndef PROD
     if(error)
-	always_trace2("host_com_write error, adapter %d,%d\n",adapter,error);
+   always_trace2("host_com_write error, adapter %d,%d\n",adapter,error);
 #endif
     /* tell base that the tx shift register is empty */
     tx_shift_register_empty(adapter);
@@ -992,29 +1012,29 @@ CPU int SendXOFFIoctlToDriver(int adapter)
     /*.............................................. Issue magic xoff IOCTL */
 
     if(SendXOFFIoctl(current->handle,    // Handle of comms port
-		  current->XOFFEvent,    // Event to signal completion on
-		  XOFF_TIMEOUT,          // Timeout in milliseconds
-		  XOFF_RXCHARCNT,        // RX character count
-		  XOFF_CHARACTER,        // XOFF character
-		  newIOStatusBlock))     // IO status block for ioctl
+        current->XOFFEvent,    // Event to signal completion on
+        XOFF_TIMEOUT,          // Timeout in milliseconds
+        XOFF_RXCHARCNT,        // RX character count
+        XOFF_CHARACTER,        // XOFF character
+        newIOStatusBlock))     // IO status block for ioctl
 
     {
-	/*............................. Add new status block to linked list */
+   /*............................. Add new status block to linked list */
 
-	EnterCriticalSection(&current->CSEvent);
+   EnterCriticalSection(&current->CSEvent);
 
-	AddNewIOStatusBlockToList(&current->firstStatusBlock,
-				  &current->lastStatusBlock, newIOStatusBlock);
+   AddNewIOStatusBlockToList(&current->firstStatusBlock,
+              &current->lastStatusBlock, newIOStatusBlock);
 
-	current->XOFFInProgress = TRUE;
-	LeaveCriticalSection(&current->CSEvent);
-	rtn =TRUE;                      // XOFF ioctl successful
+   current->XOFFInProgress = TRUE;
+   LeaveCriticalSection(&current->CSEvent);
+   rtn =TRUE;                      // XOFF ioctl successful
     }
     else
     {
-	/* Error, XOFF ioctl failed */
-	free(newIOStatusBlock);
-	rtn = FALSE;                    // XOFF ioctl failed
+   /* Error, XOFF ioctl failed */
+   free(newIOStatusBlock);
+   rtn = FALSE;                    // XOFF ioctl failed
     }
 
     return(rtn);
@@ -1039,13 +1059,13 @@ GLOBAL RXCPU void host_com_ioctl IFN3(int, adapter, int, request, long, arg)
 
     if(current->type != ADAPTER_REAL)
     {
-	// Attempt to open adapter !
+   // Attempt to open adapter !
 
-	if(request == HOST_COM_FLUSH || request == HOST_COM_INPUT_READY ||
-	   request == HOST_COM_MODEM || !host_com_open(adapter))
-	{
-	    return;
-	}
+   if(request == HOST_COM_FLUSH || request == HOST_COM_INPUT_READY ||
+      request == HOST_COM_MODEM || !host_com_open(adapter))
+   {
+       return;
+   }
     }
     /*:::::::::::::::::::::::::::::::::::::::::::::: Identify ioctl request */
 
@@ -1053,239 +1073,239 @@ GLOBAL RXCPU void host_com_ioctl IFN3(int, adapter, int, request, long, arg)
     switch(request)
     {
 
-	case HOST_COM_LSR:
-	    if(GetCharacterTypeInBuffer(current) == RXERROR)
-	    {
-		GetCharFromRXBuffer(current, RXERROR, NULL, &error);
-		*(DWORD *)arg = (DWORD)error;
-	    }
-	    break;
+   case HOST_COM_LSR:
+       if(GetCharacterTypeInBuffer(current) == RXERROR)
+       {
+      GetCharFromRXBuffer(current, RXERROR, NULL, &error);
+      *(DWORD *)arg = (DWORD)error;
+       }
+       break;
 
-	/*:::::::::::::::::::::::::::::::::::::::::: Process break requests */
+   /*:::::::::::::::::::::::::::::::::::::::::: Process break requests */
 
-	case HOST_COM_SBRK:         /* Set BREAK */
-	    sub_note_trace0(HOST_COM_VERBOSE, "set BREAK");
-	    SetCommBreak(current->handle);
-	    current->ComStates.Break = 1;
-	    break;
+   case HOST_COM_SBRK:         /* Set BREAK */
+       sub_note_trace0(HOST_COM_VERBOSE, "set BREAK");
+       SetCommBreak(current->handle);
+       current->ComStates.Break = 1;
+       break;
 
-	case HOST_COM_CBRK:        /* Clear BREAK */
-	    sub_note_trace0(HOST_COM_VERBOSE, "clear BREAK");
-	    ClearCommBreak(current->handle);
-	    current->ComStates.Break = 0;
-	    break;
+   case HOST_COM_CBRK:        /* Clear BREAK */
+       sub_note_trace0(HOST_COM_VERBOSE, "clear BREAK");
+       ClearCommBreak(current->handle);
+       current->ComStates.Break = 0;
+       break;
 
-	/*::::::::::::::::::::::::::::::::::::::::: Process baud rate change */
+   /*::::::::::::::::::::::::::::::::::::::::: Process baud rate change */
 
-	case HOST_COM_BAUD:
+   case HOST_COM_BAUD:
 
-	    if (!FastCommSetBaudRate(current->handle, arg))
-	    {
-		sprintf(BaudRateStr, "(%d)", arg);
-		host_error(EHS_UNSUPPORTED_BAUD, ERR_CONT, BaudRateStr);
-		always_trace1("set BAUD failed - SetBaudRate:%d", arg);
-	    }
-	    current->ComStates.BaudRate = (DWORD)arg;
+       if (!FastCommSetBaudRate(current->handle, arg))
+       {
+      sprintf(BaudRateStr, "(%d)", arg);
+      host_error(EHS_UNSUPPORTED_BAUD, ERR_CONT, BaudRateStr);
+      always_trace1("set BAUD failed - SetBaudRate:%d", arg);
+       }
+       current->ComStates.BaudRate = (DWORD)arg;
 
-	    break;
+       break;
 
-	/*:::::::::::::::::::::::::::::::::::::::: Process DTR line requests */
+   /*:::::::::::::::::::::::::::::::::::::::: Process DTR line requests */
 
-	case HOST_COM_SDTR:                 /* Set DTR line */
-	    //printf("Set DTR\n");
-	    sub_note_trace0(HOST_COM_VERBOSE, "set DTR");
-	    if(!EscapeCommFunction (current->handle, SETDTR))
-		sub_note_trace0(HOST_COM_VERBOSE, "set DTR FAILED");
-	    current->ComStates.DTR = 1;
-	    break;
+   case HOST_COM_SDTR:                 /* Set DTR line */
+       //printf("Set DTR\n");
+       sub_note_trace0(HOST_COM_VERBOSE, "set DTR");
+       if(!EscapeCommFunction (current->handle, SETDTR))
+      sub_note_trace0(HOST_COM_VERBOSE, "set DTR FAILED");
+       current->ComStates.DTR = 1;
+       break;
 
-	case HOST_COM_CDTR:                 /* Clear DTR line */
-	    //printf("Clear DTR\n");
-	    sub_note_trace0(HOST_COM_VERBOSE, "clear DTR");
-	    if(!EscapeCommFunction (current->handle, CLRDTR))
-		sub_note_trace0(HOST_COM_VERBOSE, "clear DTR FAILED");
-	    current->ComStates.DTR = 0;
-	    break;
+   case HOST_COM_CDTR:                 /* Clear DTR line */
+       //printf("Clear DTR\n");
+       sub_note_trace0(HOST_COM_VERBOSE, "clear DTR");
+       if(!EscapeCommFunction (current->handle, CLRDTR))
+      sub_note_trace0(HOST_COM_VERBOSE, "clear DTR FAILED");
+       current->ComStates.DTR = 0;
+       break;
 
-	/*::::::::::::::::::::::::::::::::::::::::::::::::: flush comms port */
+   /*::::::::::::::::::::::::::::::::::::::::::::::::: flush comms port */
 
-	case HOST_COM_FLUSH:                /* Flush comms port */
-	    sub_note_trace0(HOST_COM_VERBOSE, "Flush comms port");
-	    break;
+   case HOST_COM_FLUSH:                /* Flush comms port */
+       sub_note_trace0(HOST_COM_VERBOSE, "Flush comms port");
+       break;
 
-	/*:::::::::::::::::::::::::::::::::::::::: Process RTS line requests */
+   /*:::::::::::::::::::::::::::::::::::::::: Process RTS line requests */
 
-	case HOST_COM_CRTS:                 /* Clear RTS */
-	    //printf("Clear RTS\n");
-	    sub_note_trace0(HOST_COM_VERBOSE, "clear RTS");
-	    if(!EscapeCommFunction (current->handle, CLRRTS))
-		sub_note_trace0(HOST_COM_VERBOSE, "clear RTS FAILED");
-	    current->ComStates.RTS = 0;
-	    break;
+   case HOST_COM_CRTS:                 /* Clear RTS */
+       //printf("Clear RTS\n");
+       sub_note_trace0(HOST_COM_VERBOSE, "clear RTS");
+       if(!EscapeCommFunction (current->handle, CLRRTS))
+      sub_note_trace0(HOST_COM_VERBOSE, "clear RTS FAILED");
+       current->ComStates.RTS = 0;
+       break;
 
-	case HOST_COM_SRTS:
-	    //printf("Set RTS\n");
-	    sub_note_trace0(HOST_COM_VERBOSE, "set RTS");
-	    if(!EscapeCommFunction (current->handle, SETRTS))
-		sub_note_trace0(HOST_COM_VERBOSE, "set RTS FAILED");
-	    current->ComStates.RTS = 1;
-	    break;
+   case HOST_COM_SRTS:
+       //printf("Set RTS\n");
+       sub_note_trace0(HOST_COM_VERBOSE, "set RTS");
+       if(!EscapeCommFunction (current->handle, SETRTS))
+      sub_note_trace0(HOST_COM_VERBOSE, "set RTS FAILED");
+       current->ComStates.RTS = 1;
+       break;
 
-	/*::::::::::::::::::::::::::::::::::: Return status of the RX buffer */
+   /*::::::::::::::::::::::::::::::::::: Return status of the RX buffer */
 
-	case HOST_COM_INPUT_READY:
-	    *(long *)arg = current->rx;   /* check the port for data */
-	    break;
+   case HOST_COM_INPUT_READY:
+       *(long *)arg = current->rx;   /* check the port for data */
+       break;
 
-	/*:::::::::::::::::::::::::::::::::::::::::::::: Return modem status */
+   /*:::::::::::::::::::::::::::::::::::::::::::::: Return modem status */
 
-	case HOST_COM_MODEM:              /* Get modem state */
+   case HOST_COM_MODEM:              /* Get modem state */
 
-	    current->modem_status = 0;
-	    if(GetCharacterTypeInBuffer(current) == MODEMSTATE)
-	    {
-		GetCharFromRXBuffer(current, MODEMSTATE, &host_modem, &error);
-		MSR.all = host_modem;
+       current->modem_status = 0;
+       if(GetCharacterTypeInBuffer(current) == MODEMSTATE)
+       {
+      GetCharFromRXBuffer(current, MODEMSTATE, &host_modem, &error);
+      MSR.all = host_modem;
 
-		if(MSR.bits.CTS)  current->modem_status |= HOST_COM_MODEM_CTS;
-		if(MSR.bits.RI)   current->modem_status |= HOST_COM_MODEM_RI;
-		if(MSR.bits.DSR)  current->modem_status |= HOST_COM_MODEM_DSR;
-		if(MSR.bits.RLSD) current->modem_status |= HOST_COM_MODEM_RLSD;
-	    }
-	    else
-	    {
-		//.......................Get modem data from the serial driver ?
+      if(MSR.bits.CTS)  current->modem_status |= HOST_COM_MODEM_CTS;
+      if(MSR.bits.RI)   current->modem_status |= HOST_COM_MODEM_RI;
+      if(MSR.bits.DSR)  current->modem_status |= HOST_COM_MODEM_DSR;
+      if(MSR.bits.RLSD) current->modem_status |= HOST_COM_MODEM_RLSD;
+       }
+       else
+       {
+      //.......................Get modem data from the serial driver ?
 
-		FastGetCommModemStatus(current->handle, current->ModemEvent,
-				       &ModemState);
+      FastGetCommModemStatus(current->handle, current->ModemEvent,
+                   &ModemState);
 
-		if(ModemState & MS_CTS_ON)
-		    current->modem_status |= HOST_COM_MODEM_CTS;
+      if(ModemState & MS_CTS_ON)
+          current->modem_status |= HOST_COM_MODEM_CTS;
 
-		if(ModemState & MS_RING_ON)
-		    current->modem_status |= HOST_COM_MODEM_RI;
+      if(ModemState & MS_RING_ON)
+          current->modem_status |= HOST_COM_MODEM_RI;
 
-		if(ModemState & MS_DSR_ON)
-		    current->modem_status |= HOST_COM_MODEM_DSR;
+      if(ModemState & MS_DSR_ON)
+          current->modem_status |= HOST_COM_MODEM_DSR;
 
-		if(ModemState & MS_RLSD_ON)
-		    current->modem_status |= HOST_COM_MODEM_RLSD;
-	    }
+      if(ModemState & MS_RLSD_ON)
+          current->modem_status |= HOST_COM_MODEM_RLSD;
+       }
 
-	    //.......................Return modem change information to the base
+       //.......................Return modem change information to the base
 
-	    sub_note_trace4(HOST_COM_VERBOSE, "CTS:%s RI:%s DSR:%s RLSD:%s",
-		     current->modem_status & HOST_COM_MODEM_CTS  ? "ON" : "OFF",
-		     current->modem_status & HOST_COM_MODEM_RI   ? "ON" : "OFF",
-		     current->modem_status & HOST_COM_MODEM_DSR  ? "ON" : "OFF",
-		     current->modem_status & HOST_COM_MODEM_RLSD ? "ON" : "OFF");
+       sub_note_trace4(HOST_COM_VERBOSE, "CTS:%s RI:%s DSR:%s RLSD:%s",
+           current->modem_status & HOST_COM_MODEM_CTS  ? "ON" : "OFF",
+           current->modem_status & HOST_COM_MODEM_RI   ? "ON" : "OFF",
+           current->modem_status & HOST_COM_MODEM_DSR  ? "ON" : "OFF",
+           current->modem_status & HOST_COM_MODEM_RLSD ? "ON" : "OFF");
 
-	    *(long *)arg = current->modem_status;
-	    break;
+       *(long *)arg = current->modem_status;
+       break;
 
-	/*::::::::::::::::::::::::::::::::::::::::: Setup number of stop bits */
+   /*::::::::::::::::::::::::::::::::::::::::: Setup number of stop bits */
 
-	case HOST_COM_STOPBITS:
-	    sub_note_trace1(HOST_COM_VERBOSE, "Setting Stop bits %d", arg);
-	    if (FastCommGetLineControl(current->handle, &StopBits, &Parity,
-				       &DataBits))
-	    {
-		switch (arg)
-		{
-		    case 1:
-			StopBits = ONESTOPBIT;
-			break;
-		    case 2:
-			StopBits = DataBits == 5 ? ONE5STOPBITS : TWOSTOPBITS;
-			break;
+   case HOST_COM_STOPBITS:
+       sub_note_trace1(HOST_COM_VERBOSE, "Setting Stop bits %d", arg);
+       if (FastCommGetLineControl(current->handle, &StopBits, &Parity,
+                   &DataBits))
+       {
+      switch (arg)
+      {
+          case 1:
+         StopBits = ONESTOPBIT;
+         break;
+          case 2:
+         StopBits = DataBits == 5 ? ONE5STOPBITS : TWOSTOPBITS;
+         break;
 
-		    default:
-			always_trace1("STOPBITS strange request %d\n", arg);
-			break;
-		}
+          default:
+         always_trace1("STOPBITS strange request %d\n", arg);
+         break;
+      }
 
-		if(!FastCommSetLineControl(current->handle, StopBits, Parity, DataBits))
-		{
+      if(!FastCommSetLineControl(current->handle, StopBits, Parity, DataBits))
+      {
 
-		    always_trace1("set STOPBITS failed- FastCommSetLineControl:%d",arg);
-		}
-	    }
-	    else {
+          always_trace1("set STOPBITS failed- FastCommSetLineControl:%d",arg);
+      }
+       }
+       else {
 
-		always_trace1("set STOPBITS failed- FastCommGetLineControl:%d",arg);
-	    }
-	    current->ComStates.StopBits = StopBits;
-	    break;
+      always_trace1("set STOPBITS failed- FastCommGetLineControl:%d",arg);
+       }
+       current->ComStates.StopBits = StopBits;
+       break;
 
-	/*:::::::::::::::::::::::::::::::::::::::::::::::::::::: Setup parity */
+   /*:::::::::::::::::::::::::::::::::::::::::::::::::::::: Setup parity */
 
-	case HOST_COM_PARITY:
-	    if (FastCommGetLineControl(current->handle, &StopBits, &Parity, &DataBits))
-	    {
-		switch(arg)
-		{
-		    case HOST_COM_PARITY_EVEN:
-			sub_note_trace0(HOST_COM_VERBOSE, "Set EVEN Parity");
-			Parity=EVENPARITY;
-		    break;
+   case HOST_COM_PARITY:
+       if (FastCommGetLineControl(current->handle, &StopBits, &Parity, &DataBits))
+       {
+      switch(arg)
+      {
+          case HOST_COM_PARITY_EVEN:
+         sub_note_trace0(HOST_COM_VERBOSE, "Set EVEN Parity");
+         Parity=EVENPARITY;
+          break;
 
-		    case HOST_COM_PARITY_ODD:
-			sub_note_trace0(HOST_COM_VERBOSE, "Set ODD Parity");
-			Parity=ODDPARITY;
-			break;
+          case HOST_COM_PARITY_ODD:
+         sub_note_trace0(HOST_COM_VERBOSE, "Set ODD Parity");
+         Parity=ODDPARITY;
+         break;
 
-		    case HOST_COM_PARITY_MARK:
-			sub_note_trace0(HOST_COM_VERBOSE, "Set MARK Parity");
-			Parity=MARKPARITY;
-			break;
+          case HOST_COM_PARITY_MARK:
+         sub_note_trace0(HOST_COM_VERBOSE, "Set MARK Parity");
+         Parity=MARKPARITY;
+         break;
 
-		    case HOST_COM_PARITY_SPACE:
-			sub_note_trace0(HOST_COM_VERBOSE, "Set SPACE Parity");
-			Parity=SPACEPARITY;
-			break;
+          case HOST_COM_PARITY_SPACE:
+         sub_note_trace0(HOST_COM_VERBOSE, "Set SPACE Parity");
+         Parity=SPACEPARITY;
+         break;
 
-		    case HOST_COM_PARITY_NONE:
-			sub_note_trace0(HOST_COM_VERBOSE, "Set DISABLE Parity");
-			Parity=NOPARITY;
-			break;
-		}
-		if(!FastCommSetLineControl(current->handle, StopBits, Parity, DataBits))
-		{
-		    always_trace1("set PARITY failed - FastCommSetLineControl :%d",arg);
-		}
-	    }
-	    else {
+          case HOST_COM_PARITY_NONE:
+         sub_note_trace0(HOST_COM_VERBOSE, "Set DISABLE Parity");
+         Parity=NOPARITY;
+         break;
+      }
+      if(!FastCommSetLineControl(current->handle, StopBits, Parity, DataBits))
+      {
+          always_trace1("set PARITY failed - FastCommSetLineControl :%d",arg);
+      }
+       }
+       else {
 
-		always_trace1("set STOPBITS failed- FastCommGetLineControl:%d",arg);
-	    }
-	    current->ComStates.Parity = Parity;
-	    break;
+      always_trace1("set STOPBITS failed- FastCommGetLineControl:%d",arg);
+       }
+       current->ComStates.Parity = Parity;
+       break;
 
-	/*::::::::::::::::::::::::::::::::::::::::::::::::::: Setup data bits */
+   /*::::::::::::::::::::::::::::::::::::::::::::::::::: Setup data bits */
 
-	case HOST_COM_DATABITS:
-	    sub_note_trace1(HOST_COM_VERBOSE, "Setting data bits %d",arg);
-	    if (FastCommGetLineControl(current->handle, &StopBits, &Parity, &DataBits))
-	    {
-		DataBits = (UCHAR)arg;
-		if(!FastCommSetLineControl(current->handle, StopBits, Parity, DataBits))
-		{
-		    always_trace1("set DATABITS failed - FastCommSetLineControl:%d",arg);
-		}
-	    }
-	    else {
+   case HOST_COM_DATABITS:
+       sub_note_trace1(HOST_COM_VERBOSE, "Setting data bits %d",arg);
+       if (FastCommGetLineControl(current->handle, &StopBits, &Parity, &DataBits))
+       {
+      DataBits = (UCHAR)arg;
+      if(!FastCommSetLineControl(current->handle, StopBits, Parity, DataBits))
+      {
+          always_trace1("set DATABITS failed - FastCommSetLineControl:%d",arg);
+      }
+       }
+       else {
 
-		always_trace1("set STOPBITS failed- FastCommGetLineControl:%d",arg);
-	    }
-	    current->ComStates.DataBits = DataBits;
-	    break;
+      always_trace1("set STOPBITS failed- FastCommGetLineControl:%d",arg);
+       }
+       current->ComStates.DataBits = DataBits;
+       break;
 
-	/*::::::::::::::::::::::::::::::::::::::: Unrecognised host_com ioctl */
+   /*::::::::::::::::::::::::::::::::::::::: Unrecognised host_com ioctl */
 
-	default:
-	    always_trace0("Bad host_com_ioctl\n");
-	    sub_note_trace0(HOST_COM_VERBOSE, "Bad host_com_ioctl");
-	    break;
+   default:
+       always_trace0("Bad host_com_ioctl\n");
+       sub_note_trace0(HOST_COM_VERBOSE, "Bad host_com_ioctl");
+       break;
     }
 
     /* Tell comms idle system that there has been comms activity */
@@ -1345,59 +1365,59 @@ DWORD RX GetCharsFromDriver(int adapter)
     bytestoread = BUFFER_SIZE - current->bytes_in_rxbuf;
     bytes_before_wrap = BUFFER_SIZE - current->head_inx;
     if (bytes_before_wrap < bytestoread){
-	OV.Offset = 0;          /* reset offset or ReadFile can fail */
-	OV.OffsetHigh = 0;
-	if (!ReadFile(current->handle, &current->buffer[current->head_inx],
-		      bytes_before_wrap, &bytesread, &OV))
-	{
-	    // we have zero timeout for the read operation
-	    // this pending check may be redundant??????
-	    if (GetLastError() == ERROR_IO_PENDING) {
-		GetOverlappedResult(current->handle, &OV,
-				    &bytesread, TRUE);
-	    }
-	    else {
-		ClearCommError(current->handle, &CommError, NULL);
-		bytesread = 0;
-	    }
-	}
+   OV.Offset = 0;          /* reset offset or ReadFile can fail */
+   OV.OffsetHigh = 0;
+   if (!ReadFile(current->handle, &current->buffer[current->head_inx],
+            bytes_before_wrap, &bytesread, &OV))
+   {
+       // we have zero timeout for the read operation
+       // this pending check may be redundant??????
+       if (GetLastError() == ERROR_IO_PENDING) {
+      GetOverlappedResult(current->handle, &OV,
+                &bytesread, TRUE);
+       }
+       else {
+      ClearCommError(current->handle, &CommError, NULL);
+      bytesread = 0;
+       }
+   }
 
-	if (bytesread) {
-	    total_bytes_read = bytesread;
-	    current->bytes_in_rxbuf += bytesread;
-	    if (bytesread == bytes_before_wrap) {
-		current->head_inx = 0;
-		bytestoread -= bytesread;
-	    }
-	    else {
-		current->head_inx += bytesread;
-		bytestoread = 0;
+   if (bytesread) {
+       total_bytes_read = bytesread;
+       current->bytes_in_rxbuf += bytesread;
+       if (bytesread == bytes_before_wrap) {
+      current->head_inx = 0;
+      bytestoread -= bytesread;
+       }
+       else {
+      current->head_inx += bytesread;
+      bytestoread = 0;
 
-	    }
-	}
-	else
-	    bytestoread = 0;
+       }
+   }
+   else
+       bytestoread = 0;
     }
     if (bytestoread){
-	OV.Offset = 0;          /* reset offset or ReadFile can fail */
-	OV.OffsetHigh = 0;
-	if (!ReadFile(current->handle, &current->buffer[current->head_inx],
-		      bytestoread, &bytesread, &OV))
-	{
-	    if (GetLastError() == ERROR_IO_PENDING) {
-		GetOverlappedResult(current->handle, &OV,
-				    &bytesread, TRUE);
-	    }
-	    else {
-		ClearCommError(current->handle, &CommError, NULL);
-		bytesread = 0;
-	    }
-	}
-	if (bytesread) {
-	    current->bytes_in_rxbuf += bytesread;
-	    current->head_inx += bytesread;
-	    total_bytes_read += bytesread;
-	}
+   OV.Offset = 0;          /* reset offset or ReadFile can fail */
+   OV.OffsetHigh = 0;
+   if (!ReadFile(current->handle, &current->buffer[current->head_inx],
+            bytestoread, &bytesread, &OV))
+   {
+       if (GetLastError() == ERROR_IO_PENDING) {
+      GetOverlappedResult(current->handle, &OV,
+                &bytesread, TRUE);
+       }
+       else {
+      ClearCommError(current->handle, &CommError, NULL);
+      bytesread = 0;
+       }
+   }
+   if (bytesread) {
+       current->bytes_in_rxbuf += bytesread;
+       current->head_inx += bytesread;
+       total_bytes_read += bytesread;
+   }
     }
     LeaveCriticalSection(&current->CSEvent);
 
@@ -1430,7 +1450,7 @@ DWORD CPU nt_poll_comms IFN1(DWORD, adapter)
     CURRENT_ADAPTER();                  /* Setup ptr to current adapter */
     DWORD EvtMask;                      /* Comms event mask */
     ULONG SignalledObj = (ULONG) -1;
-    HANDLE WaitTable[3];
+    HANDLE WaitTable[2];
     HANDLE SetCommEvt;                  /* Handle used by FastSetCommEvent */
 
     BOOL CheckDriverForChars = FALSE;   /* Check driver for characters */
@@ -1454,92 +1474,92 @@ DWORD CPU nt_poll_comms IFN1(DWORD, adapter)
 
     while(TRUE)
     {
-	/*::::::::::::::::: Wait for communications events then process them */
+   /*::::::::::::::::: Wait for communications events then process them */
 
-	if(SignalledObj != 1)
-	{
-	    if(!FastWaitCommsOrCpuEvent(current->handle, WaitTable, 0, &EvtMask,
-					&SignalledObj))
-	    {
-		// Error getting comms/CPU thread event ?
-		DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
-	    }
-	}
+   if(SignalledObj != 1)
+   {
+       if(!FastWaitCommsOrCpuEvent(current->handle, WaitTable, 0, &EvtMask,
+               &SignalledObj))
+       {
+      // Error getting comms/CPU thread event ?
+      DisplayErrorTerm(EHS_FUNC_FAILED,GetLastError(),__FILE__,__LINE__);
+       }
+   }
 
-	/*::::::::::::::::::::: Is the CPU thread returning control to us ? */
+   /*::::::::::::::::::::: Is the CPU thread returning control to us ? */
 
-	if(SignalledObj == 1 || current->TerminateRXThread)
-	{
-	    // The CPU thread is trying to tell us something.
+   if(SignalledObj == 1 || current->TerminateRXThread)
+   {
+       // The CPU thread is trying to tell us something.
 
-	    /*..................... Is it time to terminate this thread !!! */
+       /*..................... Is it time to terminate this thread !!! */
 
-	    if(current->TerminateRXThread)
-	    {
-		FastSetCommMask(current->handle,SetCommEvt,0);
-		WaitForAllXOFFsToComplete(adapter);   // Complete ioctl's
-		CloseHandle(SetCommEvt);
-		return(0);                            // Terminate thread
-	    }
+       if(current->TerminateRXThread)
+       {
+      FastSetCommMask(current->handle,SetCommEvt,0);
+      WaitForAllXOFFsToComplete(adapter);   // Complete ioctl's
+      CloseHandle(SetCommEvt);
+      return(0);                            // Terminate thread
+       }
 
-	    /* we have 3 reasons why we are here:
-	       (1). the CPU thread has emptied the current rx window
-	       (2). XOFF is in progress
-	     */
-	}
+       /* we have 3 reasons why we are here:
+          (1). the CPU thread has emptied the current rx window
+          (2). XOFF is in progress
+        */
+   }
 
-	if (SignalledObj == 0 || current->bytes_in_rxwindow == 0)
-	    GetCharsFromDriver(adapter);
-	/*:::::::::::::::::::::::::::::::: Is there data to pass to the base */
+   if (SignalledObj == 0 || current->bytes_in_rxwindow == 0)
+       GetCharsFromDriver(adapter);
+   /*:::::::::::::::::::::::::::::::: Is there data to pass to the base */
 
-	if((CharType = GetCharacterTypeInBuffer(current)) != RXBUFEMPTY)
-	{
-	    if (CharType  == RXCHAR || CharType == CHARINERROR) {
-		WaitForAllXOFFsToComplete(adapter);
-	    }
+   if((CharType = GetCharacterTypeInBuffer(current)) != RXBUFEMPTY)
+   {
+       if (CharType  == RXCHAR || CharType == CHARINERROR) {
+      WaitForAllXOFFsToComplete(adapter);
+       }
 
-	    // slid the window. Note that there may be some character left in
-	    // the window(because of XOFF). It  is no harm to slid
-	    // the window.
-	    //
-	    EnterCriticalSection(&current->CSEvent);
-	    if (current->bytes_in_rxbuf > current->rxwindow_size)
-		current->bytes_in_rxwindow = current->rxwindow_size;
-	    else
-		current->bytes_in_rxwindow = current->bytes_in_rxbuf;
-	    LeaveCriticalSection(&current->CSEvent);
+       // slid the window. Note that there may be some character left in
+       // the window(because of XOFF). It  is no harm to slid
+       // the window.
+       //
+       EnterCriticalSection(&current->CSEvent);
+       if (current->bytes_in_rxbuf > current->rxwindow_size)
+      current->bytes_in_rxwindow = current->rxwindow_size;
+       else
+      current->bytes_in_rxwindow = current->bytes_in_rxbuf;
+       LeaveCriticalSection(&current->CSEvent);
 
-	    host_com_lock(adapter);
+       host_com_lock(adapter);
 
-	    if(CharType == MODEMSTATE)
-		com_modem_change(adapter);
-	    else if (CharType == RXERROR)
-		com_lsr_change(adapter);
-	    else {
-		com_recv_char(adapter);
-		/*
-		 * reset rx flush counter so we won't flush Rx buffer.
-		 * current->RXFlushTrigger may have been RXFLUSHTRIGGER - 1
-		 * at this moment and when we switch context to main thread
-		 * another timer tick may have come which would trigger
-		 * EmptyRxBuffer and cause unwantted overrun.
-		 */
-		current->RXFlushTrigger = RXFLUSHTRIGGER;
-		current->RX_in_Control = FALSE;
-		current->SignalRXThread = 0;
-	    }
-	    host_com_unlock(adapter);
+       if(CharType == MODEMSTATE)
+      com_modem_change(adapter);
+       else if (CharType == RXERROR)
+      com_lsr_change(adapter);
+       else {
+      com_recv_char(adapter);
+      /*
+       * reset rx flush counter so we won't flush Rx buffer.
+       * current->RXFlushTrigger may have been RXFLUSHTRIGGER - 1
+       * at this moment and when we switch context to main thread
+       * another timer tick may have come which would trigger
+       * EmptyRxBuffer and cause unwantted overrun.
+       */
+      current->RXFlushTrigger = RXFLUSHTRIGGER;
+      current->RX_in_Control = FALSE;
+      current->SignalRXThread = 0;
+       }
+       host_com_unlock(adapter);
 
-	    //Wait for CPU thread to return control
-	    if(CharType != MODEMSTATE && CharType != RXERROR)
-	    {
-		WaitForSingleObject(current->RXControlObject, INFINITE);
-	    }
+       //Wait for CPU thread to return control
+       if(CharType != MODEMSTATE && CharType != RXERROR)
+       {
+      WaitForSingleObject(current->RXControlObject, INFINITE);
+       }
 
-	    SignalledObj = 1;
-	}
-	else
-	    SignalledObj = (ULONG) -1;
+       SignalledObj = 1;
+   }
+   else
+       SignalledObj = (ULONG) -1;
     }
 }
 
@@ -1555,18 +1575,18 @@ void RX WaitForAllXOFFsToComplete(int adapter)
     int PendingXOFF;
 
     if(current->firstStatusBlock == NULL && current->lastStatusBlock == NULL)
-	return; //list of pending ioctrl's empty
+   return; //list of pending ioctrl's empty
 
     /*::::::::::::::::::::::: Wait for all pending xoff ioctl's to complete */
 
     do
     {
-	PendingXOFF = RemoveCompletedXOFFs(adapter);
+   PendingXOFF = RemoveCompletedXOFFs(adapter);
 
-	/*................................... Are there any ioctl's pending */
+   /*................................... Are there any ioctl's pending */
 
-	if(PendingXOFF)
-	    WaitForSingleObject(current->XOFFEvent,XOFF_TIMEOUT); // wait for ioctl
+   if(PendingXOFF)
+       WaitForSingleObject(current->XOFFEvent,XOFF_TIMEOUT); // wait for ioctl
     }
     while(PendingXOFF);
 }
@@ -1585,7 +1605,7 @@ BOOL RX RemoveCompletedXOFFs(int adapter)
     EnterCriticalSection(&current->CSEvent);
 
     PendingXOFF = RemoveCompletedIOCTLs(&current->firstStatusBlock,
-					&current->lastStatusBlock);
+               &current->lastStatusBlock);
 
     if(!PendingXOFF) current->XOFFInProgress = FALSE;
 
@@ -1602,7 +1622,7 @@ BOOL RX RemoveCompletedXOFFs(int adapter)
 void RXCPU host_com_lock(int adapter)
 {
     CURRENT_ADAPTER();
-    if(current->type != ADAPTER_REAL) return;	/* Exit, NULL adapter */
+    if(current->type != ADAPTER_REAL) return;   /* Exit, NULL adapter */
 
     EnterCriticalSection(&current->AdapterLock);
     current->AdapterLockCnt++;
@@ -1617,7 +1637,7 @@ void RXCPU host_com_unlock(int adapter)
     CURRENT_ADAPTER();
 
     if(current->type != ADAPTER_REAL || current->AdapterLockCnt == 0)
-	return; /* Exit, NULL adapter */
+   return; /* Exit, NULL adapter */
 
     current->AdapterLockCnt--;
     LeaveCriticalSection(&current->AdapterLock);
@@ -1634,9 +1654,9 @@ void RXCPU host_com_unlock(int adapter)
     if(current->SignalRXThread &&
        current->SignalRXThread == GetCurrentThreadId())
     {
-	current->RX_in_Control = TRUE;
-	SetEvent(current->RXControlObject);
-	current->SignalRXThread = (DWORD) 0;
+   current->RX_in_Control = TRUE;
+   SetEvent(current->RXControlObject);
+   current->SignalRXThread = (DWORD) 0;
     }
 }
 
@@ -1656,59 +1676,59 @@ GLOBAL void CPU host_com_heart_beat()
 
     for(adapter = 0; adapter < (sizeof(host_com)/sizeof(HOST_COM)); adapter++)
     {
-	current = host_com_ptr[adapter]; /* Ptr to current adapter */
+   current = host_com_ptr[adapter]; /* Ptr to current adapter */
 
-	if(current->type == ADAPTER_NULL)
-	{
-	    if(current->ReOpenCounter) current->ReOpenCounter--;
-	}
-	else if (current->type == ADAPTER_REAL)
-	{
-	    if(current->no_tx_chars) FlushTXBuffer(adapter,TIMER_TRIGGER);
-	    current->tx_heart_beat_count++;
+   if(current->type == ADAPTER_NULL)
+   {
+       if(current->ReOpenCounter) current->ReOpenCounter--;
+   }
+   else if (current->type == ADAPTER_REAL)
+   {
+       if(current->no_tx_chars) FlushTXBuffer(adapter,TIMER_TRIGGER);
+       current->tx_heart_beat_count++;
 
-	    if(current->RXFlushTrigger == 0 && !current->CharReadFromUART)
-		EmptyRXBuffer(adapter); //Empty RX buffer
-	    else
-		if(current->CharReadFromUART)
-		{
-		    current->RXFlushTrigger = 0;        //Force trigger reset
-		    current->CharReadFromUART = FALSE;
-		}
+       if(current->RXFlushTrigger == 0 && !current->CharReadFromUART)
+      EmptyRXBuffer(adapter); //Empty RX buffer
+       else
+      if(current->CharReadFromUART)
+      {
+          current->RXFlushTrigger = 0;        //Force trigger reset
+          current->CharReadFromUART = FALSE;
+      }
 
-	    //Update RX flush trigger counter
-	    if(--current->RXFlushTrigger < 0)
-	       current->RXFlushTrigger = RXFLUSHTRIGGER;
-	    /* if auto close is enable, decrement the counter and
-	     * suspend the adapter is time out
-	     */
+       //Update RX flush trigger counter
+       if(--current->RXFlushTrigger < 0)
+          current->RXFlushTrigger = RXFLUSHTRIGGER;
+       /* if auto close is enable, decrement the counter and
+        * suspend the adapter is time out
+        */
 
-	    if (current->SuspendTimeoutTicks) {
-		TickCount = GetTickCount();
+       if (current->SuspendTimeoutTicks) {
+      TickCount = GetTickCount();
 
-		if (current->TickCount) {
-		    current->SuspendTickCounter -= TickCount - current->TickCount;
-		}
-		else {
-		    /* we have not yet initialize the tick count yet,
-		     * presume that it is 55ms
-		     */
-		    current->SuspendTickCounter -= 55;
-		}
-		current->TickCount = TickCount;
+      if (current->TickCount) {
+          current->SuspendTickCounter -= TickCount - current->TickCount;
+      }
+      else {
+          /* we have not yet initialize the tick count yet,
+           * presume that it is 55ms
+           */
+          current->SuspendTickCounter -= 55;
+      }
+      current->TickCount = TickCount;
 
-		/* time out, suspend the port */
-		if (current->SuspendTickCounter <= 27) {
-		    /* make sure host_com_close won't reset the adapter because
-		     * we want to keep the adapter current states
-		     */
-		    current->Suspending = TRUE;
-		    host_com_close(adapter);
-		    current->Suspended = TRUE;
-		    current->Suspending = FALSE;
-		}
-	    }
-	}
+      /* time out, suspend the port */
+      if (current->SuspendTickCounter <= 27) {
+          /* make sure host_com_close won't reset the adapter because
+           * we want to keep the adapter current states
+           */
+          current->Suspending = TRUE;
+          host_com_close(adapter);
+          current->Suspended = TRUE;
+          current->Suspending = FALSE;
+      }
+       }
+   }
     }
 }
 
@@ -1726,53 +1746,53 @@ void CPU FlushTXBuffer(int adapter, FLUSHTYPE FlushReason)
     ScaleTXThreshold(current, FlushReason);
 
     if (current->SyncWrite) {
-	if (!WriteFile(current->handle, current->TXBuffer,
-		       current->no_tx_chars, &BytesWritten,
-		       &current->DWOV[0])) {
-	    error = GetLastError();
-	    if (error == ERROR_IO_PENDING) {
-		if (!GetOverlappedResult(current->handle,
-					 &current->DWOV[0],
-					 &BytesWritten,
-					 TRUE))
-		    error = GetLastError();
-		else
-		    error = ERROR_SUCCESS;
-	    }
-	}
-	if (error != ERROR_SUCCESS) {
-	    ClearCommError(current->handle, &error, NULL);
+   if (!WriteFile(current->handle, current->TXBuffer,
+             current->no_tx_chars, &BytesWritten,
+             &current->DWOV[0])) {
+       error = GetLastError();
+       if (error == ERROR_IO_PENDING) {
+      if (!GetOverlappedResult(current->handle,
+                &current->DWOV[0],
+                &BytesWritten,
+                TRUE))
+          error = GetLastError();
+      else
+          error = ERROR_SUCCESS;
+       }
+   }
+   if (error != ERROR_SUCCESS) {
+       ClearCommError(current->handle, &error, NULL);
 #ifndef PROD
-	    always_trace2("host_com_write error, adapter %d,%d\n", adapter, error);
+       always_trace2("host_com_write error, adapter %d,%d\n", adapter, error);
 #endif
-	}
-	tx_shift_register_empty(adapter);
-	current->no_tx_chars = 0;
-	return;
+   }
+   tx_shift_register_empty(adapter);
+   current->no_tx_chars = 0;
+   return;
     }
     /*...Clear pending writes on the OV structure that we are about to use*/
 
     if(current->DWOV[current->DWOVInx].hEvent)
     {
-	if(GetOverlappedResult(current->handle,
-			       &current->DWOV[current->DWOVInx],
-			       &BytesWritten,TRUE))
-	{
-	    error = 0;         /* Write successful */
-	}
-	else
-	{
-	    error = GetLastError();
-	}
+   if(GetOverlappedResult(current->handle,
+                &current->DWOV[current->DWOVInx],
+                &BytesWritten,TRUE))
+   {
+       error = 0;         /* Write successful */
+   }
+   else
+   {
+       error = GetLastError();
+   }
 
 #ifndef PROD
-	if(error)
-	    always_trace2("host_com_write error, adapter %d,%d\n",adapter,error);
+   if(error)
+       always_trace2("host_com_write error, adapter %d,%d\n",adapter,error);
 #endif
 
     }
     else
-	current->DWOV[current->DWOVInx].hEvent = current->TXEvent[current->DWOVInx];
+   current->DWOV[current->DWOVInx].hEvent = current->TXEvent[current->DWOVInx];
 
     /*..................................................... Write characters */
 
@@ -1780,18 +1800,18 @@ void CPU FlushTXBuffer(int adapter, FLUSHTYPE FlushReason)
     if(!WriteFile(current->handle, current->TXBuffer, current->no_tx_chars,
        &BytesWritten, &current->DWOV[current->DWOVInx]))
     {
-	if((error = GetLastError()) == ERROR_IO_PENDING)
-	    error = 0;         //ignore IO PENDING
+   if((error = GetLastError()) == ERROR_IO_PENDING)
+       error = 0;         //ignore IO PENDING
 
-	/* Reset comms port, clear error */
-	if(error)
-	{
-	    ClearCommError(current->handle,&error,NULL);
+   /* Reset comms port, clear error */
+   if(error)
+   {
+       ClearCommError(current->handle,&error,NULL);
 #ifndef PROD
-	    always_trace2("host_com_write error, adapter %d,%d\n",adapter,
-			  error);
+       always_trace2("host_com_write error, adapter %d,%d\n",adapter,
+           error);
 #endif
-	}
+   }
     }
 
     if(++current->DWOVInx == MAX_PENDING_WRITES) current->DWOVInx =0;
@@ -1808,76 +1828,76 @@ void ScaleTXThreshold(register HOST_COM *current,FLUSHTYPE FlushReason)
 
     if(FlushReason != TIMER_TRIGGER)
     {
-	current->tx_timer_flush_count = 0;
-	current->todate_timer_flush_total = 0;
+   current->tx_timer_flush_count = 0;
+   current->todate_timer_flush_total = 0;
     }
 
     /*....................................................................*/
 
     switch(FlushReason)
     {
-	// Comms heart beat caused flush
+   // Comms heart beat caused flush
 
-	case TIMER_TRIGGER:
-	    //printf("T%d",current->no_tx_chars);
-	    if(++current->tx_timer_flush_count == 3)
-	    {
-		//printf("X");
-		// three consecutive timer trigged flushes, this maybe because
-		// the TX threshold is to high. If the threshold is to high
-		// then we are wasting time waiting for the communications
-		// heart beat to flush the buffer. Reduce TX threshold.
+   case TIMER_TRIGGER:
+       //printf("T%d",current->no_tx_chars);
+       if(++current->tx_timer_flush_count == 3)
+       {
+      //printf("X");
+      // three consecutive timer trigged flushes, this maybe because
+      // the TX threshold is to high. If the threshold is to high
+      // then we are wasting time waiting for the communications
+      // heart beat to flush the buffer. Reduce TX threshold.
 
-		current->todate_timer_flush_total += current->no_tx_chars;
-		current->tx_threshold = current->todate_timer_flush_total/3;
+      current->todate_timer_flush_total += current->no_tx_chars;
+      current->tx_threshold = current->todate_timer_flush_total/3;
 
-		//printf("[%dT]",current->tx_threshold);
+      //printf("[%dT]",current->tx_threshold);
 
-		// Reset TXFULL_TRIGGER control variables
-		current->tx_heart_beat_count = 0;
-		current->tx_flush_count = 0;
+      // Reset TXFULL_TRIGGER control variables
+      current->tx_heart_beat_count = 0;
+      current->tx_flush_count = 0;
 
-		// Reset TIMER_TRIGGER control variables
-		current->tx_timer_flush_count = 0;
-		current->todate_timer_flush_total = 0;
-	    }
-	    else
-	    {
-		current->todate_timer_flush_total += current->no_tx_chars;
-	    }
+      // Reset TIMER_TRIGGER control variables
+      current->tx_timer_flush_count = 0;
+      current->todate_timer_flush_total = 0;
+       }
+       else
+       {
+      current->todate_timer_flush_total += current->no_tx_chars;
+       }
 
-	    break;
+       break;
 
-	// TX threshold reached
+   // TX threshold reached
 
-	case TXFULL_TRIGGER:
+   case TXFULL_TRIGGER:
 
-	    //printf("F");
-	    //TX scaling trigger triggered ?????
-	    if(current->tx_heart_beat_count <= 3 &&
-	       current->tx_flush_count++ == TX_SCALING_TRIGGER)
-	    {
-		current->tx_threshold = current->tx_threshold*2 > current->max_tx_threshold
-					? current->max_tx_threshold
-					: current->tx_threshold*2;
+       //printf("F");
+       //TX scaling trigger triggered ?????
+       if(current->tx_heart_beat_count <= 3 &&
+          current->tx_flush_count++ == TX_SCALING_TRIGGER)
+       {
+      current->tx_threshold = current->tx_threshold*2 > current->max_tx_threshold
+               ? current->max_tx_threshold
+               : current->tx_threshold*2;
 
-		//printf("[%dF]",current->tx_threshold);
-		current->tx_flush_count = 0;
-	    }
-	    else
-		if(current->tx_heart_beat_count > 3)
-		{
-		    current->tx_heart_beat_count = 0;
-		    current->tx_flush_count = 0;
-		}
+      //printf("[%dF]",current->tx_threshold);
+      current->tx_flush_count = 0;
+       }
+       else
+      if(current->tx_heart_beat_count > 3)
+      {
+          current->tx_heart_beat_count = 0;
+          current->tx_flush_count = 0;
+      }
 
-	    break;
+       break;
 
-	// XOFF triggered or close triggered flush
+   // XOFF triggered or close triggered flush
 
-	case XOFF_TRIGGER:
-	case CLOSE_TRIGGER:
-	    break;
+   case XOFF_TRIGGER:
+   case CLOSE_TRIGGER:
+       break;
 
     } /* End of switch statement */
 }
@@ -1898,16 +1918,16 @@ void CPU host_com_EOI_hook(long adapter)
 
     if (!current->XOFFInProgress && current->bytes_in_rxwindow)
     {
-	while ((CharType = GetCharacterTypeInBuffer(current)) != RXBUFEMPTY){
-	    if (CharType == MODEMSTATE)
-		com_modem_change(adapter);
-	    else if (CharType == RXERROR)
-		    com_lsr_change(adapter);
-	    else {
-		com_recv_char((int) adapter);
-		return;
-	    }
-	}
+   while ((CharType = GetCharacterTypeInBuffer(current)) != RXBUFEMPTY){
+       if (CharType == MODEMSTATE)
+      com_modem_change(adapter);
+       else if (CharType == RXERROR)
+          com_lsr_change(adapter);
+       else {
+      com_recv_char((int) adapter);
+      return;
+       }
+   }
     }
     //Request host_com_unlock() to signal the RX thread. This will
     //return responsibility for interrupt generation to the RX thread.
@@ -1934,17 +1954,17 @@ void CPU host_com_poll(int adapter)
     /*:::::::::::::::::::::::::::::::::: Are we dealing with a null adapter */
 
     if(current->type != ADAPTER_REAL && !host_com_open(adapter))
-	return;                             /* Exit, unable to open adapter */
+   return;                             /* Exit, unable to open adapter */
 
     /*::::::::::::::::: Has an XOFF character stop the generation of ints */
 
     if(current->XOFFInProgress)
     {
-	// XOFF in process, pass no more characters to the base and return
-	// control to the RX thread.
+   // XOFF in process, pass no more characters to the base and return
+   // control to the RX thread.
 
-	current->SignalRXThread = GetCurrentThreadId();
-	return;
+   current->SignalRXThread = GetCurrentThreadId();
+   return;
     }
 
     // If the RX buffer is empty see if there are any characters hanging
@@ -1957,26 +1977,26 @@ void CPU host_com_poll(int adapter)
     if(current->bytes_in_rxbuf == 0 ||
        (CharType = GetCharacterTypeInBuffer(current)) == RXBUFEMPTY)
     {
-	current->SignalRXThread = GetCurrentThreadId();
+   current->SignalRXThread = GetCurrentThreadId();
     }
     else
     {
-	//Process modem state characters
-	while(CharType == MODEMSTATE || CharType == RXERROR)
-	{
-	    if (CharType == MODEMSTATE)
-		com_modem_change(adapter);
-	    else
-		com_lsr_change(adapter);
-	    CharType = GetCharacterTypeInBuffer(current);
-	}
+   //Process modem state characters
+   while(CharType == MODEMSTATE || CharType == RXERROR)
+   {
+       if (CharType == MODEMSTATE)
+      com_modem_change(adapter);
+       else
+      com_lsr_change(adapter);
+       CharType = GetCharacterTypeInBuffer(current);
+   }
 
-	if(CharType != RXBUFEMPTY)
-	{
-	    com_recv_char((int)adapter);
-	}
-	else
-	    current->SignalRXThread = GetCurrentThreadId();
+   if(CharType != RXBUFEMPTY)
+   {
+       com_recv_char((int)adapter);
+   }
+   else
+       current->SignalRXThread = GetCurrentThreadId();
     }
 }
 
@@ -1994,11 +2014,11 @@ void CPU host_com_da_int_change(int adapter, int data_int_state, int data_state)
 
     if(current->type != ADAPTER_REAL)
     {
-	// Only attempt to open a null adapter if data available interrupts
-	// are being enabled
+   // Only attempt to open a null adapter if data available interrupts
+   // are being enabled
 
-	if(data_int_state == 0 || !host_com_open(adapter))
-	    return;
+   if(data_int_state == 0 || !host_com_open(adapter))
+       return;
     }
 }
 
@@ -2020,34 +2040,34 @@ RXBUFCHARTYPE GetCharacterTypeInBuffer(register HOST_COM *current)
 
     if(current->buffer[tail_inx] == ESCAPECHAR && bytes_in_buf > 1)
     {
-	BUMP_TAIL_INX(tail_inx,bytes_in_buf);
+   BUMP_TAIL_INX(tail_inx,bytes_in_buf);
 
-	switch(current->buffer[tail_inx])
-	{
-	    case SERIAL_LSRMST_ESCAPE :
-		rtn = RXCHAR;
-		break;
+   switch(current->buffer[tail_inx])
+   {
+       case SERIAL_LSRMST_ESCAPE :
+      rtn = RXCHAR;
+      break;
 
-	    case SERIAL_LSRMST_LSR_NODATA :
-		rtn = bytes_in_buf > 1 ? RXERROR : RXBUFEMPTY;
-		break;
+       case SERIAL_LSRMST_LSR_NODATA :
+      rtn = bytes_in_buf > 1 ? RXERROR : RXBUFEMPTY;
+      break;
 
-	    case SERIAL_LSRMST_LSR_DATA :
-		rtn = bytes_in_buf > 2 ? CHARINERROR : RXBUFEMPTY;
-		break;
+       case SERIAL_LSRMST_LSR_DATA :
+      rtn = bytes_in_buf > 2 ? CHARINERROR : RXBUFEMPTY;
+      break;
 
-	    case SERIAL_LSRMST_MST :
-		rtn = bytes_in_buf > 1 ? MODEMSTATE : RXBUFEMPTY;
-		break;
-	    // receive an invalid escape id
-	    default:
-		rtn = UNKNOWN;
-		break;
-	}
+       case SERIAL_LSRMST_MST :
+      rtn = bytes_in_buf > 1 ? MODEMSTATE : RXBUFEMPTY;
+      break;
+       // receive an invalid escape id
+       default:
+      rtn = UNKNOWN;
+      break;
+   }
     }
     else
     {
-	rtn = current->buffer[tail_inx] == ESCAPECHAR ? RXBUFEMPTY : RXCHAR;
+   rtn = current->buffer[tail_inx] == ESCAPECHAR ? RXBUFEMPTY : RXCHAR;
     }
 
     return(rtn);
@@ -2057,77 +2077,77 @@ RXBUFCHARTYPE GetCharacterTypeInBuffer(register HOST_COM *current)
 //::::::::::::::::::::::::::::::::::::Get the next character from the RX buffer.
 
 void GetCharFromRXBuffer(register HOST_COM *current, RXBUFCHARTYPE type,
-			UCHAR *data, UCHAR *error)
+         UCHAR *data, UCHAR *error)
 {
     EnterCriticalSection(&current->CSEvent);
 
     switch(type)
     {
-	//................................................. Return modem status
+   //................................................. Return modem status
 
-	case MODEMSTATE :
-	    // Skip escape character and type marker
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+   case MODEMSTATE :
+       // Skip escape character and type marker
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
 
-	    *data = current->buffer[current->tail_inx];
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
-	    current->bytes_in_rxwindow -= 3;
-	    break;
+       *data = current->buffer[current->tail_inx];
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+       current->bytes_in_rxwindow -= 3;
+       break;
 
-	//.................................................... Return character
+   //.................................................... Return character
 
-	case RXCHAR :
-	    if(current->buffer[current->tail_inx] == ESCAPECHAR)
-	    {
-		//Skip ESCAPE character
-		BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
-		current->bytes_in_rxwindow--;
-		*data = ESCAPECHAR;
-	    }
-	    else
-		*data = current->buffer[current->tail_inx];
+   case RXCHAR :
+       if(current->buffer[current->tail_inx] == ESCAPECHAR)
+       {
+      //Skip ESCAPE character
+      BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+      current->bytes_in_rxwindow--;
+      *data = ESCAPECHAR;
+       }
+       else
+      *data = current->buffer[current->tail_inx];
 
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
-	    current->bytes_in_rxwindow--;
-	    break;
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+       current->bytes_in_rxwindow--;
+       break;
 
-	//...........................................Return character and error
+   //...........................................Return character and error
 
-	case CHARINERROR :
-	    // Skip escape character and type marker
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+   case CHARINERROR :
+       // Skip escape character and type marker
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
 
-	    *error = current->buffer[current->tail_inx];
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
-	    *data =  current->buffer[current->tail_inx];
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
-	    current->bytes_in_rxwindow -= 4;
-	    break;
+       *error = current->buffer[current->tail_inx];
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+       *data =  current->buffer[current->tail_inx];
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+       current->bytes_in_rxwindow -= 4;
+       break;
 
-	//................................Return line status error with no data
+   //................................Return line status error with no data
 
-	case RXERROR :
-	    // Skip escape character and type marker
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+   case RXERROR :
+       // Skip escape character and type marker
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
 
-	    // Get linr status error
-	    *error = current->buffer[current->tail_inx];
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
-	    current->bytes_in_rxwindow -= 3;
-	    break;
-	case UNKNOWN:
-	    // The only case we will hit an unknown type is unsupport escape
-	    // id. Dump the escape char, return the byte follows the escape
-	    // characater and post an overrun error
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
-	    *data = current->buffer[current->tail_inx];
-	    BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
-	    current->bytes_in_rxwindow -= 2;
-	    *error =  2;
-	    break;
+       // Get linr status error
+       *error = current->buffer[current->tail_inx];
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+       current->bytes_in_rxwindow -= 3;
+       break;
+   case UNKNOWN:
+       // The only case we will hit an unknown type is unsupport escape
+       // id. Dump the escape char, return the byte follows the escape
+       // characater and post an overrun error
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+       *data = current->buffer[current->tail_inx];
+       BUMP_TAIL_INX(current->tail_inx, current->bytes_in_rxbuf);
+       current->bytes_in_rxwindow -= 2;
+       *error =  2;
+       break;
 
     }
 
@@ -2143,25 +2163,25 @@ void CPU EmptyRXBuffer(int adapter)
 
     if(!current->RX_in_Control && current->SignalRXThread == (DWORD)0)
     {
-	always_trace0("Char not removed from UART, RX buffer flushed\n");
+   always_trace0("Char not removed from UART, RX buffer flushed\n");
 
-	host_com_lock(adapter);
+   host_com_lock(adapter);
 
-	while((CharType = GetCharacterTypeInBuffer(current)) != RXBUFEMPTY)
-	{
-	    if(CharType == MODEMSTATE)
-		com_modem_change(adapter);
-	    else if (CharType == RXERROR)
-		com_lsr_change(adapter);
-	    else
-		com_recv_char(adapter);
-	}
+   while((CharType = GetCharacterTypeInBuffer(current)) != RXBUFEMPTY)
+   {
+       if(CharType == MODEMSTATE)
+      com_modem_change(adapter);
+       else if (CharType == RXERROR)
+      com_lsr_change(adapter);
+       else
+      com_recv_char(adapter);
+   }
 
-	host_com_unlock(adapter);
+   host_com_unlock(adapter);
 
-	//Buffer empty return control to the RX thread
-	current->RX_in_Control = TRUE;
-	SetEvent(current->RXControlObject);
+   //Buffer empty return control to the RX thread
+   current->RX_in_Control = TRUE;
+   SetEvent(current->RXControlObject);
     }
 }
 
@@ -2190,8 +2210,8 @@ void host_com_state(int adapter)
 
     if(current->AdapterLock.DebugInfo)
     {
-	printf("Adapter CS count %d\n",current->AdapterLock.DebugInfo->ContentionCount);
-	printf("Data CS count    %d\n",current->CSEvent.DebugInfo->ContentionCount);
+   printf("Adapter CS count %d\n",current->AdapterLock.DebugInfo->ContentionCount);
+   printf("Data CS count    %d\n",current->CSEvent.DebugInfo->ContentionCount);
     }
 
     printf("Bytes RX to date %d\n",byte_count);

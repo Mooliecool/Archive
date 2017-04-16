@@ -14,13 +14,22 @@
 #include <mvdm.h>
 #include <ctype.h>
 #include <memory.h>
+#include "host_def.h"
 #include "oemuni.h"
 #include "nt_pif.h"
-#include "nt_uis.h"	  // For resource id
-
+#include "nt_uis.h"       // For resource id
+#include "dpmtbls.h"      // Dynamic Patch Module support
+#include "wowcmpat.h"
 
 VOID GetWowKernelCmdLine(VOID);
 extern ULONG fSeparateWow;
+#if defined(KOREA)
+//To fix HaNa spread sheet IME hot key problem
+//09/20/96 bklee. See mvdm\v86\monitor\i386\monitor.c
+BOOL bIgnoreExtraKbdDisable = FALSE;
+#endif
+
+extern PFAMILY_TABLE  *pgDpmVdmFamTbls;
 
 VOID cmdGetNextCmd (VOID)
 {
@@ -68,29 +77,58 @@ char    CmdLine[MAX_PATH];
 
         DeleteConfigFiles();   // get rid of the temp boot files
 
-	// When COMMAND.COM issues first cmdGetNextCmd, it has
-	// a completed environment already(cmdGetInitEnvironment),
-	// Therefore, we don't have to ask environment from BASE
-	cmdVDMEnvBlk.lpszzEnv = (PVOID)GetVDMAddr(FETCHWORD(pCMDInfo->EnvSeg),0);
+        // When COMMAND.COM issues first cmdGetNextCmd, it has
+        // a completed environment already(cmdGetInitEnvironment),
+        // Therefore, we don't have to ask environment from BASE
+        cmdVDMEnvBlk.lpszzEnv = (PVOID)GetVDMAddr(FETCHWORD(pCMDInfo->EnvSeg),0);
         cmdVDMEnvBlk.cchEnv = FETCHWORD(pCMDInfo->EnvSize);
 
-	//clear bits that track printer flushing
+        // Check BLASTER environment variable to determine if Sound Blaster
+        // emulation should be disabled.
+        cb = cmdGetEnvironmentVariable(NULL, "BLASTER", CmdLine, MAX_PATH);
+        if (cb !=0 && cb <= MAX_PATH) {
+            SbReinitialize(CmdLine, MAX_PATH);
+        }
+        //clear bits that track printer flushing
         host_lpt_flush_initialize();
+
+        // save ptr to global DPM tables for DOS
+        pgDpmDosFamTbls = DPMFAMTBLS();
+        InitGlobalDpmTables(pgDpmVdmFamTbls, NUM_VDM_FAMILIES_HOOKED);
     }
     else {
 
-	// program has terminated. If the termiation was issued from
-	// second(or later) instance of command.com(cmd.exe), don't
-	// reset the flag.
-	if (Exe32ActiveCount == 0)
+        // Get rid of all the SDB command line parameter stuff associated with
+        // the app compat flags.
+        if((cCmdLnParmStructs > 0) || dwDosCompatFlags) {
+
+            // Get rid of the Dynamic Patch tables for this task.
+            if(dwDosCompatFlags & WOWCF2_DPM_PATCHES) {
+
+                FreeTaskDpmSupport(DPMFAMTBLS(),
+                                   NUM_VDM_FAMILIES_HOOKED,
+                                   pgDpmDosFamTbls);
+            }
+
+            FreeCmdLnParmStructs(pCmdLnParms, cCmdLnParmStructs);
+
+            cCmdLnParmStructs = 0;
+            dwDosCompatFlags  = 0;
+        }
+
+        // program has terminated. If the termiation was issued from
+        // second(or later) instance of command.com(cmd.exe), don't
+        // reset the flag.
+        if (Exe32ActiveCount == 0)
             DontCheckDosBinaryType = FALSE;
 
-	// tell the base our new current directories (in ANSI)
-	// we don't do it on repeat call(the shell out case is handled in
-	// return exit code
+        // tell the base our new current directories (in ANSI)
+        // we don't do it on repeat call(the shell out case is handled in
+        // return exit code
         if (!IsRepeatCall) {
             cmdUpdateCurrentDirectories((BYTE)pCMDInfo->CurDrive);
-	}
+        }
+
 
         VDMInfo.VDMState = 0;
         if(!IsRepeatCall){
@@ -102,32 +140,39 @@ char    CmdLine[MAX_PATH];
                 nt_block_event_thread(0);
 
             if (DosSessionId) {
-		if (!pfdata.CloseOnExit){
-		    char  achTitle[MAX_PATH];
+                pRdrInfo = (PREDIRCOMPLETE_INFO) FETCHDWORD(pCMDInfo->pRdrInfo);
+                if (!pfdata.CloseOnExit){
+                    char  achTitle[MAX_PATH];
                     char  achInactive[60];     //should be plenty for 'inactive'
-		    strcpy (achTitle, "[");
+                    strcpy (achTitle, "[");
                     if (!LoadString(GetModuleHandle(NULL), EXIT_NO_CLOSE,
                                                               achInactive, 60))
-		        strcat (achTitle, "Inactive ");
+                        strcat (achTitle, "Inactive ");
                     else
                         strcat(achTitle, achInactive);
-		    cb = strlen(achTitle);
-		    // GetConsoleTitleA and SetConsoleTitleA
-		    // are working on OEM character set.
-		    GetConsoleTitleA(achTitle + cb, MAX_PATH - cb - 1);
-		    cb = strlen(achTitle);
-		    achTitle[cb] = ']';
-		    achTitle[cb + 1] = '\0';
-		    SetConsoleTitleA(achTitle);
-		    Sleep(INFINITE);
-		}
-		else {
-		    VdmExitCode = VDMInfo.ErrorCode;
-		    TerminateVDM();
-		}
+                    cb = strlen(achTitle);
+                    // GetConsoleTitleA and SetConsoleTitleA
+                    // are working on OEM character set.
+                    GetConsoleTitleA(achTitle + cb, MAX_PATH - cb - 1);
+                    cb = strlen(achTitle);
+                    achTitle[cb] = ']';
+                    achTitle[cb + 1] = '\0';
+                    SetConsoleTitleA(achTitle);
+                    // finish touch on redirection stuff
+                    cmdCheckCopyForRedirection (pRdrInfo, FALSE);
+                    Sleep(INFINITE);
+                }
+                else {
+                    // finish touch on redirection stuff
+                    // this will wait on the output thread if there
+                    // are any.
+                    cmdCheckCopyForRedirection (pRdrInfo, TRUE);
+                    VdmExitCode = VDMInfo.ErrorCode;
+                    TerminateVDM();
+                }
             }
             fBlock = TRUE;
-	}
+        }
     }
 
     if(IsRepeatCall) {
@@ -140,7 +185,7 @@ char    CmdLine[MAX_PATH];
 
     if (!IsFirstCall && !(VDMInfo.VDMState & ASKING_FOR_SECOND_TIME)) {
         pRdrInfo = (PREDIRCOMPLETE_INFO) FETCHDWORD(pCMDInfo->pRdrInfo);
-        if (cmdCheckCopyForRedirection (pRdrInfo) == FALSE)
+        if (!cmdCheckCopyForRedirection (pRdrInfo, FALSE))
             VDMInfo.ErrorCode = ERROR_NOT_ENOUGH_MEMORY;
     }
 
@@ -157,63 +202,63 @@ char    CmdLine[MAX_PATH];
     }
 
     /**
-	Merging environment is required if
-	(1). Not the first comamnd &&
-	(2). NTVDM is running on an existing console ||
-	     NTVDM has been shelled out.
+        Merging environment is required if
+        (1). Not the first comamnd &&
+        (2). NTVDM is running on an existing console ||
+             NTVDM has been shelled out.
         Note that WOW doesn't need enviornment merging.
     **/
     if (!DosEnvCreated && !IsFirstCall && (!DosSessionId || Exe32ActiveCount)) {
-	RtlZeroMemory(&MyVDMInfo, sizeof(VDMINFO));
-	MyVDMInfo.VDMState = ASKING_FOR_ENVIRONMENT | ASKING_FOR_DOS_BINARY;
-	if (IsRepeatCall) {
-	    MyVDMInfo.VDMState |= ASKING_FOR_SECOND_TIME;
-	    MyVDMInfo.ErrorCode = 0;
-	}
-	else
-	    MyVDMInfo.ErrorCode = VDMInfo.ErrorCode;
+        RtlZeroMemory(&MyVDMInfo, sizeof(VDMINFO));
+        MyVDMInfo.VDMState = ASKING_FOR_ENVIRONMENT | ASKING_FOR_DOS_BINARY;
+        if (IsRepeatCall) {
+            MyVDMInfo.VDMState |= ASKING_FOR_SECOND_TIME;
+            MyVDMInfo.ErrorCode = 0;
+        }
+        else
+            MyVDMInfo.ErrorCode = VDMInfo.ErrorCode;
         MyVDMInfo.Enviornment = lpszzVDMEnv32;
         MyVDMInfo.EnviornmentSize = (USHORT) cchVDMEnv32;
         if (!GetNextVDMCommand(&MyVDMInfo) && MyVDMInfo.EnviornmentSize > cchVDMEnv32) {
             MyVDMInfo.Enviornment = realloc(lpszzVDMEnv32, MyVDMInfo.EnviornmentSize);
             if (MyVDMInfo.Enviornment == NULL) {
-		RcErrorDialogBox(EG_MALLOC_FAILURE, NULL, NULL);
-		TerminateVDM();
-	    }
+                RcErrorDialogBox(EG_MALLOC_FAILURE, NULL, NULL);
+                TerminateVDM();
+            }
             lpszzVDMEnv32 = MyVDMInfo.Enviornment;
             cchVDMEnv32 = MyVDMInfo.EnviornmentSize;
-	    MyVDMInfo.VDMState = ASKING_FOR_DOS_BINARY | ASKING_FOR_ENVIRONMENT |
+            MyVDMInfo.VDMState = ASKING_FOR_DOS_BINARY | ASKING_FOR_ENVIRONMENT |
                                  ASKING_FOR_SECOND_TIME;
 
             MyVDMInfo.TitleLen =
-	    MyVDMInfo.DesktopLen =
+            MyVDMInfo.DesktopLen =
             MyVDMInfo.ReservedLen =
             MyVDMInfo.CmdSize =
             MyVDMInfo.AppLen =
             MyVDMInfo.PifLen =
             MyVDMInfo.CurDirectoryLen = 0;
             MyVDMInfo.ErrorCode = 0;
-	    if (!GetNextVDMCommand(&MyVDMInfo)) {
-		RcErrorDialogBox(EG_ENVIRONMENT_ERR, NULL, NULL);
-		TerminateVDM();
-	    }
-	}
+            if (!GetNextVDMCommand(&MyVDMInfo)) {
+                RcErrorDialogBox(EG_ENVIRONMENT_ERR, NULL, NULL);
+                TerminateVDM();
+            }
+        }
         if (!cmdCreateVDMEnvironment(&cmdVDMEnvBlk)) {
-	    RcErrorDialogBox(EG_ENVIRONMENT_ERR, NULL, NULL);
-	    TerminateVDM();
-	}
-	DosEnvCreated = TRUE;
+            RcErrorDialogBox(EG_ENVIRONMENT_ERR, NULL, NULL);
+            TerminateVDM();
+        }
+        DosEnvCreated = TRUE;
         VDMInfo.ErrorCode = 0;
     }
     if (cmdVDMEnvBlk.cchEnv > FETCHWORD(pCMDInfo->EnvSize)) {
         setAX((USHORT)cmdVDMEnvBlk.cchEnv);
-	setCF(1);
+        setCF(1);
         IsFirstCall = FALSE;
-	IsRepeatCall = TRUE;
-	return;
+        IsRepeatCall = TRUE;
+        return;
     }
     if (DosEnvCreated)
-	VDMInfo.VDMState |= ASKING_FOR_SECOND_TIME;
+        VDMInfo.VDMState |= ASKING_FOR_SECOND_TIME;
 
     if(!GetNextVDMCommand(&VDMInfo)){
        RcErrorDialogBox(EG_ENVIRONMENT_ERR, NULL, NULL);
@@ -246,7 +291,6 @@ char    CmdLine[MAX_PATH];
 
     cmdCheckForPIF (&VDMInfo);
 
-
     //
     // if forcedos, then don't check binary type on int 21 exec process,
     // so that child spawns stay in dos land. Begining with NT 4.0 forcedos.exe
@@ -256,30 +300,30 @@ char    CmdLine[MAX_PATH];
 
     DontCheckDosBinaryType = (VDMInfo.dwCreationFlags & CREATE_FORCEDOS) != 0;
 
-
     // convert exec path name to upper case. This is what command.com expect
-    if (_strupr(VDMInfo.AppName) == NULL) {
+    if(WOW32_strupr(VDMInfo.AppName) == NULL) {
        pSrc = VDMInfo.AppName;
-       while (*pSrc)
-	    *pSrc++ = (char)toupper((int)*pSrc);
+       while( *pSrc)
+              *pSrc++ = (char)toupper((int)*pSrc);
     }
+
     // figure out the extention type
     // at least one char for the base name plus
     // EXTENTION_STRING_LEN for the extention
     // plus the NULL char
     if (VDMInfo.AppLen > 1 + EXTENTION_STRING_LEN  + 1) {
-	pSrc = (PCHAR)VDMInfo.AppName + VDMInfo.AppLen - 5;
-	if (!strncmp(pSrc, EXE_EXTENTION_STRING, EXTENTION_STRING_LEN))
-	    STOREWORD(pCMDInfo->ExecExtType, EXE_EXTENTION);
-	else if (!strncmp(pSrc, COM_EXTENTION_STRING, EXTENTION_STRING_LEN))
-	    STOREWORD(pCMDInfo->ExecExtType, COM_EXTENTION);
-	else if (!strncmp(pSrc, BAT_EXTENTION_STRING, EXTENTION_STRING_LEN))
-	    STOREWORD(pCMDInfo->ExecExtType, BAT_EXTENTION);
-	else
-	    STOREWORD(pCMDInfo->ExecExtType, UNKNOWN_EXTENTION);
+        pSrc = (PCHAR)VDMInfo.AppName + VDMInfo.AppLen - 5;
+        if (!strncmp(pSrc, EXE_EXTENTION_STRING, EXTENTION_STRING_LEN))
+            STOREWORD(pCMDInfo->ExecExtType, EXE_EXTENTION);
+        else if (!strncmp(pSrc, COM_EXTENTION_STRING, EXTENTION_STRING_LEN))
+            STOREWORD(pCMDInfo->ExecExtType, COM_EXTENTION);
+        else if (!strncmp(pSrc, BAT_EXTENTION_STRING, EXTENTION_STRING_LEN))
+            STOREWORD(pCMDInfo->ExecExtType, BAT_EXTENTION);
+        else
+            STOREWORD(pCMDInfo->ExecExtType, UNKNOWN_EXTENTION);
     }
     else
-	STOREWORD(pCMDInfo->ExecExtType, UNKNOWN_EXTENTION);
+        STOREWORD(pCMDInfo->ExecExtType, UNKNOWN_EXTENTION);
 
     // tell command.com the length of the app full path name.
     STOREWORD(pCMDInfo->ExecPathSize, VDMInfo.AppLen);
@@ -292,6 +336,37 @@ char    CmdLine[MAX_PATH];
 
     // Copy filepart of AppName excluding extension to ccom's buffer
     pSrc = strrchr(VDMInfo.AppName, '\\');
+
+#if defined(KOREA)
+    // To fix HaNa spread sheet IME hotkey problem.
+    {
+    LPSTR pStrt, pEnd;
+    char  szModName[9];
+    SHORT len;
+
+    pStrt = pSrc;
+
+    if (pStrt==NULL)
+        pStrt = VDMInfo.AppName;
+    else
+        pStrt++;
+
+    if ( (pEnd = strchr (pStrt, '.')) == NULL) {
+        strncpy (szModName, pStrt, 9);
+        szModName[8] = '\0';
+    }
+    else {
+        len = (SHORT) (pEnd - pStrt);
+        if (len<=8) {
+            strncpy (szModName, pStrt, len);
+            szModName[len] = '\0';
+        }
+    }
+
+    bIgnoreExtraKbdDisable = !(strcmp("HANASP", szModName));
+
+    }
+#endif
     if (!pSrc) {
          pSrc = VDMInfo.AppName;
         }
@@ -316,7 +391,7 @@ char    CmdLine[MAX_PATH];
     // We do not strip leading white characters in the passed command line
     // so the application sees the original data.
     if (cb > 2)
-	*pDst++ = ' ';
+        *pDst++ = ' ';
 
     // append the command tail(at least, "\0xd\0xa")
     strncpy(pDst, CmdLine, cb + 1);
@@ -332,14 +407,14 @@ char    CmdLine[MAX_PATH];
 
 
     if (DosEnvCreated) {
-	VDMInfo.Enviornment = (PVOID)GetVDMAddr(FETCHWORD(pCMDInfo->EnvSeg),0);
-	RtlMoveMemory(VDMInfo.Enviornment,
-		      cmdVDMEnvBlk.lpszzEnv,
-		      cmdVDMEnvBlk.cchEnv
-		     );
-	STOREWORD(pCMDInfo->EnvSize,cmdVDMEnvBlk.cchEnv);
-	free(cmdVDMEnvBlk.lpszzEnv);
-	DosEnvCreated = FALSE;
+        VDMInfo.Enviornment = (PVOID)GetVDMAddr(FETCHWORD(pCMDInfo->EnvSeg),0);
+        RtlMoveMemory(VDMInfo.Enviornment,
+                      cmdVDMEnvBlk.lpszzEnv,
+                      cmdVDMEnvBlk.cchEnv
+                     );
+        STOREWORD(pCMDInfo->EnvSize,cmdVDMEnvBlk.cchEnv);
+        free(cmdVDMEnvBlk.lpszzEnv);
+        DosEnvCreated = FALSE;
     }
 
     STOREWORD(pCMDInfo->fBatStatus,(USHORT)VDMInfo.fComingFromBat);
@@ -361,6 +436,12 @@ char    CmdLine[MAX_PATH];
     *pSCS_ToSync = (CHAR)0xff;
     setCF(0);
 
+    // Get the app comapt flags & associated command line parameters from the
+    // app compat SDB for this app.
+    pCmdLnParms = InitVdmSdbInfo((LPCSTR)VDMInfo.AppName,
+                                 &dwDosCompatFlags,
+                                 &cCmdLnParmStructs);
+
     return;
 }
 
@@ -369,11 +450,9 @@ char    CmdLine[MAX_PATH];
 VOID GetWowKernelCmdLine(VOID)
 {
 CMDINFO UNALIGNED *pCMDInfo;
-PCHAR	 pch, pEnvStrings;
-PCHAR    pSlash;
-int      Len;
-LPSTR    pszCmdLine;
-
+PCHAR    pch;
+CHAR     szKrnl386[]="krnl386.exe";
+CHAR     szPath[MAX_PATH+1];
 
     DeleteConfigFiles();   // get rid of the temp boot files
     host_lpt_flush_initialize();
@@ -381,126 +460,57 @@ LPSTR    pszCmdLine;
     //
     // Only a few things need be set for WOW.
     //   1. NumDrives
-    //   2. Environment (get from current 32-bit env.)
-    //   3. Kernel CmdLine (get from ntvdm command tail)
-    //   4. Current drive
+    //   2. Kernel CmdLine (get from ntvdm command tail)
+    //   3. Current drive
     //
+    //  Command.com has setup correct enviroment block at
+    //  this moment, so don't bother to mess with environment stuff.
 
     pCMDInfo = (LPVOID) GetVDMAddr ((USHORT)getDS(),(USHORT)getDX());
     pCMDInfo->NumDrives = nDrives;
 
     //
-    // Get the process's environment into lpszzVDMEnv32 and count
-    // its size into cchVDMEnv32.
+    // We used to get the info from a command line parameter, which
+    // consisted of a fully qualified short path file name:
+    // "-a %SystemRoot%\system32\krnl386.exe".
+    //
+    // We now remove that parameter and simply assume that for
+    // wow we will use %SystemRoot%\system32\krnl386.exe
     //
 
-    pEnvStrings = pch = lpszzVDMEnv32 = GetEnvironmentStrings();
-    cchVDMEnv32 = 0;
-    while (pch[0] || pch[1]) {
-        cchVDMEnv32++;
-        pch++;
-    }
-    cchVDMEnv32 += 2;  // two terminating nulls not counted in loop.
-
     //
-    // Transform environment to suit VDM.  cmdCreateVDMEnvironment
-    // uses lpszzVDMEnv32 and cchVDMEnv32 as the source.
+    // Make sure we have enough space for the two strings concatenated.
+    // ulSystem32PathLen does not include the terminator, but
+    // sizeof( szKrnl386 ) does, so we only need one more for the '\'.
     //
-
-    if (!cmdCreateVDMEnvironment(&cmdVDMEnvBlk)) {
+    if (ulSystem32PathLen + 1 + sizeof (szKrnl386) > FETCHWORD(pCMDInfo->ExecPathSize)) {
         RcErrorDialogBox(EG_ENVIRONMENT_ERR, NULL, NULL);
         TerminateVDM();
     }
 
-    //
-    // Copy the transformed environment to real mode mem and then free it.
-    //
-
-    pch = (PVOID)GetVDMAddr(FETCHWORD(pCMDInfo->EnvSeg),0);
-    RtlMoveMemory(pch,
-                  cmdVDMEnvBlk.lpszzEnv,
-                  cmdVDMEnvBlk.cchEnv
-                 );
-    STOREWORD(pCMDInfo->EnvSize,cmdVDMEnvBlk.cchEnv);
-    free(cmdVDMEnvBlk.lpszzEnv);
-    // GetEnvironmentStrings needs us to call its corresponding function
-    // to free the memory it allocated.
-    FreeEnvironmentStrings(pEnvStrings);
-
-    //
-    // Get the command line parameter, which consists of a fully
-    // qualified short path file name: "-a %SystemRoot%\system32\krnl386.exe".
-    //
-    // Note that the first token of cmdline is "%SystemRoot%\system32\ntvdm ",
-    // and may be a long file name surrounded by quotes.
-    //
-    pszCmdLine = GetCommandLine();
-    if (pszCmdLine) {
-
-        // skip leading spaces
-        while (*pszCmdLine && !isgraph(*pszCmdLine)) {
-               pszCmdLine++;
-               }
-
-        // skip first token
-        if (*pszCmdLine == '"') {
-            pszCmdLine++;
-            while (*pszCmdLine && *pszCmdLine++ != '"')
-                   ;
-            }
-        else {
-            while (isgraph(*pszCmdLine)) {
-                   pszCmdLine++;
-                   }
-            }
-
-        // mov to beg of WowKernelPathName
-        pszCmdLine = strstr(pszCmdLine, " -a ");
-        pszCmdLine += 4;
-        while (*pszCmdLine && *pszCmdLine == ' ') {
-               pszCmdLine++;
-        }
-    }
-
-    if (!pszCmdLine || !*pszCmdLine) {
-        RcErrorDialogBox(EG_ENVIRONMENT_ERR, NULL, NULL);
-        TerminateVDM();
-    }
-
-
-    //
-    // Copy first token to ExecPath, and find the beg of the file part.
-    //
-    Len = FETCHWORD(pCMDInfo->ExecPathSize);
-    pch = (PVOID)GetVDMAddr(FETCHWORD(pCMDInfo->ExecPathSeg),
+    pch = (PCHAR)GetVDMAddr(FETCHWORD(pCMDInfo->ExecPathSeg),
                             FETCHWORD(pCMDInfo->ExecPathOff));
 
-    pSlash = pszCmdLine;
-    while (--Len && isgraph(*pszCmdLine)) {
-         if (*pszCmdLine == '\\') {
-             pSlash = pszCmdLine + 1;
-         }
-         *pch++ = *pszCmdLine++;
-    }
-    *pch = '\0';
-    pCMDInfo->ExecPathSize -= Len;
+    memcpy(pch, pszSystem32Path, ulSystem32PathLen);
+    *(pch + ulSystem32PathLen) = '\\';
+    memcpy(pch + ulSystem32PathLen + 1, szKrnl386, sizeof(szKrnl386));
+
+    pCMDInfo->ExecPathSize = (WORD)(ulSystem32PathLen + 1 + sizeof(szKrnl386));
     pCMDInfo->ExecExtType = EXE_EXTENTION; // for WOW, use EXE extention
-
-    pszCmdLine = pSlash;              // filepart begins here
-
 
     //
     // Copy filepart of first token and rest to CmdLine buffer
     //
-    Len = FETCHWORD(pCMDInfo->CmdLineSize);
     pch = (PVOID)GetVDMAddr(FETCHWORD(pCMDInfo->CmdLineSeg),
                             FETCHWORD(pCMDInfo->CmdLineOff));
 
-    while (--Len && *pszCmdLine) {
-         *pch++ = *pszCmdLine++;
+    if (FETCHWORD(pCMDInfo->CmdLineSize)<sizeof(szKrnl386)+2) {
+        RcErrorDialogBox(EG_ENVIRONMENT_ERR, NULL, NULL);
+        TerminateVDM();
     }
-    strcpy(pch, "\x0d\x0a");
 
+    memcpy(pch, szKrnl386, sizeof(szKrnl386)-1);
+    memcpy(pch+sizeof(szKrnl386)-1, "\x0d\x0a\0", 3);
 
     *pIsDosBinary = 1;
     IsRepeatCall = FALSE;
@@ -551,20 +561,20 @@ UINT  DriveType;
 
     if (DriveType == DRIVE_UNKNOWN || DriveType == DRIVE_NO_ROOT_DIR){
         SetEnvironmentVariableOem(EnvVar, NULL);
-	setCF(1);
-	setAX(0);
-	return;
+        setCF(1);
+        setAX(0);
+        return;
     }
 
     if((EnvVarLen = GetEnvironmentVariableOem (EnvVar,lpszCurDir,
                                             MAXIMUM_VDM_CURRENT_DIR+3)) == 0){
 
-	// if its not in env then and drive exist then we have'nt
-	// yet touched it.
+        // if its not in env then and drive exist then we have'nt
+        // yet touched it.
         strcpy(lpszCurDir, RootName);
         SetEnvironmentVariableOem (EnvVar,RootName);
-	setCF(0);
-	return;
+        setCF(0);
+        return;
     }
     if (EnvVarLen > MAXIMUM_VDM_CURRENT_DIR+3) {
         setCF(1);
@@ -583,7 +593,9 @@ UINT  DriveType;
  *                  for local drives.
  *
  *
- *  Entry - Client (DS:DX) - pointer to SCSINFO.
+ *  Entry - Client (DS:DX) - pointer to SCSINFO
+ *          Client (DS:BX) - pointer to SCS_Is_Dos_Binary
+ *          Client (DS:CX) - pointer to SCS_FDACCESS
  *
  *  EXIT  - None
  */
@@ -605,24 +617,24 @@ VOID cmdSetInfo (VOID)
 VOID cmdSetDirectories (PCHAR lpszzEnv, VDMINFO * pVdmInfo)
 {
 LPSTR   lpszVal;
-CHAR	ch, chDrive, achEnvDrive[] = "=?:";
+CHAR    ch, chDrive, achEnvDrive[] = "=?:";
 
     ch = pVdmInfo->CurDrive + 'A';
     if (pVdmInfo->CurDirectoryLen != 0){
-	SetCurrentDirectory(pVdmInfo->CurDirectory);
-	achEnvDrive[1] = ch;
-	SetEnvironmentVariable(achEnvDrive, pVdmInfo->CurDirectory);
+        SetCurrentDirectory(pVdmInfo->CurDirectory);
+        achEnvDrive[1] = ch;
+        SetEnvironmentVariable(achEnvDrive, pVdmInfo->CurDirectory);
     }
     if (lpszzEnv) {
         while(*lpszzEnv) {
-	    if(*lpszzEnv == '=' &&
-		    (chDrive = toupper(*(lpszzEnv+1))) >= 'A' &&
-		    chDrive <= 'Z' &&
-		    (*(PCHAR)((ULONG)lpszzEnv+2) == ':') &&
-		    chDrive != ch) {
-		    lpszVal = (PCHAR)((ULONG)lpszzEnv + 4);
-		    achEnvDrive[1] = chDrive;
-		    SetEnvironmentVariable (achEnvDrive,lpszVal);
+            if(*lpszzEnv == '=' &&
+                    (chDrive = (CHAR)toupper(*(lpszzEnv+1))) >= 'A' &&
+                    chDrive <= 'Z' &&
+                    (*(PCHAR)((ULONG)lpszzEnv+2) == ':') &&
+                    chDrive != ch) {
+                    lpszVal = (PCHAR)((ULONG)lpszzEnv + 4);
+                    achEnvDrive[1] = chDrive;
+                    SetEnvironmentVariable (achEnvDrive,lpszVal);
             }
             lpszzEnv = strchr(lpszzEnv,'\0');
             lpszzEnv++;
@@ -650,69 +662,6 @@ LPSTR   lpszCS;
     return;
 }
 
-
-VOID cmdSaveWorld (VOID)
-{
-#ifdef CHECK_IT_LATER
-SAVEWORLD VDMState;
-HANDLE  hFile;
-PCHAR   pVDM;
-DWORD   dwBytesWritten;
-
-    if(IsFirstVDMInSystem) {
-        IsFirstVDMInSystem = FALSE;
-        if ((hFile = CreateFile("c:\\nt\\bin86\\savevdm.wld",
-                            GENERIC_WRITE,
-                            0,
-                            NULL,
-                            OPEN_ALWAYS,
-                            0,
-                            NULL)) == (HANDLE)-1){
-            SaveWorldCreated = FALSE;
-            return;
-        }
-        VDMState.ax    =    getAX();
-        VDMState.bx    =    getBX();
-        VDMState.cx    =    getCX();
-        VDMState.dx    =    getDX();
-        VDMState.cs    =    getCS();
-        VDMState.ss    =    getSS();
-        VDMState.ds    =    getDS();
-        VDMState.es    =    getES();
-        VDMState.si    =    getSI();
-        VDMState.di    =    getDI();
-        VDMState.bp    =    getBP();
-        VDMState.sp    =    getSP();
-        VDMState.ip    =    getIP() + 1;
-        VDMState.flag  =    0;
-        VDMState.ImageSize = 1024*1024;
-
-        pVDM = (PVOID)GetVDMAddr(0,0);
-
-        if (WriteFile (hFile,
-                       (LPVOID)&VDMState,
-                       (DWORD)sizeof(VDMState),
-                       &dwBytesWritten,
-                       NULL) == FALSE){
-            SaveWorldCreated = FALSE;
-            CloseHandle(hFile);
-            return;
-        }
-
-        if (WriteFile (hFile,
-                       (LPVOID)pVDM,
-                       (DWORD)VDMState.ImageSize,
-                       &dwBytesWritten,
-                       NULL) == FALSE){
-            SaveWorldCreated = FALSE;
-            CloseHandle(hFile);
-            return;
-        }
-        CloseHandle(hFile);
-    }
-#endif
-    return;
-}
 
 
 /* cmdInitConsole - Let Video VDD know that it can start console output
@@ -749,32 +698,6 @@ USHORT cmdMapCodePage (ULONG CodePage)
 }
 
 
-
-/* GetWOWShortCutInfo - returns the startupinf.reserved field of
- *                      vdminfo for the first wow task.
- *
- * Input - Bufsize - pointer to bufsize
- *         Buf     - buffer where the info is returned
- *
- * Output
- *        Success - returns TRUE, BufSize has the length of buffer filled in
- *        Failure - returns FALSE, Bufsize has the required buffer size.
- */
-
-BOOL GetWOWShortCutInfo (PULONG Bufsize, PVOID Buf)
-{
-    if (*Bufsize >= VDMInfo.ReservedLen) {
-        *Bufsize =  VDMInfo.ReservedLen;
-        if (Bufsize)
-            strncpy (Buf, VDMInfo.Reserved, VDMInfo.ReservedLen);
-        return TRUE;
-    }
-    else {
-        *Bufsize =  VDMInfo.ReservedLen;
-        return FALSE;
-    }
-}
-
 VOID cmdUpdateCurrentDirectories(BYTE CurDrive)
 {
     DWORD cchRemain, cchCurDir;
@@ -791,8 +714,8 @@ VOID cmdUpdateCurrentDirectories(BYTE CurDrive)
     cchRemain = MAX_PATH;
     lpszCurDir = lpszzCurrentDirectories;
     if (lpszCurDir != NULL) {
-	Drive = 0;
-	// current directory is the first entry
+        Drive = 0;
+        // current directory is the first entry
         achName[1] = CurDrive + 'A';
         cchCurrentDirectories = GetEnvironmentVariable(
                                                         achName,
@@ -800,15 +723,15 @@ VOID cmdUpdateCurrentDirectories(BYTE CurDrive)
                                                         cchRemain
                                                       );
 
-	if (cchCurrentDirectories == 0 || cchCurrentDirectories > MAX_PATH) {
-	    free(lpszzCurrentDirectories);
-	    lpszzCurrentDirectories = NULL;
-	    cchCurrentDirectories = 0;
-	    return;
-	}
+        if (cchCurrentDirectories == 0 || cchCurrentDirectories > MAX_PATH) {
+            free(lpszzCurrentDirectories);
+            lpszzCurrentDirectories = NULL;
+            cchCurrentDirectories = 0;
+            return;
+        }
 
-	cchRemain -= ++cchCurrentDirectories;
-	// we got current directory already. Keep the drive number
+        cchRemain -= ++cchCurrentDirectories;
+        // we got current directory already. Keep the drive number
         lpszCurDir += cchCurrentDirectories;
 
         while (Drive < 26) {
@@ -857,25 +780,25 @@ VOID cmdUpdateCurrentDirectories(BYTE CurDrive)
                     }
                 }
             }
-	    // next drive
-	    Drive++;
+            // next drive
+            Drive++;
         }
 
 
-	lpszCurDir = lpszzCurrentDirectories;
-	// need space for the ending NULL and shrink the space if necessary
-	lpszzCurrentDirectories = (CHAR *) realloc(lpszCurDir, cchCurrentDirectories + 1);
-	if (lpszzCurrentDirectories != NULL && cchCurrentDirectories != 0){
-	    lpszzCurrentDirectories[cchCurrentDirectories++] = '\0';
-	    SetVDMCurrentDirectories(cchCurrentDirectories, lpszzCurrentDirectories);
-	    free(lpszzCurrentDirectories);
-	    lpszzCurrentDirectories = NULL;
-	    cchCurrentDirectories = 0;
-	}
-	else {
-	    free(lpszCurDir);
-	    cchCurrentDirectories = 0;
-	}
+        lpszCurDir = lpszzCurrentDirectories;
+        // need space for the ending NULL and shrink the space if necessary
+        lpszzCurrentDirectories = (CHAR *) realloc(lpszCurDir, cchCurrentDirectories + 1);
+        if (lpszzCurrentDirectories != NULL && cchCurrentDirectories != 0){
+            lpszzCurrentDirectories[cchCurrentDirectories++] = '\0';
+            SetVDMCurrentDirectories(cchCurrentDirectories, lpszzCurrentDirectories);
+            free(lpszzCurrentDirectories);
+            lpszzCurrentDirectories = NULL;
+            cchCurrentDirectories = 0;
+        }
+        else {
+            free(lpszCurDir);
+            cchCurrentDirectories = 0;
+        }
 
     }
 }
@@ -895,3 +818,51 @@ VOID cmdGetStartInfo (VOID)
     setAL((BYTE) (DosSessionId ? 1 : 0));
     return;
 }
+
+#ifdef DBCS     // this should go to US build also
+/* This SVC function changes the window title. This function get called
+ * from command.com when TSRs are installed and scs_cmdprompt is off
+ * (command.com does its prompt).
+ *
+ * Entry - Client (AL) = 0, restore bare title
+ *         Client (AL) != 1, set new program title,
+ *                           DS:SI point to a CRLF terminated program name
+ *
+ * Exit  - none
+ *
+ */
+
+ VOID cmdSetWinTitle(VOID)
+ {
+    static CHAR achCommandPrompt[64] = {'\0'};
+
+    CHAR    achBuf[256], *pch, *pch1;
+
+    if (achCommandPrompt[0] == '\0') {
+        if (!LoadString(GetModuleHandle(NULL),
+                        IDS_PROMPT,
+                        achCommandPrompt,
+                        64
+                       ))
+            strcpy(achCommandPrompt, "Command Prompt");
+
+    }
+    if (getAL() == 0)
+        SetConsoleTitleA(achCommandPrompt);
+    else {
+        pch = (CHAR *)GetVDMAddr(getDS(), getSI());
+        pch1 = strchr(pch, 0x0d);
+        if (pch1 == NULL)
+            SetConsoleTitleA(achCommandPrompt);
+        else {
+            *pch1 = '\0';
+            strcpy(achBuf, achCommandPrompt);
+            strcat(achBuf, " - ");
+            strncat(achBuf, pch,sizeof(achBuf) - strlen(achBuf));
+            achBuf[sizeof(achBuf)-1] = 0;
+            *pch1 = 0x0d;
+            SetConsoleTitleA(achBuf);
+        }
+    }
+ }
+#endif // DBCS

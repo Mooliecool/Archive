@@ -38,7 +38,11 @@ static char SccsID[]="@(#)sun4_a3cpu.c	1.2 5/24/91 Copyright Insignia Solutions 
 
 GLOBAL	quick_event_delays	host_delays;
 GLOBAL	host_addr Start_of_M_area;
+#ifdef CPU_40_STYLE
 GLOBAL	IHPE Length_of_M_area;
+#else
+GLOBAL  IU32 Length_of_M_area;
+#endif
 #ifdef A2CPU
 extern	void	route_on();
 extern	void	route_on_fragment_no_interrupt_check();
@@ -169,7 +173,7 @@ void setSTATUS(word flags)
     setCF(flags & 1);
 }
 
-/* 
+/*
  * Do the Iret for the benefit of the Iret hooks.
  * Unwind stack for flags, cs & ip.
  * Seems too simple - does the CPU require more cleanup information???
@@ -316,7 +320,7 @@ GLOBAL void InitNtCpuInfo IFN0()
     nt_cpu_info.ss = &GLOBAL_SsSel;
 
     /* EIP & flags, neither of which are likely to be very reliable. */
-    nt_cpu_info.eip = &GLOBAL_CleanedRec;
+    nt_cpu_info.eip = (IU32 *)&GLOBAL_CleanedRec;
     nt_cpu_info.flags = &GLOBAL_EFLAGS;
 
     nt_cpu_info.cr0 = &GLOBAL_R_CR0;

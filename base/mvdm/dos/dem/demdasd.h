@@ -2,7 +2,11 @@
 
 #pragma pack(1)
 
+#if defined(NEC_98) 
+#define MAX_FLOPPY_TYPE     7
+#else  // !NEC_98
 #define MAX_FLOPPY_TYPE     5
+#endif // !NEC_98
 typedef struct A_DISKIO {
     DWORD   StartSector;
     WORD    Sectors;
@@ -189,6 +193,10 @@ DWORD		TotalSectors;
 #define     FF_FDISK		5
 #define     FF_144		7
 #define     FF_288		9
+#if defined(NEC_98) 
+#define     FF_125              4                    
+#define     FF_640              2                    
+#endif // NEC_98
 #define DOS_DIR_ENTRY_LENGTH		   32
 #define DOS_DIR_ENTRY_LENGTH_SHIFT_COUNT    5
 
@@ -259,7 +267,11 @@ DWORD		TotalSectors;
 
 #define BIOS_DISKCHANGED	6
 
+#if defined(NEC_98) 
+#define BYTES_PER_SECTOR       1024                
+#else  // !NEC_98
 #define BYTES_PER_SECTOR	512
+#endif // !NEC_98
 
 VOID demDasdInit(VOID);
 VOID demFloppyInit(VOID);
@@ -298,4 +310,8 @@ BOOL   nt_fdisk_close(BYTE drive);
 extern PBDS	demBDS;
 extern BYTE	NumberOfFloppy, NumberOfFdisk;
 
+#if defined(NEC_98) 
+BOOL demIsDriveFloppy(BYTE DriveLog); // defined in demdasd.c
+#else  // !NEC_98
 #define demIsDriveFloppy(DriveLog)  (DriveLog < NumberOfFloppy)
+#endif // !NEC_98

@@ -126,9 +126,11 @@ static char SccsID[] = "@(#)printer.c	1.19 11/14/94 Copyright Insignia Solutions
  * ============================================================================
  */
 
+#ifndef NEC_98
 #define PRINTER_BIT_MASK	0x3	/* bits decoded from address bus */
 #define CONTROL_REG_MASK	0xE0;	/* unused bits drift to HIGH */
 #define STATUS_REG_MASK		0x07;	/* unused bits drift to HIGH */
+#endif // !NEC_98
 
 #define DATA_OFFSET	0		/* ouput register */
 #define STATUS_OFFSET	1		/* status register */
@@ -138,26 +140,50 @@ static char SccsID[] = "@(#)printer.c	1.19 11/14/94 Copyright Insignia Solutions
 #undef	ERROR
 #endif
 
+#if defined(NEC_98)
+static half_word output_reg;
+static half_word control_reg;
+#define NOTBUSY         (IU8)0x04
+
+static half_word status_reg;
+#define IR8             (IU8)0x08
+#define NOTPSTB         (IU8)0x80
+
+BOOL is_busy = TRUE;
+BOOL busy_flag = FALSE;
+int busy_count = 0;
+#define NEC98_BUSY 10
+#define NEC98_BUSY_COUNT 1
+
+BOOL    pstb_mask;
+#define PSTBM           0x40
+static int state;                       /* state control variable NEC98 */
+
+static sys_addr timeout_address = BIOS_NEC98_PR_TIME;
+static q_ev_handle handle_for_out_event;
+static q_ev_handle handle_for_outa_event;
+
+#else  // !NEC_98
 static half_word output_reg[NUM_PARALLEL_PORTS];
 static half_word control_reg[NUM_PARALLEL_PORTS];
-#define NOTBUSY		0x80
-#define ACK		0x40
-#define PEND		0x20
-#define SELECT		0x10
-#define ERROR		0x08
+#define NOTBUSY		(IU8)0x80
+#define ACK		(IU8)0x40
+#define PEND		(IU8)0x20
+#define SELECT		(IU8)0x10
+#define ERROR		(IU8)0x08
 
 static half_word status_reg[NUM_PARALLEL_PORTS];
-#define IRQ		0x10
-#define SELECT_IN	0x08
-#define INIT_P		0x04
-#define AUTO_FEED	0x02
-#define STROBE		0x01
+#define IRQ		(IU8)0x10
+#define SELECT_IN	(IU8)0x08
+#define INIT_P		(IU8)0x04
+#define AUTO_FEED	(IU8)0x02
+#define STROBE		(IU8)0x01
 
 LOCAL IU8 retryErrorCount = 0;   /* num status inb before clearing ERROR */
 
-static int state[NUM_PARALLEL_PORTS]; /* state control variable */
+static IU8 state[NUM_PARALLEL_PORTS]; /* state control variable */
 /*
- * set up arrays of all port addresses 
+ * set up arrays of all port addresses
  */
 static io_addr port_start[] = {LPT1_PORT_START,LPT2_PORT_START,LPT3_PORT_START};
 static io_addr port_end[] = {LPT1_PORT_END, LPT2_PORT_END, LPT3_PORT_END};
@@ -168,7 +194,9 @@ static sys_addr port_address[] = {LPT1_PORT_ADDRESS, LPT2_PORT_ADDRESS, LPT3_POR
 static sys_addr timeout_address[] = {LPT1_TIMEOUT_ADDRESS, LPT2_TIMEOUT_ADDRESS, LPT3_TIMEOUT_ADDRESS};
 static q_ev_handle handle_for_out_event[NUM_PARALLEL_PORTS];
 static q_ev_handle handle_for_outa_event[NUM_PARALLEL_PORTS];
+#endif // !NEC_98
 
+#ifndef NEC_98
 #if defined(NTVDM) && defined(MONITOR)
 /* sudeepb 24-Jan-1993 for printing performance for x86 */
 sys_addr lp16BitPrtBuf;
@@ -176,6 +204,7 @@ sys_addr lp16BitPrtId;
 sys_addr lp16BitPrtCount;
 sys_addr lp16BitPrtBusy;
 #endif
+#endif // !NEC_98
 
 #define STATE_READY     0
 #define STATE_OUT       1
@@ -217,7 +246,7 @@ LOCAL IBOOL psFlushEnabled[NUM_PARALLEL_PORTS];	/* TRUE if PostScript flushing
 
 /*
  * ============================================================================
- * Internal functions & macros 
+ * Internal functions & macros
  * ============================================================================
  */
 
@@ -232,6 +261,11 @@ LOCAL IBOOL psFlushEnabled[NUM_PARALLEL_PORTS];	/* TRUE if PostScript flushing
  * Defines and variables to handle tables stored in 16-bit code for NT
  * monitors.
  */
+#if defined(NEC_98)
+void printer_inb IPT2(io_addr, port, half_word *, value);
+void printer_outb IPT2(io_addr, port, half_word, value);
+void notbusy_check IPT0();
+#else  // !NEC_98
 #if defined(NTVDM) && defined(MONITOR)
 
 static BOOL intel_setup = FALSE;
@@ -265,41 +299,57 @@ static sys_addr state_addr;
 static void printer_inb IPT2(io_addr, port, half_word *, value);
 static void printer_outb IPT2(io_addr, port, half_word, value);
 static void notbusy_check IPT1(int,adapter);
-
+#endif // !NEC_98
 
 /*
  * ============================================================================
- * External functions 
+ * External functions
  * ============================================================================
  */
 
 void printer_post IFN1(int,adapter)
 {
+#if defined(NEC_98)
+        sas_storew(timeout_address, 0x00);
+#else  // !NEC_98
 	/*
 	 * Set up BIOS data area.
 	 */
 	sas_storew(port_address[adapter],(word)port_start[adapter]);
 	sas_store(timeout_address[adapter], (half_word)0x14 );		/* timeout */
+#endif // !NEC_98
 }
 
+#if defined(NEC_98)
+static void lpr_state_outa_event IFN1(long,adapter)
+{
+        state=STATE_READY;
+}
+
+void lpr_state_out_event IFN1(long,adapter)
+{
+        state=STATE_OUTA;
+        handle_for_outa_event=add_q_event_t(lpr_state_outa_event,HOST_PRINTER_DELAY,0);
+}
+#else  // !NEC_98
 #if defined(NTVDM) && defined(MONITOR)
-static void lpr_state_outa_event IFN1(long,adapter) 
-{ 
-	set_status(adapter, get_status(adapter) | ACK);
+static void lpr_state_outa_event IFN1(long,adapter)
+{
+	set_status(adapter, (IU8)(get_status(adapter) | ACK));
 	set_state(adapter, STATE_READY);
 }
 
 static void lpr_state_out_event IFN1(long,adapter)
 {
-	set_status(adapter, get_status(adapter) & ~ACK);
-	set_state(adapter, STATE_OUTA); 
-	handle_for_outa_event[adapter]=add_q_event_t(lpr_state_outa_event,HOST_PRINTER_DELAY,adapter); 
-} 
+	set_status(adapter, (IU8)(get_status(adapter) & ~ACK));
+	set_state(adapter, STATE_OUTA);
+	handle_for_outa_event[adapter]=add_q_event_t(lpr_state_outa_event,HOST_PRINTER_DELAY,adapter);
+}
 
 #else	/* NTVDM && MONITOR */
 
-static void lpr_state_outa_event IFN1(long,adapter) 
-{ 
+static void lpr_state_outa_event IFN1(long,adapter)
+{
 	set_high(status_reg[adapter],ACK);
 	state[adapter]=STATE_READY;
 }
@@ -307,13 +357,19 @@ static void lpr_state_outa_event IFN1(long,adapter)
 static void lpr_state_out_event IFN1(long,adapter)
 {
 	set_low(status_reg[adapter], ACK);
-	state[adapter]=STATE_OUTA; 
-	handle_for_outa_event[adapter]=add_q_event_t(lpr_state_outa_event,HOST_PRINTER_DELAY,adapter); 
-} 
+	state[adapter]=STATE_OUTA;
+	handle_for_outa_event[adapter]=add_q_event_t(lpr_state_outa_event,HOST_PRINTER_DELAY,adapter);
+}
 #endif	/* NTVDM && MONITOR */
+#endif // !NEC_98
 
+#if defined(NEC_98)
+void printer_inb IFN2(io_addr,port, half_word *,value)
+#else  // !NEC_98
 static void printer_inb IFN2(io_addr,port, half_word *,value)
+#endif // !NEC_98
 {
+#ifndef NEC_98
 	int	adapter, i;
 
 	note_trace1(PRINTER_VERBOSE,"inb from printer port %#x ",port);
@@ -328,13 +384,26 @@ static void printer_inb IFN2(io_addr,port, half_word *,value)
         adapter = i % NUM_PARALLEL_PORTS;
 		
 	port = port & PRINTER_BIT_MASK;		/* clear unused bits */
+#endif // !NEC_98
 
 	switch(port)
 	{
+#if defined(NEC_98)
+        case LPT1_READ_DATA:
+                *value = output_reg;
+#else  // !NEC_98
 	case DATA_OFFSET:
                 *value = output_reg[adapter];
+#endif // !NEC_98
 		break;
 
+#if defined(NEC_98)
+        case LPT1_READ_SIGNAL1:
+                notbusy_check();
+                *value = status_reg;
+                if(sas_hw_at(BIOS_NEC98_BIOS_FLAG+1)&0x80)
+                    *value |= 0x20;
+#else  // !NEC_98
 	case STATUS_OFFSET:
 		switch(get_state(adapter))
 		{
@@ -358,7 +427,7 @@ static void printer_inb IFN2(io_addr,port, half_word *,value)
                         if (retryErrorCount > 0)
                             retryErrorCount--;
                         else
-                            set_status(adapter, get_status(adapter) | ERROR);
+                            set_status(adapter, (IU8)(get_status(adapter) | ERROR));
 			break;
     	case STATE_OUT:
 			*value = get_status(adapter) | STATUS_REG_MASK;
@@ -382,27 +451,40 @@ static void printer_inb IFN2(io_addr,port, half_word *,value)
 #endif
 			break;
     	default:	
-			note_trace1(PRINTER_VERBOSE, 
-			            "<pinb() - unknown state %x>", 
+			note_trace1(PRINTER_VERBOSE,
+			            "<pinb() - unknown state %x>",
 			            get_state(adapter));
 			break;
 		}
+#endif // !NEC_98
 		break;
+#if defined(NEC_98)
+        case LPT1_READ_SIGNAL2:
+                *value = control_reg;
+#else  // !NEC_98
 	case CONTROL_OFFSET:
 		*value = get_control(adapter) | CONTROL_REG_MASK;
 		negate(*value, STROBE);
 		negate(*value, AUTO_FEED);
 		negate(*value, SELECT_IN);
+#endif // !NEC_98
 		break;
 	}
+#ifndef NEC_98
 	note_trace3(PRINTER_VERBOSE, "<pinb() %x, ret %x, state %x>",
 		    port, *value, get_state(adapter));
-
-
+#endif // !NEC_98
 }
 
+#if defined(NEC_98)
+void printer_outb IFN2(io_addr,port, half_word,value)
+#else  // !NEC_98
 static void printer_outb IFN2(io_addr,port, half_word,value)
+#endif // !NEC_98
 {
+#if defined(NEC_98)
+        half_word old_control;
+#else  // !NEC_98
 	int	adapter, i;
 	half_word old_control;
 #ifdef PC_CONFIG
@@ -472,15 +554,64 @@ static void printer_outb IFN2(io_addr,port, half_word,value)
 	case STATE_OUT:
 	case STATE_OUTA:
 	case STATE_READY:
+#endif // !NEC_98
 		switch(port)
 		{
+#if defined(NEC_98)
+                case LPT1_WRITE_DATA:
+                        output_reg = value;
+#else  // !NEC_98
 		case DATA_OFFSET:
 #if defined(NTVDM)
 			set_state(adapter, STATE_DATA);
 #endif
 			/* Write char to internal buffer */
 			output_reg[adapter] = value;
+#endif // !NEC_98
 			break;
+#if defined(NEC_98)
+                case LPT1_WRITE_SIGNAL2:
+                case LPT1_WRITE_SIGNAL1:
+                        old_control = control_reg;
+                        if (port == LPT1_WRITE_SIGNAL2) {
+                            control_reg =(value & (IR8 | NOTPSTB));
+                        } else {
+                            switch (value >>1)
+                            {
+                            case 1:
+                            case 41:
+                                break;
+                            case 3:
+                                if (value & 0x01)
+                                    set_high(control_reg ,IR8);
+                                else
+                                    set_low(control_reg, IR8);
+                                break;
+                            case 7:
+                                if (value & 0x01) {
+                                set_high(control_reg, NOTPSTB);
+//                                  is_busy = FALSE;
+                                    if (busy_count<1) {
+                                        status_reg |= NOTBUSY;
+                                        busy_flag=FALSE;
+                                    } else if (busy_count==NEC98_BUSY) {
+                                        busy_count=NEC98_BUSY_COUNT;
+                                        busy_flag=TRUE;
+                                    }
+                                } else {
+                                    set_low(control_reg, NOTPSTB);
+//                                  is_busy = TRUE;
+                                    busy_count=NEC98_BUSY;
+                                    status_reg &= ~NOTBUSY;
+                                    busy_flag=FALSE;
+                                }
+                                break;
+                            default:
+                                break;
+                            }
+                        }
+#else  // !NEC_98
+
 		case STATUS_OFFSET:
 			/* Not possible */
 			break;
@@ -489,6 +620,11 @@ static void printer_outb IFN2(io_addr,port, half_word,value)
 			/* Write control bits */
 			old_control = get_control(adapter);	/* Save old value to see what's changed */
 			set_control(adapter, value);
+#endif // !NEC_98
+#if defined(NEC_98)
+                        if (!pstb_mask) {
+                                if (high_low(old_control, value, NOTPSTB))
+#else  // !NEC_98
 			if (low_high(old_control, value, INIT_P))
 #ifdef PC_CONFIG
 				/* this was a call to host_print_doc - <chrisP 28Aug91> */
@@ -505,7 +641,9 @@ static void printer_outb IFN2(io_addr,port, half_word,value)
 					((value & AUTO_FEED) != 0));
 
 			if (low_high(old_control, value, STROBE))
+#endif // !NEC_98
 			{
+#ifndef NEC_98
 #if defined(NTVDM)
 			    if (get_state(adapter) == STATE_DONGLE) {
 				host_set_lpt_direct_access(adapter, FALSE);
@@ -517,6 +655,7 @@ static void printer_outb IFN2(io_addr,port, half_word,value)
 				set_state(adapter, STATE_READY);
 			    }
 #endif
+#endif // !NEC_98
 
 #ifdef PS_FLUSHING
 				/*
@@ -532,49 +671,74 @@ static void printer_outb IFN2(io_addr,port, half_word,value)
 				 	* Send the stored internal buffer to
 				 	* the printer
 				 	*/
+#if defined(NEC_98)
+                                        if(host_print_byte(output_reg) != FALSE)
+                                        {
+                                            status_reg &= ~NOTBUSY;
+                                            state=STATE_OUT;
+                                            handle_for_out_event=add_q_event_t(lpr_state_out_event,HOST_PRINTER_DELAY,0);
+                                        }
+#else  // !NEC_98
                                 	if(host_print_byte(adapter,output_reg[adapter]) == FALSE)
 					{
-				    		set_status(adapter, get_status(adapter) & ~ERROR); /* active Low */
+				    		set_status(adapter, (IU8)(get_status(adapter) & ~ERROR)); /* active Low */
 				    		/* NTVDM had here(?): set_status(adapter, ACK|PEND|SELECT|ERROR); */
 				    		/* two status inbs before we clear ERROR */
-				    		retryErrorCount = 2;  
+				    		retryErrorCount = 2;
 					}
 					else
 					{
                                     		/* clear ERROR condition */
-                                    		set_status(adapter, get_status(adapter) | ERROR);
+                                    		set_status(adapter, (IU8)(get_status(adapter) | ERROR));
 #if defined(NTVDM) && !defined(MONITOR)
 				    		set_low(status_reg[adapter], NOTBUSY);
 #else /* NTVDM && !MONITOR */
 				    		set_status(adapter,
-					       	get_status(adapter) & ~NOTBUSY);
+					       	(IU8)(get_status(adapter) & ~NOTBUSY));
 #endif /* NTVDM && !MONITOR */
 				    		set_state(adapter, STATE_OUT);
 #ifndef DELAYED_INTS
 				    		handle_for_out_event[adapter]=add_q_event_t(lpr_state_out_event,HOST_PRINTER_DELAY,adapter);
 #endif /* DELAYED_INTS */
 					}
+#endif // !NEC_98
 #ifdef PS_FLUSHING
 				}
 #endif	/* PS_FLUSHING */
 			}
+#if defined(NEC_98)
+                        else if (low_high(old_control, value, NOTPSTB)
+                                        && state == STATE_OUT)
+#else  // !NEC_98
 			else if (high_low(old_control, value, STROBE)
 				 	&& get_state(adapter) == STATE_OUT)
+#endif // !NEC_98
 			{
+#if defined(NEC_98)
+                                if (value & IR8)
+#else  // !NEC_98
 				if (value & IRQ)
+#endif // !NEC_98
 				{
 					/*
 					 * Application is using
 					 * interrupts, so we can't
-					 * rely on INBs being 
+					 * rely on INBs being
 					 * used to check the
 					 * printer status.
 					 */
+#if defined(NEC_98)
+                                        state =STATE_READY;
+                                        notbusy_check();
+                                }
+#else  // !NEC_98
 					set_state(adapter, STATE_READY);
 					notbusy_check(adapter);
+#endif // !NEC_98
 				}
 			}
 
+#ifndef NEC_98
 #if defined(NTVDM)
 			else if (low_high(old_control, value, IRQ) &&
 				 get_state(adapter) == STATE_DONGLE) {
@@ -584,20 +748,25 @@ static void printer_outb IFN2(io_addr,port, half_word,value)
 			}
 
 #endif
+#endif // !NEC_98
 
+#ifndef NEC_98
 #ifndef	PROD
 			if (old_control & IRQ)
 				note_trace1(PRINTER_VERBOSE, "Warning: LPT%d is being interrupt driven\n",
 					number_for_adapter(adapter));
 #endif
+#endif // !NEC_98
 			break;
 		}
+#ifndef NEC_98
 		break;
 	default:	
 		note_trace1(PRINTER_VERBOSE, "<poutb() - unknown state %x>",
 		            get_state(adapter));
 		break;
 	}
+#endif // !NEC_98
 }
 
 void printer_status_changed IFN1(int,adapter)
@@ -606,16 +775,24 @@ void printer_status_changed IFN1(int,adapter)
 	            adapter);
 
 	/* check whether the printer has just changed state to NOTBUSY */
+#if defined(NEC_98)
+        notbusy_check();
+#else  // !NEC_98
 	notbusy_check(adapter);
+#endif // !NEC_98
 }
 
 /*
  * ============================================================================
- * Internal functions 
+ * Internal functions
  * ============================================================================
  */
 
+#if defined(NEC_98)
+void notbusy_check IFN0()
+#else  // !NEC_98
 static void notbusy_check IFN1(int,adapter)
+#endif // !NEC_98
 {
 	/*
 	 *	This function is used to detect when the printer
@@ -639,6 +816,35 @@ static void notbusy_check IFN1(int,adapter)
 	 */
 
 	/* <chrisP 11Sep91> allow not busy at leading edge of ack pulse too */
+#if defined(NEC_98)
+        if ( (state == STATE_READY
+             ||  state == STATE_OUTA)
+             && !(status_reg & NOTBUSY)
+             && !(host_lpt_status() & HOST_LPT_BUSY))
+        {
+#if 1
+            if(busy_count<1){
+                        status_reg |= NOTBUSY;
+                        busy_flag=FALSE;
+                }
+            else if(busy_count==NEC98_BUSY)status_reg &= ~NOTBUSY;
+            else {
+                status_reg &= ~NOTBUSY;
+                busy_count--;
+            }
+#else
+                if(is_busy)
+                        status_reg &= ~NOTBUSY;
+                else
+                        status_reg |= NOTBUSY;
+#endif
+
+                if (control_reg & IR8)
+                {
+                        ica_hw_interrupt(0, CPU_PRINTER_INT, 1);
+                }
+        }
+#else  // !NEC_98
 	if (	 (get_state(adapter) == STATE_READY ||
 #if defined(NTVDM)
 		  get_state(adapter) == STATE_DATA ||
@@ -650,7 +856,7 @@ static void notbusy_check IFN1(int,adapter)
 #if defined(NTVDM) && !defined(MONITOR)
 		set_high(status_reg[adapter], NOTBUSY);
 #else /* NTVDM && !MONITOR */
-		set_status(adapter, get_status(adapter) | NOTBUSY);
+		set_status(adapter, (IU8)(get_status(adapter) | NOTBUSY));
 #endif /* NTVDM && !MONITOR */
 
 #ifndef	PROD
@@ -663,6 +869,7 @@ static void notbusy_check IFN1(int,adapter)
 			ica_hw_interrupt(0, CPU_PRINTER_INT, 1);
 		}
 	}
+#endif // !NEC_98
 }
 #ifdef SEGMENTATION
 /*
@@ -678,6 +885,21 @@ static void notbusy_check IFN1(int,adapter)
 */
 void printer_init IFN1(int,adapter)
 {
+#if defined(NEC_98)
+        unsigned char ch;
+        io_define_inb( LPT1_ADAPTER, printer_inb );
+        io_define_outb( LPT1_ADAPTER, printer_outb );
+        io_connect_port( LPT1_READ_DATA, LPT1_ADAPTER, IO_READ_WRITE);
+        io_connect_port( LPT1_READ_SIGNAL1, LPT1_ADAPTER, IO_READ);
+        io_connect_port( LPT1_READ_SIGNAL2, LPT1_ADAPTER, IO_READ_WRITE);
+        io_connect_port( LPT1_WRITE_SIGNAL1, LPT1_ADAPTER, IO_READ_WRITE);
+        ch = sas_hw_at(BIOS_NEC98_BIOS_FLAG + 1);
+        ch &= 0x80;
+        status_reg = 0x94|(ch >>2);
+        control_reg = 0x80;
+        host_print_auto_feed(FALSE);
+        state=STATE_READY;
+#else  // !NEC_98
 	io_addr i;
 
 	io_define_inb( lpt_adapter[adapter], printer_inb );
@@ -723,6 +945,7 @@ void printer_init IFN1(int,adapter)
 #endif /* NTVDM && MONITOR */
 	    state[adapter] = STATE_READY;
 
+#endif // !NEC_98
 } /* end of printer_init() */
 
 #if defined(NTVDM) && defined(MONITOR)
@@ -736,6 +959,7 @@ void printer_setup_table(table_addr)
 sys_addr table_addr;
 #endif /* ANSI */
 {
+#ifndef NEC_98
     int i;
     sys_addr lp16BufSize;
     unsigned int cbBuf;
@@ -778,11 +1002,13 @@ sys_addr table_addr;
         lp16BitPrtBusy =  lp16BitPrtCount + 2;
 	intel_setup = TRUE;
     }
+#endif // !NEC_98
 }
 #endif /* NTVDM && MONITOR */
 
-#endif 
+#endif
 
+#ifndef NEC_98
 #ifdef NTVDM
 void printer_is_being_closed(int adapter)
 {
@@ -796,7 +1022,7 @@ void printer_is_being_closed(int adapter)
 }
 
 #endif
-
+#endif // !NEC_98
 
 #ifdef PS_FLUSHING
 /*(
@@ -834,3 +1060,42 @@ GLOBAL void printer_psflush_change IFN2(
             host_lpt_enable_autoflush(adapter);
 }
 #endif	/* PS_FLUSHING */
+
+#if defined(NEC_98)
+
+void NEC98_out_port_37 IFN1(half_word, value)
+{
+        if (value & 1)
+                pstb_mask = TRUE;
+        else
+                pstb_mask = FALSE;
+}
+
+void NEC98_out_port_35 IFN1(half_word, value)
+{
+        if (value & PSTBM)
+                pstb_mask = TRUE;
+        else
+                pstb_mask = FALSE;
+}
+
+void NEC98_in_port_35 IFN1(half_word *, value)
+{
+        if (pstb_mask)
+                *value |= PSTBM;
+        else
+                *value &= ~PSTBM;
+}
+
+void NEC98_lpt_busy_check(void)
+{
+        busy_flag=FALSE;
+        if(busy_count==NEC98_BUSY){
+                status_reg &= ~NOTBUSY;
+        } else {
+                busy_count=0;
+                status_reg |= NOTBUSY;
+        }
+}
+
+#endif // NEC_98
