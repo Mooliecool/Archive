@@ -34,6 +34,110 @@ SeverityNames=(Fatal=0x0)
 SeverityNames=(None=0x1)
 
 FacilityNames=(Kernel=0x0)
+FacilityNames=(HardwareProfile=0x1)
+
+MessageId=0x0001 Facility=HardwareProfile Severity=None SymbolicName=HARDWARE_PROFILE_UNDOCKED_STRING
+Language=English
+Undocked Profile
+.
+
+MessageId=0x0002 Facility=HardwareProfile Severity=None SymbolicName=HARDWARE_PROFILE_DOCKED_STRING
+Language=English
+Docked Profile
+.
+
+MessageId=0x0003 Facility=HardwareProfile Severity=None SymbolicName=HARDWARE_PROFILE_UNKNOWN_STRING
+Language=English
+Profile
+.
+
+MessageId=0x007E Facility=Kernel Severity=None SymbolicName=WINDOWS_NT_BANNER
+Language=English
+Microsoft (R) Windows (R) Version %hs (Build %u%hs)
+.
+
+MessageId=0x007F Facility=Kernel Severity=None SymbolicName=BUGCHECK_MESSAGE_INTRO
+Language=English
+A problem has been detected and Windows has been shut down to prevent damage
+to your computer.
+.
+
+MessageId=0x0080 Facility=Kernel Severity=None SymbolicName=BUGCODE_ID_DRIVER
+Language=English
+The problem seems to be caused by the following file:
+.
+
+MessageId=0x0081 Facility=Kernel Severity=None SymbolicName=PSS_MESSAGE_INTRO
+Language=English
+If this is the first time you've seen this Stop error screen,
+restart your computer. If this screen appears again, follow
+these steps:
+.
+
+MessageId=0x0082 Facility=Kernel Severity=None SymbolicName=BUGCODE_PSS_MESSAGE
+Language=English
+Check to make sure any new hardware or software is properly installed.
+If this is a new installation, ask your hardware or software manufacturer
+for any Windows updates you might need.
+
+If problems continue, disable or remove any newly installed hardware
+or software. Disable BIOS memory options such as caching or shadowing.
+If you need to use Safe Mode to remove or disable components, restart
+your computer, press F8 to select Advanced Startup Options, and then
+select Safe Mode.
+.
+
+MessageId=0x0083 Facility=Kernel Severity=None SymbolicName=BUGCHECK_TECH_INFO
+Language=English
+Technical Information:
+.
+
+MessageId=0x0087 Facility=Kernel Severity=None SymbolicName=WINDOWS_NT_CSD_STRING
+Language=English
+Service Pack
+.
+
+MessageId=0x0088 Facility=Kernel Severity=None SymbolicName=WINDOWS_NT_INFO_STRING
+Language=English
+%u System Processor [%u MB Memory] %Z
+.
+
+MessageId=0x0089 Facility=Kernel Severity=None SymbolicName=WINDOWS_NT_MP_STRING
+Language=English
+MultiProcessor Kernel
+.
+
+MessageId=0x008A Facility=Kernel Severity=None SymbolicName=THREAD_TERMINATE_HELD_MUTEX
+Language=English
+A kernel thread terminated while holding a mutex
+.
+
+MessageId=0x008B Facility=Kernel Severity=None SymbolicName=BUGCODE_PSS_CRASH_INIT
+Language=English
+Beginning dump of physical memory
+.
+
+MessageId=0x008C Facility=Kernel Severity=None SymbolicName=BUGCODE_PSS_CRASH_PROGRESS
+Language=English
+Dumping physical memory to disk
+.
+
+MessageId=0x008D Facility=Kernel Severity=None SymbolicName=BUGCODE_PSS_CRASH_DONE
+Language=English
+Physical memory dump complete.
+Contact your system administrator or technical support group for further
+assistance.
+.
+
+MessageId=0x009D Facility=Kernel Severity=None SymbolicName=WINDOWS_NT_INFO_STRING_PLURAL
+Language=English
+%u System Processors [%u MB Memory] %Z
+.
+
+MessageId=0x009E Facility=Kernel Severity=None SymbolicName=WINDOWS_NT_RC_STRING
+Language=English
+RC
+.
 
 MessageId=0x0001 Facility=Kernel Severity=Fatal SymbolicName=APC_INDEX_MISMATCH
 Language=English
@@ -113,7 +217,6 @@ Language=English
 
 MessageId=0x0014 Facility=Kernel Severity=Fatal SymbolicName=CREATE_DELETE_LOCK_NOT_LOCKED
 Language=English
-The thread reaper was handed a thread to reap, but the thread's process'
 .
 
 MessageId=0x0015 Facility=Kernel Severity=Fatal SymbolicName=LAST_CHANCE_CALLED_FROM_KMODE
@@ -388,8 +491,8 @@ MessageId=0x0058 Facility=Kernel Severity=Fatal SymbolicName=FTDISK_INTERNAL_ERR
 Language=English
 .
 
-MessageId=0x0059 Facility=Kernel Severity=Fatal
-SymbolicName=PINBALL_FILE_SYSTEM Language=English
+MessageId=0x0059 Facility=Kernel Severity=Fatal SymbolicName=PINBALL_FILE_SYSTEM
+Language=English
 .
 
 MessageId=0x005A Facility=Kernel Severity=Fatal SymbolicName=CRITICAL_SERVICE_FAILED
@@ -428,7 +531,6 @@ MessageId=0x0062 Facility=Kernel Severity=Fatal SymbolicName=OBJECT1_INITIALIZAT
 Language=English
 .
 
-
 MessageId=0x0063 Facility=Kernel Severity=Fatal SymbolicName=SECURITY1_INITIALIZATION_FAILED
 Language=English
 .
@@ -440,7 +542,6 @@ Language=English
 MessageId=0x0065 Facility=Kernel Severity=Fatal SymbolicName=MEMORY1_INITIALIZATION_FAILED
 Language=English
 .
-
 
 MessageId=0x0066 Facility=Kernel Severity=Fatal SymbolicName=CACHE_INITIALIZATION_FAILED
 Language=English
@@ -531,20 +632,16 @@ MessageId=0x007B Facility=Kernel Severity=Fatal SymbolicName=INACCESSIBLE_BOOT_D
 Language=English
 .
 
-MessageId=0x007C Facility=Kernel Severity=Fatal SymbolicName=BUGCODE_PSS_MESSAGE
+MessageId=0x007C Facility=Kernel Severity=Fatal SymbolicName=BUGCODE_NDIS_DRIVER
 Language=English
-Restart and set the recovery options in the system control panel
-or the /CRASHDEBUG system start option. If this message reappears,
-contact your system administrator or technical support group.
 .
 
 MessageId=0x007D Facility=Kernel Severity=Fatal SymbolicName=INSTALL_MORE_MEMORY
 Language=English
 .
 
-MessageId=0x007E Facility=Kernel Severity=None SymbolicName=WINDOWS_NT_BANNER
+MessageId=0x007E Facility=Kernel Severity=Fatal SymbolicName=SYSTEM_THREAD_EXCEPTION_NOT_HANDLED
 Language=English
-Windows OpenNT Version %s (Build %u%s)
 .
 
 MessageId=0x007F Facility=Kernel Severity=Fatal SymbolicName=UNEXPECTED_KERNEL_MODE_TRAP
@@ -560,45 +657,25 @@ MessageId=0x0081 Facility=Kernel Severity=Fatal SymbolicName=SPIN_LOCK_INIT_FAIL
 Language=English
 .
 
-MessageId=0x082 Facility=Kernel Severity=Fatal SymbolicName=DFS_FILE_SYSTEM
+MessageId=0x0082 Facility=Kernel Severity=Fatal SymbolicName=DFS_FILE_SYSTEM
 Language=English
 .
 
-MessageId=0x083 Facility=Kernel Severity=Fatal SymbolicName=OFS_FILE_SYSTEM
+MessageId=0x0083 Facility=Kernel Severity=Fatal SymbolicName=OFS_FILE_SYSTEM
 Language=English
 .
 
-MessageId=0x084 Facility=Kernel Severity=Fatal SymbolicName=RECOM_DRIVER
+MessageId=0x0084 Facility=Kernel Severity=Fatal SymbolicName=RECOM_DRIVER
 Language=English
 .
 
-MessageId=0x085 Facility=Kernel Severity=Fatal SymbolicName=SETUP_FAILURE
+MessageId=0x0085 Facility=Kernel Severity=Fatal SymbolicName=SETUP_FAILURE
 Language=English
 .
 
-MessageId=0x086 Facility=Kernel Severity=Fatal SymbolicName=AUDIT_FAILURE
+MessageId=0x0086 Facility=Kernel Severity=Fatal SymbolicName=AUDIT_FAILURE
 Language=English
 Audit attempt has failed.
-.
-
-MessageId=0x0087 Facility=Kernel Severity=None SymbolicName=WINDOWS_NT_CSD_STRING
-Language=English
-Service Pack
-.
-
-MessageId=0x0088 Facility=Kernel Severity=None SymbolicName=WINDOWS_NT_INFO_STRING
-Language=English
-%u System Processor [%u MB Memory] %Z
-.
-
-MessageId=0x0089 Facility=Kernel Severity=None SymbolicName=WINDOWS_NT_MP_STRING
-Language=English
-MultiProcessor Kernel
-.
-
-MessageId=0x008A Facility=Kernel Severity=None SymbolicName=THREAD_TERMINATE_HELD_MUTEX
-Language=English
-A kernel thread terminated while holding a mutex
 .
 
 MessageId=0x008B Facility=Kernel Severity=Fatal SymbolicName=MBR_CHECKSUM_MISMATCH
@@ -606,20 +683,8 @@ Language=English
 This system may be infected with a virus.
 .
 
-MessageId=0x008C Facility=Kernel Severity=Fatal SymbolicName=BUGCODE_PSS_CRASH_INIT
+MessageId=0x008E Facility=Kernel Severity=Fatal SymbolicName=KERNEL_MODE_EXCEPTION_NOT_HANDLED
 Language=English
-Beginning dump of physical memory
-.
-
-MessageId=0x008D Facility=Kernel Severity=Fatal SymbolicName=BUGCODE_PSS_CRASH_PROGRESS
-Language=English
-Dumping physical memory to disk
-.
-
-MessageId=0x008E Facility=Kernel Severity=Fatal SymbolicName=BUGCODE_PSS_CRASH_DONE
-Language=English
-Physical memory dump complete.  Contact your system administrator or
-technical support group.
 .
 
 MessageId=0x008F Facility=Kernel Severity=Fatal SymbolicName=PP0_INITIALIZATION_FAILED
@@ -678,14 +743,542 @@ MessageId=0x009C Facility=Kernel Severity=Fatal SymbolicName=MACHINE_CHECK_EXCEP
 Language=English
 .
 
-MessageId=0x009D Facility=Kernel Severity=None SymbolicName=WINDOWS_NT_INFO_STRING_PLURAL
+MessageId=0x009E Facility=Kernel Severity=Fatal SymbolicName=USER_MODE_HEALTH_MONITOR
 Language=English
-%u System Processors [%u MB Memory] %Z
+One or more critical user mode components failed to satisfy a health check.
 .
 
-MessageId=0x009E Facility=Kernel Severity=None SymbolicName=WINDOWS_NT_RC_STRING
+MessageId=0x009F Facility=Kernel Severity=Fatal SymbolicName=DRIVER_POWER_STATE_FAILURE
 Language=English
-RC
 .
 
+MessageId=0x00A0 Facility=Kernel Severity=Fatal SymbolicName=INTERNAL_POWER_ERROR
+Language=English
+.
+
+MessageId=0x00A1 Facility=Kernel Severity=Fatal SymbolicName=PCI_BUS_DRIVER_INTERNAL
+Language=English
+Inconsistency detected in the PCI Bus driver's internal structures.
+.
+
+MessageId=0x00A2 Facility=Kernel Severity=Fatal SymbolicName=MEMORY_IMAGE_CORRUPT
+Language=English
+A CRC check on the memory range has failed
+.
+
+MessageId=0x00A3 Facility=Kernel Severity=Fatal SymbolicName=ACPI_DRIVER_INTERNAL
+Language=English
+.
+
+MessageId=0x00A4 Facility=Kernel Severity=Fatal SymbolicName=CNSS_FILE_SYSTEM_FILTER
+Language=English
+Internal inconsistency while representing
+Ntfs Structured Storage as a DOCFILE.
+.
+
+MessageId=0x00A5 Facility=Kernel Severity=Fatal SymbolicName=ACPI_BIOS_ERROR
+Language=English
+The BIOS in this system is not fully ACPI compliant.  Please contact your
+system vendor for an updated BIOS.  If you are unable to obtain an
+updated BIOS or the latest BIOS supplied by your vendor is not ACPI 
+compliant, you can turn off ACPI mode during textmode setup.  To do this, 
+press the F7 key when you are prompted to install storage drivers.  The 
+system will not notify you that the F7 key was pressed - it will silently
+disable ACPI and allow you to continue your installation.
+.
+
+MessageId=0x00A6 Facility=Kernel Severity=Fatal SymbolicName=FP_EMULATION_ERROR
+Language=English
+.
+
+MessageId=0x00A7 Facility=Kernel Severity=Fatal SymbolicName=BAD_EXHANDLE
+Language=English
+.
+
+MessageId=0x00A8 Facility=Kernel Severity=Fatal SymbolicName=BOOTING_IN_SAFEMODE_MINIMAL
+Language=English
+The system is booting in safemode - Minimal Services
+.
+
+MessageId=0x00A9 Facility=Kernel Severity=Fatal SymbolicName=BOOTING_IN_SAFEMODE_NETWORK
+Language=English
+The system is booting in safemode - Minimal Services with Network
+.
+
+MessageId=0x00AA Facility=Kernel Severity=Fatal SymbolicName=BOOTING_IN_SAFEMODE_DSREPAIR
+Language=English
+The system is booting in safemode - Directory Services Repair
+.
+
+MessageId=0x00AB Facility=Kernel Severity=Fatal SymbolicName=SESSION_HAS_VALID_POOL_ON_EXIT
+Language=English
+.
+
+MessageId=0x00AC Facility=Kernel Severity=Fatal SymbolicName=HAL_MEMORY_ALLOCATION
+Language=English
+Allocate from NonPaged Pool failed for a HAL critical allocation.
+.
+
+MessageId=0x00B4 Facility=Kernel Severity=Fatal SymbolicName=VIDEO_DRIVER_INIT_FAILURE
+Language=English
+The video driver failed to initialize
+.
+
+MessageId=0x00B5 Facility=Kernel Severity=Fatal SymbolicName=BOOTLOG_LOADED
+Language=English
+Loaded driver
+.
+
+MessageId=0x00B6 Facility=Kernel Severity=Fatal SymbolicName=BOOTLOG_NOT_LOADED
+Language=English
+Did not load driver
+.
+
+MessageId=0x00B7 Facility=Kernel Severity=Fatal SymbolicName=BOOTLOG_ENABLED
+Language=English
+Boot Logging Enabled
+.
+
+MessageId=0x00B8 Facility=Kernel Severity=Fatal SymbolicName=ATTEMPTED_SWITCH_FROM_DPC
+Language=English
+A wait operation, attach process, or yield was attempted from a DPC routine.
+.
+
+MessageId=0x00B9 Facility=Kernel Severity=Fatal SymbolicName=CHIPSET_DETECTED_ERROR
+Language=English
+A parity error in the system memory or I/O system was detected.
+.
+
+MessageId=0x00BA Facility=Kernel Severity=Fatal SymbolicName=SESSION_HAS_VALID_VIEWS_ON_EXIT
+Language=English
+.
+
+MessageId=0x00BB Facility=Kernel Severity=Fatal SymbolicName=NETWORK_BOOT_INITIALIZATION_FAILED
+Language=English
+An initialization failure occurred while attempting to boot from the network.
+.
+
+MessageId=0x00BC Facility=Kernel Severity=Fatal SymbolicName=NETWORK_BOOT_DUPLICATE_ADDRESS
+Language=English
+A duplicate IP address was assigned to this machine while attempting to
+boot from the network.
+.
+
+MessageId=0x00BD Facility=Kernel Severity=Fatal SymbolicName=INVALID_HIBERNATED_STATE
+Language=English
+The hibernated memory image does not match the current hardware configuration.
+.
+
+MessageId=0x00BE Facility=Kernel Severity=Fatal SymbolicName=ATTEMPTED_WRITE_TO_READONLY_MEMORY
+Language=English
+An attempt was made to write to read-only memory.
+.
+
+MessageId=0x00BF Facility=Kernel Severity=Fatal SymbolicName=MUTEX_ALREADY_OWNED
+Language=English
+.
+
+MessageId=0x00C0 Facility=Kernel Severity=Fatal SymbolicName=PCI_CONFIG_SPACE_ACCESS_FAILURE
+Language=English
+An attempt to access PCI configuration space failed.
+.
+
+MessageId=0x00C1 Facility=Kernel Severity=Fatal SymbolicName=SPECIAL_POOL_DETECTED_MEMORY_CORRUPTION
+Language=English
+.
+
+MessageId=0x00C2 Facility=Kernel Severity=Fatal SymbolicName=BAD_POOL_CALLER
+Language=English
+.
+
+MessageId=0x00C3 Facility=Kernel Severity=Fatal SymbolicName=BUGCODE_PSS_MESSAGE_SIGNATURE
+Language=English
+
+A system file that is owned by Windows was replaced by an application
+running on your system.  The operating system detected this and tried to
+verify the validity of the file's signature.  The operating system found that
+the file signature is not valid and put the original, correct file back
+so that your operating system will continue to function properly.
+.
+
+MessageId=0x00C4 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_VERIFIER_DETECTED_VIOLATION
+Language=English
+
+A device driver attempting to corrupt the system has been caught.
+The faulty driver currently on the kernel stack must be replaced
+with a working version.
+.
+
+MessageId=0x00C5 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_CORRUPTED_EXPOOL
+Language=English
+
+A device driver has corrupted the executive memory pool.
+
+Check to make sure any new hardware or software is properly installed.
+If this is a new installation, ask your hardware or software manufacturer
+for any Windows you might need.
+
+Run the driver verifier against any new (or suspect) drivers.
+If that doesn't reveal the corrupting driver, try enabling special pool.
+Both of these features are intended to catch the corruption at an earlier
+point where the offending driver can be identified.
+
+If you need to use Safe Mode to remove or disable components,
+restart your computer, press F8 to select Advanced Startup Options,
+and then select Safe Mode.
+.
+
+MessageId=0x00C6 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_CAUGHT_MODIFYING_FREED_POOL
+Language=English
+
+A device driver attempting to corrupt the system has been caught.
+The faulty driver currently on the kernel stack must be replaced
+with a working version.
+.
+
+MessageId=0x00C7 Facility=Kernel Severity=Fatal SymbolicName=TIMER_OR_DPC_INVALID
+Language=English
+
+A kernel timer or DPC was found in memory which must not contain such
+items.  Usually this is memory being freed.  This is usually caused by
+a device driver that has not cleaned up properly before freeing memory.
+.
+
+MessageId=0x00C8 Facility=Kernel Severity=Fatal SymbolicName=IRQL_UNEXPECTED_VALUE
+Language=English
+
+The processor's IRQL is not valid for the currently executing context.
+This is a software error condition and is usually caused by a device
+driver changing IRQL and not restoring it to its previous value when
+it has finished its task.
+.
+MessageId=0x00C9 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_VERIFIER_IOMANAGER_VIOLATION
+Language=English
+
+The IO manager has detected a violation by a driver that is being verified.
+The faulty driver that is being verified must be debugged and
+replaced with a working version.
+.
+MessageId=0x00CA Facility=Kernel Severity=Fatal SymbolicName=PNP_DETECTED_FATAL_ERROR
+Language=English
+
+Plug and Play detected an error most likely caused by a faulty driver.
+.
+
+MessageId=0x00CB Facility=Kernel Severity=Fatal SymbolicName=DRIVER_LEFT_LOCKED_PAGES_IN_PROCESS
+Language=English
+.
+
+MessageId=0x00CC Facility=Kernel Severity=Fatal SymbolicName=PAGE_FAULT_IN_FREED_SPECIAL_POOL
+Language=English
+
+The system is attempting to access memory after it has been freed.
+This usually indicates a system-driver synchronization issue.
+.
+
+MessageId=0x00CD Facility=Kernel Severity=Fatal SymbolicName=PAGE_FAULT_BEYOND_END_OF_ALLOCATION
+Language=English
+
+The system is attempting to access memory beyond the end of the allocation.
+This usually indicates a system-driver synchronization issue.
+.
+
+MessageId=0x00CE Facility=Kernel Severity=Fatal SymbolicName=DRIVER_UNLOADED_WITHOUT_CANCELLING_PENDING_OPERATIONS
+Language=English
+.
+
+MessageId=0x00CF Facility=Kernel Severity=Fatal SymbolicName=TERMINAL_SERVER_DRIVER_MADE_INCORRECT_MEMORY_REFERENCE
+Language=English
+.
+
+MessageId=0x00D0 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_CORRUPTED_MMPOOL
+Language=English
+.
+
+MessageId=0x00D1 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_IRQL_NOT_LESS_OR_EQUAL
+Language=English
+.
+
+MessageId=0x00D3 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_PORTION_MUST_BE_NONPAGED
+Language=English
+The driver mistakenly marked a part of it's image pagable instead of non-pageable.
+.
+
+MessageId=0x00D4 Facility=Kernel Severity=Fatal SymbolicName=SYSTEM_SCAN_AT_RAISED_IRQL_CAUGHT_IMPROPER_DRIVER_UNLOAD
+Language=English
+The driver unloaded without cancelling pending operations.
+.
+
+MessageId=0x00D5 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_PAGE_FAULT_IN_FREED_SPECIAL_POOL
+Language=English
+
+The driver is attempting to access memory after it has been freed.
+.
+
+MessageId=0x00D6 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_PAGE_FAULT_BEYOND_END_OF_ALLOCATION
+Language=English
+
+The driver is attempting to access memory beyond the end of the allocation.
+.
+
+MessageId=0x00D7 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_UNMAPPING_INVALID_VIEW
+Language=English
+
+The driver is attempting to unmap an invalid memory address.
+.
+
+MessageId=0x00D8 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_USED_EXCESSIVE_PTES
+Language=English
+
+The driver has used an excessive number of system PTEs.
+.
+
+MessageId=0x00D9 Facility=Kernel Severity=Fatal SymbolicName=LOCKED_PAGES_TRACKER_CORRUPTION
+Language=English
+
+The driver is corrupting the locked pages tracking structures.
+.
+
+MessageId=0x00DA Facility=Kernel Severity=Fatal SymbolicName=SYSTEM_PTE_MISUSE
+Language=English
+
+The driver is mismanaging system PTEs.
+.
+
+MessageId=0x00DB Facility=Kernel Severity=Fatal SymbolicName=DRIVER_CORRUPTED_SYSPTES
+Language=English
+
+A driver has corrupted the memory management system PTEs.
+.
+
+MessageId=0x00DC Facility=Kernel Severity=Fatal SymbolicName=DRIVER_INVALID_STACK_ACCESS
+Language=English
+
+A driver accessed a stack address that lies below the current stack pointer
+of the stack's thread.
+.
+
+MessageId=0x00DE Facility=Kernel Severity=Fatal SymbolicName=POOL_CORRUPTION_IN_FILE_AREA
+Language=English
+
+A driver corrupted pool memory used for holding pages destined for disk.
+.
+
+MessageId=0x00DF Facility=Kernel Severity=Fatal SymbolicName=IMPERSONATING_WORKER_THREAD
+Language=English
+
+A worker thread is impersonating another process. The work item forgot to
+disable impersonation before it returned.
+.
+
+MessageId=0x00E0 Facility=Kernel Severity=Fatal SymbolicName=ACPI_BIOS_FATAL_ERROR
+Language=English
+
+Your computer (BIOS) has reported that a component in your system is faulty and
+has prevented Windows from operating.  You can determine which component is
+faulty by running the diagnostic disk or tool that came with your computer.
+
+If you do not have this tool, you must contact your system vendor and report
+this error message to them.  They will be able to assist you in correcting this
+hardware problem thereby allowing Windows to operate.
+.
+
+MessageId=0x00E1 Facility=Kernel Severity=Fatal SymbolicName=WORKER_THREAD_RETURNED_AT_BAD_IRQL
+Language=English
+.
+
+MessageId=0x00E2 Facility=Kernel Severity=Fatal SymbolicName=MANUALLY_INITIATED_CRASH
+Language=English
+
+The end-user manually generated the crashdump.
+.
+
+MessageId=0x00E3 Facility=Kernel Severity=Fatal SymbolicName=RESOURCE_NOT_OWNED
+Language=English
+
+A thread tried to release a resource it did not own.
+.
+
+MessageId=0x00E4 Facility=Kernel Severity=Fatal SymbolicName=WORKER_INVALID
+Language=English
+
+A executive worker item was found in memory which must not contain such
+items.  Usually this is memory being freed.  This is usually caused by
+a device driver that has not cleaned up properly before freeing memory.
+.
+
+MessageId=0x00E5 Facility=Kernel Severity=Fatal SymbolicName=POWER_FAILURE_SIMULATE
+Language=English
+.
+
+MessageId=0x00E6 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_VERIFIER_DMA_VIOLATION
+Language=English
+The DMA Subsystem has detected an illegal DMA operation initiated by
+a driver being verified. The faulty driver must be replaced with a
+working version.
+.
+
+MessageId=0x00E7 Facility=Kernel Severity=Fatal SymbolicName=INVALID_FLOATING_POINT_STATE
+Language=English
+While restoring the previously saved floating point state for a thread,
+the state was found to be invalid.
+.
+
+MessageId=0x00E8 Facility=Kernel Severity=Fatal SymbolicName=INVALID_CANCEL_OF_FILE_OPEN
+Language=English
+The fileobject passed to IoCancelFileOpen is invalid. It should have reference of 1. The driver
+that called IoCancelFileOpen is at fault.
+.
+
+MessageId=0x00E9 Facility=Kernel Severity=Fatal SymbolicName=ACTIVE_EX_WORKER_THREAD_TERMINATION
+Language=English
+An executive worker thread is being terminated without having gone through the worker thread rundown code.
+Work items queued to the Ex worker queue must not terminate their threads.
+A stack trace should indicate the culprit.
+.
+
+MessageId=0x00EA Facility=Kernel Severity=Fatal SymbolicName=THREAD_STUCK_IN_DEVICE_DRIVER
+Language=English
+The device driver got stuck in an infinite loop. This usually indicates
+problem with the device itself or with the device driver programming the
+hardware incorrectly.
+
+Please check with your hardware device vendor for any driver updates.
+.
+
+MessageId=0x00EB Facility=Kernel Severity=Fatal SymbolicName=DIRTY_MAPPED_PAGES_CONGESTION
+Language=English
+The filesystem driver stack has deadlocked and all the modified pages are
+destined for the filesystem.  Since the filesystem is nonoperational, the
+system has crashed because none of the modified pages can be reused with
+losing data.  Any filesystem or filter driver in the stack may be at fault.
+.
+
+MessageId=0x00EC Facility=Kernel Severity=Fatal SymbolicName=SESSION_HAS_VALID_SPECIAL_POOL_ON_EXIT
+Language=English
+.
+
+MessageId=0x00ED Facility=Kernel Severity=Fatal SymbolicName=UNMOUNTABLE_BOOT_VOLUME
+Language=English
+.
+
+MessageId=0x00EF Facility=Kernel Severity=Fatal SymbolicName=CRITICAL_PROCESS_DIED
+Language=English
+The kernel attempted to ready a thread that was in an incorrect state such as terminated.
+.
+
+MessageId=0x00F1 Facility=Kernel Severity=Fatal SymbolicName=SCSI_VERIFIER_DETECTED_VIOLATION
+Language=English
+The SCSI verifier has detected an error in a SCSI miniport driver being verified.
+.
+
+MessageId=0x00F2 Facility=Kernel Severity=Fatal SymbolicName=HARDWARE_INTERRUPT_STORM
+Language=English
+An interrupt storm has caused the system to hang.
+.
+
+MessageId=0x00F3 Facility=Kernel Severity=Fatal SymbolicName=DISORDERLY_SHUTDOWN
+Language=English
+The system does not shutdown in a deterministic manner so bugchecks can occur.
+.
+
+MessageId=0x00F4 Facility=Kernel Severity=Fatal SymbolicName=CRITICAL_OBJECT_TERMINATION
+Language=English
+A process or thread crucial to system operation has unexpectedly exited or been terminated.
+.
+
+MessageId=0x00F5 Facility=Kernel Severity=Fatal SymbolicName=FLTMGR_FILE_SYSTEM
+Language=English
+.
+
+MessageId=0x00F6 Facility=Kernel Severity=Fatal SymbolicName=PCI_VERIFIER_DETECTED_VIOLATION
+Language=English
+The PCI driver has detected an error in a PCI device or BIOS being verified.
+.
+
+MessageId=0x00F7 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_OVERRAN_STACK_BUFFER
+Language=English
+A driver has overrun a stack-based buffer.  This overrun could potentially allow a malicious
+user to gain control of this machine.
+.
+
+MessageId=0x00F8 Facility=Kernel Severity=Fatal SymbolicName=RAMDISK_BOOT_INITIALIZATION_FAILED
+Language=English
+An initialization failure occurred while attempting to boot from the RAM disk.
+.
+
+MessageId=0x00F9 Facility=Kernel Severity=Fatal SymbolicName=DRIVER_RETURNED_STATUS_REPARSE_FOR_VOLUME_OPEN
+Language=English
+A driver returned STATUS_REPARSE to a Create request with no trailing names. STATUS_REPARSE 
+should be returned only for Create requests with trailing names as that indicates the driver is supporting
+name spaces.
+.
+
+MessageId=0x00FA Facility=Kernel Severity=Fatal SymbolicName=HTTP_DRIVER_CORRUPTED
+Language=English
+The HTTP kernel driver (http.sys) reached a corrupted state and can not recover.  This means 
+that the HTTP module detected that its private data is corrupted.  This usually results in 
+eventual corruption of the thread pool and an access violation.
+.
+
+MessageId=0x00FB Facility=Kernel Severity=Fatal SymbolicName=RECURSIVE_MACHINE_CHECK
+Language=English
+A machine check exception occurred just after processing a previous machine check, but
+before an exit from the machine check code could be completed.
+.
+
+MessageId=0x00FC Facility=Kernel Severity=Fatal SymbolicName=ATTEMPTED_EXECUTE_OF_NOEXECUTE_MEMORY
+Language=English
+An attempt was made to execute to non-executable memory.
+.
+
+MessageId=0x00FD Facility=Kernel Severity=Fatal SymbolicName=DIRTY_NOWRITE_PAGES_CONGESTION
+Language=English
+The component owning the modified nowrite pages failed to write out
+these pages after marking the relevant files as dont-write to
+memory management. This indicates a driver bug.
+.
+
+MessageId=0x00FE Facility=Kernel Severity=Fatal SymbolicName=BUGCODE_USB_DRIVER
+Language=English
+.
+
+MessageId=0x0104 Facility=Kernel Severity=Fatal SymbolicName=AGP_INVALID_ACCESS
+Language=English
+An invalid AGP memory access was detected.
+.
+
+MessageId=0x0105 Facility=Kernel Severity=Fatal SymbolicName=AGP_GART_CORRUPTION
+Language=English
+The Graphics Aperture Redirection Table (Gart) is corrupt.
+.
+
+MessageId=0x0106 Facility=Kernel Severity=Fatal SymbolicName=AGP_ILLEGALLY_REPROGRAMMED
+Language=English
+The AGP HW has been reprogrammed by an unauthorized agent.
+.
+
+MessageId=0x0107 Facility=Kernel Severity=Fatal SymbolicName=KERNEL_EXPAND_STACK_ACTIVE
+Language=English
+A thread is terminating or attempting a win32 callout while running on an expanded stack.
+.
+
+MessageId=0x0108 Facility=Kernel Severity=Fatal SymbolicName=THIRD_PARTY_FILE_SYSTEM_FAILURE
+Language=English
+A 3rd Party file system or file system filter has failed in an unrecoverable way.
+.
+
+MessageId=0x0109 Facility=Kernel Severity=Fatal SymbolicName=CRITICAL_STRUCTURE_CORRUPTION
+Language=English
+Modification of system code or a critical data structure was detected.
+.
+
+MessageId=0x0111 Facility=Kernel Severity=Fatal SymbolicName=RECURSIVE_NMI
+Language=English
+A non-maskable interrrupt ocurred just after processing a previous non-maskable interrupt, but
+before an exit from the non-maskable interrupt could be completed.
+.
+
+;#define WINLOGON_FATAL_ERROR ((ULONG)0xC000021AL)
+;#define MANUALLY_INITIATED_CRASH1 ((ULONG)0xDEADDEAD)
 ;#endif // _BUGCODES_
