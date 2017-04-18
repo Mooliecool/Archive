@@ -45,7 +45,8 @@ TARGET2=up
 
 C_DEFINES=$(C_DEFINES) -D_NTSYSTEM_
 
-SOURCES=..\init.c      \
+SOURCES=..\init.c       \
+        ..\bootvid.c    \
         ..\ntoskrnl.rc
 
 !IF "$(NTTEST)"==""
@@ -82,7 +83,8 @@ NTRES=$(O)\ntoskrnl.res
 UMRES=$(O)\ntoskrnl.res
 
 LINKLIBS = \
-    $(DDK_LIB_PATH)\hal.lib \
+    $(DDK_LIB_PATH)\hal.lib         \
+    $(MINWIN_LIB_PATH)\bootvid.lib  \
     $(EXPORT_FILE)
 
 !IF $(IA64)

@@ -30,6 +30,8 @@ Revision History:
 #include "stdio.h"
 #include <string.h>
 
+#include <inbv.h>
+
 UNICODE_STRING NtSystemRoot;
 PVOID ExPageLockHandle;
 
@@ -72,6 +74,7 @@ ExBurnMemory(
     IN PLOADER_PARAMETER_BLOCK LoaderBlock
     );
 
+
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text(INIT,ExpInitializeExecutive)
 #pragma alloc_text(INIT,Phase1Initialization)
@@ -100,6 +103,8 @@ ULONG NtBuildNumber = VER_PRODUCTBUILD | 0xF0000000;
 #endif
 
 ULONG InitializationPhase;  // bss 0
+
+extern BOOLEAN ShowProgressBar;
 
 extern LIST_ENTRY PsLoadedModuleList;
 extern KiServiceLimit;
@@ -178,6 +183,82 @@ ULONG InitAnsiCodePageDataOffset;
 ULONG InitOemCodePageDataOffset;
 ULONG InitUnicodeCaseTableDataOffset;
 PVOID InitNlsSectionPointer;
+
+#define COLOR_BLACK      0
+#define COLOR_BLUE       2
+#define COLOR_DARKGRAY   4
+#define COLOR_GRAY       9
+#define COLOR_WHITE      15
+
+extern BOOLEAN InbvBootDriverInstalled;
+
+VOID
+DisplayBootBitmap (
+    IN BOOLEAN DisplayOnScreen
+    )
+
+/*++
+
+Routine Description:
+
+    Draws the gui boot screen.
+
+Arguments:
+
+    DisplayOnScreen - TRUE to dump text to the screen, FALSE otherwise.
+
+Return Value:
+
+    None.
+
+Environment:
+
+    This routine may be called more than once, and should not be marked INIT.
+
+--*/
+
+{   
+    if (DisplayOnScreen) {
+
+        PUCHAR BitmapTop, BitmapBottom;
+
+        InbvSetTextColor(14);
+        InbvSolidColorFill(0, 0,  639, 479, 0); // background
+        InbvSolidColorFill(0, 421,  639, 479, -1); // bottom
+
+        BitmapTop = InbvGetResourceAddress(2);
+        //BitmapBottom = InbvGetResourceAddress(2);
+
+        InbvSetScrollRegion(32, 80, 631, 400);
+
+        if (BitmapTop) {
+            //InbvBitBlt(BitmapBottom, 0, 419);
+            InbvBitBlt(BitmapTop, 0, 0);
+        }  
+        
+        //
+        // Progress bar is shown in verbose mode
+        //
+    
+        InbvSetProgressBarCoordinates(239, 430);        
+    } else {
+        
+        PUCHAR BootBitmap;
+        
+        InbvSolidColorFill(0, 0, 639, 479, 2);
+        
+        BootBitmap = InbvGetResourceAddress(1);
+        
+        if (BootBitmap) {
+            InbvBitBlt(BootBitmap, 168, 138);
+        }
+            
+        InbvSetProgressBarCoordinates(283, 326);
+        
+    }
+    
+
+}
 
 VOID
 ExBurnMemory(
@@ -723,25 +804,7 @@ Return Value:
 
         sprintf( VersionBuffer, "%u.%u", NtMajorVersion, NtMinorVersion );
         RtlCreateUnicodeStringFromAsciiz( &CmVersionString, VersionBuffer );
-        sprintf(s,
-                NT_SUCCESS(Status) ? MessageEntry->Text : "WINDOWS NT (TM)\n",
-                VersionBuffer,
-                NtBuildNumber & 0xFFFF,
-                Buffer);
-        HalDisplayString(s);
         
-        //
-        // Print the ESUP version information message
-        //
-        sprintf(s,
-                "Legacy System Extended Support ESUP\n"
-                "%s, SVN r%u, %s, %s\n",
-                VER_PRODUCTESUPBLDTYPE_STR,
-                VER_PRODUCTBUILD_SVNREV,
-                VER_PRODUCTESUPBLDDATE_STR,
-                VER_PRODUCTESUPBUILDER_STR);
-        HalDisplayString(s);
-
 #if i386 && !FPO
         if (NtGlobalFlag & FLG_KERNEL_STACK_TRACE_DB) {
             PVOID StackTraceDataBase;
@@ -889,7 +952,7 @@ Phase1Initialization(
     )
 
 {
-
+    PCHAR s;
     PLOADER_PARAMETER_BLOCK LoaderBlock;
     PETHREAD Thread;
     PKPRCB Prcb;
@@ -909,6 +972,7 @@ Phase1Initialization(
     ANSI_STRING AnsiDebugString;
     UNICODE_STRING EnvString, NullString, UnicodeSystemDriveString;
     CHAR DebugBuffer[256];
+    CHAR VersionBuffer[24];
     PWSTR Src, Dst;
     BOOLEAN ResetActiveTimeBias;
     HANDLE NlsSection;
@@ -926,6 +990,8 @@ Phase1Initialization(
 #endif
     PCHAR MPKernelString;
     PCHAR Options;
+    BOOLEAN SOS;
+    BOOLEAN NOGUIBOOT;
 
     //
     //  Set handle for PAGELK section.
@@ -954,15 +1020,54 @@ Phase1Initialization(
     }
     
     //
-    // Grab the loader block options.
+    // Allow the boot video driver to behave differently based on the
+    // OsLoadOptions.
     //
-    
+
     Options = LoaderBlock->LoadOptions ? _strupr(LoaderBlock->LoadOptions) : NULL;
 
+    if (Options) {
+        NOGUIBOOT = (BOOLEAN)(strstr(Options, "NOGUIBOOT") != NULL);
+    } else {
+        NOGUIBOOT = FALSE;
+    }
+
+    InbvEnableBootDriver((BOOLEAN)!NOGUIBOOT);
+
     //
-    // Are we booting into WinPE?
+    // There is now enough functionality for the system Boot Video
+    // Driver to run.
     //
-    
+
+    InbvDriverInitialize(LoaderBlock, 18);
+
+    if (NOGUIBOOT) {
+
+        //
+        // If the user specified the noguiboot switch we don't want to
+        // use the bootvid driver, so release display ownership.
+        //
+
+        InbvNotifyDisplayOwnershipLost(NULL);
+    }
+
+    if (Options) {
+        SOS = (BOOLEAN)(strstr(Options, "SOS") != NULL);
+    } else {
+        SOS = FALSE;
+    }
+
+    if (NOGUIBOOT) {
+        InbvEnableDisplayString(FALSE);
+    } else {
+        InbvEnableDisplayString(SOS);
+        DisplayBootBitmap(SOS);
+    }
+
+
+    //
+    // Check whether we are booting into WinPE
+    //
     if (Options) {
         if (strstr(Options, "MININT") != NULL) {
             InitIsWinPEMode = TRUE;
@@ -971,9 +1076,9 @@ Phase1Initialization(
                 InitWinPEModeType |= INIT_WINPEMODE_INRAM;
             } else {
                 InitWinPEModeType |= INIT_WINPEMODE_REGULAR;
-            }
+            }                            
         }
-    }
+    }    
 
 
 #ifdef _PNP_POWER_
@@ -1033,6 +1138,8 @@ Phase1Initialization(
     DataTableEntry = CONTAINING_RECORD(LoaderBlock->LoadOrderListHead.Flink,
                                         LDR_DATA_TABLE_ENTRY,
                                         InLoadOrderLinks);
+                                        
+    
 
 #ifndef NT_UP
 
@@ -1087,6 +1194,7 @@ Phase1Initialization(
     // Now that the processors have started, display number of processors
     // and size of memory.
     //
+    
 
     Status = RtlFindMessage( DataTableEntry->DllBase,
                              11,
@@ -1107,7 +1215,8 @@ Phase1Initialization(
              (Size + (1 << 20 - PAGE_SHIFT) - 1) >> (20 - PAGE_SHIFT),
              &AnsiDebugString
            );
-    HalDisplayString(DebugBuffer);
+    InbvDisplayString(DebugBuffer);
+    InbvUpdateProgressBar(5);
 
     //
     // Display the memory configuration of the host system.
@@ -1126,7 +1235,7 @@ Phase1Initialization(
         // Output display headings and enumerate memory types.
         //
 
-        HalDisplayString("\nStart  End  Page  Type Of Memory\n Pfn   Pfn  Count\n\n");
+        InbvDisplayString("\nStart  End  Page  Type Of Memory\n Pfn   Pfn  Count\n\n");
         ListHead = &LoaderBlock->MemoryDescriptorListHead;
         NextEntry = ListHead->Flink;
         do {
@@ -1246,16 +1355,16 @@ Phase1Initialization(
                     MemoryDescriptor->PageCount,
                     TypeOfMemory);
 
-            HalDisplayString(&DisplayBuffer[0]);
+            InbvDisplayString(&DisplayBuffer[0]);
             NextEntry = NextEntry->Flink;
         } while (NextEntry != ListHead);
 
-        HalDisplayString("\n");
+        InbvDisplayString("\n");
     }
 #endif
 
     if (!ObInitSystem())
-        KeBugCheck(OBJECT1_INITIALIZATION_FAILED);
+       KeBugCheck(OBJECT1_INITIALIZATION_FAILED);
 
     if (!ExInitSystem())
         KeBugCheckEx(PHASE1_INITIALIZATION_FAILED,0,0,0,0);
@@ -1271,6 +1380,8 @@ Phase1Initialization(
     if (!SeInitSystem())
             KeBugCheck(SECURITY1_INITIALIZATION_FAILED);
 
+    InbvUpdateProgressBar(10);    
+        
     //
     // Create the symbolic link to \SystemRoot.
     //
@@ -1443,6 +1554,8 @@ Phase1Initialization(
 
     if (!CmInitSystem1(LoaderBlock))
       KeBugCheck(CONFIG_INITIALIZATION_FAILED);
+  
+    InbvUpdateProgressBar(15);
 
     //
     // Compute timezone bias and next cutover date
@@ -1482,6 +1595,8 @@ Phase1Initialization(
     if (!PpInitSystem()) {
         KeBugCheck(PP1_INITIALIZATION_FAILED);
     }
+    
+    InbvUpdateProgressBar(20);
 
 //#endif // _PNP_POWER_
 
@@ -1499,9 +1614,27 @@ Phase1Initialization(
     //
 
     ExInitSystemPhase2();
+    
+    InbvUpdateProgressBar(25);
 
+    //
+    // Initialize the Io system.
+    //
+    // IoInitSystem updates progress bar updates from 25 to 75 %.
+    //
+    
+    InbvSetProgressBarSubset(25, 75);
+    
     if (!IoInitSystem(LoaderBlock))
         KeBugCheck(IO1_INITIALIZATION_FAILED);
+    
+    //
+    // Clear progress bar subset, goes back to absolute mode.
+    //
+
+    InbvSetProgressBarSubset(0, 100);
+    
+    InbvUpdateProgressBar(80);
 
 #if i386
     //
@@ -1512,6 +1645,7 @@ Phase1Initialization(
     //
     KeI386VdmInitialize();
 #endif
+
 
 #ifdef _PNP_POWER_
     if (!PoInitSystem(1)) {
@@ -1526,6 +1660,8 @@ Phase1Initialization(
 
     if (PsInitSystem(1, (PLOADER_PARAMETER_BLOCK)Context) == FALSE)
         KeBugCheck(PROCESS1_INITIALIZATION_FAILED);
+    
+    InbvUpdateProgressBar(85);
 
     //
     // Force KeBugCheck to look at PsLoadedModuleList now that it is
@@ -1556,6 +1692,8 @@ Phase1Initialization(
         KeBugCheck(REFMON_INITIALIZATION_FAILED);
     }
 
+    InbvUpdateProgressBar(90);    
+    
     //
     // Set up process parameters for the Session Manager Subsystem
     //
@@ -1739,6 +1877,14 @@ Phase1Initialization(
 #endif // DBG
         KeBugCheckEx(SESSION4_INITIALIZATION_FAILED,Status,0,0,0);
     }
+    
+    InbvUpdateProgressBar(100);
+    
+    //
+    // Turn on debug output so that we can see chkdsk run.
+    //
+
+    InbvEnableDisplayString(TRUE);
 
     //
     // Wait five seconds for the session manager to get started or
