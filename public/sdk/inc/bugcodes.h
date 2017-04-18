@@ -64,6 +64,181 @@ Notes:
 
 
 //
+// MessageId: HARDWARE_PROFILE_UNDOCKED_STRING
+//
+// MessageText:
+//
+//  Undocked Profile
+//
+#define HARDWARE_PROFILE_UNDOCKED_STRING ((ULONG)0x40010001L)
+
+//
+// MessageId: HARDWARE_PROFILE_DOCKED_STRING
+//
+// MessageText:
+//
+//  Docked Profile
+//
+#define HARDWARE_PROFILE_DOCKED_STRING   ((ULONG)0x40010002L)
+
+//
+// MessageId: HARDWARE_PROFILE_UNKNOWN_STRING
+//
+// MessageText:
+//
+//  Profile
+//
+#define HARDWARE_PROFILE_UNKNOWN_STRING  ((ULONG)0x40010003L)
+
+//
+// MessageId: WINDOWS_NT_BANNER
+//
+// MessageText:
+//
+//  Microsoft (R) Windows (R) Version %hs (Build %u%hs)
+//
+#define WINDOWS_NT_BANNER                ((ULONG)0x4000007EL)
+
+//
+// MessageId: BUGCHECK_MESSAGE_INTRO
+//
+// MessageText:
+//
+//  A problem has been detected and Windows has been shut down to prevent damage
+//  to your computer.
+//
+#define BUGCHECK_MESSAGE_INTRO           ((ULONG)0x4000007FL)
+
+//
+// MessageId: BUGCODE_ID_DRIVER
+//
+// MessageText:
+//
+//  The problem seems to be caused by the following file:
+//
+#define BUGCODE_ID_DRIVER                ((ULONG)0x40000080L)
+
+//
+// MessageId: PSS_MESSAGE_INTRO
+//
+// MessageText:
+//
+//  If this is the first time you've seen this Stop error screen,
+//  restart your computer. If this screen appears again, follow
+//  these steps:
+//
+#define PSS_MESSAGE_INTRO                ((ULONG)0x40000081L)
+
+//
+// MessageId: BUGCODE_PSS_MESSAGE
+//
+// MessageText:
+//
+//  Check to make sure any new hardware or software is properly installed.
+//  If this is a new installation, ask your hardware or software manufacturer
+//  for any Windows updates you might need.
+//  
+//  If problems continue, disable or remove any newly installed hardware
+//  or software. Disable BIOS memory options such as caching or shadowing.
+//  If you need to use Safe Mode to remove or disable components, restart
+//  your computer, press F8 to select Advanced Startup Options, and then
+//  select Safe Mode.
+//
+#define BUGCODE_PSS_MESSAGE              ((ULONG)0x40000082L)
+
+//
+// MessageId: BUGCHECK_TECH_INFO
+//
+// MessageText:
+//
+//  Technical Information:
+//
+#define BUGCHECK_TECH_INFO               ((ULONG)0x40000083L)
+
+//
+// MessageId: WINDOWS_NT_CSD_STRING
+//
+// MessageText:
+//
+//  Service Pack
+//
+#define WINDOWS_NT_CSD_STRING            ((ULONG)0x40000087L)
+
+//
+// MessageId: WINDOWS_NT_INFO_STRING
+//
+// MessageText:
+//
+//  %u System Processor [%u MB Memory] %Z
+//
+#define WINDOWS_NT_INFO_STRING           ((ULONG)0x40000088L)
+
+//
+// MessageId: WINDOWS_NT_MP_STRING
+//
+// MessageText:
+//
+//  MultiProcessor Kernel
+//
+#define WINDOWS_NT_MP_STRING             ((ULONG)0x40000089L)
+
+//
+// MessageId: THREAD_TERMINATE_HELD_MUTEX
+//
+// MessageText:
+//
+//  A kernel thread terminated while holding a mutex
+//
+#define THREAD_TERMINATE_HELD_MUTEX      ((ULONG)0x4000008AL)
+
+//
+// MessageId: BUGCODE_PSS_CRASH_INIT
+//
+// MessageText:
+//
+//  Beginning dump of physical memory
+//
+#define BUGCODE_PSS_CRASH_INIT           ((ULONG)0x4000008BL)
+
+//
+// MessageId: BUGCODE_PSS_CRASH_PROGRESS
+//
+// MessageText:
+//
+//  Dumping physical memory to disk
+//
+#define BUGCODE_PSS_CRASH_PROGRESS       ((ULONG)0x4000008CL)
+
+//
+// MessageId: BUGCODE_PSS_CRASH_DONE
+//
+// MessageText:
+//
+//  Physical memory dump complete.
+//  Contact your system administrator or technical support group for further
+//  assistance.
+//
+#define BUGCODE_PSS_CRASH_DONE           ((ULONG)0x4000008DL)
+
+//
+// MessageId: WINDOWS_NT_INFO_STRING_PLURAL
+//
+// MessageText:
+//
+//  %u System Processors [%u MB Memory] %Z
+//
+#define WINDOWS_NT_INFO_STRING_PLURAL    ((ULONG)0x4000009DL)
+
+//
+// MessageId: WINDOWS_NT_RC_STRING
+//
+// MessageText:
+//
+//  RC
+//
+#define WINDOWS_NT_RC_STRING             ((ULONG)0x4000009EL)
+
+//
 // MessageId: APC_INDEX_MISMATCH
 //
 // MessageText:
@@ -239,7 +414,7 @@ Notes:
 //
 // MessageText:
 //
-//  The thread reaper was handed a thread to reap, but the thread's process'
+//  CREATE_DELETE_LOCK_NOT_LOCKED
 //
 #define CREATE_DELETE_LOCK_NOT_LOCKED    ((ULONG)0x00000014L)
 
@@ -1171,15 +1346,13 @@ Notes:
 #define INACCESSIBLE_BOOT_DEVICE         ((ULONG)0x0000007BL)
 
 //
-// MessageId: BUGCODE_PSS_MESSAGE
+// MessageId: BUGCODE_NDIS_DRIVER
 //
 // MessageText:
 //
-//  Restart and set the recovery options in the system control panel
-//  or the /CRASHDEBUG system start option. If this message reappears,
-//  contact your system administrator or technical support group.
+//  BUGCODE_NDIS_DRIVER
 //
-#define BUGCODE_PSS_MESSAGE              ((ULONG)0x0000007CL)
+#define BUGCODE_NDIS_DRIVER              ((ULONG)0x0000007CL)
 
 //
 // MessageId: INSTALL_MORE_MEMORY
@@ -1191,13 +1364,13 @@ Notes:
 #define INSTALL_MORE_MEMORY              ((ULONG)0x0000007DL)
 
 //
-// MessageId: WINDOWS_NT_BANNER
+// MessageId: SYSTEM_THREAD_EXCEPTION_NOT_HANDLED
 //
 // MessageText:
 //
-//  Windows OpenNT Version %s (Build %u%s)
+//  SYSTEM_THREAD_EXCEPTION_NOT_HANDLED
 //
-#define WINDOWS_NT_BANNER                ((ULONG)0x4000007EL)
+#define SYSTEM_THREAD_EXCEPTION_NOT_HANDLED ((ULONG)0x0000007EL)
 
 //
 // MessageId: UNEXPECTED_KERNEL_MODE_TRAP
@@ -1272,42 +1445,6 @@ Notes:
 #define AUDIT_FAILURE                    ((ULONG)0x00000086L)
 
 //
-// MessageId: WINDOWS_NT_CSD_STRING
-//
-// MessageText:
-//
-//  Service Pack
-//
-#define WINDOWS_NT_CSD_STRING            ((ULONG)0x40000087L)
-
-//
-// MessageId: WINDOWS_NT_INFO_STRING
-//
-// MessageText:
-//
-//  %u System Processor [%u MB Memory] %Z
-//
-#define WINDOWS_NT_INFO_STRING           ((ULONG)0x40000088L)
-
-//
-// MessageId: WINDOWS_NT_MP_STRING
-//
-// MessageText:
-//
-//  MultiProcessor Kernel
-//
-#define WINDOWS_NT_MP_STRING             ((ULONG)0x40000089L)
-
-//
-// MessageId: THREAD_TERMINATE_HELD_MUTEX
-//
-// MessageText:
-//
-//  A kernel thread terminated while holding a mutex
-//
-#define THREAD_TERMINATE_HELD_MUTEX      ((ULONG)0x4000008AL)
-
-//
 // MessageId: MBR_CHECKSUM_MISMATCH
 //
 // MessageText:
@@ -1317,32 +1454,13 @@ Notes:
 #define MBR_CHECKSUM_MISMATCH            ((ULONG)0x0000008BL)
 
 //
-// MessageId: BUGCODE_PSS_CRASH_INIT
+// MessageId: KERNEL_MODE_EXCEPTION_NOT_HANDLED
 //
 // MessageText:
 //
-//  Beginning dump of physical memory
+//  KERNEL_MODE_EXCEPTION_NOT_HANDLED
 //
-#define BUGCODE_PSS_CRASH_INIT           ((ULONG)0x0000008CL)
-
-//
-// MessageId: BUGCODE_PSS_CRASH_PROGRESS
-//
-// MessageText:
-//
-//  Dumping physical memory to disk
-//
-#define BUGCODE_PSS_CRASH_PROGRESS       ((ULONG)0x0000008DL)
-
-//
-// MessageId: BUGCODE_PSS_CRASH_DONE
-//
-// MessageText:
-//
-//  Physical memory dump complete.  Contact your system administrator or
-//  technical support group.
-//
-#define BUGCODE_PSS_CRASH_DONE           ((ULONG)0x0000008EL)
+#define KERNEL_MODE_EXCEPTION_NOT_HANDLED ((ULONG)0x0000008EL)
 
 //
 // MessageId: PP0_INITIALIZATION_FAILED
@@ -1471,21 +1589,936 @@ Notes:
 #define MACHINE_CHECK_EXCEPTION          ((ULONG)0x0000009CL)
 
 //
-// MessageId: WINDOWS_NT_INFO_STRING_PLURAL
+// MessageId: USER_MODE_HEALTH_MONITOR
 //
 // MessageText:
 //
-//  %u System Processors [%u MB Memory] %Z
+//  One or more critical user mode components failed to satisfy a health check.
 //
-#define WINDOWS_NT_INFO_STRING_PLURAL    ((ULONG)0x4000009DL)
+#define USER_MODE_HEALTH_MONITOR         ((ULONG)0x0000009EL)
 
 //
-// MessageId: WINDOWS_NT_RC_STRING
+// MessageId: DRIVER_POWER_STATE_FAILURE
 //
 // MessageText:
 //
-//  RC
+//  DRIVER_POWER_STATE_FAILURE
 //
-#define WINDOWS_NT_RC_STRING             ((ULONG)0x4000009EL)
+#define DRIVER_POWER_STATE_FAILURE       ((ULONG)0x0000009FL)
 
+//
+// MessageId: INTERNAL_POWER_ERROR
+//
+// MessageText:
+//
+//  INTERNAL_POWER_ERROR
+//
+#define INTERNAL_POWER_ERROR             ((ULONG)0x000000A0L)
+
+//
+// MessageId: PCI_BUS_DRIVER_INTERNAL
+//
+// MessageText:
+//
+//  Inconsistency detected in the PCI Bus driver's internal structures.
+//
+#define PCI_BUS_DRIVER_INTERNAL          ((ULONG)0x000000A1L)
+
+//
+// MessageId: MEMORY_IMAGE_CORRUPT
+//
+// MessageText:
+//
+//  A CRC check on the memory range has failed
+//
+#define MEMORY_IMAGE_CORRUPT             ((ULONG)0x000000A2L)
+
+//
+// MessageId: ACPI_DRIVER_INTERNAL
+//
+// MessageText:
+//
+//  ACPI_DRIVER_INTERNAL
+//
+#define ACPI_DRIVER_INTERNAL             ((ULONG)0x000000A3L)
+
+//
+// MessageId: CNSS_FILE_SYSTEM_FILTER
+//
+// MessageText:
+//
+//  Internal inconsistency while representing
+//  Ntfs Structured Storage as a DOCFILE.
+//
+#define CNSS_FILE_SYSTEM_FILTER          ((ULONG)0x000000A4L)
+
+//
+// MessageId: ACPI_BIOS_ERROR
+//
+// MessageText:
+//
+//  The BIOS in this system is not fully ACPI compliant.  Please contact your
+//  system vendor for an updated BIOS.  If you are unable to obtain an
+//  updated BIOS or the latest BIOS supplied by your vendor is not ACPI 
+//  compliant, you can turn off ACPI mode during textmode setup.  To do this, 
+//  press the F7 key when you are prompted to install storage drivers.  The 
+//  system will not notify you that the F7 key was pressed - it will silently
+//  disable ACPI and allow you to continue your installation.
+//
+#define ACPI_BIOS_ERROR                  ((ULONG)0x000000A5L)
+
+//
+// MessageId: FP_EMULATION_ERROR
+//
+// MessageText:
+//
+//  FP_EMULATION_ERROR
+//
+#define FP_EMULATION_ERROR               ((ULONG)0x000000A6L)
+
+//
+// MessageId: BAD_EXHANDLE
+//
+// MessageText:
+//
+//  BAD_EXHANDLE
+//
+#define BAD_EXHANDLE                     ((ULONG)0x000000A7L)
+
+//
+// MessageId: BOOTING_IN_SAFEMODE_MINIMAL
+//
+// MessageText:
+//
+//  The system is booting in safemode - Minimal Services
+//
+#define BOOTING_IN_SAFEMODE_MINIMAL      ((ULONG)0x000000A8L)
+
+//
+// MessageId: BOOTING_IN_SAFEMODE_NETWORK
+//
+// MessageText:
+//
+//  The system is booting in safemode - Minimal Services with Network
+//
+#define BOOTING_IN_SAFEMODE_NETWORK      ((ULONG)0x000000A9L)
+
+//
+// MessageId: BOOTING_IN_SAFEMODE_DSREPAIR
+//
+// MessageText:
+//
+//  The system is booting in safemode - Directory Services Repair
+//
+#define BOOTING_IN_SAFEMODE_DSREPAIR     ((ULONG)0x000000AAL)
+
+//
+// MessageId: SESSION_HAS_VALID_POOL_ON_EXIT
+//
+// MessageText:
+//
+//  SESSION_HAS_VALID_POOL_ON_EXIT
+//
+#define SESSION_HAS_VALID_POOL_ON_EXIT   ((ULONG)0x000000ABL)
+
+//
+// MessageId: HAL_MEMORY_ALLOCATION
+//
+// MessageText:
+//
+//  Allocate from NonPaged Pool failed for a HAL critical allocation.
+//
+#define HAL_MEMORY_ALLOCATION            ((ULONG)0x000000ACL)
+
+//
+// MessageId: VIDEO_DRIVER_INIT_FAILURE
+//
+// MessageText:
+//
+//  The video driver failed to initialize
+//
+#define VIDEO_DRIVER_INIT_FAILURE        ((ULONG)0x000000B4L)
+
+//
+// MessageId: BOOTLOG_LOADED
+//
+// MessageText:
+//
+//  Loaded driver
+//
+#define BOOTLOG_LOADED                   ((ULONG)0x000000B5L)
+
+//
+// MessageId: BOOTLOG_NOT_LOADED
+//
+// MessageText:
+//
+//  Did not load driver
+//
+#define BOOTLOG_NOT_LOADED               ((ULONG)0x000000B6L)
+
+//
+// MessageId: BOOTLOG_ENABLED
+//
+// MessageText:
+//
+//  Boot Logging Enabled
+//
+#define BOOTLOG_ENABLED                  ((ULONG)0x000000B7L)
+
+//
+// MessageId: ATTEMPTED_SWITCH_FROM_DPC
+//
+// MessageText:
+//
+//  A wait operation, attach process, or yield was attempted from a DPC routine.
+//
+#define ATTEMPTED_SWITCH_FROM_DPC        ((ULONG)0x000000B8L)
+
+//
+// MessageId: CHIPSET_DETECTED_ERROR
+//
+// MessageText:
+//
+//  A parity error in the system memory or I/O system was detected.
+//
+#define CHIPSET_DETECTED_ERROR           ((ULONG)0x000000B9L)
+
+//
+// MessageId: SESSION_HAS_VALID_VIEWS_ON_EXIT
+//
+// MessageText:
+//
+//  SESSION_HAS_VALID_VIEWS_ON_EXIT
+//
+#define SESSION_HAS_VALID_VIEWS_ON_EXIT  ((ULONG)0x000000BAL)
+
+//
+// MessageId: NETWORK_BOOT_INITIALIZATION_FAILED
+//
+// MessageText:
+//
+//  An initialization failure occurred while attempting to boot from the network.
+//
+#define NETWORK_BOOT_INITIALIZATION_FAILED ((ULONG)0x000000BBL)
+
+//
+// MessageId: NETWORK_BOOT_DUPLICATE_ADDRESS
+//
+// MessageText:
+//
+//  A duplicate IP address was assigned to this machine while attempting to
+//  boot from the network.
+//
+#define NETWORK_BOOT_DUPLICATE_ADDRESS   ((ULONG)0x000000BCL)
+
+//
+// MessageId: INVALID_HIBERNATED_STATE
+//
+// MessageText:
+//
+//  The hibernated memory image does not match the current hardware configuration.
+//
+#define INVALID_HIBERNATED_STATE         ((ULONG)0x000000BDL)
+
+//
+// MessageId: ATTEMPTED_WRITE_TO_READONLY_MEMORY
+//
+// MessageText:
+//
+//  An attempt was made to write to read-only memory.
+//
+#define ATTEMPTED_WRITE_TO_READONLY_MEMORY ((ULONG)0x000000BEL)
+
+//
+// MessageId: MUTEX_ALREADY_OWNED
+//
+// MessageText:
+//
+//  MUTEX_ALREADY_OWNED
+//
+#define MUTEX_ALREADY_OWNED              ((ULONG)0x000000BFL)
+
+//
+// MessageId: PCI_CONFIG_SPACE_ACCESS_FAILURE
+//
+// MessageText:
+//
+//  An attempt to access PCI configuration space failed.
+//
+#define PCI_CONFIG_SPACE_ACCESS_FAILURE  ((ULONG)0x000000C0L)
+
+//
+// MessageId: SPECIAL_POOL_DETECTED_MEMORY_CORRUPTION
+//
+// MessageText:
+//
+//  SPECIAL_POOL_DETECTED_MEMORY_CORRUPTION
+//
+#define SPECIAL_POOL_DETECTED_MEMORY_CORRUPTION ((ULONG)0x000000C1L)
+
+//
+// MessageId: BAD_POOL_CALLER
+//
+// MessageText:
+//
+//  BAD_POOL_CALLER
+//
+#define BAD_POOL_CALLER                  ((ULONG)0x000000C2L)
+
+//
+// MessageId: BUGCODE_PSS_MESSAGE_SIGNATURE
+//
+// MessageText:
+//
+//  
+//  A system file that is owned by Windows was replaced by an application
+//  running on your system.  The operating system detected this and tried to
+//  verify the validity of the file's signature.  The operating system found that
+//  the file signature is not valid and put the original, correct file back
+//  so that your operating system will continue to function properly.
+//
+#define BUGCODE_PSS_MESSAGE_SIGNATURE    ((ULONG)0x000000C3L)
+
+//
+// MessageId: DRIVER_VERIFIER_DETECTED_VIOLATION
+//
+// MessageText:
+//
+//  
+//  A device driver attempting to corrupt the system has been caught.
+//  The faulty driver currently on the kernel stack must be replaced
+//  with a working version.
+//
+#define DRIVER_VERIFIER_DETECTED_VIOLATION ((ULONG)0x000000C4L)
+
+//
+// MessageId: DRIVER_CORRUPTED_EXPOOL
+//
+// MessageText:
+//
+//  
+//  A device driver has corrupted the executive memory pool.
+//  
+//  Check to make sure any new hardware or software is properly installed.
+//  If this is a new installation, ask your hardware or software manufacturer
+//  for any Windows you might need.
+//  
+//  Run the driver verifier against any new (or suspect) drivers.
+//  If that doesn't reveal the corrupting driver, try enabling special pool.
+//  Both of these features are intended to catch the corruption at an earlier
+//  point where the offending driver can be identified.
+//  
+//  If you need to use Safe Mode to remove or disable components,
+//  restart your computer, press F8 to select Advanced Startup Options,
+//  and then select Safe Mode.
+//
+#define DRIVER_CORRUPTED_EXPOOL          ((ULONG)0x000000C5L)
+
+//
+// MessageId: DRIVER_CAUGHT_MODIFYING_FREED_POOL
+//
+// MessageText:
+//
+//  
+//  A device driver attempting to corrupt the system has been caught.
+//  The faulty driver currently on the kernel stack must be replaced
+//  with a working version.
+//
+#define DRIVER_CAUGHT_MODIFYING_FREED_POOL ((ULONG)0x000000C6L)
+
+//
+// MessageId: TIMER_OR_DPC_INVALID
+//
+// MessageText:
+//
+//  
+//  A kernel timer or DPC was found in memory which must not contain such
+//  items.  Usually this is memory being freed.  This is usually caused by
+//  a device driver that has not cleaned up properly before freeing memory.
+//
+#define TIMER_OR_DPC_INVALID             ((ULONG)0x000000C7L)
+
+//
+// MessageId: IRQL_UNEXPECTED_VALUE
+//
+// MessageText:
+//
+//  
+//  The processor's IRQL is not valid for the currently executing context.
+//  This is a software error condition and is usually caused by a device
+//  driver changing IRQL and not restoring it to its previous value when
+//  it has finished its task.
+//
+#define IRQL_UNEXPECTED_VALUE            ((ULONG)0x000000C8L)
+
+//
+// MessageId: DRIVER_VERIFIER_IOMANAGER_VIOLATION
+//
+// MessageText:
+//
+//  
+//  The IO manager has detected a violation by a driver that is being verified.
+//  The faulty driver that is being verified must be debugged and
+//  replaced with a working version.
+//
+#define DRIVER_VERIFIER_IOMANAGER_VIOLATION ((ULONG)0x000000C9L)
+
+//
+// MessageId: PNP_DETECTED_FATAL_ERROR
+//
+// MessageText:
+//
+//  
+//  Plug and Play detected an error most likely caused by a faulty driver.
+//
+#define PNP_DETECTED_FATAL_ERROR         ((ULONG)0x000000CAL)
+
+//
+// MessageId: DRIVER_LEFT_LOCKED_PAGES_IN_PROCESS
+//
+// MessageText:
+//
+//  DRIVER_LEFT_LOCKED_PAGES_IN_PROCESS
+//
+#define DRIVER_LEFT_LOCKED_PAGES_IN_PROCESS ((ULONG)0x000000CBL)
+
+//
+// MessageId: PAGE_FAULT_IN_FREED_SPECIAL_POOL
+//
+// MessageText:
+//
+//  
+//  The system is attempting to access memory after it has been freed.
+//  This usually indicates a system-driver synchronization issue.
+//
+#define PAGE_FAULT_IN_FREED_SPECIAL_POOL ((ULONG)0x000000CCL)
+
+//
+// MessageId: PAGE_FAULT_BEYOND_END_OF_ALLOCATION
+//
+// MessageText:
+//
+//  
+//  The system is attempting to access memory beyond the end of the allocation.
+//  This usually indicates a system-driver synchronization issue.
+//
+#define PAGE_FAULT_BEYOND_END_OF_ALLOCATION ((ULONG)0x000000CDL)
+
+//
+// MessageId: DRIVER_UNLOADED_WITHOUT_CANCELLING_PENDING_OPERATIONS
+//
+// MessageText:
+//
+//  DRIVER_UNLOADED_WITHOUT_CANCELLING_PENDING_OPERATIONS
+//
+#define DRIVER_UNLOADED_WITHOUT_CANCELLING_PENDING_OPERATIONS ((ULONG)0x000000CEL)
+
+//
+// MessageId: TERMINAL_SERVER_DRIVER_MADE_INCORRECT_MEMORY_REFERENCE
+//
+// MessageText:
+//
+//  TERMINAL_SERVER_DRIVER_MADE_INCORRECT_MEMORY_REFERENCE
+//
+#define TERMINAL_SERVER_DRIVER_MADE_INCORRECT_MEMORY_REFERENCE ((ULONG)0x000000CFL)
+
+//
+// MessageId: DRIVER_CORRUPTED_MMPOOL
+//
+// MessageText:
+//
+//  DRIVER_CORRUPTED_MMPOOL
+//
+#define DRIVER_CORRUPTED_MMPOOL          ((ULONG)0x000000D0L)
+
+//
+// MessageId: DRIVER_IRQL_NOT_LESS_OR_EQUAL
+//
+// MessageText:
+//
+//  DRIVER_IRQL_NOT_LESS_OR_EQUAL
+//
+#define DRIVER_IRQL_NOT_LESS_OR_EQUAL    ((ULONG)0x000000D1L)
+
+//
+// MessageId: DRIVER_PORTION_MUST_BE_NONPAGED
+//
+// MessageText:
+//
+//  The driver mistakenly marked a part of it's image pagable instead of non-pageable.
+//
+#define DRIVER_PORTION_MUST_BE_NONPAGED  ((ULONG)0x000000D3L)
+
+//
+// MessageId: SYSTEM_SCAN_AT_RAISED_IRQL_CAUGHT_IMPROPER_DRIVER_UNLOAD
+//
+// MessageText:
+//
+//  The driver unloaded without cancelling pending operations.
+//
+#define SYSTEM_SCAN_AT_RAISED_IRQL_CAUGHT_IMPROPER_DRIVER_UNLOAD ((ULONG)0x000000D4L)
+
+//
+// MessageId: DRIVER_PAGE_FAULT_IN_FREED_SPECIAL_POOL
+//
+// MessageText:
+//
+//  
+//  The driver is attempting to access memory after it has been freed.
+//
+#define DRIVER_PAGE_FAULT_IN_FREED_SPECIAL_POOL ((ULONG)0x000000D5L)
+
+//
+// MessageId: DRIVER_PAGE_FAULT_BEYOND_END_OF_ALLOCATION
+//
+// MessageText:
+//
+//  
+//  The driver is attempting to access memory beyond the end of the allocation.
+//
+#define DRIVER_PAGE_FAULT_BEYOND_END_OF_ALLOCATION ((ULONG)0x000000D6L)
+
+//
+// MessageId: DRIVER_UNMAPPING_INVALID_VIEW
+//
+// MessageText:
+//
+//  
+//  The driver is attempting to unmap an invalid memory address.
+//
+#define DRIVER_UNMAPPING_INVALID_VIEW    ((ULONG)0x000000D7L)
+
+//
+// MessageId: DRIVER_USED_EXCESSIVE_PTES
+//
+// MessageText:
+//
+//  
+//  The driver has used an excessive number of system PTEs.
+//
+#define DRIVER_USED_EXCESSIVE_PTES       ((ULONG)0x000000D8L)
+
+//
+// MessageId: LOCKED_PAGES_TRACKER_CORRUPTION
+//
+// MessageText:
+//
+//  
+//  The driver is corrupting the locked pages tracking structures.
+//
+#define LOCKED_PAGES_TRACKER_CORRUPTION  ((ULONG)0x000000D9L)
+
+//
+// MessageId: SYSTEM_PTE_MISUSE
+//
+// MessageText:
+//
+//  
+//  The driver is mismanaging system PTEs.
+//
+#define SYSTEM_PTE_MISUSE                ((ULONG)0x000000DAL)
+
+//
+// MessageId: DRIVER_CORRUPTED_SYSPTES
+//
+// MessageText:
+//
+//  
+//  A driver has corrupted the memory management system PTEs.
+//
+#define DRIVER_CORRUPTED_SYSPTES         ((ULONG)0x000000DBL)
+
+//
+// MessageId: DRIVER_INVALID_STACK_ACCESS
+//
+// MessageText:
+//
+//  
+//  A driver accessed a stack address that lies below the current stack pointer
+//  of the stack's thread.
+//
+#define DRIVER_INVALID_STACK_ACCESS      ((ULONG)0x000000DCL)
+
+//
+// MessageId: POOL_CORRUPTION_IN_FILE_AREA
+//
+// MessageText:
+//
+//  
+//  A driver corrupted pool memory used for holding pages destined for disk.
+//
+#define POOL_CORRUPTION_IN_FILE_AREA     ((ULONG)0x000000DEL)
+
+//
+// MessageId: IMPERSONATING_WORKER_THREAD
+//
+// MessageText:
+//
+//  
+//  A worker thread is impersonating another process. The work item forgot to
+//  disable impersonation before it returned.
+//
+#define IMPERSONATING_WORKER_THREAD      ((ULONG)0x000000DFL)
+
+//
+// MessageId: ACPI_BIOS_FATAL_ERROR
+//
+// MessageText:
+//
+//  
+//  Your computer (BIOS) has reported that a component in your system is faulty and
+//  has prevented Windows from operating.  You can determine which component is
+//  faulty by running the diagnostic disk or tool that came with your computer.
+//  
+//  If you do not have this tool, you must contact your system vendor and report
+//  this error message to them.  They will be able to assist you in correcting this
+//  hardware problem thereby allowing Windows to operate.
+//
+#define ACPI_BIOS_FATAL_ERROR            ((ULONG)0x000000E0L)
+
+//
+// MessageId: WORKER_THREAD_RETURNED_AT_BAD_IRQL
+//
+// MessageText:
+//
+//  WORKER_THREAD_RETURNED_AT_BAD_IRQL
+//
+#define WORKER_THREAD_RETURNED_AT_BAD_IRQL ((ULONG)0x000000E1L)
+
+//
+// MessageId: MANUALLY_INITIATED_CRASH
+//
+// MessageText:
+//
+//  
+//  The end-user manually generated the crashdump.
+//
+#define MANUALLY_INITIATED_CRASH         ((ULONG)0x000000E2L)
+
+//
+// MessageId: RESOURCE_NOT_OWNED
+//
+// MessageText:
+//
+//  
+//  A thread tried to release a resource it did not own.
+//
+#define RESOURCE_NOT_OWNED               ((ULONG)0x000000E3L)
+
+//
+// MessageId: WORKER_INVALID
+//
+// MessageText:
+//
+//  
+//  A executive worker item was found in memory which must not contain such
+//  items.  Usually this is memory being freed.  This is usually caused by
+//  a device driver that has not cleaned up properly before freeing memory.
+//
+#define WORKER_INVALID                   ((ULONG)0x000000E4L)
+
+//
+// MessageId: POWER_FAILURE_SIMULATE
+//
+// MessageText:
+//
+//  POWER_FAILURE_SIMULATE
+//
+#define POWER_FAILURE_SIMULATE           ((ULONG)0x000000E5L)
+
+//
+// MessageId: DRIVER_VERIFIER_DMA_VIOLATION
+//
+// MessageText:
+//
+//  The DMA Subsystem has detected an illegal DMA operation initiated by
+//  a driver being verified. The faulty driver must be replaced with a
+//  working version.
+//
+#define DRIVER_VERIFIER_DMA_VIOLATION    ((ULONG)0x000000E6L)
+
+//
+// MessageId: INVALID_FLOATING_POINT_STATE
+//
+// MessageText:
+//
+//  While restoring the previously saved floating point state for a thread,
+//  the state was found to be invalid.
+//
+#define INVALID_FLOATING_POINT_STATE     ((ULONG)0x000000E7L)
+
+//
+// MessageId: INVALID_CANCEL_OF_FILE_OPEN
+//
+// MessageText:
+//
+//  The fileobject passed to IoCancelFileOpen is invalid. It should have reference of 1. The driver
+//  that called IoCancelFileOpen is at fault.
+//
+#define INVALID_CANCEL_OF_FILE_OPEN      ((ULONG)0x000000E8L)
+
+//
+// MessageId: ACTIVE_EX_WORKER_THREAD_TERMINATION
+//
+// MessageText:
+//
+//  An executive worker thread is being terminated without having gone through the worker thread rundown code.
+//  Work items queued to the Ex worker queue must not terminate their threads.
+//  A stack trace should indicate the culprit.
+//
+#define ACTIVE_EX_WORKER_THREAD_TERMINATION ((ULONG)0x000000E9L)
+
+//
+// MessageId: THREAD_STUCK_IN_DEVICE_DRIVER
+//
+// MessageText:
+//
+//  The device driver got stuck in an infinite loop. This usually indicates
+//  problem with the device itself or with the device driver programming the
+//  hardware incorrectly.
+//  
+//  Please check with your hardware device vendor for any driver updates.
+//
+#define THREAD_STUCK_IN_DEVICE_DRIVER    ((ULONG)0x000000EAL)
+
+//
+// MessageId: DIRTY_MAPPED_PAGES_CONGESTION
+//
+// MessageText:
+//
+//  The filesystem driver stack has deadlocked and all the modified pages are
+//  destined for the filesystem.  Since the filesystem is nonoperational, the
+//  system has crashed because none of the modified pages can be reused with
+//  losing data.  Any filesystem or filter driver in the stack may be at fault.
+//
+#define DIRTY_MAPPED_PAGES_CONGESTION    ((ULONG)0x000000EBL)
+
+//
+// MessageId: SESSION_HAS_VALID_SPECIAL_POOL_ON_EXIT
+//
+// MessageText:
+//
+//  SESSION_HAS_VALID_SPECIAL_POOL_ON_EXIT
+//
+#define SESSION_HAS_VALID_SPECIAL_POOL_ON_EXIT ((ULONG)0x000000ECL)
+
+//
+// MessageId: UNMOUNTABLE_BOOT_VOLUME
+//
+// MessageText:
+//
+//  UNMOUNTABLE_BOOT_VOLUME
+//
+#define UNMOUNTABLE_BOOT_VOLUME          ((ULONG)0x000000EDL)
+
+//
+// MessageId: CRITICAL_PROCESS_DIED
+//
+// MessageText:
+//
+//  The kernel attempted to ready a thread that was in an incorrect state such as terminated.
+//
+#define CRITICAL_PROCESS_DIED            ((ULONG)0x000000EFL)
+
+//
+// MessageId: SCSI_VERIFIER_DETECTED_VIOLATION
+//
+// MessageText:
+//
+//  The SCSI verifier has detected an error in a SCSI miniport driver being verified.
+//
+#define SCSI_VERIFIER_DETECTED_VIOLATION ((ULONG)0x000000F1L)
+
+//
+// MessageId: HARDWARE_INTERRUPT_STORM
+//
+// MessageText:
+//
+//  An interrupt storm has caused the system to hang.
+//
+#define HARDWARE_INTERRUPT_STORM         ((ULONG)0x000000F2L)
+
+//
+// MessageId: DISORDERLY_SHUTDOWN
+//
+// MessageText:
+//
+//  The system does not shutdown in a deterministic manner so bugchecks can occur.
+//
+#define DISORDERLY_SHUTDOWN              ((ULONG)0x000000F3L)
+
+//
+// MessageId: CRITICAL_OBJECT_TERMINATION
+//
+// MessageText:
+//
+//  A process or thread crucial to system operation has unexpectedly exited or been terminated.
+//
+#define CRITICAL_OBJECT_TERMINATION      ((ULONG)0x000000F4L)
+
+//
+// MessageId: FLTMGR_FILE_SYSTEM
+//
+// MessageText:
+//
+//  FLTMGR_FILE_SYSTEM
+//
+#define FLTMGR_FILE_SYSTEM               ((ULONG)0x000000F5L)
+
+//
+// MessageId: PCI_VERIFIER_DETECTED_VIOLATION
+//
+// MessageText:
+//
+//  The PCI driver has detected an error in a PCI device or BIOS being verified.
+//
+#define PCI_VERIFIER_DETECTED_VIOLATION  ((ULONG)0x000000F6L)
+
+//
+// MessageId: DRIVER_OVERRAN_STACK_BUFFER
+//
+// MessageText:
+//
+//  A driver has overrun a stack-based buffer.  This overrun could potentially allow a malicious
+//  user to gain control of this machine.
+//
+#define DRIVER_OVERRAN_STACK_BUFFER      ((ULONG)0x000000F7L)
+
+//
+// MessageId: RAMDISK_BOOT_INITIALIZATION_FAILED
+//
+// MessageText:
+//
+//  An initialization failure occurred while attempting to boot from the RAM disk.
+//
+#define RAMDISK_BOOT_INITIALIZATION_FAILED ((ULONG)0x000000F8L)
+
+//
+// MessageId: DRIVER_RETURNED_STATUS_REPARSE_FOR_VOLUME_OPEN
+//
+// MessageText:
+//
+//  A driver returned STATUS_REPARSE to a Create request with no trailing names. STATUS_REPARSE 
+//  should be returned only for Create requests with trailing names as that indicates the driver is supporting
+//  name spaces.
+//
+#define DRIVER_RETURNED_STATUS_REPARSE_FOR_VOLUME_OPEN ((ULONG)0x000000F9L)
+
+//
+// MessageId: HTTP_DRIVER_CORRUPTED
+//
+// MessageText:
+//
+//  The HTTP kernel driver (http.sys) reached a corrupted state and can not recover.  This means 
+//  that the HTTP module detected that its private data is corrupted.  This usually results in 
+//  eventual corruption of the thread pool and an access violation.
+//
+#define HTTP_DRIVER_CORRUPTED            ((ULONG)0x000000FAL)
+
+//
+// MessageId: RECURSIVE_MACHINE_CHECK
+//
+// MessageText:
+//
+//  A machine check exception occurred just after processing a previous machine check, but
+//  before an exit from the machine check code could be completed.
+//
+#define RECURSIVE_MACHINE_CHECK          ((ULONG)0x000000FBL)
+
+//
+// MessageId: ATTEMPTED_EXECUTE_OF_NOEXECUTE_MEMORY
+//
+// MessageText:
+//
+//  An attempt was made to execute to non-executable memory.
+//
+#define ATTEMPTED_EXECUTE_OF_NOEXECUTE_MEMORY ((ULONG)0x000000FCL)
+
+//
+// MessageId: DIRTY_NOWRITE_PAGES_CONGESTION
+//
+// MessageText:
+//
+//  The component owning the modified nowrite pages failed to write out
+//  these pages after marking the relevant files as dont-write to
+//  memory management. This indicates a driver bug.
+//
+#define DIRTY_NOWRITE_PAGES_CONGESTION   ((ULONG)0x000000FDL)
+
+//
+// MessageId: BUGCODE_USB_DRIVER
+//
+// MessageText:
+//
+//  BUGCODE_USB_DRIVER
+//
+#define BUGCODE_USB_DRIVER               ((ULONG)0x000000FEL)
+
+//
+// MessageId: AGP_INVALID_ACCESS
+//
+// MessageText:
+//
+//  An invalid AGP memory access was detected.
+//
+#define AGP_INVALID_ACCESS               ((ULONG)0x00000104L)
+
+//
+// MessageId: AGP_GART_CORRUPTION
+//
+// MessageText:
+//
+//  The Graphics Aperture Redirection Table (Gart) is corrupt.
+//
+#define AGP_GART_CORRUPTION              ((ULONG)0x00000105L)
+
+//
+// MessageId: AGP_ILLEGALLY_REPROGRAMMED
+//
+// MessageText:
+//
+//  The AGP HW has been reprogrammed by an unauthorized agent.
+//
+#define AGP_ILLEGALLY_REPROGRAMMED       ((ULONG)0x00000106L)
+
+//
+// MessageId: KERNEL_EXPAND_STACK_ACTIVE
+//
+// MessageText:
+//
+//  A thread is terminating or attempting a win32 callout while running on an expanded stack.
+//
+#define KERNEL_EXPAND_STACK_ACTIVE       ((ULONG)0x00000107L)
+
+//
+// MessageId: THIRD_PARTY_FILE_SYSTEM_FAILURE
+//
+// MessageText:
+//
+//  A 3rd Party file system or file system filter has failed in an unrecoverable way.
+//
+#define THIRD_PARTY_FILE_SYSTEM_FAILURE  ((ULONG)0x00000108L)
+
+//
+// MessageId: CRITICAL_STRUCTURE_CORRUPTION
+//
+// MessageText:
+//
+//  Modification of system code or a critical data structure was detected.
+//
+#define CRITICAL_STRUCTURE_CORRUPTION    ((ULONG)0x00000109L)
+
+//
+// MessageId: RECURSIVE_NMI
+//
+// MessageText:
+//
+//  A non-maskable interrrupt ocurred just after processing a previous non-maskable interrupt, but
+//  before an exit from the non-maskable interrupt could be completed.
+//
+#define RECURSIVE_NMI                    ((ULONG)0x00000111L)
+
+#define WINLOGON_FATAL_ERROR ((ULONG)0xC000021AL)
+#define MANUALLY_INITIATED_CRASH1 ((ULONG)0xDEADDEAD)
 #endif // _BUGCODES_
