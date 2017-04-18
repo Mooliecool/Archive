@@ -21,12 +21,6 @@ Revision History:
 #include "ncr.h"
 #include "ncrcatp.h"
 
-/*
- *  Some plagarism from ixreboot.c
- */
-
-VOID  HalpVideoReboot(VOID);
-
 //
 // Defines to let us diddle the CMOS clock and the keyboard
 //
@@ -99,7 +93,7 @@ Return Value:
             if ((NCRPlatform != NCR3360) && (NCRPowerOffSystem == TRUE)) {
                 HalpCatPowerOffSystem();
             } else {
-                HalpVideoReboot();
+                InbvAcquireDisplayOwnership();
                 HalpReboot();
             }
             break;

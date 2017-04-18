@@ -28,6 +28,10 @@ Revision History:
 
     John Vert (jvert) 19-Jul-1991
         Moved into HAL
+        
+Notes:
+
+    This is moved out of HAL in NT 5
 
 --*/
 
@@ -413,7 +417,7 @@ CpReadLsr (
     }
 #endif
 
-    HalpDisplayDebugStatus ((PUCHAR) diagstr, 11*4);
+    // HalpDisplayDebugStatus ((PUCHAR) diagstr, 11*4); NT5 REMOVE
     LastLsr = lsr;
     LastMsr = msr;
     return lsr;

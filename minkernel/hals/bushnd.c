@@ -189,7 +189,14 @@ HalpNoSetDeviceData (
     IN ULONG                    Length
     );*/
 
-
+BOOLEAN
+HaliFindBusAddressTranslation(
+    IN PHYSICAL_ADDRESS BusAddress,
+    IN OUT PULONG AddressSpace,
+    OUT PPHYSICAL_ADDRESS TranslatedAddress,
+    IN OUT PULONG_PTR Context,
+    IN BOOLEAN NextBus
+    );
 
 //
 // Prototypes for DeviceControls
@@ -268,6 +275,17 @@ Routine Description:
     HalReferenceHandlerForBus = HaliReferenceHandlerForBus;
     HalReferenceBusHandler = HaliReferenceBusHandler;
     HalDereferenceBusHandler = HaliDereferenceBusHandler;
+    
+    //
+    // If the HAL hasn't implemented a version of this function
+    // already supply the bus handler implementation.
+    //
+    
+    if (!HALPDISPATCH->HalFindBusAddressTranslation) {
+        HALPDISPATCH->HalFindBusAddressTranslation =
+            HaliFindBusAddressTranslation;
+    }
+    
 }
 
 NTSTATUS
@@ -1221,6 +1239,88 @@ Routine Description:
     return Status;
 }
 
+PBUS_HANDLER
+HalpContextToBusHandler(
+    IN ULONG_PTR Context
+    )
+
+/*++
+
+Routine Description:
+
+    Convert a context into a pointer to a bus handler.   Not really
+    a big deal as the context IS a pointer to a bus handler,... or
+    possibly null in which case we want the first bus handler.
+
+    For the sake of paranoia, we run down the list of bus handlers
+    to find a match for the incoming context.  This is because context
+    is supplied by something outside the HAL.
+
+Arguments:
+
+    Context             ULONG_PTR either NULL or a value from which
+                        a pointer to a bus handler can be derived.
+
+Return Value:
+
+    Pointer to a bus handler or NULL if the incoming context was not
+    valid.
+
+--*/
+
+{
+    PLIST_ENTRY OldHalBusHandler;
+    PLIST_ENTRY NewHalBusHandler;
+
+    NewHalBusHandler = HalpAllBusHandlers.Flink;
+
+    if (Context) {
+
+        //
+        // Caller supplied a handler, convert to a HAL_BUS_HANDLER.
+        //
+
+        OldHalBusHandler = &CONTAINING_RECORD((PBUS_HANDLER)Context,
+                                              HAL_BUS_HANDLER,
+                                              Handler)->AllHandlers;
+
+        while (NewHalBusHandler != &HalpAllBusHandlers) {
+
+            if (NewHalBusHandler == OldHalBusHandler) {
+
+                //
+                // Match.
+                //
+
+                break;
+            }
+            NewHalBusHandler = NewHalBusHandler->Flink;
+        }
+    }
+
+    if (NewHalBusHandler == &HalpAllBusHandlers) {
+
+        //
+        // If at end of list, either the incoming value wasn't
+        // on the list or this list is empty.
+        //
+
+#if DBG
+
+        DbgPrint("HAL: HalpContextToBusHandler, invalid context.\n");
+
+#endif
+
+        return NULL;
+    }
+
+    return &CONTAINING_RECORD(NewHalBusHandler,
+                              HAL_BUS_HANDLER,
+                              AllHandlers)->Handler;
+
+}
+
+
 #if 0
 // NT5 REMOVE
 
@@ -1667,3 +1767,178 @@ Return Value:
 #endif
 
 #endif
+
+BOOLEAN
+HaliFindBusAddressTranslation(
+    IN PHYSICAL_ADDRESS BusAddress,
+    IN OUT PULONG AddressSpace,
+    OUT PPHYSICAL_ADDRESS TranslatedAddress,
+    IN OUT PULONG_PTR Context,
+    IN BOOLEAN NextBus
+    )
+
+/*++
+
+Routine Description:
+
+    This routine performs a very similar function to HalTranslateBusAddress
+    except that InterfaceType and BusNumber are not known by the caller.
+    This function will walk all busses known by the HAL looking for a
+    valid translation for the input BusAddress of type AddressSpace.
+
+    This function is recallable using the input/output Context parameter.
+    On the first call to this routine for a given translation the ULONG_PTR
+    Context should be NULL.  Note:  Not the address of it but the contents.
+
+    If the caller decides the returned translation is not the desired
+    translation, it calls this routine again passing Context in as it
+    was returned on the previous call.  This allows this routine to
+    traverse the bus structures until the correct translation is found
+    and is provided because on multiple bus systems, it is possible for
+    the same resource to exist in the independent address spaces of
+    multiple busses.
+
+    Note:  This routine is not called directly, it is called through
+    the HALPDISPATCH table.  If a HAL implements a simpler version of
+    this function (eg generic PC/AT boxes don't actually need translation,
+    those HALs substitute their own version of this routine.   This
+    routine is not otherwise exported from the HAL.
+
+Arguments:
+
+    BusAddress          Address to be translated.
+    AddressSpace        0 = Memory
+                        1 = IO (There are other possibilities).
+                        N.B. This argument is a pointer, the value
+                        will be modified if the translated address
+                        is of a different address space type from
+                        the untranslated bus address.
+    TranslatedAddress   Pointer to where the translated address
+                        should be stored.
+    Context             Pointer to a ULONG_PTR. On the initial call,
+                        for a given BusAddress, it should contain
+                        0.  It will be modified by this routine,
+                        on subsequent calls for the same BusAddress
+                        the value should be handed in again,
+                        unmodified by the caller.
+    NextBus             FALSE if we should attempt this translation
+                        on the same bus as indicated by Context,
+                        TRUE if we should be looking for another
+                        bus.
+
+Return Value:
+
+    TRUE    if translation was successful,
+    FALSE   otherwise.
+
+--*/
+
+{
+    PLIST_ENTRY HalBusHandler;
+    PBUS_HANDLER Handler;
+
+    //
+    // First, make sure the context parameter was supplied. (paranoia).
+    //
+
+    if (!Context) {
+        ASSERT(Context);
+        return FALSE;
+    }
+
+    ASSERT(*Context || (NextBus == TRUE));
+
+    //
+    // Note: The Context is really a PBUS_HANDLER, but,
+    // HalpContextToBusHandler is paranoid. If the incoming
+    // Context isn't what we expect, we won't use it as a
+    // pointer.
+    //
+
+    Handler = HalpContextToBusHandler(*Context);
+
+    if (!Handler) {
+        ASSERT(Handler);
+        return FALSE;
+    }
+
+    if (NextBus == FALSE) {
+
+        //
+        // Attempt translation on THIS bus (and ONLY this bus).
+        //
+
+        ASSERT(Handler == (PBUS_HANDLER)*Context);
+
+        if (HalTranslateBusAddress(
+                Handler->InterfaceType,
+                Handler->BusNumber,
+                BusAddress,
+                AddressSpace,
+                TranslatedAddress)) {
+            *Context = (ULONG_PTR)Handler;
+            return TRUE;
+        }
+
+        return FALSE;
+    }
+
+    HalBusHandler = &CONTAINING_RECORD(Handler,
+                                       HAL_BUS_HANDLER,
+                                       Handler)->AllHandlers;
+    //
+    // Handler is either the bus that came in in Context or the
+    // first bus if *Context was null.   If *Context wasn't NULL,
+    // we want the next bus.
+    //
+
+    if (*Context) {
+        HalBusHandler = HalBusHandler->Flink;
+    }
+
+    //
+    // Examine each remaining bus looking for one that will translate
+    // this address.
+    //
+
+    while (HalBusHandler != &HalpAllBusHandlers) {
+
+        //
+        // This is gross, having gone to all the trouble to find
+        // the handler, it seems a pity to break it out into parameters
+        // used to search for this handler.
+        //
+        // Use HalTranslateAddress to find out if this translation
+        // works on this handler.
+        //
+
+        Handler = &CONTAINING_RECORD(HalBusHandler,
+                                     HAL_BUS_HANDLER,
+                                     AllHandlers)->Handler;
+
+        if (HalTranslateBusAddress(
+                Handler->InterfaceType,
+                Handler->BusNumber,
+                BusAddress,
+                AddressSpace,
+                TranslatedAddress)) {
+            *Context = (ULONG_PTR)Handler;
+            return TRUE;
+        }
+
+        //
+        // Try next handler.
+        //
+
+        HalBusHandler = HalBusHandler->Flink;
+    }
+
+    //
+    // Didn't find another handler this translation works with.  Set
+    // the Context such that we don't do the scan again (unless the
+    // caller resets it) and indicate failure.
+    //
+
+    *Context = 1;
+    return FALSE;
+}
