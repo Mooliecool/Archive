@@ -22,7 +22,7 @@ Notes:
 Revision History:
 
     23-Sep-1992 sudeepb Formed W_VDMEndExecution from VDMEndExecution
-			for performance.
+                        for performance.
 
     18-Dec-1992 sudeepb Tuned all the routines for performance
 
@@ -67,6 +67,9 @@ Return Value:
     PETHREAD Thread;
     KIRQL    OldIrql;
     BOOLEAN  IntsEnabled;
+    PVDM_PROCESS_OBJECTS pProcessObjects;
+    NTSTATUS Status;
+    CONTEXT VdmContext;
 
     PAGED_CODE();
 
@@ -80,16 +83,17 @@ Return Value:
     TrapFrame = VdmGetTrapFrame(&Thread->Tcb);
 
 
-    // Sudeepb 01-Dec-1992 - There was a try except here which i have
-    // taken out, because we come here from SystemServe Entry which
-    // already has a top level try except, so no one can blow NT
-    // even if we take a fault here becuase user memory was'nt allocated..
-
     //
-    // Get the VdmTib,
+    // Get the VdmTib
     //
-    VdmTib = NtCurrentTeb()->Vdm;
 
+    Status = VdmpGetVdmTib(&VdmTib, VDMTIB_KMODE);
+    if (!NT_SUCCESS(Status)) {
+       KeLowerIrql(OldIrql);
+       return(STATUS_INVALID_SYSTEM_SERVICE);
+    }
+
+    try {
 
     //
     // Determine if interrupts are on or off
@@ -176,13 +180,24 @@ Return Value:
         VdmTib->VdmContext.EFlags |= EFLAGS_INTERRUPT_MASK;
     }
 
+    // before working on a trap frame, make sure that it's our own structure
+    //
+
+    VdmContext = VdmTib->VdmContext;
+    if (!(VdmContext.SegCs & FRAME_EDITED)) {
+       // we will crash in KiServiceExit
+       KeLowerIrql(OldIrql);
+       return(STATUS_INVALID_SYSTEM_SERVICE);
+    }
+
     //
     // Switch from MonitorContext to VdmContext
     //
+
     VdmSwapContexts(
         TrapFrame,
         &(VdmTib->MonitorContext),
-        &(VdmTib->VdmContext)
+        &VdmContext
         );
 
 
@@ -191,6 +206,13 @@ Return Value:
     //
     if (IntsEnabled && (*pNtVDMState & VDM_INT_HARDWARE)) {
         VdmDispatchInterrupts(TrapFrame, VdmTib);
+    }
+
+    }
+    except(EXCEPTION_EXECUTE_HANDLER) {
+       Status = GetExceptionCode();
+       KeLowerIrql(OldIrql);
+       return(Status);
     }
 
     KeLowerIrql(OldIrql);
@@ -281,8 +303,8 @@ Return Value:
         //
 
         VdmTib->VdmContext.EFlags =
-	    (VdmTib->VdmContext.EFlags & ~EFLAGS_INTERRUPT_MASK)
-	        | (*(PULONG)pNtVDMState & VDM_VIRTUAL_INTERRUPTS);
+            (VdmTib->VdmContext.EFlags & ~EFLAGS_INTERRUPT_MASK)
+                | (*(PULONG)pNtVDMState & VDM_VIRTUAL_INTERRUPTS);
     }
 
     return;

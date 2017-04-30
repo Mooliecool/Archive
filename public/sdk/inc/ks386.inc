@@ -981,7 +981,8 @@ ProcessorStateLength equ 0120H
 ;  EPROCESS
 ;
 
-EpDebugPort equ 0FCH
+EpDebugPort equ 000CCH
+EpVdmObjects equ 00144H
 
 ;
 ;  NTDDK Resource
@@ -1096,3 +1097,9 @@ CuEbp equ 018H
 CuRet equ 01CH
 CuOutBf equ 020H
 CuOutLn equ 024H
+
+;
+;  VDM_PROCESS_OBJECTS
+;
+
+VpVdmTib equ 00098H

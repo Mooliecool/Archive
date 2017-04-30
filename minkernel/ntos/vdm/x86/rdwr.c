@@ -69,8 +69,13 @@ NTFastDOSIO (
     // signal softpc that we are doing disk io for idle detection
     *pNtVDMState |= VDM_IDLEACTIVITY;
 
+    Status = VdmpGetVdmTib(&VdmTib, VDMTIB_KMODE); // no probe, valid user-mode
+                                                   // address there
+    if (!NT_SUCCESS(Status)) { // vdmtib is bad
+       TrapFrame->EFlags |= EFLAGS_CF;
+       return;
+    }
 
-    VdmTib = NtCurrentTeb()->Vdm;
     IoStatusBlock = (PIO_STATUS_BLOCK) &VdmTib->TempArea1;
     CurrentPosition = (PFILE_POSITION_INFORMATION) &VdmTib->TempArea2;
     EndOfFile = (PFILE_END_OF_FILE_INFORMATION) CurrentPosition;
@@ -107,6 +112,8 @@ NTFastDOSIO (
     OldIrql = KeGetCurrentIrql();
     KeLowerIrql(PASSIVE_LEVEL);
 
+    try {
+
     // Check if we need to seek
     if (!(TrapFrame->EFlags & EFLAGS_ZF)) {
         Large = RtlConvertUlongToLargeInteger(GETFILEPOINTER(ulBX,ulSI));
@@ -123,10 +130,8 @@ NTFastDOSIO (
             CurrentPosition->CurrentByteOffset.LowPart == -1 )
           {
             goto ErrorExit;
-        }
+          }
     }
-
-
 
     if (IoType == SVC_DEMFASTREAD){
         Status = NtReadFile(
@@ -192,6 +197,12 @@ NTFastDOSIO (
             Status = IoStatusBlock->Status;
         }
     }
+
+    }
+    except(ExSystemExceptionFilter()) {
+       goto ErrorExit; // we have caught an exception, error exit
+    }
+
 
     KeRaiseIrql(OldIrql, &OldIrql);
 

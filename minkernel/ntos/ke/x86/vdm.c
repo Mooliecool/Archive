@@ -1259,8 +1259,6 @@ Ke386VdmInsertQueueApc (
     IN PKRUNDOWN_ROUTINE RundownRoutine OPTIONAL,
     IN PKNORMAL_ROUTINE  NormalRoutine  OPTIONAL,
     IN PVOID             NormalContext   OPTIONAL,
-    IN PVOID             SystemArgument1 OPTIONAL,
-    IN PVOID             SystemArgument2 OPTIONAL,
     IN KPRIORITY         Increment
     )
 
@@ -1299,9 +1297,6 @@ Arguments:
 
     NormalContext - Supplies a pointer to an arbitrary data structure which is
         to be passed to the function specified by the NormalRoutine parameter.
-
-    SystemArgument1, SystemArgument2 - Supply a set of two arguments that
-        contain untyped data provided by the executive.
 
     Increment - Supplies the priority increment that is to be applied if
         queuing the APC causes a thread wait to be satisfied.
@@ -1391,8 +1386,8 @@ Return Value:
     Apc->KernelRoutine   = KernelRoutine;
     Apc->RundownRoutine  = RundownRoutine;
     Apc->NormalRoutine   = NormalRoutine;
-    Apc->SystemArgument1 = SystemArgument1;
-    Apc->SystemArgument2 = SystemArgument2;
+    Apc->SystemArgument1 = NULL;
+    Apc->SystemArgument2 = NULL;
     Apc->NormalContext   = NormalContext;
 
     //

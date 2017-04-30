@@ -491,6 +491,7 @@ typedef struct _Vdm_Tib {
     LONG NumTasks;
     PFAMILY_TABLE *pDpmFamTbls;  // array of ptrs to API family tables
     BOOLEAN ContinueExecution;
+    VDM_INTERRUPTHANDLER VdmInterruptHandlers[1024];
 } VDM_TIB, *PVDM_TIB;
 
 //

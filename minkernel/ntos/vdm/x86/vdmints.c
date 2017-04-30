@@ -98,7 +98,8 @@ VOID
 PushRmInterrupt(
     PKTRAP_FRAME TrapFrame,
     ULONG IretHookAddress,
-    PUSHORT pIvtEntry
+    PVDM_TIB VdmTib,
+    ULONG InterruptNumber
     );
 
 NTSTATUS
@@ -212,9 +213,8 @@ Return Value:
                                     VdmpNullRundownRoutine, // rundown
                                     VdmpQueueIntNormalRoutine, // normal routine
                                     (PVOID)KernelMode,      // NormalContext
-                                    NULL,                   // sysarg1
-                                    NULL,                   // sysarg2
-                                    0 ))                    // Increment
+                                    0
+                                    ))
            {
             Status = STATUS_UNSUCCESSFUL;
             }
@@ -332,8 +332,6 @@ Return Value:
                              VdmpNullRundownRoutine,// rundown
                              NULL,                  // normal routine
                              (PVOID)UserMode,       // NormalContext
-                             NULL,                  // sysarg1
-                             NULL,                  // sysarg2
 			     (*pNtVDMState & VDM_INT_HARDWARE) // PrBoost
 			      ? VDM_HWINT_INCREMENT : 0
                              );
@@ -342,8 +340,15 @@ Return Value:
                 else  {
                      ASSERT(*NormalContext == (PVOID)UserMode);
 
+                     Status = VdmpGetVdmTib(&VdmTib, VDMTIB_KPROBE);
+                     if (!NT_SUCCESS(Status)) {
+                        return;
+                     }
 
-                     VdmTib = NtCurrentTeb()->Vdm;
+
+                     //VdmTib = (PsGetCurrentProcess()->VdmObjects)->VdmTib;
+                     // VdmTib =
+                     //    ((PVDM_PROCESS_OBJECTS)(PsGetCurrentProcess()->VdmObjects))->VdmTib;
 
                         //
                         // If there are no hardware ints, dispatch timer ints
@@ -583,7 +588,12 @@ VDIretry:
               goto VDIretry;
               }
 
-          return VdmpLeaveIcaLock(pIcaUserData->pIcaLock);
+          Status = VdmpLeaveIcaLock(pIcaUserData->pIcaLock);
+          if (!NT_SUCCESS(Status)) {
+              ExRaiseStatus(Status);
+              }
+
+          return Status;
           }
 
 
@@ -614,13 +624,21 @@ VDIretry:
                                              IrqLineNum
                                              );
 
+       if (*pNtVDMState & VDM_TRACE_HISTORY) {
+            VdmTraceEvent(VDMTR_KERNEL_HW_INT,
+                          (USHORT)InterruptNumber,
+                          0,
+                          TrapFrame);
+       }
+
        //
        // Push the interrupt frames
        //
        if (TrapFrame->EFlags & EFLAGS_V86_MASK) {
           PushRmInterrupt(TrapFrame,
                           IretHookAddress,
-                          (PUSHORT)(InterruptNumber * 4)
+                          VdmTib,
+                          InterruptNumber
                           );
           }
        else  {
@@ -666,7 +684,10 @@ VDIretry:
         //
         // Release the ica lock
         //
-        VdmpLeaveIcaLock(pIcaUserData->pIcaLock);
+        Status = VdmpLeaveIcaLock(pIcaUserData->pIcaLock);
+        if (!NT_SUCCESS(Status)) {
+            ExRaiseStatus(Status);
+            }
 
         //
         // check to see if we are supposed to switch back to monitor context
@@ -932,7 +953,8 @@ VOID
 PushRmInterrupt(
     PKTRAP_FRAME TrapFrame,
     ULONG   IretHookAddress,
-    PUSHORT pIvtEntry
+    PVDM_TIB VdmTib,
+    ULONG InterruptNumber
     )
 /*++
 
@@ -944,7 +966,8 @@ Arguments:
 
     TrapFrame          - address of current trapframe
     IretHookAddress    - address of Iret Hook, 0 if none
-    pIvtEntry          - Pointer to the Real Mode Ivt Entry
+    VdmTib             - address of current vdm tib
+    InterruptNumber    - interrupt number to reflect
 
 
 Return Value:
@@ -955,6 +978,8 @@ Return Value:
 {
     ULONG      UserSS;
     USHORT     UserSP;
+    USHORT     NewCS;
+    USHORT     NewIP;
 
     PAGED_CODE();
 
@@ -991,10 +1016,30 @@ Return Value:
     //
     //  Set new sp, ip, and cs.
     //
+
+    if (VdmTib->VdmInterruptHandlers[InterruptNumber].Flags & VDM_INT_HOOKED) {
+        NewCS = (USHORT) (VdmTib->DpmiInfo.DosxRmReflector >> 16);
+        NewIP = (USHORT) VdmTib->DpmiInfo.DosxRmReflector;
+        //
+        // now encode the interrupt number into CS
+        //
+        NewCS -= (USHORT) InterruptNumber;
+        NewIP += (USHORT) (InterruptNumber*16);
+
+    } else {
+        PUSHORT pIvtEntry = (PUSHORT) (InterruptNumber * 4);
+
+        NewIP = *pIvtEntry++;
+        NewCS = *pIvtEntry;
+    }
+
     TrapFrame->HardwareEsp =  UserSP;
-    TrapFrame->Eip         = *pIvtEntry++;
-    TrapFrame->SegCs       = *pIvtEntry;
+    TrapFrame->Eip         =  NewIP;
+    TrapFrame->SegCs       =  NewCS;
 }
+
+
+
 
 NTSTATUS
 PushPmInterrupt(
@@ -1026,9 +1071,9 @@ Return Value:
     ULONG   Flags,Base,Limit;
     ULONG   VdmSp, VdmSpOrg;
     PUSHORT VdmStackPointer;
+    ULONG   StackOffset;
     BOOLEAN Frame32 = (BOOLEAN) VdmTib->DpmiInfo.Flags;
-    PVDM_INTERRUPTHANDLER IntHandler;
-    USHORT  NewCS;
+    
 
     PAGED_CODE();
 
@@ -1037,33 +1082,30 @@ Return Value:
     // This emulates the win3.1 Begin_Use_Locked_PM_Stack function.
     //
 
-    try {
-        if (!VdmTib->DpmiInfo.LockCount++) {
-            VdmTib->DpmiInfo.SaveEsp        = TrapFrame->HardwareEsp;
-            VdmTib->DpmiInfo.SaveEip        = TrapFrame->Eip;
-            VdmTib->DpmiInfo.SaveSsSelector = (USHORT) TrapFrame->HardwareSegSs;
-            TrapFrame->HardwareEsp       = 0x1000;
-            TrapFrame->HardwareSegSs     = (ULONG) VdmTib->DpmiInfo.SsSelector | 0x7;
-        }
-    } except (EXCEPTION_EXECUTE_HANDLER) {
-        return GetExceptionCode ();
+    if (!VdmTib->DpmiInfo.LockCount++) {
+        VdmTib->DpmiInfo.SaveEsp        = TrapFrame->HardwareEsp;
+        VdmTib->DpmiInfo.SaveEip        = TrapFrame->Eip;
+        VdmTib->DpmiInfo.SaveSsSelector = (USHORT) TrapFrame->HardwareSegSs;
+        TrapFrame->HardwareEsp       = 0x1000;
+        TrapFrame->HardwareSegSs     = (ULONG) VdmTib->DpmiInfo.SsSelector | 0x7;
     }
 
     //
     // Use Sp or Esp ?
     //
     if (!Ki386GetSelectorParameters((USHORT)TrapFrame->HardwareSegSs,
-                                    &Flags, &Base, &Limit)) {
+                                   &Flags, &Base, &Limit))
+       {
         return STATUS_ACCESS_VIOLATION;
-    }
+        }
 
     //
     // Adjust the limit for page granularity
     //
+    Limit++;
     if (Flags & SEL_TYPE_2GIG) {
         Limit = (Limit << 12) | 0xfff;
         }
-    if (Limit != 0xffffffff) Limit++;
 
     VdmSp = (Flags & SEL_TYPE_BIG) ? TrapFrame->HardwareEsp
                                    : (USHORT)TrapFrame->HardwareEsp;
@@ -1102,9 +1144,10 @@ Return Value:
     //
     if (Flags & SEL_TYPE_BIG) {
         TrapFrame->HardwareEsp = VdmSp;
-    } else {
-        TrapFrame->HardwareEsp = (USHORT)VdmSp;
-    }
+        }
+    else {
+        (USHORT)TrapFrame->HardwareEsp = (USHORT)VdmSp;
+        }
 
 
     //
@@ -1118,89 +1161,43 @@ Return Value:
     //
     if ( VdmSp >= VdmSpOrg ||
          !(Flags & SEL_TYPE_ED) && VdmSpOrg > Limit ||
-         (Flags & SEL_TYPE_ED) && VdmSp < Limit ) {
+         (Flags & SEL_TYPE_ED) && VdmSp < Limit )
+       {
         return STATUS_ACCESS_VIOLATION;
-    }
+        }
 
     //
     // Build the Hw Int iret frame
     //
 
-    try {
-        if (Frame32) {
-            //
-            // Probe the stack pointer to make sure its good. We probe for read here
-            // as we are faster. The code is going to write the addresses anyway.
-            //
-            ProbeForReadSmallStructure (VdmStackPointer - 6 * sizeof (ULONG),
-                                        6 * sizeof (ULONG),
-                                        sizeof (UCHAR));
+    if (Frame32) {
 
-            VdmStackPointer -= 2;
-            *(PULONG)VdmStackPointer = TrapFrame->EFlags;
+       *(--(PULONG)VdmStackPointer)          = TrapFrame->EFlags;
+       *(PUSHORT)(--(PULONG)VdmStackPointer) = (USHORT)TrapFrame->SegCs;
+       *(--(PULONG)VdmStackPointer)          = TrapFrame->Eip;
+       *(--(PULONG)VdmStackPointer)          = TrapFrame->EFlags & ~EFLAGS_TF_MASK;
+       *(--(PULONG)VdmStackPointer)          = VdmTib->DpmiInfo.DosxIntIretD >> 16;
+       *(--(PULONG)VdmStackPointer)          = VdmTib->DpmiInfo.DosxIntIretD & 0xffff;
 
-            VdmStackPointer -= 2;
-            *(PUSHORT)VdmStackPointer = (USHORT)TrapFrame->SegCs;
+    } else {
 
-            VdmStackPointer -= 2;
-            *(PULONG)VdmStackPointer = TrapFrame->Eip;
+       *(--(PUSHORT)VdmStackPointer) = (USHORT)TrapFrame->EFlags;
+       *(--(PUSHORT)VdmStackPointer) = (USHORT)TrapFrame->SegCs;
+       *(--(PUSHORT)VdmStackPointer) = (USHORT)TrapFrame->Eip;
+       *(--(PUSHORT)VdmStackPointer) = (USHORT)(TrapFrame->EFlags & ~EFLAGS_TF_MASK);
+       *(--(PULONG)VdmStackPointer)          = VdmTib->DpmiInfo.DosxIntIret;
 
-            VdmStackPointer -= 2;
-            *(PULONG)VdmStackPointer = TrapFrame->EFlags & ~EFLAGS_TF_MASK;
-
-            VdmStackPointer -= 2;
-            *(PULONG)VdmStackPointer = VdmTib->DpmiInfo.DosxIntIretD >> 16;
-
-            VdmStackPointer -= 2;
-            *(PULONG)VdmStackPointer = VdmTib->DpmiInfo.DosxIntIretD & 0xffff;
-
-        } else {
-            ProbeForReadSmallStructure (VdmStackPointer - 6 * sizeof (USHORT),
-                                        6 * sizeof (USHORT),
-                                        sizeof (UCHAR));
-
-            VdmStackPointer -= 1;
-            *VdmStackPointer = (USHORT)TrapFrame->EFlags;
-
-            VdmStackPointer -= 1;
-            *VdmStackPointer = (USHORT)TrapFrame->SegCs;
-
-            VdmStackPointer -= 1;
-            *VdmStackPointer = (USHORT)TrapFrame->Eip;
-
-            VdmStackPointer -= 1;
-            *VdmStackPointer = (USHORT)(TrapFrame->EFlags & ~EFLAGS_TF_MASK);
-
-            VdmStackPointer -= 2;
-            *(PULONG)VdmStackPointer = VdmTib->DpmiInfo.DosxIntIret;
-        }
-
-        //
-        // Point cs and ip at interrupt handler
-        //
-        IntHandler = &VdmTib->VdmInterruptTable[InterruptNumber];
-        ProbeForReadSmallStructure (&IntHandler[InterruptNumber],
-                                    sizeof (VDM_INTERRUPTHANDLER),
-                                    sizeof (UCHAR));
-        NewCS = IntHandler->CsSelector | 0x7;
-        if ((TrapFrame->EFlags & EFLAGS_V86_MASK) == 0) {
-            NewCS = SANITIZE_SEG (NewCS, UserMode);
-            if (NewCS < 8) {
-                NewCS = KGDT_R3_CODE | RPL_MASK;
-            }
-        }
-        TrapFrame->SegCs = NewCS;
-        TrapFrame->Eip   = IntHandler->Eip;
-
-    } except (EXCEPTION_EXECUTE_HANDLER) {
-        return GetExceptionCode ();
     }
+
+    //
+    // Point cs and ip at interrupt handler
+    //
+    TrapFrame->SegCs = VdmTib->VdmInterruptHandlers[InterruptNumber].CsSelector | 0x7;
+    TrapFrame->Eip   = VdmTib->VdmInterruptHandlers[InterruptNumber].Eip;
 
     //
     // Turn off trace bit so we don't trace the iret hook
     //
-    ASSERT (KeGetCurrentIrql () >= APC_LEVEL);
-
     TrapFrame->EFlags &= ~EFLAGS_TF_MASK;
 
     //
@@ -1216,41 +1213,18 @@ Return Value:
         SegCs = IretHookAddress >> 16;
         Eip   = IretHookAddress & 0xFFFF;
 
+        if (Frame32) {
 
-        try {
-            if (Frame32) {
+           *(--(PULONG)VdmStackPointer)          = TrapFrame->EFlags;
+           *(PUSHORT)(--(PULONG)VdmStackPointer) = (USHORT)SegCs;
+           *(--(PULONG)VdmStackPointer)          = Eip;
 
-                ProbeForReadSmallStructure (VdmStackPointer - 3 * sizeof (ULONG),
-                                            3 * sizeof (ULONG),
-                                            sizeof (UCHAR));
+        } else {
 
-                VdmStackPointer -= 2;
-                *(PULONG)VdmStackPointer = TrapFrame->EFlags;
+           *(--(PUSHORT)VdmStackPointer) = (USHORT)TrapFrame->EFlags;
+           *(--(PUSHORT)VdmStackPointer) = (USHORT)SegCs;
+           *(--(PUSHORT)VdmStackPointer) = (USHORT)Eip;
 
-                VdmStackPointer -= 2;
-                *VdmStackPointer = (USHORT)SegCs;
-
-                VdmStackPointer -= 2;
-                *(PULONG)VdmStackPointer = Eip;
-
-            } else {
-
-                ProbeForReadSmallStructure (VdmStackPointer - 3 * sizeof (USHORT),
-                                            3 * sizeof (USHORT),
-                                            sizeof (UCHAR));
-
-                VdmStackPointer -= 1;
-                *VdmStackPointer = (USHORT)TrapFrame->EFlags;
-
-                VdmStackPointer -= 1;
-                *VdmStackPointer = (USHORT)SegCs;
-
-                VdmStackPointer -= 1;
-                *VdmStackPointer = (USHORT)Eip;
-
-            }
-        } except (EXCEPTION_EXECUTE_HANDLER) {
-            return GetExceptionCode ();
         }
     }
     return STATUS_SUCCESS;
@@ -1309,7 +1283,7 @@ Return Value:
     PLIST_ENTRY   Next;
     PEPROCESS     Process;
     PDELAYINTIRQ  pDelayIntIrq;
-    PETHREAD      Thread;
+    PETHREAD      Thread, MainThread;
     NTSTATUS      Status;
     KIRQL         OldIrql;
     ULONG         IrqLine;
@@ -1317,8 +1291,8 @@ Return Value:
     PULONG        pDelayIrq;
     PULONG        pUndelayIrq;
     LARGE_INTEGER liDelay;
-    BOOLEAN       FreeIrqLine;
-    BOOLEAN       TakeIrqLine;
+    BOOLEAN       FreeIrqLine, AlreadyInUse;
+
 
 
     //
@@ -1331,8 +1305,11 @@ Return Value:
         }
 
     ExAcquireFastMutex(&pVdmObjects->DelayIntFastMutex);
-    Status = STATUS_INVALID_PARAMETER_2;
-    Thread = NULL;
+
+    Status = STATUS_SUCCESS;
+    Thread = MainThread = NULL;
+    FreeIrqLine = TRUE;
+    AlreadyInUse = FALSE;
 
     try {
 
@@ -1346,8 +1323,15 @@ Return Value:
         //
         IrqLine = 1 << pdsd->DelayIrqLine;
         if (!IrqLine) {
+            Status = STATUS_INVALID_PARAMETER_2;
             goto VidEarlyExit;
             }
+
+        pDelayIrq = pVdmObjects->pIcaUserData->pDelayIrq;
+        ProbeForWriteUlong(pDelayIrq);
+        pUndelayIrq = pVdmObjects->pIcaUserData->pUndelayIrq;
+        ProbeForWriteUlong(pUndelayIrq);
+
 
         //
         // Copy out the Delay parameter, and convert hundreths nanosecs
@@ -1359,56 +1343,70 @@ Return Value:
         //
         if (Delay == 0xFFFFFFFF) {
             ZwSetTimerResolution(KeMaximumIncrement, FALSE, &Delay);
+            goto VidEarlyExit;
             }
-        else {
-                // convert delay to hundreths of nanosecs
-                // and ensure min delay of 1 msec
-                //
-             Delay = Delay < 1000 ? 10000 : Delay * 10;
 
-                //
-                // If the delay time is close to the system's clock rate
-                // then adjust the system's clock rate and if needed
-                // the delay time so that the timer will fire before the
-                // the due time.
-                //
-             if (Delay < 150000) {
-                 ULONG ul = Delay >> 1;
 
-                 if (ul < KeTimeIncrement && KeTimeIncrement > KeMinimumIncrement) {
-                     ZwSetTimerResolution(ul, TRUE, (PULONG)&liDelay.LowPart);
-                     }
+         FreeIrqLine = FALSE;
 
-                 if (Delay < KeTimeIncrement) {
-                     // can't set system clock rate low enuf, so use half delay
-                     Delay >>= 1;
-                     }
-                 else if (Delay < (KeTimeIncrement << 1)) {
-                     // Real close to the system clock rate, lower delay
-                     // proportionally, to avoid missing clock cycles.
-                     Delay -= KeTimeIncrement >> 1;
-                     }
+            // convert delay to hundreths of nanosecs
+            // and ensure min delay of 1 msec
+            //
+         Delay = Delay < 1000 ? 10000 : Delay * 10;
+
+            //
+            // If the delay time is close to the system's clock rate
+            // then adjust the system's clock rate and if needed
+            // the delay time so that the timer will fire before the
+            // the due time.
+            //
+         if (Delay < 150000) {
+             ULONG ul = Delay >> 1;
+
+             if (ul < KeTimeIncrement && KeTimeIncrement > KeMinimumIncrement) {
+                 ZwSetTimerResolution(ul, TRUE, (PULONG)&liDelay.LowPart);
+                 }
+
+             if (Delay < KeTimeIncrement) {
+                 // can't set system clock rate low enuf, so use half delay
+                 Delay >>= 1;
+                 }
+             else if (Delay < (KeTimeIncrement << 1)) {
+                 // Real close to the system clock rate, lower delay
+                 // proportionally, to avoid missing clock cycles.
+                 Delay -= KeTimeIncrement >> 1;
                  }
              }
 
+         //
+         // Reference the Target Thread
+         //
+         Status = ObReferenceObjectByHandle(
+                          pdsd->hThread,
+                          THREAD_QUERY_INFORMATION,
+                          PsThreadType,
+                          KeGetPreviousMode(),
+                          &Thread,
+                          NULL
+                          );
+         if (!NT_SUCCESS(Status)) {
+             Thread = NULL;
+             goto VidEarlyExit;
+             }
 
-        //
-        // Reference the Target Thread
-        //
-        Status = ObReferenceObjectByHandle(
-                         pdsd->hThread,
-                         THREAD_QUERY_INFORMATION,
-                         PsThreadType,
-                         KeGetPreviousMode(),
-                         &Thread,
-                         NULL
-                         );
-        if (NT_SUCCESS(Status)) {
-            pDelayIrq = pVdmObjects->pIcaUserData->pDelayIrq;
-            ProbeForWriteUlong(pDelayIrq);
-            pUndelayIrq = pVdmObjects->pIcaUserData->pUndelayIrq;
-            ProbeForWriteUlong(pUndelayIrq);
-            }
+
+         Status = ObReferenceObjectByPointer(
+                          pVdmObjects->MainThread,
+                          THREAD_QUERY_INFORMATION,
+                          PsThreadType,
+                          KernelMode
+                          );
+         if (NT_SUCCESS(Status)) {
+             MainThread = pVdmObjects->MainThread;
+             }
+         else {
+             goto VidEarlyExit;
+             }
 
 VidEarlyExit:;
         }
@@ -1422,14 +1420,16 @@ VidEarlyExit:;
            ObDereferenceObject(Thread);
            }
 
+       if (MainThread) {
+           ObDereferenceObject(MainThread);
+           }
+
        return Status;
        }
 
 
 
    KeAcquireSpinLock(&pVdmObjects->DelayIntSpinLock, &OldIrql);
-   FreeIrqLine = FALSE;
-   TakeIrqLine = FALSE;
 
    try {
 
@@ -1437,7 +1437,7 @@ VidEarlyExit:;
         // Search the DelayedIntList for a matching Irq Line.
         //
         Next = pVdmObjects->DelayIntListHead.Flink;
-        while ( Next != &pVdmObjects->DelayIntListHead) {
+        while (Next != &pVdmObjects->DelayIntListHead) {
             pDelayIntIrq = CONTAINING_RECORD(Next, DELAYINTIRQ, DelayIntListEntry);
             if (pDelayIntIrq->IrqLine == IrqLine) {
                 break;
@@ -1445,100 +1445,66 @@ VidEarlyExit:;
             Next = Next->Flink;
             }
 
-
-        //
-        //  if Delay is 0xFFFFFFFF then remove the DelayIntIrq from DelayIntList
-        //  and free the memory used. cancel pending timers, apcs.
-        //
-        if (Delay == 0xFFFFFFFF) {
-            if (Next != &pVdmObjects->DelayIntListHead) {
-                if (pDelayIntIrq->InUse) {
-                    switch (pDelayIntIrq->InUse) {
-                       case VDMDELAY_KTIMER:
-                            KeCancelTimer(&pDelayIntIrq->Timer);
-                            KeRemoveQueueDpc(&pDelayIntIrq->Dpc);
-                            break;
-
-                       case VDMDELAY_KAPC:
-                            KeRemoveQueueApc(&pDelayIntIrq->Apc);
-                            break;
-                       }
-
-                    FreeIrqLine = TRUE;
-
-                    }
-
-                RemoveEntryList(&pDelayIntIrq->DelayIntListEntry);
-                ExFreePool(pDelayIntIrq);
-                PsReturnPoolQuota(Process, NonPagedPool, sizeof(DELAYINTIRQ));
-                }
-
-            goto VidExit;
+        if (Next == &pVdmObjects->DelayIntListHead) {
+            pDelayIntIrq = NULL;
             }
 
 
-        //
-        // If a DelayIntIrq does not exist for this irql, allocate from nonpaged
-        // pool and initialize it
-        //
-
-        if (Next == &pVdmObjects->DelayIntListHead) {
-
-            pDelayIntIrq = ExAllocatePool(
-                                         NonPagedPool,
-                                         sizeof(DELAYINTIRQ)
-                                         );
-            if (pDelayIntIrq) {
-
-                try {
-                    PsChargePoolQuota(Process, NonPagedPool, sizeof(DELAYINTIRQ));
-                    }
-                except(EXCEPTION_EXECUTE_HANDLER) {
-                    Status = GetExceptionCode();
-                    ExFreePool(pDelayIntIrq);
-                    goto VidExit;
-                    }
-                RtlZeroMemory(pDelayIntIrq, sizeof(DELAYINTIRQ));
-                pDelayIntIrq->IrqLine = IrqLine;
-
-                KeInitializeTimer(&pDelayIntIrq->Timer);
-
-                KeInitializeDpc(&pDelayIntIrq->Dpc,
-                                VdmpDelayIntDpcRoutine,
-                                Process
-                                );
-
-                InsertTailList(&pVdmObjects->DelayIntListHead,
-                               &pDelayIntIrq->DelayIntListEntry
-                               );
+        if (!pDelayIntIrq) {
+            if (FreeIrqLine) {
+                goto VidExit;
                 }
-            else {
+
+            //
+            // If a DelayIntIrq does not exist for this irql, allocate from nonpaged
+            // pool and initialize it
+            //
+
+            pDelayIntIrq = ExAllocatePoolWithTag(NonPagedPool,
+                                                 sizeof(DELAYINTIRQ),
+                                                 ' MDV');
+
+            if (!pDelayIntIrq) {
                 Status = STATUS_NO_MEMORY;
                 goto VidExit;
                 }
+
+
+            try {
+                PsChargePoolQuota(Process, NonPagedPool, sizeof(DELAYINTIRQ));
+                }
+            except(EXCEPTION_EXECUTE_HANDLER) {
+                Status = GetExceptionCode();
+                ExFreePool(pDelayIntIrq);
+                goto VidExit;
+                }
+            RtlZeroMemory(pDelayIntIrq, sizeof(DELAYINTIRQ));
+            pDelayIntIrq->IrqLine = IrqLine;
+
+            KeInitializeTimer(&pDelayIntIrq->Timer);
+
+            KeInitializeDpc(&pDelayIntIrq->Dpc,
+                            VdmpDelayIntDpcRoutine,
+                            Process
+                            );
+
+            InsertTailList(&pVdmObjects->DelayIntListHead,
+                           &pDelayIntIrq->DelayIntListEntry
+                           );
             }
 
-        //
-        // Save PKTHREAD of Target thread for the dpc routine
-        //
-        pDelayIntIrq->Thread = &Thread->Tcb;
 
-
-        //
-        // If the DelayIntIrq is already in use then we have nothing to do
-        // else set the appropriate timer
-        //
-        if (pDelayIntIrq->InUse == VDMDELAY_NOTINUSE) {
-
-            liDelay = RtlEnlargedIntegerMultiply(Delay, -1);
-            pDelayIntIrq->InUse = VDMDELAY_KTIMER;
-            KeSetTimer(&pDelayIntIrq->Timer,
-                       liDelay,
-                       &pDelayIntIrq->Dpc
-                       );
-
-            TakeIrqLine = TRUE;
-            }
+         if (Delay == 0xFFFFFFFF) {
+             if (pDelayIntIrq->InUse == VDMDELAY_KTIMER) {
+                 pDelayIntIrq->InUse = VDMDELAY_NOTINUSE;
+                 pDelayIntIrq = NULL;
+                 }
+             }
+         else if (pDelayIntIrq->InUse == VDMDELAY_NOTINUSE) {
+             liDelay = RtlEnlargedIntegerMultiply(Delay, -1);
+             KeSetTimer(&pDelayIntIrq->Timer, liDelay, &pDelayIntIrq->Dpc);
+             ObReferenceObject(Process);
+             }
 
 VidExit:;
         }
@@ -1546,24 +1512,49 @@ VidExit:;
         Status = GetExceptionCode();
         }
 
+    if (pDelayIntIrq && !pDelayIntIrq->InUse) {
+
+        if (NT_SUCCESS(Status)) {
+            //
+            // Save PETHREAD of Target thread for the dpc routine
+            // the DPC routine will deref the threads.
+            //
+            pDelayIntIrq->InUse = VDMDELAY_KTIMER;
+            pDelayIntIrq->Thread = (PKTHREAD)Thread;
+            Thread = NULL;
+            pDelayIntIrq->MainThread = MainThread;
+            MainThread = NULL;
+            }
+        else {
+            pDelayIntIrq->InUse = VDMDELAY_NOTINUSE;
+            pDelayIntIrq->Thread = NULL;
+            FreeIrqLine = TRUE;
+            }
+        }
+    else {
+        AlreadyInUse = TRUE;
+        }
+
+
+
     KeReleaseSpinLock(&pVdmObjects->DelayIntSpinLock, OldIrql);
 
     try {
-        if (TakeIrqLine) {
+        if (FreeIrqLine) {
+            *pDelayIrq &= ~IrqLine;
+            _asm {
+               mov eax, pUndelayIrq
+               mov ebx, IrqLine
+               lock or [eax], ebx
+               }
+            }
+        else  if (!AlreadyInUse) {  // TakeIrqLine
             *pDelayIrq |= IrqLine;
             _asm {
                mov eax, pUndelayIrq
                mov ebx, IrqLine
                not ebx
                lock and [eax], ebx
-               }
-            }
-        else if (FreeIrqLine) {
-            *pDelayIrq &= ~IrqLine;
-            _asm {
-               mov eax, pUndelayIrq
-               mov ebx, IrqLine
-               lock or [eax], ebx
                }
             }
         }
@@ -1573,7 +1564,13 @@ VidExit:;
 
     ExReleaseFastMutex(&pVdmObjects->DelayIntFastMutex);
 
-    ObDereferenceObject(Thread);
+    if (Thread) {
+        ObDereferenceObject(Thread);
+        }
+
+    if (MainThread) {
+        ObDereferenceObject(MainThread);
+        }
 
     return Status;
 
@@ -1620,7 +1617,7 @@ Return Value:
 
     PVDM_PROCESS_OBJECTS pVdmObjects;
     PEPROCESS    Process;
-    PKTHREAD     Thread;
+    PETHREAD     Thread, MainThread;
     PLIST_ENTRY  Next;
     PDELAYINTIRQ pDelayIntIrq;
     KIRQL        OldIrql;
@@ -1647,53 +1644,63 @@ Return Value:
         Next = Next->Flink;
         }
 
+    if (Next == &pVdmObjects->DelayIntListHead) {
+        pDelayIntIrq = NULL;
+        MainThread = Thread = NULL;
+        }
+    else {
+        Thread = (PETHREAD)pDelayIntIrq->Thread;
+        pDelayIntIrq->Thread = NULL;
+        MainThread = pDelayIntIrq->MainThread;
+        pDelayIntIrq->MainThread = NULL;
+        }
 
 
-    if (Next != &pVdmObjects->DelayIntListHead && pDelayIntIrq->InUse) {
-
-        //
-        // Search for the target thread
-        //
-        Thread = NULL;
-        Next = Process->Pcb.ThreadListHead.Flink;
-        while ( Next != &Process->Pcb.ThreadListHead) {
-            Thread = (CONTAINING_RECORD(Next,KTHREAD,ThreadListEntry));
-            if (Thread == pDelayIntIrq->Thread) {
-                break;
-                }
-            Next = Next->Flink;
-            }
-
-
-        if (Thread) {
-            //
-            // if target thread is gone use thread 0, which is most likely
-            // the ntvdm cpu thread or the wowexec thread.
-            //
-            if (Thread != pDelayIntIrq->Thread) {
-                Next = Process->Pcb.ThreadListHead.Flink;
-                Thread = (CONTAINING_RECORD(Next,KTHREAD,ThreadListEntry));
-                }
-
+    if (pDelayIntIrq && pDelayIntIrq->InUse) {
+        if ((Thread &&
+             Ke386VdmInsertQueueApc(&pDelayIntIrq->Apc,
+                                    &Thread->Tcb,
+                                    KernelMode,
+                                    VdmpDelayIntApcRoutine,
+                                    VdmpNullRundownRoutine,    // rundown
+                                    VdmpQueueIntNormalRoutine, // normal routine
+                                    NULL,                      // NormalContext
+                                    VDM_HWINT_INCREMENT
+                                    ))
+            ||
+            (MainThread &&
+             Ke386VdmInsertQueueApc(&pDelayIntIrq->Apc,
+                                    &MainThread->Tcb,
+                                    KernelMode,
+                                    VdmpDelayIntApcRoutine,
+                                    VdmpNullRundownRoutine,    // rundown
+                                    VdmpQueueIntNormalRoutine, // normal routine
+                                    NULL,                      // NormalContext
+                                    VDM_HWINT_INCREMENT
+                                    )))
+           {
             pDelayIntIrq->InUse  = VDMDELAY_KAPC;
-            Ke386VdmInsertQueueApc(&pDelayIntIrq->Apc,
-                                   Thread,
-                                   KernelMode,
-                                   VdmpDelayIntApcRoutine,
-                                   VdmpNullRundownRoutine, // rundown
-                                   VdmpQueueIntNormalRoutine, // normal routine
-                                   NULL,            // NormalContext
-                                   NULL,            // sysarg1
-                                   NULL,            // sysarg2
-				   VDM_HWINT_INCREMENT ); // Increment
-
             }
         else {
+            // This hwinterrupt line is blocked forever.
             pDelayIntIrq->InUse  = VDMDELAY_NOTINUSE;
             }
         }
 
+
     KeReleaseSpinLock(&pVdmObjects->DelayIntSpinLock, OldIrql);
+
+    if (Thread) {
+        ObDereferenceObject(Thread);
+        }
+
+    if (MainThread) {
+        ObDereferenceObject(MainThread);
+        }
+
+    ObDereferenceObject(Process);
+
+
     return;
 }
 
@@ -1750,16 +1757,15 @@ Return Value:
     BOOLEAN          FreeIrqLine;
 
 
-    Ke386VdmClearApcObject(Apc);
-
-
     //
     // Get a pointer to pVdmObjects
     //
     pVdmObjects = PsGetCurrentProcess()->VdmObjects;
     ExAcquireFastMutex(&pVdmObjects->DelayIntFastMutex);
-
     KeAcquireSpinLock(&pVdmObjects->DelayIntSpinLock, &OldIrql);
+
+    Ke386VdmClearApcObject(Apc);
+
     FreeIrqLine = FALSE;
 
     try {
@@ -1776,12 +1782,15 @@ Return Value:
            Next = Next->Flink;
            }
 
+       if (Next == &pVdmObjects->DelayIntListHead) {
+           pDelayIntIrq = NULL;
+           }
 
        //
        // If we found the IrqLine in the DelayedIntList,
        // restart interrupts.
        //
-       if (Next != &pVdmObjects->DelayIntListHead && pDelayIntIrq->InUse) {
+       if (pDelayIntIrq && pDelayIntIrq->InUse) {
            pDelayIntIrq->InUse  = VDMDELAY_NOTINUSE;
            IrqLine = pDelayIntIrq->IrqLine;
            FreeIrqLine = TRUE;
@@ -1791,6 +1800,7 @@ Return Value:
     except(VdmpExceptionHandler(GetExceptionInformation())) {
        ; // fall thru
        }
+
 
     KeReleaseSpinLock(&pVdmObjects->DelayIntSpinLock, OldIrql);
 
@@ -1836,13 +1846,15 @@ Return Value:
            //
            // Queue a UserModeApc to dispatch interrupts
            //
-           ProcessorMode = KernelMode;
-           VdmpQueueIntApcRoutine(Apc,
-                                  NormalRoutine,
-                                  (PVOID *)&ProcessorMode,
-                                  SystemArgument1,
-                                  SystemArgument2
-                                  );
+           if (NormalRoutine) {
+               ProcessorMode = KernelMode;
+               VdmpQueueIntApcRoutine(Apc,
+                                      NormalRoutine,
+                                      (PVOID *)&ProcessorMode,
+                                      SystemArgument1,
+                                      SystemArgument2
+                                      );
+               }
            }
         }
     except(VdmpExceptionHandler(GetExceptionInformation())) {
@@ -1950,40 +1962,6 @@ Return Value:
                                                : STATUS_SUCCESS;
         ObDereferenceObject(Thread);
         }
-#if DBG
-    else {
-       ULONG  dwIcaLock[4];
-
-       dwIcaLock[0] = 0xfaaafaaa;
-       dwIcaLock[1] = 0xfaaafaaa;
-       dwIcaLock[2] = 0xfaaafaaa;
-       dwIcaLock[3] = 0xfaaafaaa;
-
-       try {
-          PVDM_PROCESS_OBJECTS pVdmObjects;
-          PULONG pIcaLock;
-
-          pVdmObjects = PsGetCurrentProcess()->VdmObjects;
-          pIcaLock    = pVdmObjects->pIcaUserData->pIcaLock;
-
-          dwIcaLock[0] = *pIcaLock++;
-          dwIcaLock[1] = *pIcaLock++;
-          dwIcaLock[2] = *pIcaLock++;
-          dwIcaLock[3] = *pIcaLock;
-          }
-       except (EXCEPTION_EXECUTE_HANDLER) {
-          }
-
-       DbgPrint("VdmpIsThreadTerm: St %x Tid %x IcaLock %x %x %x %x\n",
-                Status,
-                ThreadId,
-                dwIcaLock[0],
-                dwIcaLock[1],
-                dwIcaLock[2],
-                dwIcaLock[3]
-                );
-       }
-#endif
 
     return Status;
 }
@@ -1997,9 +1975,7 @@ VdmpNullRundownRoutine(
 Routine Description:
 
     This routine is used as a rundown routine for our APC.
-    It does not do anything, except prevent apc queue flushing
-    from trying to free the middle of a data structure (by its
-    existence).
+    Attempts to clear the delayed int state
 
 Arguments:
 
@@ -2011,7 +1987,7 @@ Return Value:
 
 --*/
 {
-    Ke386VdmClearApcObject(Apc);
+   VdmpDelayIntApcRoutine( Apc, NULL, NULL, NULL, NULL);
 }
 
 

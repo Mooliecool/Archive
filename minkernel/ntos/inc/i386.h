@@ -2574,8 +2574,6 @@ Ke386VdmInsertQueueApc (
     IN PKRUNDOWN_ROUTINE RundownRoutine OPTIONAL,
     IN PKNORMAL_ROUTINE  NormalRoutine  OPTIONAL,
     IN PVOID             NormalContext   OPTIONAL,
-    IN PVOID             SystemArgument1 OPTIONAL,
-    IN PVOID             SystemArgument2 OPTIONAL,
     IN KPRIORITY         Increment
     );
 

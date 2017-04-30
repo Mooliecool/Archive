@@ -47,6 +47,12 @@ typedef struct _VDM_PROCESS_OBJECTS {
     KSPIN_LOCK       DelayIntSpinLock;
     LIST_ENTRY       DelayIntListHead;
     PVDMICAUSERDATA  pIcaUserData;
+    PETHREAD         MainThread;
+    PVDM_TIB         VdmTib;
+    PUCHAR           PrinterState;
+    PUCHAR           PrinterControl;
+    PUCHAR           PrinterStatus;
+    PUCHAR           PrinterHostState;
 } VDM_PROCESS_OBJECTS, *PVDM_PROCESS_OBJECTS;
 
 
@@ -58,7 +64,7 @@ typedef struct _DelayInterruptsIrq {
     KAPC        Apc;
     KTIMER      Timer;
     BOOLEAN     InUse;
-    PETHREAD    HeartBeatThread;
+    PETHREAD    MainThread;
 } DELAYINTIRQ, *PDELAYINTIRQ;
 
 #define VDMDELAY_NOTINUSE 0

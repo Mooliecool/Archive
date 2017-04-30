@@ -32,7 +32,9 @@ X86_SOURCES=   ..\x86\vdmentry.c         \
                ..\x86\vdmprint.c         \
                ..\x86\strtexec.c         \
                ..\x86\rdwr.c             \
-               ..\x86\vdmints.c
+               ..\x86\vdmtrace.c         \
+               ..\x86\vdmints.c          \
+               ..\x86\vdmtib.c
 
 UMTYPE=console
 

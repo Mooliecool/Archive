@@ -119,20 +119,22 @@ Return Value:
             ProbeForRead(ServiceData, sizeof(VDMSET_INT21_HANDLER_DATA), 1);
 
             Status = Ke386SetVdmInterruptHandler(
-                         KeGetCurrentThread()->ApcState.Process,
-                         0x21L,
-                         (USHORT)(((PVDMSET_INT21_HANDLER_DATA)ServiceData)->Selector),
-                         ((PVDMSET_INT21_HANDLER_DATA)ServiceData)->Offset,
-                         ((PVDMSET_INT21_HANDLER_DATA)ServiceData)->Gate32
-                         );
+                KeGetCurrentThread()->ApcState.Process,
+                0x21L,
+                (USHORT)(((PVDMSET_INT21_HANDLER_DATA)ServiceData)->Selector),
+                ((PVDMSET_INT21_HANDLER_DATA)ServiceData)->Offset,
+                ((PVDMSET_INT21_HANDLER_DATA)ServiceData)->Gate32
+                );
         } except(EXCEPTION_EXECUTE_HANDLER) {
             Status = GetExceptionCode();
         }
 
     } else if (Service == VdmPrinterDirectIoOpen) {
-	Status = VdmpPrinterDirectIoOpen(ServiceData);
+        Status = VdmpPrinterDirectIoOpen(ServiceData);
     } else if (Service == VdmPrinterDirectIoClose) {
-	Status = VdmpPrinterDirectIoClose(ServiceData);
+        Status = VdmpPrinterDirectIoClose(ServiceData);
+    } else if (Service == VdmPrinterInitialize) {
+        Status = VdmpPrinterInitialize(ServiceData);
     } else {
         Status = STATUS_INVALID_PARAMETER_1;
     }

@@ -34,7 +34,7 @@ include ks386.inc
 include callconv.inc            ; calling convention macros
 include mi386.inc
 include vdm.inc
-include vdmtb.inc
+include vdmtib.inc
 
         page ,132
 

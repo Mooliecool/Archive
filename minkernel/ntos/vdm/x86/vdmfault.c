@@ -71,6 +71,12 @@ Return Value:
     //
     KeRaiseIrql(APC_LEVEL, &OldIrql);
 
+    Status = VdmpGetVdmTib(&VdmTib, VDMTIB_KPROBE);
+    if (!NT_SUCCESS(Status)) {
+       KeLowerIrql(OldIrql);
+       return(FALSE);
+    }
+
     //
     // VdmTib is in user mode memory
     //
@@ -78,7 +84,8 @@ Return Value:
         //
         // Get a pointer to the VdmTib
         //
-        VdmTib = NtCurrentTeb()->Vdm;
+ //       VdmTib =
+ //        ((PVDM_PROCESS_OBJECTS)(PsGetCurrentProcess()->VdmObjects))->VdmTib;
 
         if ((TrapFrame->EFlags & EFLAGS_V86_MASK) ||
 	    (TrapFrame->SegCs != (KGDT_R3_CODE | RPL_MASK))) {
@@ -89,8 +96,8 @@ Return Value:
 	    if (FaultAddr < 0x100000) {
                 VdmTib->EventInfo.Event = VdmMemAccess;
                 VdmTib->EventInfo.InstructionSize = 0;
-		VdmTib->EventInfo.FaultInfo.FaultAddr = FaultAddr;
-		VdmTib->EventInfo.FaultInfo.RWMode = Mode;
+                VdmTib->EventInfo.FaultInfo.FaultAddr = FaultAddr;
+                VdmTib->EventInfo.FaultInfo.RWMode = Mode;
                 VdmEndExecution(TrapFrame, VdmTib);
 	    }
 	    else {

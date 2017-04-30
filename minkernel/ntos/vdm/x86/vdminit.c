@@ -37,7 +37,7 @@ Return Value:
 --*/
 
 {
-    NTSTATUS Status;
+    NTSTATUS Status, StatusCopy;
     OBJECT_ATTRIBUTES ObjectAttributes;
     UNICODE_STRING SectionName;
     UNICODE_STRING WorkString;
@@ -54,11 +54,20 @@ Return Value:
     PKEY_VALUE_FULL_INFORMATION KeyValueBuffer;
     PCM_ROM_BLOCK BiosBlock;
     ULONG LastMappedAddress;
-    PVDM_PROCESS_OBJECTS pVdmObjects;
+    PVDM_PROCESS_OBJECTS pVdmObjects = NULL;
     USHORT PagedQuotaCharged = 0;
     USHORT NonPagedQuotaCharged = 0;
+    HANDLE hThread;
+    PVDM_TIB VdmTib;
+
 
     PAGED_CODE();
+
+    Status = VdmpGetVdmTib(&VdmTib, VDMTIB_PROBE); // take from user mode and probe
+
+    if (!NT_SUCCESS(Status)) {
+        return Status;
+    }
 
     if ((KeI386MachineType & MACHINE_TYPE_PC_9800_COMPATIBLE) == 0) {
 
@@ -74,7 +83,7 @@ Return Value:
         InitializeObjectAttributes(
             &ObjectAttributes,
             &SectionName,
-            OBJ_CASE_INSENSITIVE,
+            OBJ_CASE_INSENSITIVE|OBJ_KERNEL_HANDLE,
             (HANDLE) NULL,
             (PSECURITY_DESCRIPTOR) NULL
             );
@@ -115,26 +124,35 @@ Return Value:
             );
 
         if (!NT_SUCCESS(Status)) {
-
-            return Status;
-
+           ZwClose(SectionHandle);
+           return Status;
         }
 
-        RtlMoveMemory(
-            destination,
-            BaseAddress,
-            ViewSize
-            );
+        // problem with this statement below --
+        // it could be a non-vdm process and copying memory to address 0
+        // should be guarded against
+
+        StatusCopy = STATUS_SUCCESS;
+        try {
+            RtlMoveMemory(
+               destination,
+               BaseAddress,
+               ViewSize
+               );
+        }
+        except(ExSystemExceptionFilter()) {
+           StatusCopy = GetExceptionCode();
+        }
+
 
         Status = ZwUnmapViewOfSection(
             NtCurrentProcess(),
             BaseAddress
             );
 
-        if (!NT_SUCCESS(Status)) {
-
-            return Status;
-
+        if (!NT_SUCCESS(Status) || !NT_SUCCESS(StatusCopy)) {
+           ZwClose(SectionHandle);
+           return (NT_SUCCESS(Status) ? StatusCopy : Status);
         }
 
         //
@@ -165,7 +183,7 @@ Return Value:
         // release.)
 
         if (!NT_SUCCESS(Status)) {
-
+            ZwClose(SectionHandle);
             return Status;
 
         }
@@ -177,7 +195,7 @@ Return Value:
         InitializeObjectAttributes(
             &ObjectAttributes,
             &CmRegistryMachineHardwareDescriptionSystemName,
-            OBJ_CASE_INSENSITIVE,
+            OBJ_CASE_INSENSITIVE|OBJ_KERNEL_HANDLE,
             (HANDLE)NULL,
             NULL
             );
@@ -189,6 +207,7 @@ Return Value:
             );
 
         if (!NT_SUCCESS(Status)) {
+            ZwClose(SectionHandle);
             return Status;
         }
 
@@ -196,9 +215,15 @@ Return Value:
         // Allocate space for the data
         //
 
-        KeyValueBuffer = ExAllocatePool(PagedPool, KEY_VALUE_BUFFER_SIZE);
+        KeyValueBuffer = ExAllocatePoolWithTag(
+            PagedPool,
+            KEY_VALUE_BUFFER_SIZE,
+            ' MDV'
+            );
+
         if (KeyValueBuffer == NULL) {
             ZwClose(RegistryHandle);
+            ZwClose(SectionHandle);
             return STATUS_NO_MEMORY;
         }
 
@@ -223,6 +248,7 @@ Return Value:
         if (!NT_SUCCESS(Status)) {
             ZwClose(RegistryHandle);
             ExFreePool(KeyValueBuffer);
+            ZwClose(SectionHandle);
             return Status;
         }
 
@@ -234,6 +260,7 @@ Return Value:
         ) {
             ZwClose(RegistryHandle);
             ExFreePool(KeyValueBuffer);
+            ZwClose(SectionHandle);
             // No rom blocks.
             return STATUS_SUCCESS;
         }
@@ -251,6 +278,7 @@ Return Value:
         ) {
             ZwClose(RegistryHandle);
             ExFreePool(KeyValueBuffer);
+            ZwClose(SectionHandle);
             return STATUS_ILL_FORMED_SERVICE_ENTRY;
         }
 
@@ -368,14 +396,16 @@ Return Value:
 
     try {
 
-        Process->VdmObjects = ExAllocatePool(
+        Process->VdmObjects = ExAllocatePoolWithTag(
             NonPagedPool,
-            sizeof(VDM_PROCESS_OBJECTS)
+            sizeof(VDM_PROCESS_OBJECTS),
+            ' MDV'
             );
 
         if (Process->VdmObjects == NULL) {
             return STATUS_NO_MEMORY;
         }
+
 
         //
         // We use NonPagedQuotaCharged to keep track of the quota to return
@@ -384,16 +414,16 @@ Return Value:
         PsChargePoolQuota(Process, NonPagedPool, sizeof(VDM_PROCESS_OBJECTS));
         NonPagedQuotaCharged = sizeof(VDM_PROCESS_OBJECTS);
 
-        pVdmObjects = Process->VdmObjects;
         RtlZeroMemory( Process->VdmObjects, sizeof(VDM_PROCESS_OBJECTS));
+        pVdmObjects = Process->VdmObjects;
         ExInitializeFastMutex(&pVdmObjects->DelayIntFastMutex);
         KeInitializeSpinLock(&pVdmObjects->DelayIntSpinLock);
         InitializeListHead(&pVdmObjects->DelayIntListHead);
 
-
-        pVdmObjects->pIcaUserData = ExAllocatePool(
+        pVdmObjects->pIcaUserData = ExAllocatePoolWithTag(
             PagedPool,
-            sizeof(VDMICAUSERDATA)
+            sizeof(VDMICAUSERDATA),
+            ' MDV'
             );
 
         if (pVdmObjects->pIcaUserData == NULL) {
@@ -426,6 +456,8 @@ Return Value:
             //
             // Probe static addresses in IcaUserData.
             //
+            pIcaUserData = pVdmObjects->pIcaUserData;
+
             ProbeForWriteHandle(pIcaUserData->phWowIdleEvent);
 
             ProbeForWrite(
@@ -450,6 +482,27 @@ Return Value:
             ProbeForWriteUlong(pIcaUserData->pDelayIrq);
             ProbeForWriteUlong(pIcaUserData->pUndelayIrq);
             ProbeForWriteUlong(pIcaUserData->pDelayIret);
+
+
+            //
+            // Save pointer to main thread, for delayed interrupts DPC routine.
+            // To keep the pointer to the main thread valid, open a thread handle
+            // and keep it open until process cleanup.
+            //
+
+            InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
+            Status =  ZwOpenThread(&hThread,
+                                   THREAD_QUERY_INFORMATION,
+                                   &ObjectAttributes,
+                                   &NtCurrentTeb()->ClientId
+                                   );
+
+            if (NT_SUCCESS(Status)) {
+                pVdmObjects->MainThread = PsGetCurrentThread();
+                }
+
+
+            pVdmObjects->VdmTib = VdmTib;
         }
 
     } except(ExSystemExceptionFilter()) {
@@ -458,9 +511,12 @@ Return Value:
 
 
     if (!NT_SUCCESS(Status)) {
-        if (pVdmObjects->pIcaUserData)
-            ExFreePool(pVdmObjects->pIcaUserData);
-        ExFreePool(pVdmObjects);
+        if (pVdmObjects) {
+            if (pVdmObjects->pIcaUserData) {
+                ExFreePool(pVdmObjects->pIcaUserData);
+            }
+            ExFreePool(pVdmObjects);
+        }
         Process->VdmObjects = NULL;
 
         //
@@ -474,7 +530,7 @@ Return Value:
     // following codepath only for PC/AT (and FMR in Japan) vdm
     //
 
-    if (KeI386MachineType & MACHINE_TYPE_PC_9800_COMPATIBLE == 0) {
+    if ((KeI386MachineType & MACHINE_TYPE_PC_9800_COMPATIBLE) == 0) {
 
 #ifdef WHEN_IO_DISPATCHING_IMPROVED
         // Sudeepb - Once we improve the IO dispatching we should use this

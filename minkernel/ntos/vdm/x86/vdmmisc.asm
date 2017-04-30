@@ -26,7 +26,7 @@ include ks386.inc
 include callconv.inc
 include mi386.inc
 include vdm.inc
-include vdmtb.inc
+include vdmtib.inc
 
         page ,132
 
@@ -44,6 +44,7 @@ _PAGE   SEGMENT PARA PUBLIC 'CODE'
         EXTRNP   _ObWaitForSingleObject,3
         EXTRNP   _NtReleaseSemaphore,3
         EXTRNP   _VdmpIsThreadTerminating, 1
+        EXTRNP   _NtSetEvent,2
 
         extrn    _KeI386EFlagsAndMaskV86:DWORD
         extrn    _KeI386EFlagsOrMaskV86:DWORD
@@ -95,6 +96,7 @@ cPublicProc _VdmSwapContexts,3
         mov     ebp,esp
         push    esi
         push    edi
+        push    ebx
 
 if DBG
         EXTRNP  _DbgBreakPoint, 0
@@ -188,9 +190,14 @@ vs20:
         mov     edi,esi
         mov     esi,[ebp + 10h]
         mov     eax,[esi].CsSegCs
-        mov     [edi].TsSegCs,eax
-        mov     eax,[esi].CsSegSs
-        mov     [edi].TsHardwareSegSs,eax
+        mov     ebx,[esi].CsSegSs
+        test    dword ptr [esi].CsEFlags, EFLAGS_V86_MASK
+        jnz     vsc05                           ; don't worry about v86 segments
+
+        or      ax, 3                           ; RPL 3 only
+        or      bx, 3                           ; RPL 3 only
+vsc05:  mov     [edi].TsSegCs,eax
+        mov     [edi].TsHardwareSegSs,ebx
 ;
 ; Move General Registers
 ;
@@ -273,6 +280,7 @@ vsc20:
         mov     eax, 0ffffffffh
         mov     [edi].TsExceptionList, eax
 vsc30:
+        pop     ebx
         pop     edi
         pop     esi
         mov     esp,ebp
@@ -295,8 +303,10 @@ _VdmSwapContexts endp
 VdmDispatchBop proc
 
 vdb05:
-        mov     eax,PCR[PcTeb]
-        mov     esi, dword ptr [eax].TbVdm
+        mov     eax,PCR[PcPrcbData+PbCurrentThread]
+        mov     esi,[eax]+ThApcState+AsProcess
+        mov     esi,[esi].EpVdmObjects
+        mov     esi,[esi].VpVdmTib             ; get pointer to VdmTib
         test    dword ptr [ebp].TsEFlags,EFLAGS_V86_MASK
         jz      vdb10
         movzx   ebx,word ptr [ebp].TsSegCs
@@ -541,7 +551,7 @@ Lil10:
         ; release another thread waiting on the LockSemaphore
         ; and exit
 Lil20:
-        stdCall _NtReleaseSemaphore, <CsLockSemaphore[edx], 1, 0>
+        stdCall _NtSetEvent, <CsLockSemaphore[edx], 0>
         stdRET  _VdmpLeaveIcaLock
 
 

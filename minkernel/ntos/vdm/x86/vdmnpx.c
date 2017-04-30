@@ -22,6 +22,7 @@ Revision History:
 
 #include <ntos.h>
 #include <vdmntos.h>
+#include "vdmp.h"
 
 #ifdef ALLOC_PRAGMA
 #pragma  alloc_text(PAGE, VdmDispatchIRQ13)
@@ -75,12 +76,18 @@ Return Value:
     EXCEPTION_RECORD ExceptionRecord;
     PVDM_TIB VdmTib;
     BOOLEAN Success;
+    NTSTATUS Status;
 
     PAGED_CODE();
 
     Success = TRUE;
+
+    Status = VdmpGetVdmTib(&VdmTib, VDMTIB_KPROBE);
+    if (!NT_SUCCESS(Status)) {
+       return(FALSE);
+    }
+
     try {
-        VdmTib = NtCurrentTeb()->Vdm;
         VdmTib->EventInfo.Event = VdmIrq13;
         VdmTib->EventInfo.InstructionSize = 0L;
     } except(EXCEPTION_EXECUTE_HANDLER) {

@@ -175,3 +175,29 @@ NTSTATUS
 VdmpPrinterDirectIoClose(
     PVOID ServiceData
 );
+
+VOID
+VdmTraceEvent(
+    USHORT Type,
+    USHORT wData,
+    USHORT lData,
+    PKTRAP_FRAME TrapFrame
+    );
+
+NTSTATUS
+VdmpPrinterInitialize(
+    PVOID ServiceData
+    );
+
+NTSTATUS
+VdmpGetVdmTib(
+   PVDM_TIB *ppVdmTib,
+   ULONG dwFlags
+   );
+
+#define VDMTIB_KMODE 0x0001
+#define VDMTIB_PROBE 0x0002
+#define VDMTIB_KPROBE (VDMTIB_KMODE|VDMTIB_PROBE)
+
+
+

@@ -35,10 +35,10 @@ Revision History:
 #define HOST_LPT_BUSY           (1 << 0)
 #define STATUS_REG_MASK         0x07
 
-#define get_status(adap)        (*(PUCHAR)((ULONG)VdmTib->PrinterInfo.prt_Status+(ULONG)adap))
-#define get_control(adap)       (*(PUCHAR)((ULONG)VdmTib->PrinterInfo.prt_Control+(ULONG)adap))
-#define host_lpt_status(adap)   (*(PUCHAR)((ULONG)VdmTib->PrinterInfo.prt_HostState+(ULONG)adap))
-#define set_status(adap,val)    *(PUCHAR)((ULONG)VdmTib->PrinterInfo.prt_Status+(ULONG)adap) =  val
+#define get_status(adap)        (*(PUCHAR)((ULONG)(((PVDM_PROCESS_OBJECTS)(PsGetCurrentProcess()->VdmObjects))->PrinterStatus)+(ULONG)adap))
+#define get_control(adap)       (*(PUCHAR)((ULONG)(((PVDM_PROCESS_OBJECTS)(PsGetCurrentProcess()->VdmObjects))->PrinterControl)+(ULONG)adap))
+#define host_lpt_status(adap)   (*(PUCHAR)((ULONG)(((PVDM_PROCESS_OBJECTS)(PsGetCurrentProcess()->VdmObjects))->PrinterHostState)+(ULONG)adap))
+#define set_status(adap,val)    *(PUCHAR)((ULONG)(((PVDM_PROCESS_OBJECTS)(PsGetCurrentProcess()->VdmObjects))->PrinterStatus)+(ULONG)adap) =  val
 
 
 extern NTSTATUS PspSetProcessIoHandlers(
