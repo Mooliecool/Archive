@@ -1,3 +1,5 @@
+## Note: This branch is experimental. ##
+
 # MinNT
 MinNT - Refactored Minimal NT 4.0 Core
 
