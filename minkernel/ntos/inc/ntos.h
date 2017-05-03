@@ -31,6 +31,10 @@ Revision History:
 #include "init.h"
 #include "v86emul.h"
 
+#ifdef _AMD64_
+#include "amd64.h"
+#endif
+
 #ifdef _X86_
 #include "i386.h"
 #endif
