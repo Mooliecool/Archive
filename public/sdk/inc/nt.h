@@ -61,6 +61,10 @@ Revision History:
 #include <ntstatus.h>
 #include <ntkeapi.h>
 
+#ifdef _AMD64_
+#include "ntamd64.h"
+#endif
+
 #ifdef _X86_
 #include "nti386.h"
 #endif // i386
