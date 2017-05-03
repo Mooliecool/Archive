@@ -28,6 +28,13 @@
 extern "C" {
 #endif
 
+#if !defined(_W64)
+#if !defined(__midl) && (defined(_X86_) || defined(_M_IX86)) && _MSC_VER >= 1300
+#define _W64 __w64
+#else
+#define _W64
+#endif
+#endif
 
 /* Define _CRTAPI1 (for compatibility with the NT SDK) */
 
@@ -76,7 +83,11 @@ extern "C" {
 
 
 #ifndef _SIZE_T_DEFINED
-typedef unsigned int size_t;
+#ifdef  _WIN64
+typedef unsigned __int64    size_t;
+#else
+typedef _W64 unsigned int   size_t;
+#endif
 #define _SIZE_T_DEFINED
 #endif
 

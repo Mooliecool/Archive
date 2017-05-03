@@ -45,6 +45,14 @@ extern "C" {
 #define DECLSPEC_IMPORT
 #endif
 
+#ifndef DECLSPEC_ALIGN
+#if (_MSC_VER >= 1300) && !defined(MIDL_PASS)
+#define DECLSPEC_ALIGN(x)   __declspec(align(x))
+#else
+#define DECLSPEC_ALIGN(x)
+#endif
+#endif
+
 typedef void *PVOID;    
 
 #if (_MSC_VER >= 800) || defined(_STDCALL_SUPPORTED)
@@ -433,6 +441,22 @@ Int64ShrlMod32 (
 #define Int64ShllMod32(a, b) ((DWORDLONG)(a) << (b))
 #define Int64ShraMod32(a, b) ((LONGLONG)(a) >> (b))
 #define Int64ShrlMod32(a, b) ((DWORDLONG)(a) >> (b))
+
+#elif defined(_M_AMD64)
+
+//
+// AMD64 has native 64-bit operations that is just as fast as it's
+// 32-bit counter parts. Therefore, the int64 data type is used directly to form
+// shifts of 0..31 and multiplies of 32-bits times 32-bits to form a 64-bit
+// product.
+//
+
+#define Int32x32To64(a, b) ((LONGLONG)((LONG)(a)) * (LONGLONG)((LONG)(b)))
+#define UInt32x32To64(a, b) ((ULONGLONG)((DWORD)(a)) * (ULONGLONG)((DWORD)(b)))
+
+#define Int64ShllMod32(a, b) ((ULONGLONG)(a) << (b))
+#define Int64ShraMod32(a, b) ((LONGLONG)(a) >> (b))
+#define Int64ShrlMod32(a, b) ((ULONGLONG)(a) >> (b))
 
 #else
 
@@ -856,6 +880,689 @@ NtCurrentTeb(void);
 //
 // Define function to return the current Thread Environment Block
 //
+
+#if defined(_AMD64_)
+
+
+#if defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS)
+
+//
+// Define bit test intrinsics.
+//
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define BitTest _bittest
+#define BitTestAndComplement _bittestandcomplement
+#define BitTestAndSet _bittestandset
+#define BitTestAndReset _bittestandreset
+#define InterlockedBitTestAndSet _interlockedbittestandset
+#define InterlockedBitTestAndReset _interlockedbittestandreset
+
+#define BitTest64 _bittest64
+#define BitTestAndComplement64 _bittestandcomplement64
+#define BitTestAndSet64 _bittestandset64
+#define BitTestAndReset64 _bittestandreset64
+#define InterlockedBitTestAndSet64 _interlockedbittestandset64
+#define InterlockedBitTestAndReset64 _interlockedbittestandreset64
+
+BOOLEAN
+_bittest (
+    IN LONG *Base,
+    IN LONG Offset
+    );
+
+BOOLEAN
+_bittestandcomplement (
+    IN LONG *Base,
+    IN LONG Offset
+    );
+
+BOOLEAN
+_bittestandset (
+    IN LONG *Base,
+    IN LONG Offset
+    );
+
+BOOLEAN
+_bittestandreset (
+    IN LONG *Base,
+    IN LONG Offset
+    );
+
+BOOLEAN
+_interlockedbittestandset (
+    IN LONG *Base,
+    IN LONG Offset
+    );
+
+BOOLEAN
+_interlockedbittestandreset (
+    IN LONG *Base,
+    IN LONG Offset
+    );
+
+BOOLEAN
+_bittest64 (
+    IN LONG64 *Base,
+    IN LONG64 Offset
+    );
+
+BOOLEAN
+_bittestandcomplement64 (
+    IN LONG64 *Base,
+    IN LONG64 Offset
+    );
+
+BOOLEAN
+_bittestandset64 (
+    IN LONG64 *Base,
+    IN LONG64 Offset
+    );
+
+BOOLEAN
+_bittestandreset64 (
+    IN LONG64 *Base,
+    IN LONG64 Offset
+    );
+
+BOOLEAN
+_interlockedbittestandset64 (
+    IN LONG64 *Base,
+    IN LONG64 Offset
+    );
+
+BOOLEAN
+_interlockedbittestandreset64 (
+    IN LONG64 *Base,
+    IN LONG64 Offset
+    );
+
+#pragma intrinsic(_bittest)
+#pragma intrinsic(_bittestandcomplement)
+#pragma intrinsic(_bittestandset)
+#pragma intrinsic(_bittestandreset)
+#pragma intrinsic(_interlockedbittestandset)
+#pragma intrinsic(_interlockedbittestandreset)
+
+#pragma intrinsic(_bittest64)
+#pragma intrinsic(_bittestandcomplement64)
+#pragma intrinsic(_bittestandset64)
+#pragma intrinsic(_bittestandreset64)
+#pragma intrinsic(_interlockedbittestandset64)
+#pragma intrinsic(_interlockedbittestandreset64)
+
+//
+// Define bit scan intrinsics.
+//
+
+#define BitScanForward _BitScanForward
+#define BitScanReverse _BitScanReverse
+#define BitScanForward64 _BitScanForward64
+#define BitScanReverse64 _BitScanReverse64
+
+BOOLEAN
+_BitScanForward (
+    OUT DWORD *Index,
+    IN DWORD Mask
+    );
+
+BOOLEAN
+_BitScanReverse (
+    OUT DWORD *Index,
+    IN DWORD Mask
+    );
+
+BOOLEAN
+_BitScanForward64 (
+    OUT DWORD *Index,
+    IN DWORD64 Mask
+    );
+
+BOOLEAN
+_BitScanReverse64 (
+    OUT DWORD *Index,
+    IN DWORD64 Mask
+    );
+
+#pragma intrinsic(_BitScanForward)
+#pragma intrinsic(_BitScanReverse)
+#pragma intrinsic(_BitScanForward64)
+#pragma intrinsic(_BitScanReverse64)
+
+//
+// Define function to flush a cache line.
+//
+
+#define CacheLineFlush(Address) _mm_clflush(Address)
+
+VOID
+_mm_clflush (
+    PVOID Address
+    );
+
+#pragma intrinsic(_mm_clflush)
+
+//
+// Define memory fence intrinsics
+//
+
+#define LoadFence _mm_lfence
+#define MemoryFence _mm_mfence
+#define StoreFence _mm_sfence
+
+VOID
+_mm_lfence (
+    VOID
+    );
+
+VOID
+_mm_mfence (
+    VOID
+    );
+
+VOID
+_mm_sfence (
+    VOID
+    );
+        
+void 
+_mm_prefetch(
+    CHAR CONST *a, 
+    int sel
+    );
+
+/* constants for use with _mm_prefetch */
+#define _MM_HINT_T0     1
+#define _MM_HINT_T1     2
+#define _MM_HINT_T2     3
+#define _MM_HINT_NTA    0
+
+#pragma intrinsic(_mm_prefetch)
+#pragma intrinsic(_mm_lfence)
+#pragma intrinsic(_mm_mfence)
+#pragma intrinsic(_mm_sfence)
+
+#define YieldProcessor() 
+#define MemoryBarrier _mm_mfence
+#define PreFetchCacheLine(l, a)  _mm_prefetch((CHAR CONST *) a, l)
+
+//
+// PreFetchCacheLine level defines.
+//
+
+#define PF_TEMPORAL_LEVEL_1  _MM_HINT_T0
+#define PF_NON_TEMPORAL_LEVEL_ALL _MM_HINT_NTA
+
+//
+// Define function to get the caller's EFLAGs value.
+//
+
+#define GetCallersEflags() __getcallerseflags()
+
+unsigned __int32
+__getcallerseflags (
+    VOID
+    );
+
+#pragma intrinsic(__getcallerseflags)
+
+//
+// Define function to read the value of the time stamp counter
+//
+
+#define ReadTimeStampCounter() __rdtsc()
+
+DWORD64
+__rdtsc (
+    VOID
+    );
+
+#pragma intrinsic(__rdtsc)
+
+//
+// Define functions to move strings as bytes, words, dwords, and qwords.
+//
+
+VOID
+__movsb (
+    IN PBYTE  Destination,
+    IN PBYTE  Source,
+    IN SIZE_T Count
+    );
+
+VOID
+__movsw (
+    IN PWORD   Destination,
+    IN PWORD   Source,
+    IN SIZE_T Count
+    );
+
+VOID
+__movsd (
+    IN PDWORD Destination,
+    IN PDWORD Source,
+    IN SIZE_T Count
+    );
+
+VOID
+__movsq (
+    IN PDWORDLONG Destination,
+    IN PDWORDLONG Source,
+    IN SIZE_T Count
+    );
+
+#pragma intrinsic(__movsb)
+#pragma intrinsic(__movsw)
+#pragma intrinsic(__movsd)
+#pragma intrinsic(__movsq)
+
+//
+// Define functions to store strings as bytes, words, dwords, and qwords.
+//
+
+VOID
+__stosb (
+    IN PBYTE  Destination,
+    IN BYTE  Value,
+    IN SIZE_T Count
+    );
+
+VOID
+__stosw (
+    IN PWORD   Destination,
+    IN WORD   Value,
+    IN SIZE_T Count
+    );
+
+VOID
+__stosd (
+    IN PDWORD Destination,
+    IN DWORD Value,
+    IN SIZE_T Count
+    );
+
+VOID
+__stosq (
+    IN PDWORD64 Destination,
+    IN DWORD64 Value,
+    IN SIZE_T Count
+    );
+
+#pragma intrinsic(__stosb)
+#pragma intrinsic(__stosw)
+#pragma intrinsic(__stosd)
+#pragma intrinsic(__stosq)
+
+//
+// Define functions to capture the high 64-bits of a 128-bit multiply.
+//
+
+/*
+
+//
+// OPENNT BUGBUG: __umulh does not exist on 64-bit systems.
+//
+
+#define MultiplyHigh __mulh
+#define UnsignedMultiplyHigh __umulh
+
+LONGLONG
+MultiplyHigh (
+    IN LONGLONG Multiplier,
+    IN LONGLONG Multiplicand
+    );
+
+ULONGLONG
+UnsignedMultiplyHigh (
+    IN ULONGLONG Multiplier,
+    IN ULONGLONG Multiplicand
+    );
+
+#pragma intrinsic(__mulh)
+#pragma intrinsic(__umulh)
+*/
+
+//
+// Define functions to read and write the uer TEB and the system PCR/PRCB.
+//
+
+BYTE 
+__readgsbyte (
+    IN DWORD Offset
+    );
+
+WORD  
+__readgsword (
+    IN DWORD Offset
+    );
+
+DWORD
+__readgsdword (
+    IN DWORD Offset
+    );
+
+DWORD64
+__readgsqword (
+    IN DWORD Offset
+    );
+
+VOID
+__writegsbyte (
+    IN DWORD Offset,
+    IN BYTE  Data
+    );
+
+VOID
+__writegsword (
+    IN DWORD Offset,
+    IN WORD   Data
+    );
+
+VOID
+__writegsdword (
+    IN DWORD Offset,
+    IN DWORD Data
+    );
+
+VOID
+__writegsqword (
+    IN DWORD Offset,
+    IN DWORD64 Data
+    );
+
+#pragma intrinsic(__readgsbyte)
+#pragma intrinsic(__readgsword)
+#pragma intrinsic(__readgsdword)
+#pragma intrinsic(__readgsqword)
+#pragma intrinsic(__writegsbyte)
+#pragma intrinsic(__writegsword)
+#pragma intrinsic(__writegsdword)
+#pragma intrinsic(__writegsqword)
+
+#ifdef __cplusplus
+}
+#endif 
+
+#endif // defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS)
+
+//
+// The following flags control the contents of the CONTEXT structure.
+//
+
+#if !defined(RC_INVOKED)
+
+#define CONTEXT_AMD64   0x100000
+
+// end_wx86
+
+#define CONTEXT_CONTROL (CONTEXT_AMD64 | 0x1L)
+#define CONTEXT_INTEGER (CONTEXT_AMD64 | 0x2L)
+#define CONTEXT_SEGMENTS (CONTEXT_AMD64 | 0x4L)
+#define CONTEXT_FLOATING_POINT  (CONTEXT_AMD64 | 0x8L)
+#define CONTEXT_DEBUG_REGISTERS (CONTEXT_AMD64 | 0x10L)
+
+#define CONTEXT_FULL (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT)
+
+#define CONTEXT_ALL (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS | CONTEXT_FLOATING_POINT | CONTEXT_DEBUG_REGISTERS)
+
+// begin_wx86
+
+#endif // !defined(RC_INVOKED)
+
+//
+// Define initial MxCsr control.
+//
+
+#define INITIAL_MXCSR 0x1f80            // initial MXCSR value
+
+//
+// Define 128-bit 16-byte aligned xmm register type.
+//
+
+typedef struct DECLSPEC_ALIGN(16) _M128 {
+    DWORDLONG Low;
+    LONGLONG High;
+} M128, *PM128;
+
+//
+// Format of data for fnsave/frstor instructions.
+//
+// This structure is used to store the legacy floating point state.
+//
+
+typedef struct _LEGACY_SAVE_AREA {
+    WORD   ControlWord;
+    WORD   Reserved0;
+    WORD   StatusWord;
+    WORD   Reserved1;
+    WORD   TagWord;
+    WORD   Reserved2;
+    DWORD ErrorOffset;
+    WORD   ErrorSelector;
+    WORD   ErrorOpcode;
+    DWORD DataOffset;
+    WORD   DataSelector;
+    WORD   Reserved3;
+    BYTE  FloatRegisters[8 * 10];
+} LEGACY_SAVE_AREA, *PLEGACY_SAVE_AREA;
+
+#define LEGACY_SAVE_AREA_LENGTH  ((sizeof(LEGACY_SAVE_AREA) + 15) & ~15)
+
+//
+// Context Frame
+//
+//  This frame has a several purposes: 1) it is used as an argument to
+//  NtContinue, 2) is is used to constuct a call frame for APC delivery,
+//  and 3) it is used in the user level thread creation routines.
+//
+//
+// The flags field within this record controls the contents of a CONTEXT
+// record.
+//
+// If the context record is used as an input parameter, then for each
+// portion of the context record controlled by a flag whose value is
+// set, it is assumed that that portion of the context record contains
+// valid context. If the context record is being used to modify a threads
+// context, then only that portion of the threads context is modified.
+//
+// If the context record is used as an output parameter to capture the
+// context of a thread, then only those portions of the thread's context
+// corresponding to set flags will be returned.
+//
+// CONTEXT_CONTROL specifies SegSs, Rsp, SegCs, Rip, and EFlags.
+//
+// CONTEXT_INTEGER specifies Rax, Rcx, Rdx, Rbx, Rbp, Rsi, Rdi, and R8-R15.
+//
+// CONTEXT_SEGMENTS specifies SegDs, SegEs, SegFs, and SegGs.
+//
+// CONTEXT_DEBUG_REGISTERS specifies Dr0-Dr3 and Dr6-Dr7.
+//
+// CONTEXT_MMX_REGISTERS specifies the floating point and extended registers
+//     Mm0/St0-Mm7/St7 and Xmm0-Xmm15).
+//
+
+typedef struct DECLSPEC_ALIGN(16) _CONTEXT {
+
+    //
+    // Register parameter home addresses.
+    //
+
+    DWORD64 P1Home;
+    DWORD64 P2Home;
+    DWORD64 P3Home;
+    DWORD64 P4Home;
+    DWORD64 P5Home;
+    DWORD64 P6Home;
+
+    //
+    // Control flags.
+    //
+
+    DWORD ContextFlags;
+    DWORD MxCsr;
+
+    //
+    // Segment Registers and processor flags.
+    //
+
+    WORD   SegCs;
+    WORD   SegDs;
+    WORD   SegEs;
+    WORD   SegFs;
+    WORD   SegGs;
+    WORD   SegSs;
+    DWORD EFlags;
+
+    //
+    // Debug registers
+    //
+
+    DWORD64 Dr0;
+    DWORD64 Dr1;
+    DWORD64 Dr2;
+    DWORD64 Dr3;
+    DWORD64 Dr6;
+    DWORD64 Dr7;
+
+    //
+    // Integer registers.
+    //
+
+    DWORD64 Rax;
+    DWORD64 Rcx;
+    DWORD64 Rdx;
+    DWORD64 Rbx;
+    DWORD64 Rsp;
+    DWORD64 Rbp;
+    DWORD64 Rsi;
+    DWORD64 Rdi;
+    DWORD64 R8;
+    DWORD64 R9;
+    DWORD64 R10;
+    DWORD64 R11;
+    DWORD64 R12;
+    DWORD64 R13;
+    DWORD64 R14;
+    DWORD64 R15;
+
+    //
+    // Program counter.
+    //
+
+    DWORD64 Rip;
+
+    //
+    // MMX/floating point state.
+    //
+
+    M128 Xmm0;
+    M128 Xmm1;
+    M128 Xmm2;
+    M128 Xmm3;
+    M128 Xmm4;
+    M128 Xmm5;
+    M128 Xmm6;
+    M128 Xmm7;
+    M128 Xmm8;
+    M128 Xmm9;
+    M128 Xmm10;
+    M128 Xmm11;
+    M128 Xmm12;
+    M128 Xmm13;
+    M128 Xmm14;
+    M128 Xmm15;
+
+    //
+    // Legacy floating point state.
+    //
+
+    LEGACY_SAVE_AREA FltSave;
+    DWORD Fill;
+
+    //
+    // Special debug control registers.
+    //
+
+    DWORD64 DebugControl;
+    DWORD64 LastBranchToRip;
+    DWORD64 LastBranchFromRip;
+    DWORD64 LastExceptionToRip;
+    DWORD64 LastExceptionFromRip;
+    DWORD64 Fill1;
+} CONTEXT, *PCONTEXT;
+
+//
+// Define function table entry - a function table entry is generated for
+// each frame function.
+//
+
+typedef struct _RUNTIME_FUNCTION {
+    DWORD BeginAddress;
+    DWORD EndAddress;
+    DWORD UnwindData;
+} RUNTIME_FUNCTION, *PRUNTIME_FUNCTION;
+
+//
+// Define dynamic function table entry.
+//
+
+typedef
+PRUNTIME_FUNCTION
+(*PGET_RUNTIME_FUNCTION_CALLBACK) (
+    IN DWORD64 ControlPc,
+    IN PVOID Context
+    );
+
+
+typedef
+DWORD   
+(*POUT_OF_PROCESS_FUNCTION_TABLE_CALLBACK) (
+    IN HANDLE Process,
+    IN PVOID TableAddress,
+    OUT PDWORD Entries,
+    OUT PRUNTIME_FUNCTION* Functions
+    );
+
+#define OUT_OF_PROCESS_FUNCTION_TABLE_CALLBACK_EXPORT_NAME \
+    "OutOfProcessFunctionTableCallback"
+
+//
+// Define runtime exception handling prototypes.
+//
+
+VOID
+RtlRestoreContext (
+    IN PCONTEXT ContextRecord,
+    IN struct _EXCEPTION_RECORD *ExceptionRecord OPTIONAL
+    );
+
+
+BOOLEAN
+RtlAddFunctionTable (
+    IN PRUNTIME_FUNCTION FunctionTable,
+    IN DWORD EntryCount,
+    IN DWORD64 BaseAddress
+    );
+
+BOOLEAN
+RtlInstallFunctionTableCallback (
+    IN DWORD64 TableIdentifier,
+    IN DWORD64 BaseAddress,
+    IN DWORD Length,
+    IN PGET_RUNTIME_FUNCTION_CALLBACK Callback,
+    IN PVOID Context,
+    IN PCWSTR OutOfProcessCallbackDll OPTIONAL
+    );
+
+BOOLEAN
+RtlDeleteFunctionTable (
+    IN PRUNTIME_FUNCTION FunctionTable
+    );
+
+#endif // _AMD64_
 
 #ifdef _ALPHA_
 
