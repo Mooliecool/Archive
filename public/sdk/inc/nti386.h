@@ -25,24 +25,6 @@ Revision History:
 #ifndef _NTI386_
 #define _NTI386_
 
-// begin_ntddk begin_nthal
-
-#if defined(_X86_)
-
-//
-// Define system time structure.
-//
-
-typedef struct _KSYSTEM_TIME {
-    ULONG LowPart;
-    LONG High1Time;
-    LONG High2Time;
-} KSYSTEM_TIME, *PKSYSTEM_TIME;
-
-#endif
-
-// end_ntddk end_nthal
-
 // begin_windbgkd
 
 #ifdef _X86_
