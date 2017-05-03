@@ -39,13 +39,6 @@ Revision History:
 // end_winnt
 
 //
-// Thread affinity
-//
-
-typedef ULONG KAFFINITY;
-typedef KAFFINITY *PKAFFINITY;
-
-//
 // Thread priority
 //
 
